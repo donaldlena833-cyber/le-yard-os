@@ -7,6 +7,8 @@ import {
   Bell,
   CheckCheck,
   Command,
+  LoaderCircle,
+  LogOut,
   Menu,
   Moon,
   Plus,
@@ -23,6 +25,8 @@ import {
   useRef,
   useState,
 } from "react";
+import { useFormStatus } from "react-dom";
+import { signOutAction } from "@/app/actions/auth";
 import { ThemeProvider, useTheme } from "@/components/providers/theme-provider";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Avatar } from "@/components/ui/avatar";
@@ -48,6 +52,34 @@ const shellRoleLabel: Record<WorkspaceContextValue["role"], string> = {
   manager: "Manager",
   employee: "Employee",
 };
+
+function SignOutButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-busy={pending}
+      className="focus-ring flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-left text-[11px] font-medium text-white/55 transition-colors hover:bg-white/[0.05] hover:text-white/90 disabled:cursor-wait disabled:opacity-60"
+    >
+      {pending ? (
+        <LoaderCircle aria-hidden="true" className="size-[15px] shrink-0 animate-spin" />
+      ) : (
+        <LogOut aria-hidden="true" className="size-[15px] shrink-0" />
+      )}
+      <span aria-live="polite">{pending ? "Logging out…" : "Log out"}</span>
+    </button>
+  );
+}
+
+function SignOutControl({ className }: { className?: string }) {
+  return (
+    <form action={signOutAction} className={className}>
+      <SignOutButton />
+    </form>
+  );
+}
 
 type NotificationRow = Database["public"]["Tables"]["notifications"]["Row"];
 
@@ -352,6 +384,7 @@ function Sidebar({
             )}
           />
         </div>
+        <SignOutControl className="mt-0.5" />
       </div>
     </aside>
   );
@@ -536,14 +569,17 @@ function MobileDrawer({
                 <NavigationLink item={settingsItem} pathname={pathname} onNavigate={onClose} />
               </div>
             </nav>
-            <div className="mt-3 flex items-center gap-3 border-t border-white/[0.07] px-3 pt-4 pb-1">
-              <Avatar name={workspace.identity.displayName} size="sm" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-white/90">{workspace.identity.displayName}</p>
-                <p className="mt-0.5 truncate text-[10px] text-white/55">
-                  {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : workspace.identity.aal === "aal2" ? "MFA on" : workspace.role === "owner" ? "MFA required" : "MFA available"}
-                </p>
+            <div className="mt-3 border-t border-white/[0.07] pt-4 pb-1">
+              <div className="flex items-center gap-3 px-3">
+                <Avatar name={workspace.identity.displayName} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-white/90">{workspace.identity.displayName}</p>
+                  <p className="mt-0.5 truncate text-[10px] text-white/55">
+                    {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : workspace.identity.aal === "aal2" ? "MFA on" : workspace.role === "owner" ? "MFA required" : "MFA available"}
+                  </p>
+                </div>
               </div>
+              <SignOutControl className="mt-2" />
             </div>
           </motion.aside>
         </motion.div>

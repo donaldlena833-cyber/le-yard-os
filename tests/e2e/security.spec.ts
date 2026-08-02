@@ -21,6 +21,38 @@ test("keeps the synthetic demo workspace available without a live MFA challenge"
   await expectNoViewportOverflow(page);
 });
 
+test("exposes an accessible log out control and leaves no signed-in shell state", async ({
+  context,
+  page,
+}, testInfo) => {
+  await openWorkspace(page, "/today", "Good afternoon, Donald.");
+
+  if (isMobileProject(testInfo)) {
+    await page.getByRole("button", { name: "Open navigation" }).click();
+    await expect(
+      page.getByRole("navigation", { name: "Mobile navigation", exact: true }),
+    ).toBeVisible();
+  }
+
+  const logOut = page.getByRole("button", { name: "Log out", exact: true });
+  await expect(logOut).toBeVisible();
+  await logOut.click();
+
+  await expect(page).toHaveURL((url) => url.pathname === "/sign-in" && url.search === "");
+  await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Primary mobile navigation" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Log out", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Donald", { exact: true })).toHaveCount(0);
+
+  const authCookies = (await context.cookies()).filter(
+    ({ name }) =>
+      name === "__Host-le-yard-playground-session" ||
+      (name.startsWith("sb-") && name.includes("-auth-token")),
+  );
+  expect(authCookies).toEqual([]);
+});
+
 test("completes the demo-safe authenticator enrollment control", async ({ page }) => {
   await openWorkspace(page, "/settings", "Settings");
 
