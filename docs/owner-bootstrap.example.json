@@ -1,0 +1,24 @@
+{
+  "organization": {
+    "name": "REPLACE WITH APPROVED RESTAURANT OR ORGANIZATION NAME",
+    "slug": "replace-with-approved-slug",
+    "timezone": "America/New_York",
+    "currencyCode": "USD"
+  },
+  "locations": [
+    {
+      "name": "REPLACE WITH APPROVED LOCATION NAME",
+      "code": "REPLACE",
+      "timezone": "America/New_York",
+      "phone": null,
+      "address": {
+        "line1": "REPLACE",
+        "line2": null,
+        "city": "REPLACE",
+        "region": "REPLACE",
+        "postalCode": "REPLACE",
+        "country": "US"
+      }
+    }
+  ]
+}

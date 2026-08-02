@@ -1,0 +1,40 @@
+# Local secrets and generated environment files. Vercel environment values are
+# configured in the project dashboard/CLI and must never be uploaded from disk.
+.env*
+
+# Local dependency, framework, test, and editor artifacts.
+/node_modules/
+/.next/
+/.vercel/
+/.playwright-cli/
+/.codex/
+/.vscode/
+/.idea/
+/coverage/
+/output/
+/out/
+/dist/
+/build/
+/tmp/
+/test-results/
+/playwright-report/
+/.turbo/
+*.log
+*.tsbuildinfo
+.DS_Store
+
+# Source-control and repository-only automation metadata.
+/.git/
+/.github/
+
+# Verification, operator documentation, database tooling, and local fixtures are
+# not needed by `next build`. Runtime source, public assets, and package/Next/
+# TypeScript/PostCSS configuration remain included by omission.
+/tests/
+/docs/
+/scripts/
+/supabase/
+/playwright*.config.*
+/vitest.config.*
+/eslint.config.*
+/README.md

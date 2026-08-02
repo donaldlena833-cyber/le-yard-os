@@ -1,0 +1,229 @@
+import "server-only";
+
+import { cookies } from "next/headers";
+import { demoIds, demoWorkspace } from "@/lib/demo";
+import {
+  PLAYGROUND_SESSION_COOKIE,
+  readPlaygroundSessionToken,
+  type PlaygroundPrincipalId,
+} from "@/lib/auth/playground-auth.server";
+import {
+  deriveWorkspaceScopes,
+  normalizeAssuranceLevel,
+  resolveWorkspaceDisplayName,
+  selectWorkspaceScope,
+  toWorkspaceChoices,
+  type WorkspaceContextValue,
+  type WorkspaceLocationMembershipRow,
+  type WorkspaceLocationRow,
+  type WorkspaceMembershipRow,
+  type WorkspaceOrganizationRow,
+  type WorkspaceProfileRow,
+} from "@/lib/auth/workspace-context";
+import { readWorkspacePreference } from "@/lib/auth/workspace-preference.server";
+import { getServerRuntimeConfiguration } from "@/lib/env.server";
+import { createClient } from "@/lib/supabase/server";
+
+export type WorkspaceSessionResolution =
+  | { status: "ready"; context: WorkspaceContextValue }
+  | { status: "unauthenticated" }
+  | {
+      status: "no_access" | "no_location" | "configuration_error" | "data_error";
+      identity?: { displayName: string; email: string | null };
+    };
+
+async function createDemoWorkspaceContext(
+  principal: PlaygroundPrincipalId = "donald",
+  playground = false,
+): Promise<WorkspaceContextValue> {
+  const organization = demoWorkspace.organizations.find(
+    (candidate) => candidate.id === demoIds.organization,
+  )!;
+  const locations = demoWorkspace.locations
+    .filter((location) => location.organizationId === organization.id && location.active)
+    .map((location, index) => ({
+      id: location.id,
+      organizationId: location.organizationId,
+      name: playground
+        ? index === 0
+          ? "Le Yard · Ninth Avenue"
+          : "Private Events · Mock"
+        : location.name,
+      isPrimary: index === 0,
+    }));
+  const identityId =
+    principal === "maris" ? demoIds.people.maris : demoIds.people.donald;
+  const identity = demoWorkspace.people.find(
+    (person) => person.id === identityId,
+  )!;
+  const membership = demoWorkspace.memberships.find(
+    (candidate) => candidate.userId === identity.id,
+  )!;
+
+  const preference = await readWorkspacePreference(identity.id);
+  const activeLocation =
+    preference?.organizationId === organization.id
+      ? locations.find((location) => location.id === preference.locationId) ?? locations[0]!
+      : locations[0]!;
+  const workspaceChoice = {
+    membershipId: membership.id,
+    organization: {
+      id: organization.id,
+      name: playground
+        ? "Le Yard"
+        : organization.name.replace(" Demo Group", " Hospitality"),
+    },
+    locations,
+    role: "owner" as const,
+    organizationWide: true,
+  };
+
+  return {
+    mode: "demo",
+    identity: {
+      userId: identity.id,
+      displayName: identity.displayName,
+      email: playground ? null : identity.email,
+      aal: playground ? "aal1" : "aal2",
+    },
+    organization: workspaceChoice.organization,
+    activeLocation,
+    locations,
+    availableWorkspaces: [workspaceChoice],
+    membershipId: membership.id,
+    role: "owner",
+    organizationWide: true,
+  };
+}
+
+function metadataDisplayName(value: unknown): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  return (value as Record<string, unknown>).display_name;
+}
+
+export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolution> {
+  const runtime = getServerRuntimeConfiguration();
+
+  if (runtime.mode === "demo") {
+    if (!runtime.ready) return { status: "configuration_error" };
+    if (runtime.playground) {
+      const cookieStore = await cookies();
+      const principal = readPlaygroundSessionToken(
+        cookieStore.get(PLAYGROUND_SESSION_COOKIE)?.value,
+      );
+      if (!principal) return { status: "unauthenticated" };
+      return {
+        status: "ready",
+        context: await createDemoWorkspaceContext(principal, true),
+      };
+    }
+
+    return { status: "ready", context: await createDemoWorkspaceContext() };
+  }
+
+  if (runtime.mode !== "connected" || !runtime.ready) {
+    return { status: "configuration_error" };
+  }
+
+  const supabase = await createClient();
+  const { data: claimsData, error: claimsError } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims;
+  const userId = typeof claims?.sub === "string" ? claims.sub : null;
+  if (claimsError || !claims || !userId) return { status: "unauthenticated" };
+
+  const email = typeof claims.email === "string" ? claims.email : null;
+  const preferencePromise = readWorkspacePreference(userId);
+  const [membershipResult, profileResult] = await Promise.all([
+    supabase
+      .from("organization_memberships")
+      .select("id, organization_id, user_id, role, status")
+      .eq("user_id", userId)
+      .eq("status", "active"),
+    supabase
+      .from("profiles")
+      .select("display_name, preferred_name")
+      .eq("id", userId)
+      .maybeSingle(),
+  ]);
+
+  const profile = (profileResult.data ?? null) as WorkspaceProfileRow | null;
+  const identity = {
+    displayName: resolveWorkspaceDisplayName({
+      profile,
+      claimDisplayName: metadataDisplayName(claims.user_metadata),
+      email,
+    }),
+    email,
+  };
+
+  if (membershipResult.error || profileResult.error) {
+    return { status: "data_error", identity };
+  }
+
+  const memberships = (membershipResult.data ?? []) as WorkspaceMembershipRow[];
+  if (!memberships.length) return { status: "no_access", identity };
+
+  const organizationIds = [...new Set(memberships.map((membership) => membership.organization_id))];
+  const [organizationResult, locationResult, locationMembershipResult] = await Promise.all([
+    supabase
+      .from("organizations")
+      .select("id, name, status")
+      .in("id", organizationIds)
+      .eq("status", "active"),
+    supabase
+      .from("locations")
+      .select("id, organization_id, name, is_active")
+      .in("organization_id", organizationIds)
+      .eq("is_active", true),
+    supabase
+      .from("location_memberships")
+      .select("organization_id, location_id, user_id, is_primary")
+      .eq("user_id", userId)
+      .in("organization_id", organizationIds),
+  ]);
+
+  if (
+    organizationResult.error ||
+    locationResult.error ||
+    locationMembershipResult.error
+  ) {
+    return { status: "data_error", identity };
+  }
+
+  const scopeInput = {
+    userId,
+    memberships,
+    organizations: (organizationResult.data ?? []) as WorkspaceOrganizationRow[],
+    locations: (locationResult.data ?? []) as WorkspaceLocationRow[],
+    locationMemberships: (locationMembershipResult.data ?? []) as WorkspaceLocationMembershipRow[],
+  };
+  const scopes = deriveWorkspaceScopes(scopeInput);
+  const scope = selectWorkspaceScope({
+    ...scopeInput,
+    preference: await preferencePromise,
+  });
+
+  if (!scope) return { status: "no_access", identity };
+  if (!scope.activeLocation) return { status: "no_location", identity };
+
+  return {
+    status: "ready",
+    context: {
+      mode: "live",
+      identity: {
+        userId,
+        displayName: identity.displayName,
+        email,
+        aal: normalizeAssuranceLevel(claims.aal),
+      },
+      organization: scope.organization,
+      activeLocation: scope.activeLocation,
+      locations: scope.locations,
+      availableWorkspaces: toWorkspaceChoices(scopes),
+      membershipId: scope.membership.id,
+      role: scope.membership.role,
+      organizationWide:
+        scope.membership.role === "owner" || scope.membership.role === "admin",
+    },
+  };
+}
