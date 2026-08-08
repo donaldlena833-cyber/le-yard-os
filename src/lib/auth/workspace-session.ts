@@ -182,6 +182,11 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
   }
 
   if (runtime.mode !== "connected" || !runtime.ready) {
+    console.error("[workspace-session] connected runtime is not ready", {
+      mode: runtime.mode,
+      ready: runtime.ready,
+      issues: runtime.issues,
+    });
     return { status: "configuration_error" };
   }
 
@@ -217,6 +222,10 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
   };
 
   if (membershipResult.error || profileResult.error) {
+    console.error("[workspace-session] membership/profile query failed", {
+      membership: membershipResult.error?.message ?? null,
+      profile: profileResult.error?.message ?? null,
+    });
     return { status: "data_error", identity };
   }
 
@@ -247,6 +256,11 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
     locationResult.error ||
     locationMembershipResult.error
   ) {
+    console.error("[workspace-session] organization scope query failed", {
+      organization: organizationResult.error?.message ?? null,
+      location: locationResult.error?.message ?? null,
+      locationMembership: locationMembershipResult.error?.message ?? null,
+    });
     return { status: "data_error", identity };
   }
 
