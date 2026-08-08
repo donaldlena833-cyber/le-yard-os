@@ -36,12 +36,16 @@ const tabs: Array<{ id: Tab; label: string }> = [
   { id: "waste", label: "Waste" },
 ];
 
-// Inventory opens as a clean tenant ledger. Items, counts, vendors, and
-// recipes come from the live catalog rather than synthetic preview rows.
-const playgroundInventoryItems: typeof demoWorkspace.inventoryItems = [];
-const playgroundPurchaseOrders: typeof demoWorkspace.purchaseOrders = [];
-const playgroundVendors: typeof demoWorkspace.vendors = [];
-const playgroundRecipes: typeof demoWorkspace.recipes = [];
+// Demo mode uses the clearly synthetic fixture catalog. Connected mode has a
+// separate data layer and never falls back to these records.
+const playgroundInventoryItems = demoWorkspace.inventoryItems.filter((item) =>
+  item.locationSettings.some((setting) => setting.locationId === demoIds.locations.garden && setting.active),
+);
+const playgroundPurchaseOrders = demoWorkspace.purchaseOrders.filter(
+  (order) => order.locationId === demoIds.locations.garden,
+);
+const playgroundVendors = demoWorkspace.vendors;
+const playgroundRecipes = demoWorkspace.recipes;
 const emptyCountLines: typeof demoWorkspace.inventoryCounts[number]["lines"] = [];
 
 export function InventoryWorkspace() {
@@ -54,7 +58,9 @@ export function InventoryWorkspace() {
     Object.fromEntries(latestCountLines.map((line) => [line.itemId, line.countedQuantity])),
   );
   const [countSubmitted, setCountSubmitted] = useState(false);
-  const [waste, setWaste] = useState<WasteRecord[]>([]);
+  const [waste, setWaste] = useState<WasteRecord[]>(
+    demoWorkspace.wasteRecords.filter((record) => record.locationId === locationId),
+  );
   const [wasteOpen, setWasteOpen] = useState(false);
 
   const stockRows = useMemo(
@@ -110,7 +116,7 @@ export function InventoryWorkspace() {
         <div>
           <p className="eyebrow">Food & beverage control</p>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Inventory</h2>
-          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">{workspace.activeLocation.name} · Live counts will appear after inventory is configured</p>
+          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">{workspace.activeLocation.name} · Synthetic operational snapshot</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setWasteOpen(true)}><Trash2 className="size-4" /> Record waste</Button>
@@ -122,8 +128,8 @@ export function InventoryWorkspace() {
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Inventory value" value={formatMoney(Math.round(inventoryValue))} detail="Latest approved quantities" />
         <Metric label="Below par" value={String(belowPar)} detail={`${stockRows.length} tracked items`} trend={{ label: belowPar ? "Reorder" : "Healthy", tone: belowPar ? "negative" : "positive" }} />
-        <Metric label="Open orders" value={String(playgroundPurchaseOrders.filter((order) => !["received", "cancelled"].includes(order.status)).length)} detail="No orders yet" />
-        <Metric label="Waste · 7d" value={formatMoney(waste.reduce((sum, record) => sum + record.valueCents, 0))} detail="No waste records yet" />
+        <Metric label="Open orders" value={String(playgroundPurchaseOrders.filter((order) => !["received", "cancelled"].includes(order.status)).length)} detail={`${playgroundPurchaseOrders.length} synthetic orders`} />
+        <Metric label="Waste · 7d" value={formatMoney(waste.reduce((sum, record) => sum + record.valueCents, 0))} detail={`${waste.length} synthetic records`} />
       </section>
 
       <div className="mt-6 flex items-center gap-1 overflow-x-auto border-b border-[var(--line)]">
@@ -141,7 +147,7 @@ export function InventoryWorkspace() {
             <SectionHeading title="On hand" detail="Counted quantity compared with location par" className="mb-0" />
             <label className="relative block sm:w-72"><Search className="absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search items" className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-xs outline-none focus:border-[var(--accent)]" /></label>
           </div>
-          <div className="overflow-x-auto border-y border-[var(--line)]">
+          <div className="overflow-x-auto border-y border-[var(--line)]" tabIndex={0} role="region" aria-label="Inventory on hand table">
             <div className="grid min-w-[720px] grid-cols-[1.35fr_.6fr_.6fr_.65fr_.7fr] gap-4 bg-[var(--canvas-strong)] px-4 py-2.5 text-[9px] font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase"><span>Item</span><span>On hand</span><span>Par</span><span>Status</span><span className="text-right">Unit cost</span></div>
             {stockRows.map(({ item, onHand, par, reorder }) => {
               const status = onHand <= reorder ? "reorder" : onHand < par ? "below" : "healthy";
@@ -154,7 +160,7 @@ export function InventoryWorkspace() {
       {activeTab === "count" ? (
         <section className="mt-5">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><SectionHeading title="Live count" detail="Expected quantity remains visible; submit for manager approval when complete." className="mb-0" /><StatusPill tone={countSubmitted ? "positive" : "warning"} dot>{countSubmitted ? "Submitted" : "In progress"}</StatusPill></div>
-          <div className="mt-4 overflow-x-auto border-y border-[var(--line)]">
+          <div className="mt-4 overflow-x-auto border-y border-[var(--line)]" tabIndex={0} role="region" aria-label="Inventory count form">
             <div className="grid min-w-[680px] grid-cols-[1.3fr_.6fr_.65fr_.65fr] gap-4 bg-[var(--canvas-strong)] px-4 py-2.5 text-[9px] font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase"><span>Item</span><span>Expected</span><span>Counted</span><span>Variance</span></div>
             {playgroundInventoryItems.map((item) => {
               const line = latestCountLines.find((candidate) => candidate.itemId === item.id);

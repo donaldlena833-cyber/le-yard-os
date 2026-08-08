@@ -1,5 +1,6 @@
 import type { AppRole } from "@/types";
 import type { TableRow } from "@/types/database.generated";
+import type { OperationalCapability } from "@/lib/permissions/capabilities";
 
 export type AssuranceLevel = "aal1" | "aal2";
 
@@ -45,6 +46,7 @@ export interface WorkspaceContextValue {
   membershipId: string;
   role: AppRole;
   organizationWide: boolean;
+  capabilities: readonly OperationalCapability[];
   persona?: "chef";
 }
 

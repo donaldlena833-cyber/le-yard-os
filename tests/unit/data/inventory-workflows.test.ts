@@ -195,7 +195,7 @@ describe("extended inventory workflow RPC contracts", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("derives catalog tenant scope and allows only an Owner/Admin command", async () => {
+  it("derives catalog tenant scope and requires the precise Manager capability", async () => {
     const { workflow, rpc } = context("admin");
     await configureInventoryCatalog(workflow, {
       requestId: ids.request,
@@ -234,6 +234,12 @@ describe("extended inventory workflow RPC contracts", () => {
       isBase: true,
       isActive: true,
     })).rejects.toMatchObject({ code: "forbidden" });
-    expect(manager.rpc).not.toHaveBeenCalled();
+    expect(manager.rpc).toHaveBeenCalledTimes(1);
+    expect(manager.rpc).toHaveBeenCalledWith("has_capability", {
+      p_capability_key: "inventory.unit.manage",
+      p_location_id: ids.location,
+      p_organization_id: ids.organization,
+    });
+    expect(manager.rpc).not.toHaveBeenCalledWith("configure_kitchen_foundation", expect.anything());
   });
 });

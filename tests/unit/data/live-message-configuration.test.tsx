@@ -65,6 +65,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "44444444-4444-4444-8444-444444444444",
   role: "manager",
   organizationWide: false,
+  capabilities: [],
 };
 
 const model: LiveMessagesModel = {

@@ -36,6 +36,17 @@ Do not approve or publish these settings until both owners and the appropriate p
 
 Retention is the rule for how long each kind of record is kept before archival or deletion: receipts, employee documents, guest/consent data, audit history, exports, and backups may need different periods. Retention is currently unset. That means Le Yard OS performs no policy-driven automatic deletion; it does not mean every platform copy is guaranteed to exist forever, nor does it establish the correct legal period. A future decision must name the record class, duration, deletion/archival action, backup handling, legal holds, and approving owner.
 
+## Version 0.2 kitchen and service setup
+
+1. In a local or approved nonproduction Supabase project, apply the forward migrations and run `npm run test:integration`.
+2. In Settings, assign the Executive Chef job role only the location-scoped operational capabilities it needs. Do not promote the Chef to Admin.
+3. Open Kitchen/Inventory Setup and add real units, categories, vendors, items, packs/prices, pars, and draft recipes. Do not copy synthetic demo values.
+4. Open Service Control to test a running-low event, restore it with a compensating event, add a Manager Log handoff, publish a pre-shift, and acknowledge it as an employee.
+5. Verify `/time-clock` with an employee and a manager. Punch correction approval boundaries remain independent of kitchen capabilities.
+6. Review the explicit function-grant verifier output before migration approval. Do not grant browser execution to trigger-only or service-only functions.
+
+Service Control is internal. It does not change Toast menu availability, send email/push, or invent reservation data. Production rollout still requires the normal connected acceptance gate and separate deployment authorization.
+
 ## Production launch gate
 
 Do not bootstrap the live tenant until both owners approve all items below:

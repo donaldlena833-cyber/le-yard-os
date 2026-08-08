@@ -85,6 +85,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "60000000-0000-4000-8000-000000000001",
   role: "owner",
   organizationWide: true,
+  capabilities: [],
 };
 
 function duplicateProfile(

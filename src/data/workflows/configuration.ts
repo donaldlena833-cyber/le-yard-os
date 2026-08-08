@@ -2,6 +2,7 @@ import "server-only";
 
 import type {
   CreateChatChannelInput,
+  ConfigureJobRoleCapabilityInput,
   SaveExpenseCategoryInput,
   SetChatChannelArchivedInput,
   SetExpenseCategoryActiveInput,
@@ -14,6 +15,44 @@ import {
   requireManagementRead,
   requireOrganizationOperations,
 } from "../policy";
+
+export async function configureJobRoleCapability(
+  context: WorkflowContext,
+  input: ConfigureJobRoleCapabilityInput,
+) {
+  const membership = requireOrganizationOperations(context.actor, input.organizationId);
+  assertCondition(
+    membership.role === "owner" || membership.role === "admin",
+    "forbidden",
+    "Only Owners and Admins can assign job-role capabilities.",
+  );
+  if (input.locationId) {
+    assertCondition(
+      membership.organizationWide || membership.locationIds.includes(input.locationId),
+      "forbidden",
+      "The capability location is outside your access scope.",
+    );
+  }
+  const { data, error } = await context.supabase.rpc("configure_job_role_capability", {
+    p_request_id: input.requestId,
+    p_organization_id: input.organizationId,
+    p_assignment_id: input.assignmentId,
+    p_job_role_id: input.jobRoleId,
+    p_capability_key: input.capabilityKey,
+    p_location_id: input.locationId,
+    p_effective_from: input.effectiveFrom,
+    p_effective_to: input.effectiveTo,
+    p_is_active: input.active,
+  });
+  if (error) throwDatabaseError(error, "The capability assignment could not be saved.");
+  assertCondition(
+    typeof data === "object" && data !== null && "id" in data,
+    "database",
+    "The capability assignment was not returned.",
+  );
+  const result = data as { id: unknown; replayed?: unknown };
+  return { id: String(result.id), replayed: result.replayed === true };
+}
 
 function nullable(value: string | null | undefined) {
   return value?.trim() || null;

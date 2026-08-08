@@ -32,11 +32,11 @@ type Filter = "all" | "vip" | "allergies" | "recent";
 
 export function GuestsWorkspace() {
   const workspace = useWorkspaceContext();
-  const [guests, setGuests] = useState<Guest[]>([]);
+  const [guests, setGuests] = useState<Guest[]>(demoWorkspace.guests);
   const [selected, setSelected] = useState<Guest | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [duplicates, setDuplicates] = useState<typeof demoWorkspace.duplicateGuestCandidates>([]);
+  const [duplicates, setDuplicates] = useState(demoWorkspace.duplicateGuestCandidates);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -147,7 +147,7 @@ export function GuestsWorkspace() {
         <div className="flex items-center gap-1 overflow-x-auto">{(["all", "vip", "allergies", "recent"] as Filter[]).map((item) => <button key={item} onClick={() => setFilter(item)} className={cn("focus-ring rounded-lg px-3 py-2 text-[10px] font-semibold capitalize", filter === item ? "bg-[var(--ink)] text-[var(--paper)]" : "text-[var(--ink-faint)] hover:bg-[var(--canvas-strong)]")}>{item}</button>)}</div>
       </div>
 
-      <section className="mt-5 overflow-x-auto border-y border-[var(--line)]">
+      <section className="mt-5 overflow-x-auto border-y border-[var(--line)]" tabIndex={0} aria-label="Guest profiles table">
         <div className="grid min-w-[760px] grid-cols-[1.25fr_.8fr_.7fr_.6fr_.55fr] gap-4 bg-[var(--canvas-strong)] px-4 py-2.5 text-[9px] font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase"><span>Guest</span><span>Last visit</span><span>Lifetime</span><span>Preferences</span><span>Consent</span></div>
         {filtered.map((guest, index) => {
           const consent = demoWorkspace.consentRecords.filter((record) => record.guestId === guest.id);

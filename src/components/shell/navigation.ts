@@ -1,22 +1,30 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Boxes,
-  ChefHat,
   CalendarDays,
   ChartNoAxesCombined,
   CheckSquare2,
+  ChefHat,
   ContactRound,
   Gauge,
   HandCoins,
   MessageCircleMore,
   PlugZap,
   ReceiptText,
+  RadioTower,
   Settings2,
   Sparkles,
-  UsersRound,
+  Timer,
   Truck,
+  UsersRound,
   WalletCards,
 } from "lucide-react";
+import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import {
+  hasAnyCapability,
+  KITCHEN_CAPABILITIES,
+  type OperationalCapability,
+} from "@/lib/permissions/capabilities";
 import type { AppRole } from "@/types";
 
 export type NavItem = {
@@ -26,63 +34,63 @@ export type NavItem = {
   badge?: string;
   mobile?: boolean;
   roles?: readonly AppRole[];
-  personas?: readonly ("chef")[];
-  hiddenPersonas?: readonly ("chef")[];
+  anyCapabilities?: readonly OperationalCapability[];
+  personas?: readonly "chef"[];
+  hiddenPersonas?: readonly "chef"[];
 };
 
-export const navigationSections: Array<{
-  label: string;
-  items: NavItem[];
-}> = [
+export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: "Today",
+    items: [{ href: "/today", label: "Today", icon: Gauge, mobile: true }],
+  },
   {
     label: "Service",
     items: [
-      { href: "/today", label: "Today", icon: Gauge, mobile: true },
-      {
-        href: "/schedule",
-        label: "Schedule",
-        icon: CalendarDays,
-        mobile: true,
-      },
-      {
-        href: "/kitchen",
-        label: "Kitchen",
-        icon: ChefHat,
-        mobile: true,
-        roles: ["owner", "admin", "manager"],
-      },
-      { href: "/team", label: "Team", icon: UsersRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/vendors", label: "Vendors", icon: Truck, roles: ["owner", "admin", "manager"] },
+      { href: "/schedule", label: "Schedule", icon: CalendarDays, mobile: true },
+      { href: "/service", label: "Service Control", icon: RadioTower },
+      { href: "/time-clock", label: "Time Clock", icon: Timer, mobile: true },
+      { href: "/messages", label: "Messages", icon: MessageCircleMore, mobile: true },
+    ],
+  },
+  {
+    label: "Kitchen",
+    items: [
+      { href: "/kitchen", label: "Kitchen", icon: ChefHat, mobile: true, roles: ["owner", "admin"], anyCapabilities: KITCHEN_CAPABILITIES },
+      { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["owner", "admin"], anyCapabilities: KITCHEN_CAPABILITIES },
+      { href: "/vendors", label: "Vendors", icon: Truck, roles: ["owner", "admin"], anyCapabilities: ["inventory.vendor.manage", "inventory.price.manage", "inventory.purchase.create", "inventory.receive"] },
+    ],
+  },
+  {
+    label: "Team",
+    items: [
+      { href: "/team", label: "People", icon: UsersRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
       { href: "/earnings", label: "Earnings", icon: WalletCards, mobile: true, hiddenPersonas: ["chef"] },
-      {
-        href: "/messages",
-        label: "Messages",
-        icon: MessageCircleMore,
-        mobile: true,
-      },
     ],
   },
   {
-    label: "Back office",
+    label: "Guests",
     items: [
-      { href: "/closeout", label: "Closeout & tips", icon: HandCoins, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/receipts", label: "Receipts", icon: ReceiptText, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/guests", label: "Guests", icon: ContactRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/tasks", label: "Tasks & SOPs", icon: CheckSquare2 },
+      { href: "/guests", label: "Guests", icon: ContactRound, roles: ["owner", "admin"], anyCapabilities: ["guest.manage", "guest.sensitive_notes.view", "guest_recovery.manage"] },
     ],
   },
   {
-    label: "Intelligence",
+    label: "Money",
     items: [
-      {
-        href: "/reports",
-        label: "Reports",
-        icon: ChartNoAxesCombined,
-        roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"],
-      },
-      { href: "/assistant", label: "Ask Le Yard", icon: Sparkles, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/integrations", label: "Integrations", icon: PlugZap, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
+      { href: "/closeout", label: "Closeout & tips", icon: HandCoins, roles: ["owner", "admin"], anyCapabilities: ["closeout.create", "closeout.approve", "cash.manage", "tip.calculate", "tip.approve"], hiddenPersonas: ["chef"] },
+      { href: "/receipts", label: "Invoices", icon: ReceiptText, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [{ href: "/tasks", label: "Tasks & SOPs", icon: CheckSquare2 }],
+  },
+  {
+    label: "Insights",
+    items: [
+      { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, roles: ["owner", "admin"], anyCapabilities: ["reports.operational.view", "reports.financial.view"] },
+      { href: "/assistant", label: "Ask Le Yard", icon: Sparkles, roles: ["owner", "admin"], anyCapabilities: ["reports.operational.view", "reports.financial.view"] },
+      { href: "/integrations", label: "Integrations", icon: PlugZap, roles: ["owner", "admin"], anyCapabilities: ["integrations.manage"] },
     ],
   },
 ];
@@ -91,7 +99,7 @@ export const settingsItem: NavItem = {
   href: "/settings",
   label: "Settings",
   icon: Settings2,
-  roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"],
+  roles: ["owner", "admin"],
 };
 
 export const allNavItems = [
@@ -99,75 +107,33 @@ export const allNavItems = [
   settingsItem,
 ];
 
-export function isNavItemVisible(item: NavItem, role: AppRole, persona?: "chef"): boolean {
-  if (item.personas && (!persona || !item.personas.includes(persona))) return false;
-  if (item.hiddenPersonas?.some((hidden) => hidden === persona)) return false;
-  return !item.roles || item.roles.includes(role);
+export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue): boolean {
+  if (item.personas && (!workspace.persona || !item.personas.includes(workspace.persona))) return false;
+  if (item.hiddenPersonas?.includes(workspace.persona as "chef")) return false;
+  if (!item.roles && !item.anyCapabilities) return true;
+  return Boolean(
+    item.roles?.includes(workspace.role)
+    || (item.anyCapabilities && hasAnyCapability(workspace.capabilities, item.anyCapabilities)),
+  );
 }
 
 export const routeMeta: Record<string, { title: string; detail: string }> = {
-  "/today": {
-    title: "Today",
-    detail: "Saturday service · August 1",
-  },
-  "/schedule": {
-    title: "Schedule",
-    detail: "Aug 3–9 · Current location",
-  },
-  "/team": {
-    title: "Team",
-    detail: "Le Yard team",
-  },
-  "/vendors": {
-    title: "Vendors",
-    detail: "Prices · Purchasing · Current room",
-  },
-  "/kitchen": {
-    title: "Kitchen",
-    detail: "BOH schedule · Recipes · Portion cost",
-  },
-  "/earnings": {
-    title: "Earnings",
-    detail: "Paystubs · Tips and hourly pay",
-  },
-  "/messages": {
-    title: "Messages",
-    detail: "Internal channels",
-  },
-  "/closeout": {
-    title: "Closeout & tips",
-    detail: "Saturday dinner · Draft",
-  },
-  "/receipts": {
-    title: "Receipts",
-    detail: "Invoice intake",
-  },
-  "/inventory": {
-    title: "Inventory",
-    detail: "Current location · Live count",
-  },
-  "/guests": {
-    title: "Guests",
-    detail: "Live guest CRM",
-  },
-  "/tasks": {
-    title: "Tasks & SOPs",
-    detail: "SOPs, maintenance, and incidents",
-  },
-  "/reports": {
-    title: "Reports",
-    detail: "Jul 26–Aug 1 · Le Yard",
-  },
-  "/assistant": {
-    title: "Ask Le Yard",
-    detail: "Permission-aware operations intelligence",
-  },
-  "/integrations": {
-    title: "Integrations",
-    detail: "Imports, credentials, and sync health",
-  },
-  "/settings": {
-    title: "Settings",
-    detail: "Organization, security, and policies",
-  },
+  "/today": { title: "Today", detail: "Current service" },
+  "/schedule": { title: "Service", detail: "Schedule and availability" },
+  "/service": { title: "Service Control", detail: "Availability, pre-shift, and handoff" },
+  "/time-clock": { title: "Time Clock", detail: "Punches, breaks, and corrections" },
+  "/team": { title: "Team", detail: "People and job roles" },
+  "/vendors": { title: "Vendors", detail: "Prices and purchasing" },
+  "/kitchen": { title: "Kitchen", detail: "Recipes and production" },
+  "/earnings": { title: "Earnings", detail: "Pay periods, tips, and hourly pay" },
+  "/messages": { title: "Messages", detail: "Internal channels" },
+  "/closeout": { title: "Money", detail: "Closeout, cash, and tips" },
+  "/receipts": { title: "Invoices", detail: "Document intake and review" },
+  "/inventory": { title: "Inventory", detail: "Stock, counts, and purchasing" },
+  "/guests": { title: "Guests", detail: "Hospitality CRM" },
+  "/tasks": { title: "Operations", detail: "Tasks, SOPs, maintenance, and incidents" },
+  "/reports": { title: "Insights", detail: "Operational reporting" },
+  "/assistant": { title: "Ask Le Yard", detail: "Cited operational intelligence" },
+  "/integrations": { title: "Integrations", detail: "Imports and sync health" },
+  "/settings": { title: "Settings", detail: "Organization, capabilities, and security" },
 };

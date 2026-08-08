@@ -429,6 +429,46 @@ try {
   `);
   process.stdout.write("PASS strict storage path, tenant/location, role, and AAL policies\n");
 
+  // The synthetic seed is a fixed business snapshot, while the clock-in RPC
+  // intentionally validates against the database clock. Add an isolated,
+  // currently active published shift so the verifier stays portable over time
+  // without mutating immutable seed evidence or weakening the production guard.
+  await db.exec(`
+    reset role;
+    set role authenticated;
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}',
+      false
+    );
+    insert into public.schedules (
+      id, organization_id, location_id, week_start, status, version, created_by
+    ) values (
+      '6f000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      date_trunc('week', current_date)::date,
+      'draft', 99,
+      '10000000-0000-4000-8000-000000000004'
+    );
+    insert into public.shifts (
+      id, organization_id, location_id, schedule_id, employee_id, job_role_id,
+      starts_at, ends_at, status, is_open
+    ) values (
+      '6f100000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      '6f000000-0000-4000-8000-000000000001',
+      '50000000-0000-4000-8000-000000000005',
+      '40000000-0000-4000-8000-000000000001',
+      clock_timestamp() - interval '1 hour',
+      clock_timestamp() + interval '5 hours',
+      'scheduled', false
+    );
+    select public.publish_schedule('6f000000-0000-4000-8000-000000000001', 'Portable clock verifier');
+    reset role;
+  `);
+
   await db.exec(`
     set role authenticated;
     select set_config(
@@ -452,13 +492,13 @@ try {
       'a0000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
       '40000000-0000-4000-8000-000000000001',
-      '61000000-0000-4000-8000-000000000001'
+      '6f100000-0000-4000-8000-000000000001'
     );
     select public.record_clock_in(
       'a0000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
       '40000000-0000-4000-8000-000000000001',
-      '61000000-0000-4000-8000-000000000001'
+      '6f100000-0000-4000-8000-000000000001'
     );
     select public.start_time_break(
       'a2000000-0000-4000-8000-000000000001',

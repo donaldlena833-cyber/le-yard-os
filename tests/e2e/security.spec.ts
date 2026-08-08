@@ -68,3 +68,15 @@ test("completes the demo-safe authenticator enrollment control", async ({ page }
   await expect(page.getByText("Demo MFA enrollment verified locally.", { exact: true })).toBeVisible();
   await expectNoViewportOverflow(page);
 });
+
+test("restores Time Clock instead of redirecting to Vendors", async ({ page }) => {
+  await openWorkspace(page, "/time-clock", "Time clock");
+  await expect(page).toHaveURL(/\/time-clock$/);
+  await expect(page.getByRole("heading", { name: "Time Clock", exact: true })).toBeVisible();
+});
+
+test("opens the realtime service-control surface", async ({ page }) => {
+  await openWorkspace(page, "/service", "Service control");
+  await expect(page.getByText("Steak frites", { exact: true })).toBeVisible();
+  await expect(page.getByText("Internal status only; Toast is not changed.", { exact: true })).toBeVisible();
+});

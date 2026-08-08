@@ -6,18 +6,21 @@ import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
-import { demoWorkspace } from "@/lib/demo";
+import { demoIds, demoWorkspace } from "@/lib/demo";
 import { formatMoney } from "@/lib/utils";
 
-const playgroundVendors: typeof demoWorkspace.vendors = [];
-const playgroundInventoryItems: typeof demoWorkspace.inventoryItems = [];
-const playgroundInventoryPrices: typeof demoWorkspace.inventoryPrices = [];
-const playgroundPurchaseOrders: typeof demoWorkspace.purchaseOrders = [];
+const playgroundVendors = demoWorkspace.vendors;
+const playgroundInventoryItems = demoWorkspace.inventoryItems.filter((item) =>
+  item.locationSettings.some((setting) => setting.locationId === demoIds.locations.garden && setting.active),
+);
+const playgroundInventoryPrices = demoWorkspace.inventoryPrices;
+const playgroundPurchaseOrders = demoWorkspace.purchaseOrders.filter(
+  (order) => order.locationId === demoIds.locations.garden,
+);
 
 export function VendorsWorkspace() {
   const workspace = useWorkspaceContext();
-  // The playground starts with a clean purchasing ledger. Vendor records are
-  // created by Le Yard, not fabricated for the preview.
+  // These fixtures are visibly synthetic and exist only in demo mode.
   const vendors = playgroundVendors;
   const inventoryItems = playgroundInventoryItems;
   const inventoryPrices = playgroundInventoryPrices;
@@ -49,9 +52,9 @@ export function VendorsWorkspace() {
       </div>
 
       <section className="mt-6 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric label="Active vendors" value={String(vendors.filter((vendor) => vendor.active).length)} detail="Add your first vendor" />
-        <Metric label="Price records" value={String(inventoryPrices.length)} detail="No prices imported yet" />
-        <Metric label="Open orders" value={String(purchaseOrders.filter((order) => !["received", "cancelled"].includes(order.status)).length)} detail="No orders yet" />
+        <Metric label="Active vendors" value={String(vendors.filter((vendor) => vendor.active).length)} detail="Synthetic directory" />
+        <Metric label="Price records" value={String(inventoryPrices.length)} detail="Synthetic price history" />
+        <Metric label="Open orders" value={String(purchaseOrders.filter((order) => !["received", "cancelled"].includes(order.status)).length)} detail={`${purchaseOrders.length} synthetic orders`} />
         <Metric label="Primary room" value="Le Yard" detail="858 9th Ave" />
       </section>
 

@@ -45,6 +45,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "40000000-0000-4000-8000-000000000001",
   role: "owner",
   organizationWide: true,
+  capabilities: [],
 };
 
 const tipModel: TipPolicyConfigurationModel = {
@@ -240,6 +241,7 @@ describe("financial configuration UI", () => {
       },
       role: "manager",
       organizationWide: false,
+      capabilities: [],
     };
 
     render(

@@ -15,6 +15,16 @@ import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import type { LiveTodayModel } from "@/data/read-models/today";
+import type { LiveServiceControlModel } from "@/data/read-models/service-control";
+import type { LiveReadResult } from "@/data/read-models/shared";
+
+function ServiceStatusSummary({ result }: { result: LiveReadResult<LiveServiceControlModel> }) {
+  if (!result.ok) return null;
+  const unavailable = result.data.availability.filter((item) => item.status === "eighty_sixed" || item.status === "running_low");
+  const published = result.data.preshifts.find((preshift) => preshift.status === "published");
+  if (!unavailable.length && !published) return null;
+  return <section className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3"><span className="flex size-9 items-center justify-center rounded-xl bg-[var(--warning-soft)] text-[var(--warning)]"><AlertCircle className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-xs font-semibold">Service status</span><span className="mt-1 block text-[10px] text-[var(--ink-faint)]">{unavailable.length ? unavailable.map((item) => `${item.subjectLabel}: ${item.status === "eighty_sixed" ? "86" : "running low"}`).join(" · ") : "No current 86 items"}{published ? ` · ${published.servicePeriod.replaceAll("_", " ")} pre-shift published` : ""}</span></span><Link href="/service" className="focus-ring rounded-lg px-3 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">Open service</Link></section>;
+}
 
 function dollars(cents: number, currencyCode: string): string {
   return new Intl.NumberFormat("en-US", {
@@ -48,9 +58,11 @@ function shiftDateLabel(value: string, timeZone: string): string {
 function EmployeeTodayWorkspace({
   workspace,
   data,
+  serviceControl,
 }: {
   workspace: WorkspaceContextValue;
   data: LiveTodayModel;
+  serviceControl: LiveReadResult<LiveServiceControlModel>;
 }) {
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
   const openShifts = data.shifts.filter((shift) => shift.isOpen);
@@ -81,6 +93,7 @@ function EmployeeTodayWorkspace({
           </div>
         </div>
       </section>
+      <ServiceStatusSummary result={serviceControl} />
 
       <div className="mt-8 grid gap-9 xl:grid-cols-[1.2fr_.8fr]">
         <section>
@@ -162,9 +175,11 @@ function EmployeeTodayWorkspace({
 function ChefTodayWorkspace({
   workspace,
   data,
+  serviceControl,
 }: {
   workspace: WorkspaceContextValue;
   data: LiveTodayModel;
+  serviceControl: LiveReadResult<LiveServiceControlModel>;
 }) {
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "Chef";
   const kitchenShifts = data.shifts.filter((shift) => {
@@ -185,6 +200,7 @@ function ChefTodayWorkspace({
           <div className="border-t border-white/10 pt-5 lg:border-0 lg:pt-0 lg:text-right"><p className="text-[9px] tracking-[0.14em] text-white/50 uppercase">Kitchen shifts today</p><p className="numeric mt-2 text-xl font-medium">{kitchenShifts.length}</p><p className="mt-1 text-[9px] text-white/45">Published schedule</p></div>
         </div>
       </section>
+      <ServiceStatusSummary result={serviceControl} />
 
       <div className="mt-8 grid gap-9 xl:grid-cols-[1.2fr_.8fr]">
         <section>
@@ -212,14 +228,16 @@ function ChefTodayWorkspace({
 export function LiveTodayWorkspace({
   workspace,
   model,
+  serviceControl = { ok: false, message: "Service control unavailable." },
 }: {
   workspace: WorkspaceContextValue;
   model: { ok: true; data: LiveTodayModel } | { ok: false; message: string };
+  serviceControl?: LiveReadResult<LiveServiceControlModel>;
 }) {
   if (!model.ok) return <ErrorState message={model.message} />;
   const data = model.data;
-  if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} data={data} />;
-  if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} data={data} />;
+  if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} data={data} serviceControl={serviceControl} />;
+  if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} data={data} serviceControl={serviceControl} />;
   const firstName = workspace.identity.displayName.split(" ")[0];
 
   return (
@@ -250,6 +268,7 @@ export function LiveTodayWorkspace({
           </div>
         </div>
       </section>
+      <ServiceStatusSummary result={serviceControl} />
 
       <section aria-label="Today’s live metrics" className="grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-b border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Scheduled" value={String(data.scheduledCount)} detail={`${data.openShiftCount} open for coverage`} />

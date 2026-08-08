@@ -73,6 +73,16 @@ const workspace: WorkspaceContextValue = {
   membershipId: "40000000-0000-4000-8000-000000000001",
   role: "manager",
   organizationWide: false,
+  capabilities: [
+    "inventory.count.create",
+    "inventory.count.approve",
+    "inventory.purchase.create",
+    "inventory.receive",
+    "inventory.transfer.create",
+    "inventory.transfer.approve",
+    "inventory.waste.create",
+    "inventory.waste.approve",
+  ],
 };
 
 const model: LiveInventoryModel = {
@@ -465,6 +475,7 @@ describe("inventory catalog setup", () => {
       ...workspace,
       role: "admin",
       organizationWide: true,
+      capabilities: [],
     };
     vi.mocked(configureInventoryCatalogAction)
       .mockResolvedValueOnce({

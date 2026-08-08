@@ -341,7 +341,7 @@ function Sidebar({
       <nav aria-label="Primary navigation" className="mt-5 flex-1 overflow-y-auto px-3 pb-4">
         {navigationSections.map((section, index) => {
           const visibleItems = section.items.filter((item) =>
-            isNavItemVisible(item, workspace.role, workspace.persona),
+            isNavItemVisible(item, workspace),
           );
           if (!visibleItems.length) return null;
           return (
@@ -365,7 +365,7 @@ function Sidebar({
       </nav>
 
       <div className="border-t border-white/[0.07] p-3">
-        {isNavItemVisible(settingsItem, workspace.role, workspace.persona) ? (
+        {isNavItemVisible(settingsItem, workspace) ? (
           <NavigationLink item={settingsItem} pathname={pathname} />
         ) : null}
         <div className="mt-2 flex items-center gap-3 px-3 py-2.5">
@@ -395,13 +395,11 @@ function Sidebar({
 function CommandPalette({
   open,
   onClose,
-  role,
-  persona,
+  workspace,
 }: {
   open: boolean;
   onClose: () => void;
-  role: WorkspaceContextValue["role"];
-  persona?: WorkspaceContextValue["persona"];
+  workspace: WorkspaceContextValue;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -410,10 +408,10 @@ function CommandPalette({
     () =>
       allNavItems.filter(
         (item) =>
-          isNavItemVisible(item, role, persona) &&
+          isNavItemVisible(item, workspace) &&
           item.label.toLowerCase().includes(query.trim().toLowerCase()),
       ),
-    [persona, query, role],
+    [query, workspace],
   );
 
   useEffect(() => {
@@ -560,7 +558,7 @@ function MobileDrawer({
             <nav className="flex-1 overflow-y-auto" aria-label="Mobile navigation">
               {navigationSections.map((section, index) => {
                 const visibleItems = section.items.filter((item) =>
-                  isNavItemVisible(item, workspace.role, workspace.persona),
+                  isNavItemVisible(item, workspace),
                 );
                 if (!visibleItems.length) return null;
                 return (
@@ -581,7 +579,7 @@ function MobileDrawer({
                 );
               })}
               <div className="mt-5 border-t border-white/[0.07] pt-3">
-                {isNavItemVisible(settingsItem, workspace.role, workspace.persona) ? (
+                {isNavItemVisible(settingsItem, workspace) ? (
                   <NavigationLink item={settingsItem} pathname={pathname} onNavigate={onClose} />
                 ) : null}
               </div>
@@ -609,7 +607,7 @@ function ShellContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const workspace = useWorkspaceContext();
   const visibleMobileNavItems = navigationSections[0].items
-    .filter((item) => item.mobile && isNavItemVisible(item, workspace.role, workspace.persona))
+    .filter((item) => item.mobile && isNavItemVisible(item, workspace))
     .slice(0, 4);
   const [commandOpen, setCommandOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -748,8 +746,7 @@ function ShellContent({ children }: { children: ReactNode }) {
       <CommandPalette
         key={commandOpen ? "open" : "closed"}
         open={commandOpen}
-        role={workspace.role}
-        persona={workspace.persona}
+        workspace={workspace}
         onClose={() => setCommandOpen(false)}
       />
       <MobileDrawer

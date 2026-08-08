@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { hasAnyCapability, KITCHEN_CAPABILITIES } from "@/lib/permissions/capabilities";
 import { createClient } from "@/lib/supabase/server";
 import { localDateKey, readFailure, readSuccess, type LiveReadResult } from "./shared";
 
@@ -252,7 +253,13 @@ export interface LiveInventoryModel {
 export async function loadLiveInventory(
   workspace: WorkspaceContextValue,
 ): Promise<LiveReadResult<LiveInventoryModel>> {
-  if (workspace.role === "employee") return readFailure("Management access is required.");
+  if (
+    workspace.role !== "owner"
+    && workspace.role !== "admin"
+    && !hasAnyCapability(workspace.capabilities, KITCHEN_CAPABILITIES)
+  ) {
+    return readFailure("A kitchen or inventory capability is required at this location.");
+  }
   try {
     const supabase = await createClient();
     const organizationId = workspace.organization.id;

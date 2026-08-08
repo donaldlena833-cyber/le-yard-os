@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OPERATIONAL_CAPABILITIES } from "@/lib/permissions/capabilities";
 
 const uuid = z.string().uuid();
 
@@ -61,8 +62,27 @@ export const setExpenseCategoryActiveInputSchema = z
   .object({ requestId: uuid, categoryId: uuid, active: z.boolean() })
   .strict();
 
+export const configureJobRoleCapabilityInputSchema = z
+  .object({
+    requestId: uuid,
+    organizationId: uuid,
+    assignmentId: uuid.nullable(),
+    jobRoleId: uuid,
+    capabilityKey: z.enum(OPERATIONAL_CAPABILITIES),
+    locationId: uuid.nullable(),
+    effectiveFrom: z.iso.date(),
+    effectiveTo: z.iso.date().nullable(),
+    active: z.boolean(),
+  })
+  .strict()
+  .refine(
+    (value) => !value.effectiveTo || value.effectiveTo >= value.effectiveFrom,
+    { path: ["effectiveTo"], message: "The end date must not precede the start date." },
+  );
+
 export type CreateChatChannelInput = z.infer<typeof createChatChannelInputSchema>;
 export type SetChatChannelArchivedInput = z.infer<typeof setChatChannelArchivedInputSchema>;
 export type SetPrivateChatChannelMembersInput = z.infer<typeof setPrivateChatChannelMembersInputSchema>;
 export type SaveExpenseCategoryInput = z.infer<typeof saveExpenseCategoryInputSchema>;
 export type SetExpenseCategoryActiveInput = z.infer<typeof setExpenseCategoryActiveInputSchema>;
+export type ConfigureJobRoleCapabilityInput = z.infer<typeof configureJobRoleCapabilityInputSchema>;

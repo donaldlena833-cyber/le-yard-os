@@ -107,6 +107,8 @@ Never run `supabase db reset`, the synthetic seed, or an unreviewed migration ag
 
 ## Verification
 
+Version 0.2 adds capability-backed operational authoring and service control. In connected mode, an effective Executive Chef job-role grant can author the kitchen catalog without receiving organization-security access. `/service` provides the internal realtime 86/running-low board, versioned Manager Log, and structured pre-shift acknowledgement flow. `/time-clock` is again a real connected route. These workflows remain tenant/location scoped and never substitute demo rows in connected mode.
+
 ```bash
 npm run lint
 npm run types:database:check

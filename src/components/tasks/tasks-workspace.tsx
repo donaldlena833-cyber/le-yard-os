@@ -35,14 +35,24 @@ const tabLabels: Array<{ id: Tab; label: string }> = [
   { id: "incidents", label: "Incidents" },
 ];
 
-// The demo workspace intentionally starts with no operational records. These
-// collections are populated by live Supabase rows once Le Yard adds them.
-const playgroundSopDocuments: typeof demoFixture.sopDocuments = [];
-const playgroundMaintenanceRequests: typeof demoFixture.maintenanceRequests = [];
-const playgroundIncidents: typeof demoFixture.incidents = [];
-const playgroundTasks: typeof demoFixture.tasks = [];
-const playgroundChecklists: typeof demoFixture.checklists = [];
-const playgroundChecklistRuns: typeof demoFixture.checklistRuns = [];
+// Demo mode showcases a single-room synthetic operating day. Connected mode
+// uses its own Supabase-backed workspace and never reads these fixtures.
+const playgroundSopDocuments = demoFixture.sopDocuments;
+const playgroundMaintenanceRequests = demoFixture.maintenanceRequests.filter(
+  (request) => request.locationId === demoIds.locations.garden,
+);
+const playgroundIncidents = demoFixture.incidents.filter(
+  (incident) => incident.locationId === demoIds.locations.garden,
+);
+const playgroundTasks = demoFixture.tasks.filter(
+  (task) => task.locationId === null || task.locationId === demoIds.locations.garden,
+);
+const playgroundChecklists = demoFixture.checklists.filter(
+  (checklist) => checklist.locationId === demoIds.locations.garden,
+);
+const playgroundChecklistRuns = demoFixture.checklistRuns.filter(
+  (run) => run.locationId === demoIds.locations.garden,
+);
 const demoWorkspace = {
   ...demoFixture,
   sopDocuments: playgroundSopDocuments,

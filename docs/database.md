@@ -91,7 +91,11 @@ Job-role definitions and employee job assignments are configured only through id
 
 Authorization helpers are `SECURITY DEFINER` functions with empty search paths and `row_security = off`; they only return booleans or the caller's role. This avoids recursive membership policies without exposing rows. Browser code must use only the anon key and a user JWT. The Supabase service-role key is server-only and bypasses RLS.
 
-All 113 public base tables have both `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`, plus at least one explicit policy. `anon` has no grants on public tables.
+Operational authorization is layered beneath organization roles through `capability_definitions`, `job_role_capabilities`, and `user_capability_overrides`. `private.user_has_capability(...)` validates the active membership, active accessible location, effective employee/job-role assignment, effective capability assignment, and optional user override. A matching active user denial wins over grants. Owners and Admins retain full operational capability coverage; capability assignment itself remains an Owner/Admin command. Public helpers expose only the signed-in actor's boolean/effective keys, never another user's effective access.
+
+Capability assignment rows are effective-dated and deactivated rather than deleted. `configure_job_role_capability` and `configure_user_capability_override` are actor-derived, idempotent through `private.operation_requests`, and audited. `configure_operational_inventory_catalog` is the first capability-native write slice: a capable non-Admin Manager can manage items, vendors, vendor packs/prices, and pars only through an authorized location, while units, conversions, category hierarchy, users, credentials, and security settings remain administrative.
+
+All 116 public base tables have both `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`, plus at least one explicit policy. `anon` has no grants on public tables.
 
 ## User provisioning and passwords
 
@@ -171,6 +175,7 @@ npm run types:database:check
 npm run test:db:pglite
 npm run test:people-config:pglite
 npm run test:inventory-catalog:pglite
+npm run test:capabilities:pglite
 npm run test:operations-config:pglite
 npm run test:financial-config:pglite
 ```
@@ -187,6 +192,14 @@ npx supabase db lint --local --schema public --level error --fail-on error
 `db reset` applies every migration and then `supabase/seed.sql`. The RLS tests verify catalog-wide coverage, no anonymous grants, private buckets, tenant/location isolation, all four roles, owner AAL2 enforcement, employee self-service, manager approval boundaries, integration-secret isolation, and immutable audit behavior.
 
 For a linked nonproduction project, require explicit environment confirmation before using `--linked`. Never run seed data against production.
+
+## Version 0.2 operational authoring
+
+The capability catalog now includes precise `inventory.item.manage`, `inventory.category.manage`, and `inventory.unit.manage` keys. `configure_kitchen_foundation` is a narrow location-authorized command for units and categories; the existing capability-native command continues to own items, vendors, packs/prices, and effective-dated pars. Recipe saves remain immutable versions and may be inactive drafts without ingredients.
+
+Service Control adds five forced-RLS tables: `service_availability_events`, `manager_log_entries`, `manager_log_versions`, `preshifts`, and `preshift_acknowledgements`. Availability and acknowledgements are append-only. Manager Log updates append a version snapshot. A published pre-shift cannot be edited; correction requires a new version. Browser roles have `SELECT` only and write through explicitly granted, actor-derived commands.
+
+The latest security migration revokes public-schema function execution from `PUBLIC`, `anon`, and `authenticated`, then restores an explicit browser RPC/policy-helper manifest. Future functions inherit no `PUBLIC` execution. Trigger-only and service-only functions remain unavailable to browser sessions.
 
 ## Production checklist
 

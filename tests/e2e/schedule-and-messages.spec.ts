@@ -13,13 +13,13 @@ test("publishes a schedule and records an employee acknowledgement", async ({ pa
 
   await page
     .getByRole("button", {
-      name: /Noah Martin.*Kitchen.*Awaiting acknowledgement/,
+      name: /Mateo.*Kitchen.*Awaiting acknowledgement/,
     })
     .first()
     .click();
 
   const shiftPanel = page.locator("aside").filter({
-    has: page.getByRole("heading", { name: "Noah Martin", exact: true }),
+    has: page.getByRole("heading", { name: "Mateo", exact: true }),
   });
   await expect(shiftPanel).toBeVisible();
   await expect(shiftPanel.getByText("Awaiting response", { exact: true })).toBeVisible();

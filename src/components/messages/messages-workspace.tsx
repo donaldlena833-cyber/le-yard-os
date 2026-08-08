@@ -34,7 +34,10 @@ import type { ChatChannel, ChatMessage } from "@/types";
 
 const commonReactions = ["👍", "✨", "✅"];
 const realPlaygroundPeople = demoWorkspace.people.filter((person) =>
-  [demoIds.people.donald, demoIds.people.maris, demoIds.people.irini, demoIds.people.mateo].includes(person.id as never),
+  person.status === "active" && (
+    person.locationIds.includes(demoIds.locations.garden) ||
+    [demoIds.people.donald, demoIds.people.maris, demoIds.people.mateo].includes(person.id as never)
+  ),
 );
 const messageStorageKey = `le-yard:internal-messages:${demoIds.organization}`;
 
@@ -113,7 +116,7 @@ export function MessagesWorkspace() {
   const workspace = useWorkspaceContext();
   const currentUserId = workspace.identity.userId;
   const [selectedChannelId, setSelectedChannelId] = useState<string>("channel-all-staff");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(demoWorkspace.chatMessages);
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
@@ -252,7 +255,7 @@ export function MessagesWorkspace() {
           <header className="flex min-h-[72px] items-center gap-3 border-b border-[var(--line)] px-3 sm:px-5"><Button variant="quiet" size="icon" className="lg:hidden" aria-label="Back to channels" onClick={() => setMobileChatOpen(false)}><ArrowLeft className="size-4" /></Button><span className={cn("flex size-9 items-center justify-center rounded-xl", selectedChannel.kind === "management" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}>{selectedChannel.kind === "management" ? <LockKeyhole className="size-4" /> : selectedChannel.kind === "all_staff" ? <UsersRound className="size-4" /> : <Hash className="size-4" />}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate text-sm font-semibold">{selectedChannel.name}</h3>{selectedChannel.kind === "management" ? <StatusPill tone="danger">Private</StatusPill> : null}</div><p className="mt-0.5 truncate text-[9px] text-[var(--ink-faint)]">{channelDescription(selectedChannel)}</p></div><Button variant="quiet" size="icon" aria-label="Channel information" onClick={() => setMobileInfoOpen((current) => !current)}><Info className="size-4" /></Button><Button variant="quiet" size="icon" aria-label="More channel actions"><MoreHorizontal className="size-4" /></Button></header>
 
           <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-6">
-            {selectedChannel.kind === "all_staff" ? <section className="mb-6 rounded-[18px] border border-[var(--line)] bg-[var(--canvas)] p-4" aria-label="Channel guidance"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--paper)] text-[var(--ink-faint)]"><Megaphone className="size-3.5" /></span><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold tracking-[0.08em] uppercase">All-staff channel</p><p className="mt-1 text-[10px] leading-4 text-[var(--ink-soft)]">Use this room for service updates, shift swaps, and questions for the Le Yard team.</p></div></div></section> : null}
+            {selectedChannel.kind === "all_staff" ? <section className="mb-6 rounded-[18px] border border-[var(--line)] bg-[var(--canvas)] p-4" aria-label="Pinned announcement"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--paper)] text-[var(--ink-faint)]"><Megaphone className="size-3.5" /></span><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold tracking-[0.08em] uppercase">Pinned announcement · synthetic</p><p className="mt-1 text-[10px] font-semibold text-[var(--ink)]">{demoWorkspace.announcements[0]?.title}</p><p className="mt-1 text-[10px] leading-4 text-[var(--ink-soft)]">{demoWorkspace.announcements[0]?.body}</p></div></div></section> : null}
             <div className="mb-6 flex items-center gap-3"><span className="h-px flex-1 bg-[var(--line)]" /><span className="text-[9px] font-semibold text-[var(--ink-faint)]">Today</span><span className="h-px flex-1 bg-[var(--line)]" /></div>
             <div className="space-y-5">
               <AnimatePresence initial={false}>{channelMessages.map((message) => <MessageBubble key={message.id} message={message} mine={message.authorId === currentUserId} currentUserId={currentUserId} onToggleReaction={(emoji) => toggleReaction(message.id, emoji)} />)}</AnimatePresence>

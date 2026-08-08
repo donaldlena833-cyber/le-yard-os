@@ -2,7 +2,7 @@
 
 Legend: **Full** means create/read/update/delete within the allowed tenant scope; **Operate** means operational create/update but not user, role, security, or integration administration; **Self** means only the signed-in employee's records; **Assigned** means only locations in `location_memberships`; **Read** means no mutation; **None** means RLS returns no rows and rejects inserts.
 
-Owners and admins have organization-wide access. Owner administrative writes additionally require an AAL2 JWT. Managers are organization members but operational access is limited to assigned locations except for deliberately unified management catalogs and CRM records.
+Owners and admins have organization-wide access. Owner administrative writes additionally require an AAL2 JWT. Managers and employees receive operational capabilities from effective job-role assignments at accessible locations; an explicit user denial overrides grants. Capabilities never grant organization security administration.
 
 | Capability | Owner | Admin | Manager | Employee |
 | --- | --- | --- | --- | --- |
@@ -11,6 +11,7 @@ Owners and admins have organization-wide access. Owner administrative writes add
 | Create/invite/suspend users | Full (AAL2) | Full | None | None |
 | Assign organization roles or locations | Full (AAL2) | Full | None | None |
 | Configure job-role definitions | Full (AAL2) | Full | Read | Read |
+| Configure job-role capabilities or user overrides | Full (AAL2) | Full | None | None |
 | Employee job assignments | Full (AAL2); private rate write-only | Full; private rate write-only | Assigned metadata read; no rate access | Self metadata read; no rate access |
 | Employee directory/sensitive employment record | Full | Full | Operate | Self |
 | Availability | Full | Full | Operate assigned | Self create/update/delete |
@@ -33,7 +34,12 @@ Owners and admins have organization-wide access. Owner administrative writes add
 | Tip calculation and approval | Full | Full | Operate assigned | Self final allocation read |
 | Payroll export | Full | Full | None | None |
 | Receipts, invoices, OCR review, expenses | Full | Full | Operate assigned | None |
-| Configure vendors, units, items, recipes, prices, and pars | Full (AAL2) | Full | Read/use | None |
+| Configure units and category hierarchy | Full (AAL2) | Full | Assigned `inventory.unit.manage` / `inventory.category.manage` | Assigned capability where operationally approved |
+| Configure unit conversions | Full (AAL2) | Full | None | None |
+| Configure items, vendors, packs/prices, pars, and recipes | Full (AAL2) | Full | Assigned capability at location | Assigned capability where workflow supports employee operation |
+| Internal running-low / 86 events | Full | Full | Assigned `service.availability.manage` | Read assigned; write only with explicit capability |
+| Manager Log | Full | Full | Assigned `manager_log.manage` | None |
+| Pre-shift | Full | Full | Draft/publish with `preshift.manage` | Read published and acknowledge self |
 | Configure receipt expense categories | Full (AAL2) | Full | Read/use | None |
 | PO, delivery, counts, waste, COGS | Full | Full | Operate assigned | None |
 | Inventory transfers | Full | Full | Both locations must be assigned | None |
@@ -71,7 +77,7 @@ Owners and admins have organization-wide access. Owner administrative writes add
 14. Employee-document object scope, uploader, MIME type, and size cannot be reassigned through metadata controls; employees receive only short-lived downloads for records released to them.
 15. Authenticated sessions cannot finalize employee documents directly. The user-scoped server workflow verifies downloaded bytes first, then a service-role-only command restores the human actor and reruns full tenant, location, and employee authorization.
 16. Job-role and employee-assignment writes are Owner/Admin command-only. Authenticated reads omit hourly rates for every application role, including Owner and Admin; updates can preserve a stored rate without reading it.
-17. Inventory catalog, expense-category, tip-policy, and retention writes are Owner/Admin command-only and seed no operating values. Managers may use approved catalog and policy records but cannot define them.
+17. Unit conversions, expense categories, tip policies, and retention remain Owner/Admin command-only. Capability-authorized operational users may configure units, categories, items, vendors, vendor packs/prices, location pars, and recipes through narrow actor-derived commands; this does not confer user, credential, security, cash, payroll, or owner-level settings access.
 18. Tip-policy drafts require approval by a different authorized person. Retention requires an explicit timed window or an explicit no-auto-delete decision; neither is inferred from demo data.
 19. Checklist photo metadata can be bound only after the server downloads and verifies private image bytes. Authenticated browser calls cannot bind a claimed path directly.
 
@@ -89,9 +95,12 @@ Every bucket is private. Access is through a user JWT or a short-lived signed UR
 
 ## Verification source
 
-The authoritative policies are in `supabase/migrations/202608010005_rls_and_storage.sql`. Catalog and behavioral proof lives in `tests/rls/`. Run:
+The foundation policies begin in `supabase/migrations/202608010005_rls_and_storage.sql`; capability policies and commands are added by `supabase/migrations/20260808135755_capability_authorization_foundation.sql`. Catalog and behavioral proof lives in `tests/rls/` and the focused portable capability verifier. Run:
 
 ```bash
 npx supabase db reset
 npx supabase test db tests/rls --local
+npm run test:capabilities:pglite
+npm run test:function-grants:pglite
+npm run test:service-control:pglite
 ```

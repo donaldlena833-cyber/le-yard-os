@@ -23,6 +23,12 @@ import {
 import { readWorkspacePreference } from "@/lib/auth/workspace-preference.server";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
 import { createClient } from "@/lib/supabase/server";
+import {
+  DEMO_CAPABILITY_TEMPLATES,
+  OPERATIONAL_CAPABILITIES,
+  isOperationalCapability,
+  type OperationalCapability,
+} from "@/lib/permissions/capabilities";
 
 export type WorkspaceSessionResolution =
   | { status: "ready"; context: WorkspaceContextValue }
@@ -97,6 +103,11 @@ async function createDemoWorkspaceContext(
     organizationWide: role === "owner",
     ...(isChef ? { persona: "chef" as const } : {}),
   };
+  const capabilities: readonly OperationalCapability[] = role === "owner"
+    ? OPERATIONAL_CAPABILITIES
+    : isChef
+      ? DEMO_CAPABILITY_TEMPLATES.executiveChef
+      : DEMO_CAPABILITY_TEMPLATES.employee;
 
   return {
     mode: "demo",
@@ -113,6 +124,7 @@ async function createDemoWorkspaceContext(
     membershipId: membership.id,
     role,
     organizationWide: role === "owner",
+    capabilities,
     ...(isChef ? { persona: "chef" as const } : {}),
   };
 }
@@ -279,12 +291,27 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
 
   if (!scope) return { status: "no_access", identity };
   if (!scope.activeLocation) return { status: "no_location", identity };
-  const persona = await resolveWorkspacePersona(
-    supabase,
-    scope.organization.id,
-    userId,
-    scope.locations.map((location) => location.id),
-  );
+  const [persona, capabilityResult] = await Promise.all([
+    resolveWorkspacePersona(
+      supabase,
+      scope.organization.id,
+      userId,
+      scope.locations.map((location) => location.id),
+    ),
+    supabase.rpc("effective_capabilities", {
+      p_organization_id: scope.organization.id,
+      p_location_id: scope.activeLocation.id,
+    }),
+  ]);
+  if (capabilityResult.error) {
+    console.error("[workspace-session] effective capability query failed", {
+      organizationId: scope.organization.id,
+      locationId: scope.activeLocation.id,
+      error: capabilityResult.error.message,
+    });
+    return { status: "data_error", identity };
+  }
+  const capabilities = (capabilityResult.data ?? []).filter(isOperationalCapability);
 
   return {
     status: "ready",
@@ -304,6 +331,7 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
       role: scope.membership.role,
       organizationWide:
         scope.membership.role === "owner" || scope.membership.role === "admin",
+      capabilities,
       ...(persona ? { persona } : {}),
     },
   };

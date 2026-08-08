@@ -49,6 +49,7 @@ import { localDateTimeParts, zonedLocalToIso } from "@/data/read-models/local-ti
 import type { LiveReadResult } from "@/data/read-models/shared";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { createClient } from "@/lib/supabase/client";
+import { hasCapability } from "@/lib/permissions/capabilities";
 import {
   parseInventoryMoneyToCents,
   parseInventoryQuantity,
@@ -725,9 +726,43 @@ export function LiveInventoryWorkspace({
   title?: string;
   description?: string;
 }) {
+  const administrativeWrite = workspace.role === "admin"
+    || (workspace.role === "owner" && workspace.identity.aal === "aal2");
+  const can = (capability: Parameters<typeof hasCapability>[1]) =>
+    administrativeWrite || hasCapability(workspace.capabilities, capability);
+  const canCountCreate = can("inventory.count.create");
+  const canCountApprove = can("inventory.count.approve");
+  const canPurchase = can("inventory.purchase.create");
+  const canReceive = can("inventory.receive");
+  const canTransferCreate = can("inventory.transfer.create");
+  const canTransferApprove = can("inventory.transfer.approve");
+  const canWasteCreate = can("inventory.waste.create");
+  const canWasteApprove = can("inventory.waste.approve");
+  const canSeeVendors = administrativeWrite || ["inventory.vendor.manage", "inventory.price.manage", "inventory.purchase.create", "inventory.receive"].some((capability) =>
+    hasCapability(workspace.capabilities, capability as Parameters<typeof hasCapability>[1]),
+  );
+  const canSeeRecipes = administrativeWrite || ["recipe.manage", "prep.manage", "prep.complete", "menu.manage"].some((capability) =>
+    hasCapability(workspace.capabilities, capability as Parameters<typeof hasCapability>[1]),
+  );
+  const canSeeCatalog = administrativeWrite || ["inventory.catalog.manage", "inventory.par.manage", "inventory.vendor.manage", "inventory.price.manage", "recipe.manage"].some((capability) =>
+    hasCapability(workspace.capabilities, capability as Parameters<typeof hasCapability>[1]),
+  );
+  const visibleTabs = tabs.filter((tab) => {
+    if (tab.id === "count") return canCountCreate || canCountApprove;
+    if (tab.id === "orders") return canPurchase || canReceive;
+    if (tab.id === "transfers") return canTransferCreate || canTransferApprove;
+    if (tab.id === "vendors") return canSeeVendors;
+    if (tab.id === "recipes") return canSeeRecipes;
+    if (tab.id === "waste") return canWasteCreate || canWasteApprove;
+    if (tab.id === "catalog") return canSeeCatalog;
+    return true;
+  });
+  const firstTab = visibleTabs.some((tab) => tab.id === initialTab)
+    ? initialTab!
+    : visibleTabs[0]?.id ?? "stock";
   const router = useRouter();
   const model = result.ok ? result.data : null;
-  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "stock");
+  const [activeTab, setActiveTab] = useState<Tab>(firstTab);
   const [query, setQuery] = useState("");
   const [countOpen, setCountOpen] = useState(false);
   const [countSubmissionId, setCountSubmissionId] = useState<string | null>(null);
@@ -939,7 +974,7 @@ export function LiveInventoryWorkspace({
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">{title}</h2>
           <p className="mt-1 text-[11px] text-[var(--ink-faint)]">{description ?? `Stock, counts, purchasing, recipes, and waste for ${workspace.activeLocation.name}.`}</p>
         </div>
-        <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={!model.items.length || !model.vendors.length} onClick={() => openMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() })}><ShoppingCart className="size-4" />New order</Button><Button variant="accent" disabled={!model.items.length} onClick={openCount}><ClipboardCheck className="size-4" />Start full count</Button></div>
+        <div className="flex flex-wrap gap-2">{canPurchase ? <Button variant="secondary" disabled={!model.items.length || !model.vendors.length} onClick={() => openMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() })}><ShoppingCart className="size-4" />New order</Button> : null}{canCountCreate ? <Button variant="accent" disabled={!model.items.length} onClick={openCount}><ClipboardCheck className="size-4" />Start full count</Button> : null}</div>
       </div>
 
       {notice ? <div aria-live="polite" className="mt-4 flex items-start gap-2 rounded-xl bg-[var(--accent-soft)]/55 px-4 py-3 text-[10px] leading-4 text-[var(--accent-strong)]"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{notice}</div> : null}
@@ -952,7 +987,7 @@ export function LiveInventoryWorkspace({
       </section>
 
       <div role="tablist" aria-label="Inventory sections" className="mt-6 flex items-center gap-1 overflow-x-auto border-b border-[var(--line)]">
-        {tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             id={`inventory-tab-${tab.id}`}
@@ -977,7 +1012,7 @@ export function LiveInventoryWorkspace({
                 <label className="relative block sm:w-72"><span className="sr-only">Search inventory</span><Search className="absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, SKU, or category" className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-xs outline-none focus:border-[var(--accent)]" /></label>
               </div>
               {visibleItems.length ? (
-                <div className="overflow-x-auto border-y border-[var(--line)]">
+                <div className="overflow-x-auto border-y border-[var(--line)]" tabIndex={0} role="region" aria-label="Inventory on hand table">
                   <div className="grid min-w-[820px] grid-cols-[1.3fr_.65fr_.55fr_.7fr_.8fr_.7fr] gap-4 bg-[var(--canvas-strong)] px-4 py-2.5 text-[9px] font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase"><span>Item</span><span>On hand</span><span>Par</span><span>Status</span><span>Last movement</span><span className="text-right">Base cost</span></div>
                   {visibleItems.map((item) => {
                     const stockStatus = item.par === null ? "unconfigured" : item.reorder !== null && item.onHand <= item.reorder ? "reorder" : item.onHand < item.par ? "below" : "healthy";
@@ -999,7 +1034,7 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "count" ? (
             <section className="mt-5">
-              <SectionHeading title="Count history" detail="Pending counts are review evidence and do not affect on-hand stock." action={<Button size="sm" variant="accent" disabled={!model.items.length} onClick={openCount}><ClipboardCheck className="size-3.5" />New full count</Button>} />
+              <SectionHeading title="Count history" detail="Pending counts are review evidence and do not affect on-hand stock." action={canCountCreate ? <Button size="sm" variant="accent" disabled={!model.items.length} onClick={openCount}><ClipboardCheck className="size-3.5" />New full count</Button> : undefined} />
               {model.counts.length ? (
                 <div className="border-y border-[var(--line)]">
                   {model.counts.map((count) => {
@@ -1021,8 +1056,8 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "orders" ? (
             <section className="mt-5">
-              <SectionHeading title="Purchase orders" detail="Internal orders with server-derived totals. Vendor transmission remains outside this app until an approved integration is connected." action={<Button size="sm" variant="accent" disabled={!model.items.length || !model.vendors.length} onClick={() => openMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() })}><Plus className="size-3.5" />New order</Button>} />
-              {model.orders.length ? <div className="border-y border-[var(--line)]">{model.orders.map((order) => { const canReceive = ["submitted", "partially_received"].includes(order.status) && order.lines.length > 0; return <div key={order.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><ShoppingCart className="size-4 text-[var(--ink-faint)]" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{order.vendorName} · {order.poNumber}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Ordered {dateLabel(order.orderedOn)} · expected {dateLabel(order.expectedOn)} · {order.lineCount} lines</span></span><span className="numeric text-xs font-semibold">{formatMoney(order.totalCents, model.currencyCode)}</span><StatusPill tone={statusTone[order.status] ?? "neutral"}>{sentenceCase(order.status)}</StatusPill>{canReceive ? <Button size="sm" variant="secondary" onClick={() => openMutationDialog({ kind: "delivery", requestId: crypto.randomUUID(), order })}><Truck className="size-3.5" />Receive</Button> : null}</div>; })}</div> : <EmptyState icon={<ShoppingCart className="size-4" />} title="No purchase orders" detail={model.vendors.length && model.items.length ? "Create an internal order from active tenant vendors and tracked items." : "Active vendors and tracked items are required before an order can be created."} />}
+              <SectionHeading title="Purchase orders" detail="Internal orders with server-derived totals. Vendor transmission remains outside this app until an approved integration is connected." action={canPurchase ? <Button size="sm" variant="accent" disabled={!model.items.length || !model.vendors.length} onClick={() => openMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() })}><Plus className="size-3.5" />New order</Button> : undefined} />
+              {model.orders.length ? <div className="border-y border-[var(--line)]">{model.orders.map((order) => { const orderCanReceive = canReceive && ["submitted", "partially_received"].includes(order.status) && order.lines.length > 0; return <div key={order.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><ShoppingCart className="size-4 text-[var(--ink-faint)]" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{order.vendorName} · {order.poNumber}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Ordered {dateLabel(order.orderedOn)} · expected {dateLabel(order.expectedOn)} · {order.lineCount} lines</span></span><span className="numeric text-xs font-semibold">{formatMoney(order.totalCents, model.currencyCode)}</span><StatusPill tone={statusTone[order.status] ?? "neutral"}>{sentenceCase(order.status)}</StatusPill>{orderCanReceive ? <Button size="sm" variant="secondary" onClick={() => openMutationDialog({ kind: "delivery", requestId: crypto.randomUUID(), order })}><Truck className="size-3.5" />Receive</Button> : null}</div>; })}</div> : <EmptyState icon={<ShoppingCart className="size-4" />} title="No purchase orders" detail={model.vendors.length && model.items.length ? "Create an internal order from active tenant vendors and tracked items." : "Active vendors and tracked items are required before an order can be created."} />}
               <div className="mt-8"><SectionHeading title="Delivery history" detail="Accepted quantities, invoice references, and receiving actors. Each delivery posts canonical stock exactly once." /></div>
               {model.deliveries.length ? <div className="border-y border-[var(--line)]">{model.deliveries.map((delivery) => <div key={delivery.id} className="flex items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Truck className="size-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{delivery.vendorName}{delivery.poNumber ? ` · ${delivery.poNumber}` : ""}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{dateTimeLabel(delivery.deliveredAt, model.timeZone)} · {delivery.lines.length} lines · received by {delivery.receivedBy}{delivery.invoiceNumber ? ` · ${delivery.invoiceNumber}` : ""}</span></span><span className="numeric text-xs font-semibold">{quantityLabel(delivery.lines.reduce((sum, line) => sum + line.acceptedQuantity, 0))} accepted</span><StatusPill tone="positive">Posted</StatusPill></div>)}</div> : <EmptyState icon={<Truck className="size-4" />} title="No deliveries received" detail="Receive against an open purchase order to post accepted stock and vendor price evidence." />}
             </section>
@@ -1030,7 +1065,7 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "transfers" ? (
             <section className="mt-5">
-              <SectionHeading title="Location transfers" detail="Source submissions require an independent destination decision before paired stock movements post." action={<Button size="sm" variant="accent" disabled={!model.items.length || model.locations.filter((location) => location.id !== workspace.activeLocation.id).length === 0} onClick={() => openMutationDialog({ kind: "transfer", requestId: crypto.randomUUID() })}><ArrowRightLeft className="size-3.5" />New transfer</Button>} />
+              <SectionHeading title="Location transfers" detail="Source submissions require an independent destination decision before paired stock movements post." action={canTransferCreate ? <Button size="sm" variant="accent" disabled={!model.items.length || model.locations.filter((location) => location.id !== workspace.activeLocation.id).length === 0} onClick={() => openMutationDialog({ kind: "transfer", requestId: crypto.randomUUID() })}><ArrowRightLeft className="size-3.5" />New transfer</Button> : undefined} />
               {model.transfers.length ? <div className="border-y border-[var(--line)]">{model.transfers.map((transfer) => { const pending = transfer.status === "draft"; const own = transfer.createdByUserId === workspace.identity.userId; const atDestination = transfer.toLocationId === workspace.activeLocation.id; return <div key={transfer.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><ArrowRightLeft className="size-4 text-[var(--ink-faint)]" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{transfer.fromLocationName} → {transfer.toLocationName}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{transfer.lines.length} lines · submitted by {transfer.createdBy} · {dateTimeLabel(transfer.createdAt, model.timeZone)}{pending && own ? " · another reviewer required" : ""}</span></span><StatusPill tone={statusTone[transfer.status] ?? (pending ? "warning" : "neutral")}>{pending ? "Pending review" : sentenceCase(transfer.status)}</StatusPill>{pending ? <Button size="sm" variant={atDestination && !own ? "accent" : "secondary"} onClick={() => openMutationDialog({ kind: "transfer-review", requestId: crypto.randomUUID(), transfer })}>{atDestination && !own ? "Review receipt" : "View"}<ChevronRight className="size-3.5" /></Button> : null}</div>; })}</div> : <EmptyState icon={<ArrowRightLeft className="size-4" />} title="No location transfers" detail={model.locations.length > 1 ? "Submit a source-location transfer for destination review." : "No other RLS-visible active location is available as a destination."} />}
             </section>
           ) : null}
@@ -1051,7 +1086,7 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "waste" ? (
             <section className="mt-5">
-              <SectionHeading title="Waste log" detail="Observed waste stays pending until a different manager approves or rejects it." action={<Button size="sm" variant="accent" disabled={!model.items.length} onClick={() => openMutationDialog({ kind: "waste", requestId: crypto.randomUUID() })}><Plus className="size-3.5" />Record waste</Button>} />
+              <SectionHeading title="Waste log" detail="Observed waste stays pending until a different manager approves or rejects it." action={canWasteCreate ? <Button size="sm" variant="accent" disabled={!model.items.length} onClick={() => openMutationDialog({ kind: "waste", requestId: crypto.randomUUID() })}><Plus className="size-3.5" />Record waste</Button> : undefined} />
               {model.waste.length ? <div className="border-y border-[var(--line)]">{model.waste.map((record) => { const pending = ["pending", "in_review"].includes(record.status); return <div key={record.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger)]"><Trash2 className="size-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{record.itemName} · {record.recordedBy}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{quantityLabel(record.quantity)} {record.unitSymbol} · {sentenceCase(record.reasonCode)} · {dateTimeLabel(record.occurredAt, model.timeZone)}</span>{record.notes ? <span className="mt-1 block truncate text-[9px] text-[var(--ink-soft)]">{record.notes}</span> : null}</span><span className="numeric text-xs font-semibold">{record.estimatedCostCents === null ? "—" : formatMoney(record.estimatedCostCents, model.currencyCode)}</span><StatusPill tone={statusTone[record.status] ?? "neutral"}>{sentenceCase(record.status)}</StatusPill>{pending ? <Button size="sm" variant="secondary" onClick={() => openMutationDialog({ kind: "waste-review", requestId: crypto.randomUUID(), record })}>Review<ChevronRight className="size-3.5" /></Button> : null}</div>; })}</div> : <EmptyState icon={<Trash2 className="size-4" />} title="No waste records" detail="Record a factual observation to start an independent review." />}
             </section>
           ) : null}

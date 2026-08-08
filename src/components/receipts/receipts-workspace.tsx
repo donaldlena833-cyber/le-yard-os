@@ -30,7 +30,9 @@ type UiReceipt = Receipt & { localFileName?: string };
 
 export function ReceiptsWorkspace() {
   const workspace = useWorkspaceContext();
-  const [receipts, setReceipts] = useState<UiReceipt[]>([]);
+  const [receipts, setReceipts] = useState<UiReceipt[]>(
+    demoWorkspace.receipts.filter((receipt) => receipt.locationId === workspace.activeLocation.id),
+  );
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<UiReceipt | null>(null);
   const [processing, setProcessing] = useState(false);
