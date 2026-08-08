@@ -22,6 +22,7 @@ import { useRef, useState } from "react";
 import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/files";
 import {
   createReceiptUploadUrlAction,
+  assignReceiptInventoryMatchAction,
   finalizeReceiptUploadAction,
   resolveReceiptDuplicateAction,
   reviewReceiptAction,
@@ -31,6 +32,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
+import { InvoiceInventoryMatches } from "@/components/receipts/invoice-inventory-matches";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import type {
   LiveReceiptOption,
@@ -65,6 +67,7 @@ function ReceiptInspector({
   categories,
   expenses,
   deliveries,
+  inventoryItems,
   referenceWindowSize,
   onClose,
 }: {
@@ -73,6 +76,7 @@ function ReceiptInspector({
   categories: LiveReceiptOption[];
   expenses: LiveReceiptReferenceOption[];
   deliveries: LiveReceiptReferenceOption[];
+  inventoryItems: { id: string; name: string; sku: string | null }[];
   referenceWindowSize: number;
   onClose: () => void;
 }) {
@@ -199,6 +203,27 @@ function ReceiptInspector({
     router.refresh();
   }
 
+  async function assignInventoryMatch(input: {
+    lineKey: string;
+    description: string;
+    inventoryItemId: string;
+    confidence: number;
+  }) {
+    const scope = `receipt.inventory.match:${receipt.id}:${input.lineKey}`;
+    const result = await assignReceiptInventoryMatchAction({
+      requestId: requestIdFor(scope, input),
+      receiptId: receipt.id,
+      ...input,
+    });
+    if (!result.ok) {
+      setMessage(result.message);
+      return false;
+    }
+    rotateRequestId(scope);
+    setMessage("Invoice line assigned to inventory. Review it with the receipt before posting a delivery.");
+    return true;
+  }
+
   const terminal = receipt.reviewStatus === "approved" || receipt.reviewStatus === "rejected";
   const unresolvedMatches = receipt.duplicateMatches.filter((match) => !match.resolution);
   const linkedExpenses = expenses.filter((expense) => expense.receiptId === receipt.id);
@@ -254,6 +279,12 @@ function ReceiptInspector({
             <SectionHeading title="Extraction evidence" detail="Every field remains human-reviewed" />
             {receipt.extractions.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2">{receipt.extractions.map((extraction) => <div key={extraction.fieldName} className="rounded-xl bg-[var(--canvas)] p-3"><p className="text-[9px] font-semibold text-[var(--ink-faint)]">{extraction.fieldName}</p><p className="mt-1 truncate text-xs font-semibold">{extraction.value}</p><p className="numeric mt-1 text-[9px] text-[var(--ink-faint)]">{extraction.confidence == null ? "Confidence unavailable" : `${Math.round(extraction.confidence * 100)}% confidence`}</p></div>)}</div> : <div className="mt-3 flex items-start gap-3 rounded-xl bg-[var(--accent-soft)]/45 p-4 text-[10px] leading-4 text-[var(--accent-strong)]"><Sparkles className="mt-0.5 size-4 shrink-0" /><span>No extraction evidence is stored for this document. This release does not send receipt images to a live model provider.</span></div>}
           </section>
+
+          <InvoiceInventoryMatches
+            text={receipt.extractions.map((extraction) => extraction.value).join("; ")}
+            catalog={inventoryItems}
+            onAssign={assignInventoryMatch}
+          />
 
           {message ? <p role="status" className="mt-5 rounded-xl bg-[var(--canvas)] px-3.5 py-3 text-[10px]">{message}</p> : null}
           {!terminal ? <div className="mt-6 flex flex-wrap justify-end gap-2"><Button type="submit" variant="secondary" disabled={busy}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <FileSearch className="size-4" />} Save review</Button><Button type="button" variant="danger" disabled={busy || Boolean(unresolvedMatches.length)} onClick={() => void review("rejected")}>Reject</Button><Button type="button" variant="accent" disabled={busy || Boolean(unresolvedMatches.length)} title={unresolvedMatches.length ? "Resolve possible duplicates first" : undefined} onClick={() => void review("approved")}><Check className="size-4" /> Approve and lock</Button></div> : <div className="mt-6 flex items-center gap-2 rounded-xl bg-[var(--positive-soft)] px-3.5 py-3 text-[10px] text-[var(--positive)]"><ShieldCheck className="size-4" /> Terminal reviews and their evidence are immutable.</div>}
@@ -384,7 +415,7 @@ export function ConnectedReceiptsWorkspace({
 
       <nav aria-label="Receipt pages" className="mt-4 flex items-center justify-between gap-3"><p className="text-[9px] text-[var(--ink-faint)]">Rows {(model.page - 1) * model.pageSize + (receipts.length ? 1 : 0)}–{(model.page - 1) * model.pageSize + receipts.length} of {model.totalCount} matching documents</p><div className="flex gap-2"><Button variant="secondary" size="sm" disabled={!model.hasPreviousPage} onClick={() => router.replace(pageHref(model.page - 1))}>Previous</Button><Button variant="secondary" size="sm" disabled={!model.hasNextPage} onClick={() => router.replace(pageHref(model.page + 1))}>Next</Button></div></nav>
 
-      {selected ? <ReceiptInspector key={selected.id} receipt={selected} vendors={model.vendors} categories={model.categories} expenses={model.expenses} deliveries={model.deliveries} referenceWindowSize={model.referenceWindowSize} onClose={() => setSelectedId(null)} /> : null}
+      {selected ? <ReceiptInspector key={selected.id} receipt={selected} vendors={model.vendors} categories={model.categories} expenses={model.expenses} deliveries={model.deliveries} inventoryItems={model.inventoryItems} referenceWindowSize={model.referenceWindowSize} onClose={() => setSelectedId(null)} /> : null}
     </PageFrame>
   );
 }

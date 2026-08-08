@@ -44,7 +44,13 @@ export const navigationSections: Array<{
         icon: CalendarDays,
         mobile: true,
       },
-      { href: "/kitchen", label: "Kitchen", icon: ChefHat, mobile: true, personas: ["chef"] },
+      {
+        href: "/kitchen",
+        label: "Kitchen",
+        icon: ChefHat,
+        mobile: true,
+        roles: ["owner", "admin", "manager"],
+      },
       { href: "/team", label: "Team", icon: UsersRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
       { href: "/vendors", label: "Vendors", icon: Truck, mobile: true, roles: ["owner", "admin", "manager", "employee"] },
       { href: "/earnings", label: "Earnings", icon: WalletCards, hiddenPersonas: ["chef"] },
@@ -52,7 +58,6 @@ export const navigationSections: Array<{
         href: "/messages",
         label: "Messages",
         icon: MessageCircleMore,
-        badge: "4",
         mobile: true,
       },
     ],
@@ -61,7 +66,7 @@ export const navigationSections: Array<{
     label: "Back office",
     items: [
       { href: "/closeout", label: "Closeout & tips", icon: HandCoins, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/receipts", label: "Receipts", icon: ReceiptText, badge: "3", roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
+      { href: "/receipts", label: "Receipts", icon: ReceiptText, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
       { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
       { href: "/guests", label: "Guests", icon: ContactRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
       { href: "/tasks", label: "Tasks & SOPs", icon: CheckSquare2 },
@@ -111,7 +116,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   },
   "/team": {
     title: "Team",
-    detail: "18 active people · Le Yard",
+    detail: "Le Yard team",
   },
   "/vendors": {
     title: "Vendors",
@@ -127,7 +132,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   },
   "/messages": {
     title: "Messages",
-    detail: "4 unread across 3 channels",
+    detail: "Internal channels",
   },
   "/closeout": {
     title: "Closeout & tips",
@@ -135,7 +140,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   },
   "/receipts": {
     title: "Receipts",
-    detail: "3 documents need review",
+    detail: "Invoice intake",
   },
   "/inventory": {
     title: "Inventory",
@@ -143,11 +148,11 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   },
   "/guests": {
     title: "Guests",
-    detail: "1,248 unified profiles",
+    detail: "Live guest CRM",
   },
   "/tasks": {
     title: "Tasks & SOPs",
-    detail: "7 due before service",
+    detail: "SOPs, maintenance, and incidents",
   },
   "/reports": {
     title: "Reports",

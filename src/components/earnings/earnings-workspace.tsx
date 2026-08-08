@@ -91,7 +91,14 @@ export function EarningsWorkspace() {
   const selected = useMemo(() => paystubs.find((stub) => stub.id === selectedId) ?? paystubs[0]!, [selectedId]);
   const total = selected.hourly + selected.tips;
   const summary = periodTotals[period];
-
+  if (workspace.mode === "live") {
+    return (
+      <PageFrame width="standard">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow">Private to you</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Earnings</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Hours, approved tips, and hourly pay organized by Friday payday.</p></div><StatusPill tone="warning">Awaiting approved records</StatusPill></div>
+        <section className="mt-8 rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[var(--paper)] px-6 py-14 text-center"><WalletCards className="mx-auto size-6 text-[var(--ink-faint)]" /><h3 className="mt-4 text-base font-semibold">No paystubs yet</h3><p className="mx-auto mt-2 max-w-md text-[11px] leading-5 text-[var(--ink-faint)]">Approved Toast hours and manager-approved tip runs will populate your Friday paystubs here. No earnings are estimated before those records exist.</p></section>
+      </PageFrame>
+    );
+  }
   if (workspace.persona === "chef") {
     return <PageFrame><SectionHeading eyebrow="Restricted workspace" title="Earnings are not part of your role" detail="Payroll and paystubs are available only to employees, managers, and owners." /></PageFrame>;
   }

@@ -8,11 +8,13 @@ import {
   reviewReceiptInputSchema,
 } from "@/data/schemas";
 import {
+  assignReceiptInventoryMatchInputSchema,
   resolveReceiptDuplicateInputSchema,
   setDeliveryReceiptLinkInputSchema,
   setExpenseReceiptLinkInputSchema,
 } from "@/data/receipt-schemas";
 import {
+  assignReceiptInventoryMatch,
   createReceiptUploadUrl,
   finalizeReceiptUpload,
   reviewReceipt,
@@ -20,6 +22,17 @@ import {
   setDeliveryReceiptLink,
   setExpenseReceiptLink,
 } from "@/data/workflows/receipts";
+
+export async function assignReceiptInventoryMatchAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "receipt.inventory.match",
+    schema: assignReceiptInventoryMatchInputSchema,
+    input,
+    run: assignReceiptInventoryMatch,
+  });
+  if (result.ok && result.persisted) revalidatePath("/receipts");
+  return result;
+}
 
 export async function reviewReceiptAction(input: unknown) {
   const result = await executeWorkflowAction({

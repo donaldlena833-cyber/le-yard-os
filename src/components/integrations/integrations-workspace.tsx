@@ -32,8 +32,8 @@ const providerMarks: Record<IntegrationProvider, string> = {
 };
 
 export function IntegrationsWorkspace() {
-  const [connections] = useState(demoWorkspace.integrationConnections);
-  const [syncs, setSyncs] = useState(demoWorkspace.integrationSyncs);
+  const [connections] = useState<typeof demoWorkspace.integrationConnections>([]);
+  const [syncs, setSyncs] = useState<typeof demoWorkspace.integrationSyncs>([]);
   const [selected, setSelected] = useState<IntegrationProvider | null>(null);
   const [importing, setImporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -96,7 +96,7 @@ export function IntegrationsWorkspace() {
 
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Connected" value={`${configured}/${connections.length}`} detail="Live or manual adapters" />
-        <Metric label="Last successful sync" value="18m" detail="Toast sales import" trend={{ label: "Fresh", tone: "positive" }} />
+        <Metric label="Last successful sync" value="—" detail="Connect Toast or Resy" />
         <Metric label="Records · 7d" value={syncs.reduce((sum, sync) => sum + sync.recordsWritten, 0).toLocaleString()} detail="Validated and accepted" />
         <Metric label="Failed jobs" value={String(failures)} detail="Exponential retry enabled" trend={{ label: failures ? "Review" : "Clear", tone: failures ? "negative" : "positive" }} />
       </section>
@@ -120,7 +120,7 @@ export function IntegrationsWorkspace() {
       </section>
 
       <section className="mt-9">
-        <SectionHeading title="Recent activity" detail="Imports and sync jobs are immutable after completion." />
+        <SectionHeading title="Recent activity" detail="Imports and sync jobs will appear here after a connection is configured." />
         <div className="overflow-x-auto border-y border-[var(--line)]">
           <div className="grid min-w-[720px] grid-cols-[1fr_.7fr_.55fr_.6fr_80px] gap-4 bg-[var(--canvas-strong)] px-4 py-2.5 text-[9px] font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase"><span>Source</span><span>Started</span><span>Records</span><span>Status</span><span /></div>
           {syncs.map((sync) => {
@@ -128,6 +128,7 @@ export function IntegrationsWorkspace() {
             const adapter = connection ? integrationAdapters[connection.provider] : null;
             return <div key={sync.id} className="grid min-w-[720px] grid-cols-[1fr_.7fr_.55fr_.6fr_80px] items-center gap-4 border-t border-[var(--line)] px-4 py-3.5"><div><p className="text-xs font-semibold">{adapter?.label || "Import"}</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">{sync.direction} · attempt {sync.attempt}</p></div><span className="numeric text-[10px] text-[var(--ink-faint)]">{new Date(sync.startedAt).toLocaleString()}</span><span className="numeric text-[10px]">{sync.recordsWritten}/{sync.recordsRead}</span><span><StatusPill tone={sync.status === "succeeded" ? "positive" : sync.status === "failed" ? "danger" : sync.status === "partial" ? "warning" : "neutral"} dot={sync.status === "running"}>{sync.status}</StatusPill></span><span className="text-right">{sync.status === "failed" ? <Button variant="quiet" size="sm" onClick={() => retrySync(sync)}><RefreshCw className="size-3" /> Retry</Button> : <span className="text-[9px] text-[var(--ink-faint)]">{sync.completedAt ? "Complete" : `Retry ${retryDelayMinutes(sync.attempt)}m`}</span>}</span>{sync.errorSummary ? <p className="col-span-5 text-[9px] text-[var(--warning)]">{sync.errorSummary}</p> : null}</div>;
           })}
+          {!syncs.length ? <p className="px-4 py-10 text-center text-[11px] text-[var(--ink-faint)]">No sync activity yet.</p> : null}
         </div>
       </section>
 

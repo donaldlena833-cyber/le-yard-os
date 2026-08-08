@@ -50,6 +50,10 @@ const demoInvitationActionIds = {
 
 const initialInviteState: AuthActionState = { status: "idle" };
 
+const realPlaygroundPeople = demoWorkspace.people.filter((person) =>
+  [demoIds.people.donald, demoIds.people.maris, demoIds.people.irini, demoIds.people.mateo].includes(person.id as never),
+);
+
 const roleLabel: Record<AppRole, string> = {
   owner: "Owner",
   admin: "Admin",
@@ -218,6 +222,7 @@ function InviteDialog({
 
 function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) {
   const visibleLocations = workspace.locations as WorkspaceLocation[];
+  const people = realPlaygroundPeople;
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | AppRole>("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -239,16 +244,16 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
 
   const filteredPeople = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return demoWorkspace.people.filter((person) => {
+    return people.filter((person) => {
       const inScope = person.locationIds.some((locationId) => visibleLocations.some((location) => location.id === locationId));
       const role = roleOverrides[person.id] ?? person.primaryRole;
       const jobs = demoWorkspace.jobRoles.filter((job) => person.jobRoleIds.includes(job.id));
       const matchesQuery = !normalizedQuery || [person.displayName, person.email, ...jobs.map((job) => job.name)].some((value) => value.toLowerCase().includes(normalizedQuery));
       return inScope && matchesQuery && (roleFilter === "all" || role === roleFilter) && (locationFilter === "all" || person.locationIds.includes(locationFilter));
     });
-  }, [locationFilter, query, roleFilter, roleOverrides, visibleLocations]);
+  }, [locationFilter, people, query, roleFilter, roleOverrides, visibleLocations]);
 
-  const selected = demoWorkspace.people.find((person) => person.id === selectedId) ?? filteredPeople[0] ?? demoWorkspace.people[0];
+  const selected = people.find((person) => person.id === selectedId) ?? filteredPeople[0] ?? people[0];
   const selectedRole = roleOverrides[selected.id] ?? selected.primaryRole;
   const selectedStatus = statusOverrides[selected.id] ?? selected.status;
   const selectedMembership = demoWorkspace.memberships.find((membership) => membership.userId === selected.id);
@@ -272,14 +277,14 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
     setNotice(`${selected.displayName} was ${nextStatus === "suspended" ? "suspended" : "reactivated"} in this demo.`);
   }
 
-  const activeCount = demoWorkspace.people.filter((person) => (statusOverrides[person.id] ?? person.status) === "active").length;
-  const managerCount = demoWorkspace.people.filter((person) => ["owner", "admin", "manager"].includes(roleOverrides[person.id] ?? person.primaryRole)).length;
+  const activeCount = people.filter((person) => (statusOverrides[person.id] ?? person.status) === "active").length;
+  const managerCount = people.filter((person) => ["owner", "admin", "manager"].includes(roleOverrides[person.id] ?? person.primaryRole)).length;
 
   return (
     <PageFrame width="wide">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <div className="flex items-center gap-2"><StatusPill tone="positive" dot>{activeCount} active</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Synthetic workspace</span></div>
+          <div className="flex items-center gap-2"><StatusPill tone="positive" dot>{activeCount} active</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Le Yard users</span></div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Your whole team, in one place</h2>
           <p className="mt-1 text-[11px] text-[var(--ink-faint)]">Profiles, access, availability, and documents within your visible Le Yard scope.</p>
         </div>
@@ -287,7 +292,7 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
       </div>
 
       <section aria-label="Team metrics" className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric label="Active team" value={String(activeCount)} detail={`${demoWorkspace.people.length - activeCount} pending or suspended`} />
+        <Metric label="Active team" value={String(activeCount)} detail={`${people.length - activeCount} pending or suspended`} />
         <Metric label="Leadership" value={String(managerCount)} detail="Owners and managers" />
         <Metric label="Locations" value={String(visibleLocations.length)} detail="Visible restaurant scope" />
         <Metric label="Needs review" value="3" detail="Time off, certificate, invitation" trend={{ label: "Action", tone: "negative" }} />
@@ -329,7 +334,7 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
           <div className="border-b border-[var(--line)] p-5 sm:p-7">
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
               <div className="flex items-center gap-4">
-                <Avatar name={selected.displayName} size="lg" index={demoWorkspace.people.findIndex((person) => person.id === selected.id)} className="size-14 text-base" />
+                <Avatar name={selected.displayName} size="lg" index={people.findIndex((person) => person.id === selected.id)} className="size-14 text-base" />
                 <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="text-xl font-medium tracking-[-0.04em]">{selected.displayName}</h3><StatusPill tone={roleTone[selectedRole]}>{roleLabel[selectedRole]}</StatusPill><StatusPill tone={selectedStatus === "active" ? "positive" : selectedStatus === "invited" ? "warning" : "danger"} dot={selectedStatus === "active"}>{selectedStatus}</StatusPill></div><p className="mt-1 text-[11px] text-[var(--ink-faint)]">{selectedJobs.map((job) => job.name).join(" · ")} · joined {selected.hiredOn}</p></div>
               </div>
               <div className="flex flex-wrap items-center gap-2">

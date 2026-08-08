@@ -568,6 +568,7 @@ export function CloseoutWorkspace() {
             <p className="eyebrow">03 / Tip sources</p>
             <h3 className="mt-2 text-base font-semibold tracking-[-0.03em]">Build the distributable pool</h3>
             <p className="mt-1 text-[10px] text-[var(--ink-faint)]">Policy {rule.id} · version {rule.version} · effective {rule.effectiveFrom}</p>
+            <p className="mt-2 text-[10px] font-semibold text-[var(--ink-soft)]">Point basis: servers 10 · bartenders 10 · support staff 6 · multiplied by eligible hours.</p>
           </div>
           <div className="flex items-center gap-2 text-[10px] text-[var(--ink-faint)]"><ShieldCheck className="size-3.5 text-[var(--positive)]" /> Largest remainder · employee ID tie-break</div>
         </div>
@@ -590,8 +591,8 @@ export function CloseoutWorkspace() {
       <section className="mt-10">
         <SectionHeading
           eyebrow="04 / Allocation"
-          title="Eligible shifts, weights & adjustments"
-          detail="Weights are policy inputs, not compliance rules. Expand a calculated row for exact arithmetic."
+          title="Eligible shifts, points & adjustments"
+          detail="Tip points are multiplied by eligible hours. Expand a calculated row for exact arithmetic."
           action={<Button variant="secondary" size="sm" disabled={locked} onClick={calculate}><Calculator className="size-3.5" /> Calculate tips</Button>}
         />
         <div className="overflow-x-auto border-y border-[var(--line)]">
@@ -600,7 +601,7 @@ export function CloseoutWorkspace() {
               <tr>
                 <th className="px-4 py-2.5 text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Team member / job</th>
                 <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Eligible time</th>
-                <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Weight</th>
+                <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Points</th>
                 <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Adjustment</th>
                 <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Allocation</th>
                 <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Include</th>
@@ -620,7 +621,7 @@ export function CloseoutWorkspace() {
                         </button>
                       </td>
                       <td className="numeric px-4 py-3.5 text-right text-[11px] font-semibold">{(participant.minutes / 60).toFixed(2)}h</td>
-                      <td className="px-4 py-3.5 text-right"><input aria-label={`${participant.displayName} weight`} value={weights[participant.personId] ?? ""} disabled={locked || !participant.policyEligible} onChange={(event) => { setWeights((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric h-8 w-20 rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-right text-[10px] font-semibold outline-none disabled:opacity-45" /></td>
+                      <td className="px-4 py-3.5 text-right"><input aria-label={`${participant.displayName} tip points`} value={weights[participant.personId] ?? ""} disabled={locked || !participant.policyEligible} onChange={(event) => { setWeights((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric h-8 w-20 rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-right text-[10px] font-semibold outline-none disabled:opacity-45" /></td>
                       <td className="px-4 py-3.5 text-right"><span className="inline-flex h-8 w-24 items-center rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2"><span className="text-[9px] text-[var(--ink-faint)]">$</span><input aria-label={`${participant.displayName} adjustment`} value={adjustments[participant.personId] ?? "0.00"} disabled={locked} onChange={(event) => { setAdjustments((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric min-w-0 flex-1 bg-transparent text-right text-[10px] font-semibold outline-none disabled:opacity-45" /></span></td>
                       <td className="numeric px-4 py-3.5 text-right text-[11px] font-semibold">{allocation ? formatMoney(allocation.totalTipCents) : "—"}<span className="mt-1 block text-[8px] font-normal text-[var(--ink-faint)]">{allocation?.explanation.eligibilityCode.replaceAll("_", " ") ?? (participant.policyEligible ? "Pending" : "Policy excluded")}</span></td>
                       <td className="px-4 py-3.5 text-right"><label className="inline-flex items-center gap-2 text-[9px] text-[var(--ink-faint)]"><input type="checkbox" checked={!exclusions[participant.personId]} disabled={locked} onChange={(event) => { setExclusions((current) => ({ ...current, [participant.personId]: !event.target.checked })); invalidateCalculation(); }} className="size-4 accent-[var(--accent)]" /><span>{exclusions[participant.personId] ? "Excluded" : "Included"}</span></label></td>

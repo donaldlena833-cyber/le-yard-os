@@ -17,17 +17,20 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import { demoWorkspace } from "@/lib/demo";
+import { InvoiceInventoryMatches } from "@/components/receipts/invoice-inventory-matches";
 import { formatMoney } from "@/lib/utils";
 import type { Receipt } from "@/types";
 
 type UiReceipt = Receipt & { localFileName?: string };
 
 export function ReceiptsWorkspace() {
-  const [receipts, setReceipts] = useState<UiReceipt[]>(demoWorkspace.receipts);
+  const workspace = useWorkspaceContext();
+  const [receipts, setReceipts] = useState<UiReceipt[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<UiReceipt | null>(null);
   const [processing, setProcessing] = useState(false);
@@ -60,7 +63,7 @@ export function ReceiptsWorkspace() {
       reviewStatus: "needs_review",
       duplicateOfId: null,
       reviewedBy: null,
-      ocrText: `Uploaded ${file.name}; demo OCR found vendor, date, subtotal, tax, and total.`,
+      ocrText: `Uploaded ${file.name}; invoice lines: Roma tomatoes; Fresh basil; Bread flour; subtotal, tax, and total recognized.`,
       file: {
         ...demoWorkspace.receipts[0].file,
         id: `file-${Date.now()}`,
@@ -83,7 +86,7 @@ export function ReceiptsWorkspace() {
     const reviewed: UiReceipt = {
       ...receipt,
       reviewStatus: "verified",
-      reviewedBy: demoWorkspace.people[0].id,
+      reviewedBy: workspace.identity.userId,
       updatedAt: new Date().toISOString(),
     };
     setReceipts((current) => current.map((item) => (item.id === reviewed.id ? reviewed : item)));
@@ -111,7 +114,7 @@ export function ReceiptsWorkspace() {
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="This period" value={formatMoney(total)} detail={`${receipts.length} documents`} />
         <Metric label="Needs review" value={String(needsReview.length)} detail="AI cannot self-approve" trend={{ label: needsReview.length ? "Action" : "Clear", tone: needsReview.length ? "negative" : "positive" }} />
-        <Metric label="Extraction confidence" value="94.5%" detail="Average verified fields" />
+        <Metric label="Extraction confidence" value={receipts.length ? `${Math.round((receipts.reduce((sum, receipt) => sum + receipt.extractionConfidence, 0) / receipts.length) * 100)}%` : "—"} detail={receipts.length ? "Average extracted fields" : "Upload an invoice to begin"} />
         <Metric label="Possible duplicates" value={String(receipts.filter((receipt) => receipt.duplicateOfId).length)} detail="Matched by hash + amount" />
       </section>
 
@@ -166,6 +169,7 @@ export function ReceiptsWorkspace() {
                 {[{ label: "Document number", value: selected.documentNumber || "" }, { label: "Document date", value: selected.documentDate }, { label: "Subtotal", value: (selected.subtotalCents / 100).toFixed(2) }, { label: "Tax", value: (selected.taxCents / 100).toFixed(2) }, { label: "Total", value: (selected.totalCents / 100).toFixed(2) }, { label: "Category", value: selected.expenseCategory.replaceAll("_", " ") }].map((field) => <label key={field.label}><span className="mb-1.5 block text-[10px] font-semibold text-[var(--ink-soft)]">{field.label}</span><input defaultValue={field.value} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs capitalize outline-none focus:border-[var(--accent)]" /></label>)}
               </div>
               <div className="mt-6"><p className="text-[10px] font-semibold">Recognized text</p><p className="mt-2 rounded-xl bg-[var(--canvas)] p-3 font-mono text-[9px] leading-4 text-[var(--ink-faint)]">{selected.ocrText}</p></div>
+              <InvoiceInventoryMatches text={selected.ocrText} catalog={[]} />
               {selected.duplicateOfId ? <div className="mt-5 flex gap-3 rounded-xl bg-[var(--warning-soft)] p-3 text-[10px] text-[var(--warning)]"><CircleAlert className="size-4 shrink-0" />Possible duplicate of {selected.duplicateOfId}. Verify before posting.</div> : null}
               <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-5"><Button variant="secondary"><Link2 className="size-3.5" /> Link purchase</Button><Button variant="quiet"><ArrowUpRight className="size-3.5" /> Open file</Button><Button className="ml-auto" variant="accent" disabled={selected.reviewStatus === "verified"} onClick={() => verifyReceipt(selected)}><Check className="size-3.5" /> {selected.reviewStatus === "verified" ? "Verified" : "Verify fields"}</Button></div>
             </motion.aside>

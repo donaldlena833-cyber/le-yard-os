@@ -9,17 +9,28 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { demoWorkspace } from "@/lib/demo";
 import { formatMoney } from "@/lib/utils";
 
+const playgroundVendors: typeof demoWorkspace.vendors = [];
+const playgroundInventoryItems: typeof demoWorkspace.inventoryItems = [];
+const playgroundInventoryPrices: typeof demoWorkspace.inventoryPrices = [];
+const playgroundPurchaseOrders: typeof demoWorkspace.purchaseOrders = [];
+
 export function VendorsWorkspace() {
   const workspace = useWorkspaceContext();
+  // The playground starts with a clean purchasing ledger. Vendor records are
+  // created by Le Yard, not fabricated for the preview.
+  const vendors = playgroundVendors;
+  const inventoryItems = playgroundInventoryItems;
+  const inventoryPrices = playgroundInventoryPrices;
+  const purchaseOrders = playgroundPurchaseOrders;
   const [query, setQuery] = useState("");
-  const [selectedVendorId, setSelectedVendorId] = useState(demoWorkspace.vendors[0]?.id ?? "");
-  const selectedVendor = demoWorkspace.vendors.find((vendor) => vendor.id === selectedVendorId) ?? demoWorkspace.vendors[0];
+  const [selectedVendorId, setSelectedVendorId] = useState(vendors[0]?.id ?? "");
+  const selectedVendor = vendors.find((vendor) => vendor.id === selectedVendorId) ?? vendors[0];
   const filteredVendors = useMemo(
-    () => demoWorkspace.vendors.filter((vendor) => `${vendor.name} ${vendor.contactName}`.toLowerCase().includes(query.trim().toLowerCase())),
-    [query],
+    () => vendors.filter((vendor) => `${vendor.name} ${vendor.contactName}`.toLowerCase().includes(query.trim().toLowerCase())),
+    [query, vendors],
   );
-  const vendorPrices = demoWorkspace.inventoryPrices.filter((price) => price.vendorId === selectedVendor?.id);
-  const activeOrders = demoWorkspace.purchaseOrders.filter(
+  const vendorPrices = inventoryPrices.filter((price) => price.vendorId === selectedVendor?.id);
+  const activeOrders = purchaseOrders.filter(
     (order) => order.vendorId === selectedVendor?.id && !["received", "cancelled"].includes(order.status),
   );
 
@@ -38,16 +49,16 @@ export function VendorsWorkspace() {
       </div>
 
       <section className="mt-6 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric label="Active vendors" value={String(demoWorkspace.vendors.filter((vendor) => vendor.active).length)} detail="Current purchasing list" />
-        <Metric label="Price records" value={String(demoWorkspace.inventoryPrices.length)} detail="Verified unit prices" />
-        <Metric label="Open orders" value={String(demoWorkspace.purchaseOrders.filter((order) => !["received", "cancelled"].includes(order.status)).length)} detail="Needs follow-up" />
+        <Metric label="Active vendors" value={String(vendors.filter((vendor) => vendor.active).length)} detail="Add your first vendor" />
+        <Metric label="Price records" value={String(inventoryPrices.length)} detail="No prices imported yet" />
+        <Metric label="Open orders" value={String(purchaseOrders.filter((order) => !["received", "cancelled"].includes(order.status)).length)} detail="No orders yet" />
         <Metric label="Primary room" value="Le Yard" detail="858 9th Ave" />
       </section>
 
       <div className="mt-8 grid gap-8 xl:grid-cols-[.72fr_1.28fr]">
         <section>
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-            <SectionHeading eyebrow="Purchasing list" title="Vendors" detail="Select a vendor to inspect their current pricing." className="mb-0" />
+            <SectionHeading eyebrow="Purchasing list" title="Vendors" detail="Add a vendor to inspect current pricing." className="mb-0" />
             <label className="relative block sm:w-56">
               <span className="sr-only">Search vendors</span>
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" />
@@ -62,16 +73,16 @@ export function VendorsWorkspace() {
                 <StatusPill tone={vendor.active ? "positive" : "neutral"}>{vendor.active ? "Active" : "Inactive"}</StatusPill>
               </button>
             ))}
-            {!filteredVendors.length ? <p className="px-4 py-8 text-center text-[11px] text-[var(--ink-faint)]">No vendors match this search.</p> : null}
+            {!filteredVendors.length ? <p className="px-4 py-8 text-center text-[11px] text-[var(--ink-faint)]">No vendors yet. Add one when purchasing is ready.</p> : null}
           </div>
         </section>
 
         <section>
-          <SectionHeading eyebrow="Selected vendor" title={selectedVendor?.name.replace(" — Demo", "") ?? "Vendor"} detail={`${selectedVendor?.contactName ?? ""} · ${selectedVendor?.paymentTerms ?? "Terms not set"}`} />
+          <SectionHeading eyebrow="Selected vendor" title={selectedVendor?.name.replace(" — Demo", "") ?? "No vendor selected"} detail={selectedVendor ? `${selectedVendor.contactName} · ${selectedVendor.paymentTerms}` : "Vendor pricing will appear here after you add a vendor."} />
           <div className="border-y border-[var(--line)]">
             <div className="grid grid-cols-[1fr_auto_auto] gap-3 bg-[var(--canvas-strong)] px-3 py-2.5 text-[9px] font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase"><span>Food item</span><span>Unit</span><span className="text-right">Latest price</span></div>
             {vendorPrices.map((price) => {
-              const item = demoWorkspace.inventoryItems.find((candidate) => candidate.id === price.itemId);
+              const item = inventoryItems.find((candidate) => candidate.id === price.itemId);
               return <div key={price.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-t border-[var(--line)] px-3 py-4"><div><p className="text-[11px] font-semibold">{item?.name ?? "Inventory item"}</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">Effective {price.effectiveOn}</p></div><span className="text-[10px] text-[var(--ink-faint)]">/{price.unit}</span><span className="numeric text-sm font-semibold">{formatMoney(price.unitCostCents)}</span></div>;
             })}
             {!vendorPrices.length ? <p className="px-4 py-10 text-center text-[11px] text-[var(--ink-faint)]">No verified price records for this vendor yet.</p> : null}

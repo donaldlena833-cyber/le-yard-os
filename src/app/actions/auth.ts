@@ -107,9 +107,16 @@ export async function signInAction(
     redirect(safeInternalRedirect(parsed.data.next));
   }
 
-  const email = z.string().email().safeParse(parsed.data.identifier);
+  // Le Yard's connected tenant accepts the same short usernames as the
+  // playground accounts. They resolve to tenant-owned auth emails without
+  // exposing an email directory in the sign-in UI.
+  const identifier = parsed.data.identifier.toLowerCase();
+  const emailValue = identifier.includes("@")
+    ? identifier
+    : `${identifier}@le-yard.local`;
+  const email = z.string().email().safeParse(emailValue);
   if (!email.success) {
-    return { status: "error", message: "Enter a valid email and password." };
+    return { status: "error", message: "Enter a valid username or email and password." };
   }
 
   const supabase = await createClient();
@@ -119,7 +126,7 @@ export async function signInAction(
   });
 
   if (error) {
-    return { status: "error", message: "The email or password did not match." };
+    return { status: "error", message: "The username or password did not match." };
   }
 
   redirect(safeInternalRedirect(parsed.data.next));

@@ -50,6 +50,12 @@ export interface LiveReceiptOption {
   name: string;
 }
 
+export interface LiveReceiptInventoryItem {
+  id: string;
+  name: string;
+  sku: string | null;
+}
+
 export interface LiveReceiptReferenceOption {
   id: string;
   label: string;
@@ -67,6 +73,7 @@ export type LiveReceiptsModel =
       receipts: LiveReceiptRow[];
       vendors: LiveReceiptOption[];
       categories: LiveReceiptOption[];
+      inventoryItems: LiveReceiptInventoryItem[];
       expenses: LiveReceiptReferenceOption[];
       deliveries: LiveReceiptReferenceOption[];
       page: number;
@@ -167,6 +174,7 @@ export async function loadLiveReceipts(
     deliveryResult,
     organizationResult,
     locationResult,
+    inventoryResult,
   ] = await Promise.all([
     receiptsQuery.range(offset, offset + RECEIPTS_PAGE_SIZE - 1),
     supabase
@@ -208,6 +216,12 @@ export async function loadLiveReceipts(
       .eq("organization_id", workspace.organization.id)
       .eq("id", workspace.activeLocation.id)
       .single(),
+    supabase
+      .from("inventory_items")
+      .select("id, name, sku")
+      .eq("organization_id", workspace.organization.id)
+      .eq("is_active", true)
+      .order("name"),
   ]);
 
   if (
@@ -217,7 +231,8 @@ export async function loadLiveReceipts(
     expenseResult.error ||
     deliveryResult.error ||
     organizationResult.error ||
-    locationResult.error
+    locationResult.error ||
+    inventoryResult.error
   ) {
     return { status: "error" };
   }
@@ -356,6 +371,11 @@ export async function loadLiveReceipts(
       id: string;
       name: string;
     }>).map((category) => ({ id: category.id, name: category.name })),
+    inventoryItems: ((inventoryResult.data ?? []) as unknown as Array<{
+      id: string;
+      name: string;
+      sku: string | null;
+    }>).map((item) => ({ id: item.id, name: item.name, sku: item.sku })),
     expenses: ([
       ...(expenseResult.data ?? []),
       ...(linkedExpenseResult.data ?? []),

@@ -69,7 +69,14 @@ async function createDemoWorkspaceContext(
   )!;
 
   const preference = await readWorkspacePreference(identity.id);
-  const role = isEmployee ? ("employee" as const) : ("owner" as const);
+  // Mateo is a manager/chef in the playground. Keeping that role explicit is
+  // important: manager permissions should be exercised by the same account
+  // that owns the BOH workflow, without granting owner-only controls.
+  const role = isEmployee
+    ? ("employee" as const)
+    : isChef
+      ? ("manager" as const)
+      : ("owner" as const);
   // The playground represents one real room. Keep the legacy second mock location
   // out of every role's visible scope until multi-room operations are enabled.
   const accessibleLocations = playground ? locations.slice(0, 1) : role === "employee" ? locations.slice(0, 1) : locations;
@@ -113,6 +120,45 @@ async function createDemoWorkspaceContext(
 function metadataDisplayName(value: unknown): unknown {
   if (!value || typeof value !== "object") return undefined;
   return (value as Record<string, unknown>).display_name;
+}
+
+async function resolveWorkspacePersona(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  userId: string,
+  locationIds: readonly string[],
+): Promise<"chef" | undefined> {
+  const employeeResult = await supabase
+    .from("employees")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .eq("employment_status", "active")
+    .maybeSingle();
+  const employeeId = employeeResult.data?.id;
+  if (employeeResult.error || !employeeId || !locationIds.length) return undefined;
+
+  const assignmentResult = await supabase
+    .from("employee_job_roles")
+    .select("job_role_id")
+    .eq("organization_id", organizationId)
+    .eq("employee_id", employeeId)
+    .in("location_id", [...locationIds]);
+  const roleIds = [...new Set((assignmentResult.data ?? []).map((assignment) => assignment.job_role_id))];
+  if (assignmentResult.error || !roleIds.length) return undefined;
+
+  const roleResult = await supabase
+    .from("job_roles")
+    .select("name, code, department")
+    .eq("organization_id", organizationId)
+    .in("id", roleIds);
+  if (roleResult.error) return undefined;
+  const isKitchenRole = (roleResult.data ?? []).some((role) =>
+    [role.name, role.code, role.department ?? ""].some((value) =>
+      /chef|kitchen|culinary|boh|back.of.house/i.test(value),
+    ),
+  );
+  return isKitchenRole ? "chef" : undefined;
 }
 
 export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolution> {
@@ -219,6 +265,12 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
 
   if (!scope) return { status: "no_access", identity };
   if (!scope.activeLocation) return { status: "no_location", identity };
+  const persona = await resolveWorkspacePersona(
+    supabase,
+    scope.organization.id,
+    userId,
+    scope.locations.map((location) => location.id),
+  );
 
   return {
     status: "ready",
@@ -238,6 +290,7 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
       role: scope.membership.role,
       organizationWide:
         scope.membership.role === "owner" || scope.membership.role === "admin",
+      ...(persona ? { persona } : {}),
     },
   };
 }

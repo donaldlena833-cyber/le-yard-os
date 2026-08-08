@@ -21,7 +21,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
-import { demoIds, demoWorkspace } from "@/lib/demo";
+import { demoIds, demoWorkspace as demoFixture } from "@/lib/demo";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/types";
 
@@ -35,9 +35,27 @@ const tabLabels: Array<{ id: Tab; label: string }> = [
   { id: "incidents", label: "Incidents" },
 ];
 
+// The demo workspace intentionally starts with no operational records. These
+// collections are populated by live Supabase rows once Le Yard adds them.
+const playgroundSopDocuments: typeof demoFixture.sopDocuments = [];
+const playgroundMaintenanceRequests: typeof demoFixture.maintenanceRequests = [];
+const playgroundIncidents: typeof demoFixture.incidents = [];
+const playgroundTasks: typeof demoFixture.tasks = [];
+const playgroundChecklists: typeof demoFixture.checklists = [];
+const playgroundChecklistRuns: typeof demoFixture.checklistRuns = [];
+const demoWorkspace = {
+  ...demoFixture,
+  sopDocuments: playgroundSopDocuments,
+  maintenanceRequests: playgroundMaintenanceRequests,
+  incidents: playgroundIncidents,
+  tasks: playgroundTasks,
+  checklists: playgroundChecklists,
+  checklistRuns: playgroundChecklistRuns,
+};
+
 function EmployeeTasksWorkspace() {
   const [tab, setTab] = useState<"sops" | "maintenance" | "incidents">("sops");
-  const [selectedSop, setSelectedSop] = useState(demoWorkspace.sopDocuments[0] || null);
+  const [selectedSop, setSelectedSop] = useState(playgroundSopDocuments[0] || null);
   const [reportKind, setReportKind] = useState<"maintenance" | "incident" | null>(null);
   const [notice, setNotice] = useState("");
 
@@ -51,9 +69,9 @@ function EmployeeTasksWorkspace() {
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow">Your playbook</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">SOPs & reports</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Read the current procedures and report anything that needs a manager’s attention.</p></div><div className="flex gap-2"><Button variant="secondary" size="sm" onClick={() => setReportKind("maintenance")}><Wrench className="size-3.5" /> Report maintenance</Button><Button variant="danger" size="sm" onClick={() => setReportKind("incident")}><AlertTriangle className="size-3.5" /> Report incident</Button></div></div>
       {notice ? <p role="status" className="mt-4 rounded-xl bg-[var(--positive-soft)] px-3.5 py-3 text-[10px] text-[var(--positive)]">{notice}</p> : null}
       <div className="mt-7 flex items-center gap-1 overflow-x-auto border-b border-[var(--line)]">{([{ id: "sops", label: "SOPs" }, { id: "maintenance", label: "Maintenance" }, { id: "incidents", label: "Incidents" }] as const).map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={cn("focus-ring relative min-h-10 shrink-0 px-3 text-[11px] font-semibold", tab === item.id ? "text-[var(--ink)]" : "text-[var(--ink-faint)]")}>{item.label}{tab === item.id ? <motion.span layoutId="employee-task-tab" className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--accent)]" /> : null}</button>)}</div>
-      {tab === "sops" ? <section className="mt-6 grid gap-7 lg:grid-cols-[.8fr_1.2fr]"><div><SectionHeading title="Published procedures" detail="Read the latest approved version before service." /><div className="border-y border-[var(--line)]">{demoWorkspace.sopDocuments.map((sop) => <button key={sop.id} onClick={() => setSelectedSop(sop)} className={cn("focus-ring flex w-full items-center gap-3 border-t border-[var(--line)] px-3 py-4 text-left first:border-0 hover:bg-[var(--paper)]", selectedSop?.id === sop.id && "bg-[var(--paper)]")}><BookOpenText className="size-4 text-[var(--ink-faint)]" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{sop.title}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">v{sop.version} · {sop.category}</span></span><ChevronRight className="size-3.5 text-[var(--ink-faint)]" /></button>)}</div></div>{selectedSop ? <article className="rounded-[20px] bg-[var(--paper)] p-5 sm:p-7"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow">{selectedSop.category} · Version {selectedSop.version}</p><h3 className="mt-3 text-xl font-semibold tracking-[-0.04em]">{selectedSop.title}</h3></div><StatusPill tone="positive">Published</StatusPill></div><div className="mt-6 whitespace-pre-line text-[11px] leading-6 text-[var(--ink-soft)]">{selectedSop.body}</div><div className="mt-7 flex items-center justify-between border-t border-[var(--line)] pt-5"><p className="text-[10px] text-[var(--ink-faint)]">Acknowledgement is recorded to your profile.</p><Button variant="accent" size="sm" onClick={() => setNotice(`You acknowledged ${selectedSop.title}.`)}><Check className="size-3.5" /> Acknowledge</Button></div></article> : null}</section> : null}
-      {tab === "maintenance" ? <section className="mt-6"><SectionHeading title="Maintenance reports" detail="Tell managers what needs attention in the room." action={<Button variant="accent" size="sm" onClick={() => setReportKind("maintenance")}><Wrench className="size-3.5" /> Report issue</Button>} /><div className="border-y border-[var(--line)]">{demoWorkspace.maintenanceRequests.map((request) => <div key={request.id} className="flex items-start gap-3 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><Wrench className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{request.title}</p><p className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">{request.asset} · {request.description}</p></div><StatusPill tone={request.status === "resolved" ? "positive" : "warning"}>{request.status.replaceAll("_", " ")}</StatusPill></div>)}</div></section> : null}
-      {tab === "incidents" ? <section className="mt-6"><div className="mb-5 flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-[10px] leading-4 text-[var(--warning)]"><ShieldAlert className="mt-0.5 size-4 shrink-0" /><span>Incident reports are sensitive and visible only to authorized managers and owners.</span></div><SectionHeading title="Incident reports" detail="Your report is added to the restricted incident log." action={<Button variant="danger" size="sm" onClick={() => setReportKind("incident")}><AlertTriangle className="size-3.5" /> Report incident</Button>} /><div className="border-y border-[var(--line)]">{demoWorkspace.incidents.map((incident) => <div key={incident.id} className="flex items-start gap-3 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger)]"><ShieldAlert className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{incident.summary}</p><p className="numeric mt-1 text-[9px] text-[var(--ink-faint)]">{incident.kind} · {new Date(incident.occurredAt).toLocaleDateString()}</p></div><StatusPill tone={incident.status === "closed" ? "positive" : "warning"}>{incident.status}</StatusPill></div>)}</div></section> : null}
+      {tab === "sops" ? <section className="mt-6 grid gap-7 lg:grid-cols-[.8fr_1.2fr]"><div><SectionHeading title="Published procedures" detail="Read the latest approved version before service." /><div className="border-y border-[var(--line)]">{playgroundSopDocuments.map((sop) => <button key={sop.id} onClick={() => setSelectedSop(sop)} className={cn("focus-ring flex w-full items-center gap-3 border-t border-[var(--line)] px-3 py-4 text-left first:border-0 hover:bg-[var(--paper)]", selectedSop?.id === sop.id && "bg-[var(--paper)]")}><BookOpenText className="size-4 text-[var(--ink-faint)]" /><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{sop.title}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">v{sop.version} · {sop.category}</span></span><ChevronRight className="size-3.5 text-[var(--ink-faint)]" /></button>)}{!playgroundSopDocuments.length ? <p className="px-4 py-10 text-center text-[11px] text-[var(--ink-faint)]">No SOPs published yet. Managers can add the first procedure.</p> : null}</div></div>{selectedSop ? <article className="rounded-[20px] bg-[var(--paper)] p-5 sm:p-7"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow">{selectedSop.category} · Version {selectedSop.version}</p><h3 className="mt-3 text-xl font-semibold tracking-[-0.04em]">{selectedSop.title}</h3></div><StatusPill tone="positive">Published</StatusPill></div><div className="mt-6 whitespace-pre-line text-[11px] leading-6 text-[var(--ink-soft)]">{selectedSop.body}</div><div className="mt-7 flex items-center justify-between border-t border-[var(--line)] pt-5"><p className="text-[10px] text-[var(--ink-faint)]">Acknowledgement is recorded to your profile.</p><Button variant="accent" size="sm" onClick={() => setNotice(`You acknowledged ${selectedSop.title}.`)}><Check className="size-3.5" /> Acknowledge</Button></div></article> : null}</section> : null}
+      {tab === "maintenance" ? <section className="mt-6"><SectionHeading title="Maintenance reports" detail="Tell managers what needs attention in the room." action={<Button variant="accent" size="sm" onClick={() => setReportKind("maintenance")}><Wrench className="size-3.5" /> Report issue</Button>} /><div className="border-y border-[var(--line)]">{playgroundMaintenanceRequests.map((request) => <div key={request.id} className="flex items-start gap-3 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><Wrench className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{request.title}</p><p className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">{request.asset} · {request.description}</p></div><StatusPill tone={request.status === "resolved" ? "positive" : "warning"}>{request.status.replaceAll("_", " ")}</StatusPill></div>)}{!playgroundMaintenanceRequests.length ? <p className="px-4 py-10 text-center text-[11px] text-[var(--ink-faint)]">No maintenance reports yet.</p> : null}</div></section> : null}
+      {tab === "incidents" ? <section className="mt-6"><div className="mb-5 flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-[10px] leading-4 text-[var(--warning)]"><ShieldAlert className="mt-0.5 size-4 shrink-0" /><span>Incident reports are sensitive and visible only to authorized managers and owners.</span></div><SectionHeading title="Incident reports" detail="Your report is added to the restricted incident log." action={<Button variant="danger" size="sm" onClick={() => setReportKind("incident")}><AlertTriangle className="size-3.5" /> Report incident</Button>} /><div className="border-y border-[var(--line)]">{playgroundIncidents.map((incident) => <div key={incident.id} className="flex items-start gap-3 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger)]"><ShieldAlert className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{incident.summary}</p><p className="numeric mt-1 text-[9px] text-[var(--ink-faint)]">{incident.kind} · {new Date(incident.occurredAt).toLocaleDateString()}</p></div><StatusPill tone={incident.status === "closed" ? "positive" : "warning"}>{incident.status}</StatusPill></div>)}{!playgroundIncidents.length ? <p className="px-4 py-10 text-center text-[11px] text-[var(--ink-faint)]">No incidents recorded.</p> : null}</div></section> : null}
       {reportKind ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 px-4 backdrop-blur-[3px]" onMouseDown={(event) => { if (event.currentTarget === event.target) setReportKind(null); }}><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-[22px] bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-float)]"><div className="flex items-start justify-between"><div><p className="eyebrow">{reportKind === "maintenance" ? "Maintenance" : "Incident"}</p><h3 className="mt-2 text-lg font-semibold">{reportKind === "maintenance" ? "Report a maintenance issue" : "Report an incident"}</h3></div><Button variant="quiet" size="icon" aria-label="Close report" onClick={() => setReportKind(null)}><X className="size-4" /></Button></div><label className="mt-6 block"><span className="mb-1.5 block text-[10px] font-semibold">What happened?</span><textarea rows={4} autoFocus placeholder={reportKind === "maintenance" ? "Describe the equipment or room issue." : "Describe what happened and where."} className="w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs" /></label><div className="mt-4 flex justify-end gap-2"><Button variant="quiet" onClick={() => setReportKind(null)}>Cancel</Button><Button variant="accent" onClick={() => submitReport(reportKind)}>Send report</Button></div></div></div> : null}
     </PageFrame>
   );
@@ -63,17 +81,17 @@ export function TasksWorkspace() {
   const workspace = useWorkspaceContext();
   const currentUserId = workspace.identity.userId;
   const [tab, setTab] = useState<Tab>("tasks");
-  const [tasks, setTasks] = useState(demoWorkspace.tasks);
+  const [tasks, setTasks] = useState(playgroundTasks);
   const [checkItems, setCheckItems] = useState<Record<string, string>>(() => {
-    const run = demoWorkspace.checklistRuns[0];
+    const run = playgroundChecklistRuns[0];
     return Object.fromEntries(run?.completedItems.map((item) => [item.itemId, item.completedBy]) || []);
   });
-  const [selectedSop, setSelectedSop] = useState(demoWorkspace.sopDocuments[0] || null);
+  const [selectedSop, setSelectedSop] = useState(playgroundSopDocuments[0] || null);
   const [createOpen, setCreateOpen] = useState(false);
 
   const openTasks = tasks.filter((task) => task.status !== "done");
   const dueBeforeService = openTasks.filter((task) => new Date(task.dueAt) < new Date("2026-08-01T18:00:00-04:00"));
-  const checklist = demoWorkspace.checklists[0];
+  const checklist = playgroundChecklists[0];
   const completedCount = checklist?.items.filter((item) => Boolean(checkItems[item.id])).length || 0;
 
   if (workspace.role === "employee") return <EmployeeTasksWorkspace />;
@@ -115,8 +133,8 @@ export function TasksWorkspace() {
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Due before service" value={String(dueBeforeService.length)} detail={`Across ${workspace.activeLocation.name}`} trend={{ label: dueBeforeService.length ? "Active" : "Clear", tone: dueBeforeService.length ? "negative" : "positive" }} />
         <Metric label="Opening checklist" value={`${completedCount}/${checklist?.items.length || 0}`} detail="Required items complete" />
-        <Metric label="SOP acknowledgements" value="83%" detail="Current published versions" trend={{ label: "+6pt", tone: "positive" }} />
-        <Metric label="Open maintenance" value={String(demoWorkspace.maintenanceRequests.filter((request) => request.status !== "resolved").length)} detail="No emergency requests" />
+        <Metric label="SOP acknowledgements" value="—" detail="Publish SOPs to start tracking" />
+        <Metric label="Open maintenance" value={String(playgroundMaintenanceRequests.filter((request) => request.status !== "resolved").length)} detail="No reports yet" />
       </section>
 
       <div className="mt-6 flex items-center gap-1 overflow-x-auto border-b border-[var(--line)]">{tabLabels.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={cn("focus-ring relative min-h-10 shrink-0 px-3 text-[11px] font-semibold", tab === item.id ? "text-[var(--ink)]" : "text-[var(--ink-faint)]")}>{item.label}{tab === item.id ? <motion.span layoutId="task-tab" className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--accent)]" /> : null}</button>)}</div>

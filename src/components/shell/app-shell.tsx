@@ -92,12 +92,6 @@ interface ShellNotification {
   createdAt: string;
 }
 
-const demoNotifications: ShellNotification[] = [
-  { id: "demo-vendor", title: "Vendor price watch", body: "Roma tomatoes moved 8.6% since June", actionUrl: "/vendors", readAt: null, createdAt: new Date(Date.now() - 8 * 60_000).toISOString() },
-  { id: "demo-stock", title: "Low stock", body: "Japanese whisky is below par", actionUrl: "/inventory", readAt: null, createdAt: new Date(Date.now() - 22 * 60_000).toISOString() },
-  { id: "demo-swap", title: "Shift swap", body: "Eli offered Saturday dinner", actionUrl: "/schedule", readAt: null, createdAt: new Date(Date.now() - 60 * 60_000).toISOString() },
-];
-
 function normalizeNotification(row: NotificationRow): ShellNotification {
   const actionUrl = row.action_url
     ? safeInternalRedirect(row.action_url, "") || null
@@ -124,7 +118,7 @@ function NotificationsControl({ workspace }: { workspace: WorkspaceContextValue 
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<ShellNotification[]>(
-    workspace.mode === "demo" ? demoNotifications : [],
+    [],
   );
   const [state, setState] = useState<"loading" | "ready" | "error">(
     workspace.mode === "demo" ? "ready" : "loading",

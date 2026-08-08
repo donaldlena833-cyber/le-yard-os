@@ -32,11 +32,11 @@ type Filter = "all" | "vip" | "allergies" | "recent";
 
 export function GuestsWorkspace() {
   const workspace = useWorkspaceContext();
-  const [guests, setGuests] = useState(demoWorkspace.guests);
+  const [guests, setGuests] = useState<Guest[]>([]);
   const [selected, setSelected] = useState<Guest | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
-  const [duplicates, setDuplicates] = useState(demoWorkspace.duplicateGuestCandidates);
+  const [duplicates, setDuplicates] = useState<typeof demoWorkspace.duplicateGuestCandidates>([]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -88,7 +88,7 @@ export function GuestsWorkspace() {
 
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Guest profiles" value={guests.filter((guest) => !guest.mergedIntoId).length.toLocaleString()} detail="Across Le Yard" />
-        <Metric label="Returning · 90d" value="68%" detail="At least two visits" trend={{ label: "+4.2pt", tone: "positive" }} />
+        <Metric label="Returning · 90d" value="—" detail="Connect Resy to import visits" />
         <Metric label="VIP guests" value={String(guests.filter((guest) => guest.vip).length)} detail="Flagged by an owner or manager" />
         <Metric label="Possible duplicates" value={String(openDuplicates.length)} detail="Never auto-merged" trend={{ label: openDuplicates.length ? "Review" : "Clear", tone: openDuplicates.length ? "negative" : "positive" }} />
       </section>
@@ -113,7 +113,7 @@ export function GuestsWorkspace() {
         {!filtered.length ? <div className="px-5 py-12 text-center"><UsersRound className="mx-auto size-6 text-[var(--ink-faint)]" /><p className="mt-3 text-xs font-semibold">No matching guests</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">Try another filter or search phrase.</p></div> : null}
       </section>
 
-      <div className="mt-7 flex items-start gap-3 rounded-[16px] bg-[var(--accent-soft)]/50 px-4 py-3 text-[10px] leading-4 text-[var(--accent-strong)]"><Sparkles className="mt-0.5 size-4 shrink-0" /><span><strong>Service note:</strong> Two tonight’s reservations include known allergies. This summary cites the guest and reservation records and cannot edit them.</span></div>
+      <div className="mt-7 flex items-start gap-3 rounded-[16px] bg-[var(--accent-soft)]/50 px-4 py-3 text-[10px] leading-4 text-[var(--accent-strong)]"><Sparkles className="mt-0.5 size-4 shrink-0" /><span><strong>Guest CRM is ready.</strong> Connect Resy or add a guest to start building the Le Yard guestbook.</span></div>
 
       <AnimatePresence>
         {selected ? (

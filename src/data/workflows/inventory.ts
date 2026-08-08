@@ -35,11 +35,40 @@ export async function configureInventoryCatalog(
   const membership = context.actor.memberships.find(
     (candidate) => candidate.organizationId === location.organizationId,
   );
+  const managerRecipeEdit = membership?.role === "manager" && input.command === "recipe.save";
   assertCondition(
-    membership?.role === "owner" || membership?.role === "admin",
+    membership?.role === "owner" || membership?.role === "admin" || managerRecipeEdit,
     "forbidden",
-    "Owner or admin access is required to configure inventory.",
+    managerRecipeEdit
+      ? "Manager recipe access is required for this change."
+      : "Owner or admin access is required to configure inventory.",
   );
+
+  if (managerRecipeEdit) {
+    const result = await context.supabase.rpc("save_manager_recipe", {
+      p_request_id: input.requestId,
+      p_workspace_location_id: input.workspaceLocationId,
+      p_recipe_id: input.id ?? null,
+      p_name: input.name,
+      p_yield_quantity: input.yieldQuantity,
+      p_yield_unit_id: input.yieldUnitId,
+      p_menu_price_cents: input.menuPriceCents ?? null,
+      p_is_active: input.isActive,
+      p_ingredients: input.ingredients,
+    });
+    if (result.error) throwDatabaseError(result.error, "The recipe could not be saved.");
+    assertCondition(
+      typeof result.data === "object" && result.data !== null && "id" in result.data && "command" in result.data,
+      "database",
+      "The saved recipe was not returned.",
+    );
+    const managerResult = result.data as { id: unknown; command: unknown; replayed?: unknown };
+    return {
+      id: String(managerResult.id),
+      command: String(managerResult.command),
+      replayed: managerResult.replayed === true,
+    };
+  }
 
   const { requestId, command } = input;
   const payload = Object.fromEntries(

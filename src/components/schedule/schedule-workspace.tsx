@@ -59,17 +59,17 @@ const days = [
 ];
 
 const initialShifts: Shift[] = [
-  { id: "s1", dayId: "mon", person: "Maya Chen", role: "Floor lead", start: "4:00p", end: "11:00p", hours: 7, cost: 168, acknowledged: true },
-  { id: "s2", dayId: "mon", person: "Eli Brooks", role: "Bar", start: "4:30p", end: "11:30p", hours: 7, cost: 147, acknowledged: true },
-  { id: "s3", dayId: "tue", person: "Sofia Vega", role: "Server", start: "5:00p", end: "10:30p", hours: 5.5, cost: 55, acknowledged: true },
-  { id: "s4", dayId: "tue", person: "Noah Martin", role: "Kitchen", start: "2:00p", end: "10:00p", hours: 8, cost: 184, acknowledged: false },
-  { id: "s5", dayId: "wed", person: "Ava Scott", role: "Host", start: "5:00p", end: "10:00p", hours: 5, cost: 80, acknowledged: true },
+  { id: "s1", dayId: "mon", person: "Maris", role: "Floor lead", start: "4:00p", end: "11:00p", hours: 7, cost: 168, acknowledged: true },
+  { id: "s2", dayId: "mon", person: "Irini", role: "Server", start: "4:30p", end: "11:30p", hours: 7, cost: 147, acknowledged: true },
+  { id: "s3", dayId: "tue", person: "Irini", role: "Server", start: "5:00p", end: "10:30p", hours: 5.5, cost: 55, acknowledged: true },
+  { id: "s4", dayId: "tue", person: "Mateo", role: "Kitchen", start: "2:00p", end: "10:00p", hours: 8, cost: 184, acknowledged: false },
+  { id: "s5", dayId: "wed", person: "Donald", role: "Floor lead", start: "5:00p", end: "10:00p", hours: 5, cost: 80, acknowledged: true },
   { id: "s6", dayId: "thu", person: "Open shift", role: "Server", start: "5:00p", end: "11:00p", hours: 6, cost: 60, acknowledged: false, open: true },
-  { id: "s7", dayId: "fri", person: "Maya Chen", role: "Floor lead", start: "4:00p", end: "12:00a", hours: 8, cost: 192, acknowledged: true },
-  { id: "s8", dayId: "fri", person: "Eli Brooks", role: "Bar", start: "4:00p", end: "12:30a", hours: 8.5, cost: 178.5, acknowledged: false },
-  { id: "s9", dayId: "sat", person: "Sofia Vega", role: "Server", start: "4:30p", end: "11:30p", hours: 7, cost: 70, acknowledged: true },
-  { id: "s10", dayId: "sat", person: "Noah Martin", role: "Kitchen", start: "1:00p", end: "10:30p", hours: 9.5, cost: 218.5, acknowledged: true },
-  { id: "s11", dayId: "sun", person: "Ava Scott", role: "Host", start: "4:30p", end: "9:30p", hours: 5, cost: 80, acknowledged: false },
+  { id: "s7", dayId: "fri", person: "Maris", role: "Floor lead", start: "4:00p", end: "12:00a", hours: 8, cost: 192, acknowledged: true },
+  { id: "s8", dayId: "fri", person: "Irini", role: "Server", start: "4:00p", end: "12:30a", hours: 8.5, cost: 178.5, acknowledged: false },
+  { id: "s9", dayId: "sat", person: "Irini", role: "Server", start: "4:30p", end: "11:30p", hours: 7, cost: 70, acknowledged: true },
+  { id: "s10", dayId: "sat", person: "Mateo", role: "Kitchen", start: "1:00p", end: "10:30p", hours: 9.5, cost: 218.5, acknowledged: true },
+  { id: "s11", dayId: "sun", person: "Donald", role: "Floor lead", start: "4:30p", end: "9:30p", hours: 5, cost: 80, acknowledged: false },
 ];
 
 const roleTone: Record<string, string> = {
@@ -170,12 +170,18 @@ const employeeOpenShifts = [
 ];
 
 const chefBackOfHouseShifts = [
-  { id: "boh-fri", dayId: "fri", day: "Fri · Aug 8", time: "1:00–11:00 PM", role: "Line cook", people: "Leo M. · Priya S.", status: "Ready" },
-  { id: "boh-sat", dayId: "sat", day: "Sat · Aug 9", time: "12:00–11:30 PM", role: "Prep + line", people: "Sam O. · Leo M.", status: "Needs coverage" },
-  { id: "boh-sun", dayId: "sun", day: "Sun · Aug 10", time: "12:00–10:00 PM", role: "Prep + line", people: "Priya S. · Open", status: "Open shift" },
+  { id: "boh-fri", dayId: "fri", day: "Fri · Aug 8", time: "1:00–11:00 PM", role: "Line cook", people: "Mateo", status: "Ready" },
+  { id: "boh-sat", dayId: "sat", day: "Sat · Aug 9", time: "12:00–11:30 PM", role: "Prep + line", people: "Mateo · Unassigned", status: "Needs coverage" },
+  { id: "boh-sun", dayId: "sun", day: "Sun · Aug 10", time: "12:00–10:00 PM", role: "Prep + line", people: "Unassigned", status: "Open shift" },
 ];
 
-function ChefScheduleWorkspace() {
+function ChefScheduleWorkspace({
+  managerMode = false,
+  onBackToFoh,
+}: {
+  managerMode?: boolean;
+  onBackToFoh?: () => void;
+}) {
   const [published, setPublished] = useState(false);
   const [notice, setNotice] = useState("");
   const [shifts, setShifts] = useState(chefBackOfHouseShifts);
@@ -195,8 +201,11 @@ function ChefScheduleWorkspace() {
   return (
     <PageFrame width="full" className="max-w-[1400px]">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div><div className="flex items-center gap-2"><StatusPill tone={published ? "positive" : "warning"} dot>{published ? "Published" : "Draft"}</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Le Yard · Back of house</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Kitchen schedule</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Build the BOH plan, assign coverage, and publish the schedule.</p></div>
-        <Button variant="accent" size="sm" onClick={() => { setPublished(true); setNotice("Back-of-house schedule published. The team can now see their shifts."); }}><Send className="size-3.5" /> Publish BOH schedule</Button>
+        <div><div className="flex items-center gap-2"><StatusPill tone={published ? "positive" : "warning"} dot>{published ? "Published" : "Draft"}</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Le Yard · Back of house</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">{managerMode ? "BOH schedule" : "Kitchen schedule"}</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Build the BOH plan, assign coverage, and publish the schedule.</p></div>
+        <div className="flex flex-wrap gap-2">
+          {managerMode && onBackToFoh ? <Button variant="secondary" size="sm" onClick={onBackToFoh}><ChevronLeft className="size-3.5" /> FOH schedule</Button> : null}
+          <Button variant="accent" size="sm" onClick={() => { setPublished(true); setNotice("Back-of-house schedule published. The team can now see their shifts."); }}><Send className="size-3.5" /> Publish BOH schedule</Button>
+        </div>
       </div>
       {notice ? <p role="status" className="mt-4 rounded-xl bg-[var(--positive-soft)] px-3.5 py-3 text-[10px] text-[var(--positive)]">{notice}</p> : null}
       <section className="mt-7 grid gap-8 lg:grid-cols-[1.4fr_.6fr]">
@@ -263,6 +272,7 @@ function EmployeeScheduleWorkspace() {
 }
 
 function ManagerScheduleWorkspace() {
+  const [scheduleView, setScheduleView] = useState<"foh" | "boh">("foh");
   const [shifts, setShifts] = useState(initialShifts);
   const [selected, setSelected] = useState<Shift | null>(null);
   const [published, setPublished] = useState(false);
@@ -281,6 +291,10 @@ function ManagerScheduleWorkspace() {
     }),
     [shifts],
   );
+
+  if (scheduleView === "boh") {
+    return <ChefScheduleWorkspace managerMode onBackToFoh={() => setScheduleView("foh")} />;
+  }
 
   function onDragEnd(event: DragEndEvent) {
     const targetDay = event.over?.id;
@@ -336,20 +350,21 @@ function ManagerScheduleWorkspace() {
           <Button variant="secondary" size="sm">This week</Button>
           <Button variant="quiet" size="sm" aria-label="Next week"><ChevronRight className="size-3" /></Button>
           <Button variant="secondary" size="sm"><Copy className="size-3.5" /> Templates</Button>
+          <Button variant="secondary" size="sm" onClick={() => setScheduleView("boh")}><Copy className="size-3.5" /> BOH schedule</Button>
           <Button variant="secondary" size="sm" onClick={() => setAddOpen(true)}><Plus className="size-3.5" /> Add shift</Button>
           <Button variant="accent" size="sm" onClick={() => setPublished(true)} disabled={published}><Send className="size-3.5" /> {published ? "Published" : "Publish schedule"}</Button>
         </div>
       </div>
 
       <section aria-label="Schedule metrics" className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric label="Scheduled hours" value={`${totals.hours}h`} detail="Across 11 shift blocks" />
+        <Metric label="Scheduled hours" value={`${totals.hours}h`} detail={`Across ${shifts.length} shift blocks`} />
         <Metric label="Estimated labor" value={`$${totals.cost.toLocaleString()}`} detail="Before payroll burden" trend={{ label: "21.8%", tone: "neutral" }} />
         <Metric label="Open shifts" value={String(totals.open)} detail="Claimable by eligible staff" trend={{ label: totals.open ? "Needs fill" : "Covered", tone: totals.open ? "negative" : "positive" }} />
         <Metric label="Acknowledgements" value={`${shifts.length - totals.pending}/${shifts.length}`} detail={`${totals.pending} people pending`} />
       </section>
 
       <div className="mt-5 flex items-center justify-between gap-3 rounded-xl bg-[var(--warning-soft)] px-3.5 py-2.5 text-[10px] text-[var(--warning)]">
-        <span className="flex items-center gap-2"><CircleAlert className="size-3.5" /> One overtime warning: Noah reaches 42.5 projected hours.</span>
+        <span className="flex items-center gap-2"><CircleAlert className="size-3.5" /> Long shifts automatically carry a 30m unpaid break for manager timing.</span>
         <button className="font-semibold underline decoration-current/30 underline-offset-2">Review</button>
       </div>
 
@@ -408,7 +423,7 @@ function ManagerScheduleWorkspace() {
             <motion.div role="dialog" aria-modal="true" aria-label="Add shift" className="w-full max-w-lg rounded-[22px] bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-float)] sm:p-6" initial={{ y: 12, scale: .98 }} animate={{ y: 0, scale: 1 }} exit={{ y: 8, scale: .98 }}>
               <div className="flex items-center justify-between"><div><p className="eyebrow">Schedule</p><h3 className="mt-2 text-lg font-semibold">Add a shift</h3></div><Button variant="quiet" size="icon" onClick={() => setAddOpen(false)}><X className="size-4" /></Button></div>
               <form action={addShift} className="mt-6 grid gap-4 sm:grid-cols-2">
-                <label className="sm:col-span-2"><span className="mb-1.5 block text-[10px] font-semibold">Team member</span><select name="person" className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"><option>Open shift</option><option>Maya Chen</option><option>Eli Brooks</option><option>Sofia Vega</option><option>Noah Martin</option><option>Ava Scott</option></select></label>
+                <label className="sm:col-span-2"><span className="mb-1.5 block text-[10px] font-semibold">Team member</span><select name="person" className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"><option>Open shift</option><option>Donald</option><option>Maris</option><option>Irini</option><option>Mateo</option></select></label>
                 <label><span className="mb-1.5 block text-[10px] font-semibold">Day</span><select name="dayId" className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs">{days.map((day) => <option key={day.id} value={day.id}>{day.label}, Aug {day.date}</option>)}</select></label>
                 <label><span className="mb-1.5 block text-[10px] font-semibold">Role</span><select name="role" className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs">{Object.keys(roleTone).map((role) => <option key={role}>{role}</option>)}</select></label>
                 <label><span className="mb-1.5 block text-[10px] font-semibold">Starts</span><input name="start" defaultValue="5:00p" className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs" /></label>
@@ -422,7 +437,7 @@ function ManagerScheduleWorkspace() {
 
       <div className="mt-8 flex items-center gap-3 rounded-[16px] border border-[var(--line)] bg-[var(--paper)] px-4 py-3 text-[10px] text-[var(--ink-faint)]">
         <Sparkles className="size-4 shrink-0 text-[var(--accent)]" />
-        <span className="flex-1">Staffing insight: Saturday’s bar is covered, but adding one support shift from 7–9 PM would reduce projected ticket time by 4 minutes.</span>
+        <span className="flex-1">Schedule note: every shift longer than six hours carries a 30m unpaid break; managers approve when it falls.</span>
         <Button variant="quiet" size="sm">Review suggestion</Button>
       </div>
     </PageFrame>
@@ -432,6 +447,7 @@ function ManagerScheduleWorkspace() {
 export function ScheduleWorkspace() {
   const workspace = useWorkspaceContext();
   if (workspace.role === "employee") return <EmployeeScheduleWorkspace />;
+  if (["owner", "admin", "manager"].includes(workspace.role)) return <ManagerScheduleWorkspace />;
   if (workspace.persona === "chef") return <ChefScheduleWorkspace />;
   return <ManagerScheduleWorkspace />;
 }

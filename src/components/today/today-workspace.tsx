@@ -8,14 +8,12 @@ import {
   CalendarDays,
   Check,
   ChevronRight,
-  CircleDollarSign,
-  CloudSun,
-  PackageSearch,
   Sparkles,
   UsersRound,
   Utensils,
   WalletCards,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Avatar } from "@/components/ui/avatar";
@@ -26,18 +24,21 @@ import { LiveClock } from "@/components/today/live-clock";
 import { cn } from "@/lib/utils";
 
 const team = [
-  { name: "Maya Chen", role: "Floor lead", start: "4:00", end: "11:30", status: "on_shift" },
-  { name: "Eli Brooks", role: "Bartender", start: "4:30", end: "12:00", status: "on_shift" },
-  { name: "Sofia Vega", role: "Server", start: "5:00", end: "11:00", status: "next" },
-  { name: "Noah Martin", role: "Line cook", start: "3:00", end: "11:00", status: "on_shift" },
-  { name: "Ava Scott", role: "Host", start: "5:00", end: "10:00", status: "next" },
+  { name: "Donald", role: "Owner operator", start: "4:00", end: "11:30", status: "on_shift" },
+  { name: "Maris", role: "Owner operator", start: "4:30", end: "12:00", status: "on_shift" },
+  { name: "Irini", role: "Server", start: "5:00", end: "11:00", status: "next" },
+  { name: "Mateo", role: "Chef / manager", start: "3:00", end: "11:00", status: "on_shift" },
 ];
 
-const initialActions = [
-  { id: "a1", tone: "warning", title: "Review Roma tomato price change", detail: "Harbor Produce · 8.6% since June", icon: PackageSearch },
-  { id: "a2", tone: "warning", title: "Review 3 extracted receipts", detail: "$1,284.16 pending categorization", icon: CircleDollarSign },
-  { id: "a3", tone: "warning", title: "Japanese whisky below par", detail: "2.4 bottles on hand · par is 5", icon: PackageSearch },
-];
+type TodayAction = {
+  id: string;
+  icon: LucideIcon;
+  tone: "danger" | "warning";
+  title: string;
+  detail: string;
+};
+
+const initialActions: TodayAction[] = [];
 
 const employeeOpenShifts = [
   { id: "open-tue", day: "Tue · Aug 11", time: "5:00–11:00 PM", role: "Server", covers: 72 },
@@ -144,17 +145,15 @@ export function TodayWorkspace() {
           <div className="max-w-xl">
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill tone="positive" dot className="bg-white/[0.08] text-[#93d0ad]">
-                Prep on track
+                Ready for live data
               </StatusPill>
-              <span className="flex items-center gap-1.5 text-[10px] text-white/55">
-                <CloudSun className="size-3.5" /> 78° · Patio ready
-              </span>
+              <span className="text-[10px] text-white/55">Le Yard · main dining room</span>
             </div>
             <h2 className="mt-5 text-[clamp(2rem,4.2vw,4rem)] leading-none font-medium tracking-[-0.065em]">
               Good afternoon, {firstName}.
             </h2>
             <p className="mt-4 max-w-lg text-sm leading-6 text-white/55">
-              Dinner has 86 covers on the books. Two approvals and one stock decision need you before doors.
+              Live sales, reservations, receipts, and inventory will appear here as Toast, Resy, and vendor data are connected.
             </p>
           </div>
           <div className="flex items-end gap-10 border-t border-white/10 pt-5 xl:border-0 xl:pt-0">
@@ -173,10 +172,10 @@ export function TodayWorkspace() {
       </section>
 
       <section aria-label="Today’s key metrics" className="grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-b border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric label="Covers" value="86" detail="72 booked · 14 walk-in hold" trend={{ label: "+12%", tone: "positive" }} />
-        <Metric label="Scheduled labor" value="71.5h" detail="$1,486 estimated" trend={{ label: "22.4%", tone: "neutral" }} />
-        <Metric label="Projected sales" value="$6.8k" detail="$79 per cover" trend={{ label: "+$640", tone: "positive" }} />
-        <Metric label="Prep complete" value="92%" detail="4 of 48 items open" trend={{ label: "On time", tone: "positive" }} />
+        <Metric label="Covers" value="—" detail="Connect Resy to import reservations" />
+        <Metric label="Scheduled labor" value="—" detail="Publish a live schedule" />
+        <Metric label="Projected sales" value="—" detail="Connect Toast to import sales" />
+        <Metric label="Prep complete" value="—" detail="No checklist data yet" />
       </section>
 
       <div className="mt-8 grid gap-8 xl:grid-cols-[1.45fr_.8fr] xl:gap-12">
@@ -184,7 +183,7 @@ export function TodayWorkspace() {
           <SectionHeading
             eyebrow="Live service"
             title="Who’s on"
-            detail="11 scheduled · 7 on shift · no late arrivals"
+            detail={`${team.length} real users in this playground account set`}
             action={<Link href="/vendors" className="focus-ring inline-flex min-h-9 items-center gap-1 rounded-xl px-3 text-[10px] font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">Open vendors <ArrowRight className="size-3" /></Link>}
           />
           <div className="overflow-hidden border-y border-[var(--line)]">
@@ -217,10 +216,10 @@ export function TodayWorkspace() {
               <SectionHeading eyebrow="Run of show" title="Before doors" detail={`Local time · ${workspace.activeLocation.name}`} />
               <ol className="relative ml-2 border-l border-[var(--line-strong)] pl-5">
                 {[
-                  ["4:15", "Lineup & allergy review", "Maya"],
-                  ["4:45", "Family meal", "Kitchen"],
-                  ["5:15", "Bar count & cash drawers", "Eli"],
-                  ["5:40", "Pre-shift huddle", "All staff"],
+                  ["Before service", "Lineup & allergy review", "Managers"],
+                  ["Before service", "Family meal", "Mateo"],
+                  ["Before service", "Drawer and vendor checks", "Donald · Maris"],
+                  ["Before service", "Pre-shift huddle", "All staff"],
                 ].map(([time, title, owner], index) => (
                   <li key={title} className="relative pb-5 last:pb-0">
                     <span className={cn("absolute top-1 -left-[24.5px] size-2 rounded-full ring-4 ring-[var(--canvas)]", index === 0 ? "bg-[var(--accent)]" : "bg-[var(--line-strong)]")} />
@@ -235,26 +234,11 @@ export function TodayWorkspace() {
             </section>
 
             <section>
-              <SectionHeading eyebrow="Reservations" title="Pacing" detail="From Resy import · 2:10 PM" />
-              <div className="space-y-3">
-                {[
-                  ["6 PM", 22, 45],
-                  ["7 PM", 38, 76],
-                  ["8 PM", 31, 62],
-                  ["9 PM", 17, 34],
-                ].map(([time, covers, width]) => (
-                  <div key={time} className="grid grid-cols-[42px_1fr_28px] items-center gap-3">
-                    <span className="numeric text-[10px] text-[var(--ink-faint)]">{time}</span>
-                    <span className="h-1.5 overflow-hidden rounded-full bg-[var(--canvas-strong)]">
-                      <motion.span initial={{ width: 0 }} animate={{ width: `${width}%` }} transition={{ duration: 0.7 }} className="block h-full rounded-full bg-[var(--accent)]" />
-                    </span>
-                    <span className="numeric text-right text-[10px] font-semibold">{covers}</span>
-                  </div>
-                ))}
-              </div>
+              <SectionHeading eyebrow="Reservations" title="Pacing" detail="No Resy feed connected" />
+              <div className="rounded-xl bg-[var(--canvas)] px-4 py-6 text-center text-[10px] text-[var(--ink-faint)]">Connect Resy to see covers by service window.</div>
               <div className="mt-6 flex items-start gap-3 rounded-xl bg-[var(--positive-soft)] px-3.5 py-3 text-[10px] leading-4 text-[var(--positive)]">
                 <Sparkles className="mt-0.5 size-3.5 shrink-0" />
-                Pacing looks balanced. The 7:30 turn is the only compressed window.
+                This dashboard stays empty until live service data is connected.
               </div>
             </section>
           </div>
@@ -305,9 +289,9 @@ export function TodayWorkspace() {
             <SectionHeading eyebrow="Service pulse" title="Tonight at a glance" />
             <div className="space-y-4 border-y border-[var(--line)] py-4">
               {[
-                { icon: UsersRound, label: "Team confirmations", value: "10 / 11", note: "Ava hasn’t opened the schedule" },
-                { icon: Utensils, label: "Menu readiness", value: "4 open", note: "Two prep, two vendor items" },
-                { icon: AlertTriangle, label: "Guest notes", value: "7", note: "3 allergies · 2 VIPs · 2 birthdays" },
+                { icon: UsersRound, label: "Team confirmations", value: "—", note: "Publish a schedule to collect acknowledgements" },
+                { icon: Utensils, label: "Menu readiness", value: "—", note: "Add kitchen checklists when ready" },
+                { icon: AlertTriangle, label: "Guest notes", value: "—", note: "Connect Resy to import guest context" },
               ].map((item) => (
                 <div key={item.label} className="flex items-start gap-3">
                   <item.icon className="mt-0.5 size-4 text-[var(--ink-faint)]" />

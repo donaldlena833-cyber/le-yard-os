@@ -22,7 +22,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -32,14 +32,15 @@ import { demoIds, demoWorkspace } from "@/lib/demo";
 import { cn } from "@/lib/utils";
 import type { ChatChannel, ChatMessage } from "@/types";
 
-const initialUnread: Record<string, number> = {
-  "channel-all-staff": 2,
-  "channel-garden": 1,
-  "channel-market": 0,
-  "channel-management": 1,
-};
-
 const commonReactions = ["👍", "✨", "✅"];
+const realPlaygroundPeople = demoWorkspace.people.filter((person) =>
+  [demoIds.people.donald, demoIds.people.maris, demoIds.people.irini, demoIds.people.mateo].includes(person.id as never),
+);
+const messageStorageKey = `le-yard:internal-messages:${demoIds.organization}`;
+
+function localMessageId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function channelDescription(channel: ChatChannel) {
   if (channel.kind === "all_staff") {
@@ -86,8 +87,8 @@ function MessageBubble({
   currentUserId: string;
   onToggleReaction: (emoji: string) => void;
 }) {
-  const author = demoWorkspace.people.find((person) => person.id === message.authorId);
-  const authorIndex = demoWorkspace.people.findIndex((person) => person.id === message.authorId);
+  const author = realPlaygroundPeople.find((person) => person.id === message.authorId);
+  const authorIndex = Math.max(0, realPlaygroundPeople.findIndex((person) => person.id === message.authorId));
 
   return (
     <motion.article layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className={cn("group flex items-start gap-3", mine && "flex-row-reverse")}>
@@ -112,8 +113,8 @@ export function MessagesWorkspace() {
   const workspace = useWorkspaceContext();
   const currentUserId = workspace.identity.userId;
   const [selectedChannelId, setSelectedChannelId] = useState<string>("channel-all-staff");
-  const [messages, setMessages] = useState<ChatMessage[]>(demoWorkspace.chatMessages);
-  const [unread, setUnread] = useState(initialUnread);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [unread, setUnread] = useState<Record<string, number>>({});
   const [draft, setDraft] = useState("");
   const [attachment, setAttachment] = useState<File | null>(null);
   const [channelQuery, setChannelQuery] = useState("");
@@ -121,6 +122,57 @@ export function MessagesWorkspace() {
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const broadcastRef = useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+    const readStoredMessages = () => {
+      try {
+        const raw = window.localStorage.getItem(messageStorageKey);
+        if (!raw) return;
+        const parsed: unknown = JSON.parse(raw);
+        if (Array.isArray(parsed)) setMessages(parsed as ChatMessage[]);
+      } catch {
+        // A malformed local cache should never block the internal chat.
+        window.localStorage.removeItem(messageStorageKey);
+      }
+    };
+    readStoredMessages();
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== messageStorageKey) return;
+      readStoredMessages();
+    };
+    window.addEventListener("storage", onStorage);
+
+    const onBroadcast = (event: MessageEvent<unknown>) => {
+      if (!event.data || typeof event.data !== "object") return;
+      const payload = event.data as { key?: string; messages?: unknown };
+      if (payload.key === messageStorageKey && Array.isArray(payload.messages)) {
+        setMessages(payload.messages as ChatMessage[]);
+      }
+    };
+    if ("BroadcastChannel" in window) {
+      const channel = new BroadcastChannel(messageStorageKey);
+      channel.addEventListener("message", onBroadcast);
+      broadcastRef.current = channel;
+    }
+
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      broadcastRef.current?.close();
+      broadcastRef.current = null;
+    };
+  }, []);
+
+  function persistMessages(next: ChatMessage[]) {
+    setMessages(next);
+    try {
+      window.localStorage.setItem(messageStorageKey, JSON.stringify(next));
+      broadcastRef.current?.postMessage({ key: messageStorageKey, messages: next });
+    } catch {
+      // The message remains visible in this session even if storage is blocked.
+    }
+  }
 
   const visibleChannels = useMemo(() => demoWorkspace.chatChannels
     .filter((channel) => !channel.locationId || workspace.locations.some((location) => location.id === channel.locationId))
@@ -130,9 +182,10 @@ export function MessagesWorkspace() {
   const channelMessages = messages.filter((message) => message.channelId === selectedChannel.id);
 
   const channelMembers = useMemo(() => {
-    if (selectedChannel.participantIds.length) return demoWorkspace.people.filter((person) => selectedChannel.participantIds.includes(person.id));
-    if (selectedChannel.locationId) return demoWorkspace.people.filter((person) => person.locationIds.includes(selectedChannel.locationId!));
-    return demoWorkspace.people.filter((person) => person.status === "active");
+    if (selectedChannel.kind === "management") return realPlaygroundPeople.filter((person) => ["owner", "manager", "admin"].includes(person.primaryRole));
+    if (selectedChannel.participantIds.length) return realPlaygroundPeople.filter((person) => selectedChannel.participantIds.includes(person.id));
+    if (selectedChannel.locationId) return realPlaygroundPeople.filter((person) => person.locationIds.includes(selectedChannel.locationId!));
+    return realPlaygroundPeople.filter((person) => person.status === "active");
   }, [selectedChannel]);
 
   function selectChannel(channelId: string) {
@@ -147,26 +200,26 @@ export function MessagesWorkspace() {
     if (!body && !attachment) return;
     const now = new Date().toISOString();
     const message: ChatMessage = {
-      id: `message-demo-${Date.now()}`,
+      id: localMessageId("message-demo"),
       organizationId: demoIds.organization,
       channelId: selectedChannel.id,
       authorId: currentUserId,
       body: body || `Attached ${attachment?.name}`,
-      attachmentIds: attachment ? [`attachment-demo-${Date.now()}`] : [],
+      attachmentIds: attachment ? [localMessageId("attachment-demo")] : [],
       reactions: [],
       readBy: [],
       editedAt: null,
       createdAt: now,
       updatedAt: now,
     };
-    setMessages((current) => [...current, message]);
+    persistMessages([...messages, message]);
     setDraft("");
     setAttachment(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   function toggleReaction(messageId: string, emoji: string) {
-    setMessages((current) => current.map((message) => {
+    persistMessages(messages.map((message) => {
       if (message.id !== messageId) return message;
       const existing = message.reactions.find((reaction) => reaction.emoji === emoji);
       if (!existing) return { ...message, reactions: [...message.reactions, { emoji, personIds: [currentUserId] }] };
@@ -175,7 +228,6 @@ export function MessagesWorkspace() {
     }));
   }
 
-  const announcement = demoWorkspace.announcements[0];
   const totalUnread = Object.values(unread).reduce((sum, count) => sum + count, 0);
 
   return (
@@ -193,14 +245,14 @@ export function MessagesWorkspace() {
             <section><p className="px-3 text-[9px] font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Team</p><div className="mt-2 space-y-1">{visibleChannels.filter((channel) => ["all_staff", "management"].includes(channel.kind)).map((channel) => <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannel.id} unread={unread[channel.id] ?? 0} onSelect={() => selectChannel(channel.id)} />)}</div></section>
             <section><p className="px-3 text-[9px] font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Locations</p><div className="mt-2 space-y-1">{visibleChannels.filter((channel) => channel.kind === "location").map((channel) => <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannel.id} unread={unread[channel.id] ?? 0} onSelect={() => selectChannel(channel.id)} />)}</div></section>
           </div>
-          <div className="mt-8 rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3"><div className="flex -space-x-1.5">{demoWorkspace.people.slice(0, 5).map((person, index) => <Avatar key={person.id} name={person.displayName} size="sm" index={index} />)}</div><p className="mt-3 text-[10px] font-semibold">5 teammates online</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Presence is scoped to your organization.</p></div>
+          <div className="mt-8 rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3"><div className="flex -space-x-1.5">{realPlaygroundPeople.map((person, index) => <Avatar key={person.id} name={person.displayName} size="sm" index={index} />)}</div><p className="mt-3 text-[10px] font-semibold">{realPlaygroundPeople.length} Le Yard users</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Messages sync across signed-in Le Yard sessions in this browser.</p></div>
         </nav>
 
         <main className={cn("min-w-0 flex-col bg-[var(--paper-strong)] lg:flex", mobileChatOpen ? "flex" : "hidden")} aria-label={`${selectedChannel.name} conversation`}>
           <header className="flex min-h-[72px] items-center gap-3 border-b border-[var(--line)] px-3 sm:px-5"><Button variant="quiet" size="icon" className="lg:hidden" aria-label="Back to channels" onClick={() => setMobileChatOpen(false)}><ArrowLeft className="size-4" /></Button><span className={cn("flex size-9 items-center justify-center rounded-xl", selectedChannel.kind === "management" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}>{selectedChannel.kind === "management" ? <LockKeyhole className="size-4" /> : selectedChannel.kind === "all_staff" ? <UsersRound className="size-4" /> : <Hash className="size-4" />}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate text-sm font-semibold">{selectedChannel.name}</h3>{selectedChannel.kind === "management" ? <StatusPill tone="danger">Private</StatusPill> : null}</div><p className="mt-0.5 truncate text-[9px] text-[var(--ink-faint)]">{channelDescription(selectedChannel)}</p></div><Button variant="quiet" size="icon" aria-label="Channel information" onClick={() => setMobileInfoOpen((current) => !current)}><Info className="size-4" /></Button><Button variant="quiet" size="icon" aria-label="More channel actions"><MoreHorizontal className="size-4" /></Button></header>
 
           <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-6">
-            {selectedChannel.kind === "all_staff" ? <section className="mb-6 rounded-[18px] border border-[var(--accent)]/20 bg-[var(--accent-soft)]/40 p-4" aria-label="Pinned announcement"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Megaphone className="size-3.5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><p className="text-[10px] font-semibold tracking-[0.08em] uppercase">Pinned announcement</p><StatusPill tone={announcement.priority === "important" ? "warning" : "neutral"}>{announcement.priority}</StatusPill></div><h4 className="mt-2 text-xs font-semibold">{announcement.title}</h4><p className="mt-1 text-[10px] leading-4 text-[var(--ink-soft)]">{announcement.body}</p><p className="mt-3 text-[9px] text-[var(--ink-faint)]">{announcement.acknowledgedBy.length} acknowledged · posted by Maris</p></div></div></section> : null}
+            {selectedChannel.kind === "all_staff" ? <section className="mb-6 rounded-[18px] border border-[var(--line)] bg-[var(--canvas)] p-4" aria-label="Channel guidance"><div className="flex items-start gap-3"><span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--paper)] text-[var(--ink-faint)]"><Megaphone className="size-3.5" /></span><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold tracking-[0.08em] uppercase">All-staff channel</p><p className="mt-1 text-[10px] leading-4 text-[var(--ink-soft)]">Use this room for service updates, shift swaps, and questions for the Le Yard team.</p></div></div></section> : null}
             <div className="mb-6 flex items-center gap-3"><span className="h-px flex-1 bg-[var(--line)]" /><span className="text-[9px] font-semibold text-[var(--ink-faint)]">Today</span><span className="h-px flex-1 bg-[var(--line)]" /></div>
             <div className="space-y-5">
               <AnimatePresence initial={false}>{channelMessages.map((message) => <MessageBubble key={message.id} message={message} mine={message.authorId === currentUserId} currentUserId={currentUserId} onToggleReaction={(emoji) => toggleReaction(message.id, emoji)} />)}</AnimatePresence>
@@ -225,7 +277,7 @@ export function MessagesWorkspace() {
           <div className="mt-6 flex flex-col items-center text-center"><span className={cn("flex size-14 items-center justify-center rounded-[18px]", selectedChannel.kind === "management" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}>{selectedChannel.kind === "management" ? <ShieldCheck className="size-5" /> : <Hash className="size-5" />}</span><h4 className="mt-3 text-sm font-semibold">{selectedChannel.name}</h4><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">{channelDescription(selectedChannel)}</p></div>
           <div className="mt-6 grid grid-cols-2 gap-2"><Button variant="secondary" size="sm" onClick={() => setNotificationsMuted((current) => !current)}>{notificationsMuted ? <BellOff className="size-3.5" /> : <Bell className="size-3.5" />}{notificationsMuted ? "Muted" : "Notify"}</Button><Button variant="secondary" size="sm"><Search className="size-3.5" /> Search</Button></div>
           <section className="mt-7 border-t border-[var(--line)] pt-5"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold">Members</p><span className="numeric text-[9px] text-[var(--ink-faint)]">{channelMembers.length}</span></div><div className="mt-3 space-y-3">{channelMembers.slice(0, 6).map((person, index) => <div key={person.id} className="flex items-center gap-2.5"><Avatar name={person.displayName} size="sm" index={index} /><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-semibold">{person.displayName}</p><p className="mt-0.5 truncate text-[8px] text-[var(--ink-faint)]">{person.primaryRole}</p></div>{person.id === currentUserId ? <span className="text-[8px] text-[var(--ink-faint)]">You</span> : null}</div>)}</div>{channelMembers.length > 6 ? <button type="button" className="mt-3 text-[9px] font-semibold text-[var(--accent-strong)]">View all {channelMembers.length}</button> : null}</section>
-          <section className="mt-7 border-t border-[var(--line)] pt-5"><p className="text-[10px] font-semibold">Shared files</p><button type="button" className="mt-3 flex w-full items-center gap-2.5 rounded-xl bg-[var(--paper)] px-3 py-3 text-left"><FileText className="size-3.5 text-[var(--accent)]" /><span className="min-w-0 flex-1 truncate text-[9px] font-semibold">demo-produce-invoice.pdf</span><ChevronRight className="size-3 text-[var(--ink-faint)]" /></button></section>
+          <section className="mt-7 border-t border-[var(--line)] pt-5"><p className="text-[10px] font-semibold">Shared files</p><p className="mt-3 rounded-xl bg-[var(--paper)] px-3 py-3 text-[9px] text-[var(--ink-faint)]">Files shared in this channel will appear here.</p></section>
           {selectedChannel.kind === "management" ? <div className="mt-7 flex items-start gap-2 rounded-xl bg-[var(--danger-soft)] px-3 py-3 text-[9px] leading-4 text-[var(--danger)]"><LockKeyhole className="mt-0.5 size-3.5 shrink-0" /><span>Membership is limited to owners and managers. Access is checked on every message.</span></div> : null}
         </aside>
       </div>

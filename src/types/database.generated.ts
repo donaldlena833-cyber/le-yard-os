@@ -7526,6 +7526,20 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["guest_contacts"]["Row"]
       };
+      "save_manager_recipe": {
+        Args: {
+          "p_request_id": string | null
+          "p_workspace_location_id": string | null
+          "p_recipe_id": string | null
+          "p_name": string | null
+          "p_yield_quantity": number | null
+          "p_yield_unit_id": string | null
+          "p_menu_price_cents": number | null
+          "p_is_active": boolean | null
+          "p_ingredients": Json | null
+        }
+        Returns: Json
+      };
       "save_push_subscription": {
         Args: {
           "p_request_id": string | null
@@ -8156,6 +8170,7 @@ export const DatabaseObjectNames = {
       "save_expense_category",
       "save_guest",
       "save_guest_contact",
+      "save_manager_recipe",
       "save_push_subscription",
       "save_time_off_request",
       "save_tip_pool_policy_draft",

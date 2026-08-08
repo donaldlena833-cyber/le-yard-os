@@ -119,6 +119,7 @@ function ModalFrame({
   labelledBy,
   notice,
   onClose,
+  returnFocus,
   children,
   width = "max-w-3xl",
 }: {
@@ -127,6 +128,7 @@ function ModalFrame({
   labelledBy: string;
   notice?: string;
   onClose: () => void;
+  returnFocus?: HTMLElement | null;
   children: ReactNode;
   width?: string;
 }) {
@@ -134,9 +136,9 @@ function ModalFrame({
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   const previouslyFocusedRef = useRef<HTMLElement | null>(
-    typeof document !== "undefined" && document.activeElement instanceof HTMLElement
+    returnFocus ?? (typeof document !== "undefined" && document.activeElement instanceof HTMLElement
       ? document.activeElement
-      : null,
+      : null),
   );
 
   useEffect(() => {
@@ -601,6 +603,7 @@ function InventoryMutationDialog({
   busy,
   notice,
   onClose,
+  returnFocus,
   onError,
   onRun,
 }: {
@@ -610,6 +613,7 @@ function InventoryMutationDialog({
   busy: boolean;
   notice: string;
   onClose: () => void;
+  returnFocus?: HTMLElement | null;
   onError: (message: string) => void;
   onRun: (
     successMessage: string,
@@ -672,7 +676,7 @@ function InventoryMutationDialog({
   }
 
   if (dialog.kind === "purchase-order") {
-    return <ModalFrame title="Create purchase order" description="Create an internal, tenant-scoped order. This records the order but does not transmit it to the vendor." labelledBy="purchase-order-dialog" notice={notice} onClose={onClose} width="max-w-5xl"><form onSubmit={async (event) => { event.preventDefault(); const parsed = parsedLineValues("order"); if (!parsed) return; const form = new FormData(event.currentTarget); const taxCents = parseInventoryMoneyToCents(String(form.get("tax") ?? "")); const shippingCents = parseInventoryMoneyToCents(String(form.get("shipping") ?? "")); if (taxCents === null || shippingCents === null) return onError("Tax and shipping must be non-negative amounts with up to two decimals."); const succeeded = await onRun("Purchase order created. It is ready for receiving; no vendor message was sent.", () => createPurchaseOrderAction({ requestId: dialog.requestId, locationId: workspace.activeLocation.id, vendorId: String(form.get("vendorId")), poNumber: String(form.get("poNumber")), orderedOn: String(form.get("orderedOn") || "") || null, expectedOn: String(form.get("expectedOn") || "") || null, taxCents, shippingCents, notes: String(form.get("notes") || "") || null, lines: parsed.map((line) => ({ inventoryItemId: line.inventoryItemId, unitId: line.unitId, quantity: line.parsedQuantity!, unitPriceCents: line.parsedPrice!, notes: null })) })); if (succeeded) onClose(); }}>
+    return <ModalFrame returnFocus={returnFocus} title="Create purchase order" description="Create an internal, tenant-scoped order. This records the order but does not transmit it to the vendor." labelledBy="purchase-order-dialog" notice={notice} onClose={onClose} width="max-w-5xl"><form onSubmit={async (event) => { event.preventDefault(); const parsed = parsedLineValues("order"); if (!parsed) return; const form = new FormData(event.currentTarget); const taxCents = parseInventoryMoneyToCents(String(form.get("tax") ?? "")); const shippingCents = parseInventoryMoneyToCents(String(form.get("shipping") ?? "")); if (taxCents === null || shippingCents === null) return onError("Tax and shipping must be non-negative amounts with up to two decimals."); const succeeded = await onRun("Purchase order created. It is ready for receiving; no vendor message was sent.", () => createPurchaseOrderAction({ requestId: dialog.requestId, locationId: workspace.activeLocation.id, vendorId: String(form.get("vendorId")), poNumber: String(form.get("poNumber")), orderedOn: String(form.get("orderedOn") || "") || null, expectedOn: String(form.get("expectedOn") || "") || null, taxCents, shippingCents, notes: String(form.get("notes") || "") || null, lines: parsed.map((line) => ({ inventoryItemId: line.inventoryItemId, unitId: line.unitId, quantity: line.parsedQuantity!, unitPriceCents: line.parsedPrice!, notes: null })) })); if (succeeded) onClose(); }}>
       <div className="grid gap-5 px-5 py-5 sm:px-7"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><InventoryField label="Vendor"><select name="vendorId" required autoFocus className={inventoryFieldClass}>{model.vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}</select></InventoryField><InventoryField label="PO number"><input name="poNumber" required maxLength={80} placeholder="e.g. PO-20260801-01" className={inventoryFieldClass} /></InventoryField><InventoryField label="Ordered on"><input name="orderedOn" type="date" defaultValue={model.date} className={inventoryFieldClass} /></InventoryField><InventoryField label="Expected on"><input name="expectedOn" type="date" min={model.date} className={inventoryFieldClass} /></InventoryField></div><InventoryLineEditor model={model} lines={lines} busy={busy} mode="order" onChange={updateLine} onAdd={addLine} onRemove={removeLine} /><div className="grid gap-4 sm:grid-cols-3"><InventoryField label={`Tax · ${model.currencyCode}`}><input name="tax" inputMode="decimal" defaultValue="0.00" required className={inventoryFieldClass} /></InventoryField><InventoryField label={`Shipping · ${model.currencyCode}`}><input name="shipping" inputMode="decimal" defaultValue="0.00" required className={inventoryFieldClass} /></InventoryField><InventoryField label="Order note"><input name="notes" maxLength={4_000} className={inventoryFieldClass} /></InventoryField></div><div className="flex items-start gap-3 rounded-xl bg-[var(--canvas)] p-3 text-[9px] leading-4 text-[var(--ink-faint)]"><ShieldCheck className="mt-0.5 size-3.5 shrink-0" />Subtotal is recalculated from exact quantity × integer-cent prices in the database. The actor and request evidence are server-derived.</div><div className="flex justify-end gap-2"><Button type="button" variant="quiet" disabled={busy} onClick={onClose}>Cancel</Button><Button type="submit" variant="accent" disabled={busy || !model.vendors.length || !lines.length}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <ShoppingCart className="size-4" />}Create order</Button></div></div>
     </form></ModalFrame>;
   }
@@ -732,6 +736,7 @@ export function LiveInventoryWorkspace({
   const [selectedCountId, setSelectedCountId] = useState<string | null>(null);
   const [countReviewRequestId, setCountReviewRequestId] = useState<string | null>(null);
   const [mutationDialog, setMutationDialog] = useState<InventoryMutationDialog | null>(null);
+  const [mutationReturnFocus, setMutationReturnFocus] = useState<HTMLElement | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -831,6 +836,12 @@ export function LiveInventoryWorkspace({
     setCountOpen(true);
   }
 
+  function openMutationDialog(next: InventoryMutationDialog) {
+    setMutationReturnFocus(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setNotice("");
+    setMutationDialog(next);
+  }
+
   async function submitCount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!countSubmissionId) return;
@@ -928,7 +939,7 @@ export function LiveInventoryWorkspace({
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">{title}</h2>
           <p className="mt-1 text-[11px] text-[var(--ink-faint)]">{description ?? `Stock, counts, purchasing, recipes, and waste for ${workspace.activeLocation.name}.`}</p>
         </div>
-        <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={!model.items.length || !model.vendors.length} onClick={() => { setNotice(""); setMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() }); }}><ShoppingCart className="size-4" />New order</Button><Button variant="accent" disabled={!model.items.length} onClick={openCount}><ClipboardCheck className="size-4" />Start full count</Button></div>
+        <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={!model.items.length || !model.vendors.length} onClick={() => openMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() })}><ShoppingCart className="size-4" />New order</Button><Button variant="accent" disabled={!model.items.length} onClick={openCount}><ClipboardCheck className="size-4" />Start full count</Button></div>
       </div>
 
       {notice ? <div aria-live="polite" className="mt-4 flex items-start gap-2 rounded-xl bg-[var(--accent-soft)]/55 px-4 py-3 text-[10px] leading-4 text-[var(--accent-strong)]"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />{notice}</div> : null}
@@ -1010,8 +1021,8 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "orders" ? (
             <section className="mt-5">
-              <SectionHeading title="Purchase orders" detail="Internal orders with server-derived totals. Vendor transmission remains outside this app until an approved integration is connected." action={<Button size="sm" variant="accent" disabled={!model.items.length || !model.vendors.length} onClick={() => { setNotice(""); setMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() }); }}><Plus className="size-3.5" />New order</Button>} />
-              {model.orders.length ? <div className="border-y border-[var(--line)]">{model.orders.map((order) => { const canReceive = ["submitted", "partially_received"].includes(order.status) && order.lines.length > 0; return <div key={order.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><ShoppingCart className="size-4 text-[var(--ink-faint)]" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{order.vendorName} · {order.poNumber}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Ordered {dateLabel(order.orderedOn)} · expected {dateLabel(order.expectedOn)} · {order.lineCount} lines</span></span><span className="numeric text-xs font-semibold">{formatMoney(order.totalCents, model.currencyCode)}</span><StatusPill tone={statusTone[order.status] ?? "neutral"}>{sentenceCase(order.status)}</StatusPill>{canReceive ? <Button size="sm" variant="secondary" onClick={() => { setNotice(""); setMutationDialog({ kind: "delivery", requestId: crypto.randomUUID(), order }); }}><Truck className="size-3.5" />Receive</Button> : null}</div>; })}</div> : <EmptyState icon={<ShoppingCart className="size-4" />} title="No purchase orders" detail={model.vendors.length && model.items.length ? "Create an internal order from active tenant vendors and tracked items." : "Active vendors and tracked items are required before an order can be created."} />}
+              <SectionHeading title="Purchase orders" detail="Internal orders with server-derived totals. Vendor transmission remains outside this app until an approved integration is connected." action={<Button size="sm" variant="accent" disabled={!model.items.length || !model.vendors.length} onClick={() => openMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() })}><Plus className="size-3.5" />New order</Button>} />
+              {model.orders.length ? <div className="border-y border-[var(--line)]">{model.orders.map((order) => { const canReceive = ["submitted", "partially_received"].includes(order.status) && order.lines.length > 0; return <div key={order.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><ShoppingCart className="size-4 text-[var(--ink-faint)]" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{order.vendorName} · {order.poNumber}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Ordered {dateLabel(order.orderedOn)} · expected {dateLabel(order.expectedOn)} · {order.lineCount} lines</span></span><span className="numeric text-xs font-semibold">{formatMoney(order.totalCents, model.currencyCode)}</span><StatusPill tone={statusTone[order.status] ?? "neutral"}>{sentenceCase(order.status)}</StatusPill>{canReceive ? <Button size="sm" variant="secondary" onClick={() => openMutationDialog({ kind: "delivery", requestId: crypto.randomUUID(), order })}><Truck className="size-3.5" />Receive</Button> : null}</div>; })}</div> : <EmptyState icon={<ShoppingCart className="size-4" />} title="No purchase orders" detail={model.vendors.length && model.items.length ? "Create an internal order from active tenant vendors and tracked items." : "Active vendors and tracked items are required before an order can be created."} />}
               <div className="mt-8"><SectionHeading title="Delivery history" detail="Accepted quantities, invoice references, and receiving actors. Each delivery posts canonical stock exactly once." /></div>
               {model.deliveries.length ? <div className="border-y border-[var(--line)]">{model.deliveries.map((delivery) => <div key={delivery.id} className="flex items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Truck className="size-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{delivery.vendorName}{delivery.poNumber ? ` · ${delivery.poNumber}` : ""}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{dateTimeLabel(delivery.deliveredAt, model.timeZone)} · {delivery.lines.length} lines · received by {delivery.receivedBy}{delivery.invoiceNumber ? ` · ${delivery.invoiceNumber}` : ""}</span></span><span className="numeric text-xs font-semibold">{quantityLabel(delivery.lines.reduce((sum, line) => sum + line.acceptedQuantity, 0))} accepted</span><StatusPill tone="positive">Posted</StatusPill></div>)}</div> : <EmptyState icon={<Truck className="size-4" />} title="No deliveries received" detail="Receive against an open purchase order to post accepted stock and vendor price evidence." />}
             </section>
@@ -1019,8 +1030,8 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "transfers" ? (
             <section className="mt-5">
-              <SectionHeading title="Location transfers" detail="Source submissions require an independent destination decision before paired stock movements post." action={<Button size="sm" variant="accent" disabled={!model.items.length || model.locations.filter((location) => location.id !== workspace.activeLocation.id).length === 0} onClick={() => { setNotice(""); setMutationDialog({ kind: "transfer", requestId: crypto.randomUUID() }); }}><ArrowRightLeft className="size-3.5" />New transfer</Button>} />
-              {model.transfers.length ? <div className="border-y border-[var(--line)]">{model.transfers.map((transfer) => { const pending = transfer.status === "draft"; const own = transfer.createdByUserId === workspace.identity.userId; const atDestination = transfer.toLocationId === workspace.activeLocation.id; return <div key={transfer.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><ArrowRightLeft className="size-4 text-[var(--ink-faint)]" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{transfer.fromLocationName} → {transfer.toLocationName}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{transfer.lines.length} lines · submitted by {transfer.createdBy} · {dateTimeLabel(transfer.createdAt, model.timeZone)}{pending && own ? " · another reviewer required" : ""}</span></span><StatusPill tone={statusTone[transfer.status] ?? (pending ? "warning" : "neutral")}>{pending ? "Pending review" : sentenceCase(transfer.status)}</StatusPill>{pending ? <Button size="sm" variant={atDestination && !own ? "accent" : "secondary"} onClick={() => { setNotice(""); setMutationDialog({ kind: "transfer-review", requestId: crypto.randomUUID(), transfer }); }}>{atDestination && !own ? "Review receipt" : "View"}<ChevronRight className="size-3.5" /></Button> : null}</div>; })}</div> : <EmptyState icon={<ArrowRightLeft className="size-4" />} title="No location transfers" detail={model.locations.length > 1 ? "Submit a source-location transfer for destination review." : "No other RLS-visible active location is available as a destination."} />}
+              <SectionHeading title="Location transfers" detail="Source submissions require an independent destination decision before paired stock movements post." action={<Button size="sm" variant="accent" disabled={!model.items.length || model.locations.filter((location) => location.id !== workspace.activeLocation.id).length === 0} onClick={() => openMutationDialog({ kind: "transfer", requestId: crypto.randomUUID() })}><ArrowRightLeft className="size-3.5" />New transfer</Button>} />
+              {model.transfers.length ? <div className="border-y border-[var(--line)]">{model.transfers.map((transfer) => { const pending = transfer.status === "draft"; const own = transfer.createdByUserId === workspace.identity.userId; const atDestination = transfer.toLocationId === workspace.activeLocation.id; return <div key={transfer.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><ArrowRightLeft className="size-4 text-[var(--ink-faint)]" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{transfer.fromLocationName} → {transfer.toLocationName}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{transfer.lines.length} lines · submitted by {transfer.createdBy} · {dateTimeLabel(transfer.createdAt, model.timeZone)}{pending && own ? " · another reviewer required" : ""}</span></span><StatusPill tone={statusTone[transfer.status] ?? (pending ? "warning" : "neutral")}>{pending ? "Pending review" : sentenceCase(transfer.status)}</StatusPill>{pending ? <Button size="sm" variant={atDestination && !own ? "accent" : "secondary"} onClick={() => openMutationDialog({ kind: "transfer-review", requestId: crypto.randomUUID(), transfer })}>{atDestination && !own ? "Review receipt" : "View"}<ChevronRight className="size-3.5" /></Button> : null}</div>; })}</div> : <EmptyState icon={<ArrowRightLeft className="size-4" />} title="No location transfers" detail={model.locations.length > 1 ? "Submit a source-location transfer for destination review." : "No other RLS-visible active location is available as a destination."} />}
             </section>
           ) : null}
 
@@ -1040,8 +1051,8 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "waste" ? (
             <section className="mt-5">
-              <SectionHeading title="Waste log" detail="Observed waste stays pending until a different manager approves or rejects it." action={<Button size="sm" variant="accent" disabled={!model.items.length} onClick={() => { setNotice(""); setMutationDialog({ kind: "waste", requestId: crypto.randomUUID() }); }}><Plus className="size-3.5" />Record waste</Button>} />
-              {model.waste.length ? <div className="border-y border-[var(--line)]">{model.waste.map((record) => { const pending = ["pending", "in_review"].includes(record.status); return <div key={record.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger)]"><Trash2 className="size-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{record.itemName} · {record.recordedBy}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{quantityLabel(record.quantity)} {record.unitSymbol} · {sentenceCase(record.reasonCode)} · {dateTimeLabel(record.occurredAt, model.timeZone)}</span>{record.notes ? <span className="mt-1 block truncate text-[9px] text-[var(--ink-soft)]">{record.notes}</span> : null}</span><span className="numeric text-xs font-semibold">{record.estimatedCostCents === null ? "—" : formatMoney(record.estimatedCostCents, model.currencyCode)}</span><StatusPill tone={statusTone[record.status] ?? "neutral"}>{sentenceCase(record.status)}</StatusPill>{pending ? <Button size="sm" variant="secondary" onClick={() => { setNotice(""); setMutationDialog({ kind: "waste-review", requestId: crypto.randomUUID(), record }); }}>Review<ChevronRight className="size-3.5" /></Button> : null}</div>; })}</div> : <EmptyState icon={<Trash2 className="size-4" />} title="No waste records" detail="Record a factual observation to start an independent review." />}
+              <SectionHeading title="Waste log" detail="Observed waste stays pending until a different manager approves or rejects it." action={<Button size="sm" variant="accent" disabled={!model.items.length} onClick={() => openMutationDialog({ kind: "waste", requestId: crypto.randomUUID() })}><Plus className="size-3.5" />Record waste</Button>} />
+              {model.waste.length ? <div className="border-y border-[var(--line)]">{model.waste.map((record) => { const pending = ["pending", "in_review"].includes(record.status); return <div key={record.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-t-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--danger-soft)] text-[var(--danger)]"><Trash2 className="size-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{record.itemName} · {record.recordedBy}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{quantityLabel(record.quantity)} {record.unitSymbol} · {sentenceCase(record.reasonCode)} · {dateTimeLabel(record.occurredAt, model.timeZone)}</span>{record.notes ? <span className="mt-1 block truncate text-[9px] text-[var(--ink-soft)]">{record.notes}</span> : null}</span><span className="numeric text-xs font-semibold">{record.estimatedCostCents === null ? "—" : formatMoney(record.estimatedCostCents, model.currencyCode)}</span><StatusPill tone={statusTone[record.status] ?? "neutral"}>{sentenceCase(record.status)}</StatusPill>{pending ? <Button size="sm" variant="secondary" onClick={() => openMutationDialog({ kind: "waste-review", requestId: crypto.randomUUID(), record })}>Review<ChevronRight className="size-3.5" /></Button> : null}</div>; })}</div> : <EmptyState icon={<Trash2 className="size-4" />} title="No waste records" detail="Record a factual observation to start an independent review." />}
             </section>
           ) : null}
 
@@ -1054,7 +1065,7 @@ export function LiveInventoryWorkspace({
       <AnimatePresence>
         {countOpen ? <CountDialog key="count" model={model} values={countValues} notes={countNotes} notice={notice} busy={busy} onValueChange={(itemId, value) => setCountValues((current) => ({ ...current, [itemId]: value }))} onNotesChange={setCountNotes} onClose={() => { if (!busy) { setCountOpen(false); setCountSubmissionId(null); } }} onSubmit={submitCount} /> : null}
         {selectedCount ? <ReviewDialog key="review" count={selectedCount} model={model} currentUserId={workspace.identity.userId} note={reviewNote} notice={notice} busy={busy} onNoteChange={setReviewNote} onClose={() => { if (!busy) { setSelectedCountId(null); setCountReviewRequestId(null); } }} onDecision={(approve) => void decideCount(approve)} /> : null}
-        {mutationDialog ? <InventoryMutationDialog key={`${mutationDialog.kind}:${mutationDialog.requestId}`} dialog={mutationDialog} workspace={workspace} model={model} busy={busy} notice={notice} onClose={() => { if (!busy) setMutationDialog(null); }} onError={setNotice} onRun={runMutation} /> : null}
+        {mutationDialog ? <InventoryMutationDialog key={`${mutationDialog.kind}:${mutationDialog.requestId}`} dialog={mutationDialog} workspace={workspace} model={model} busy={busy} notice={notice} returnFocus={mutationReturnFocus} onClose={() => { if (!busy) { setMutationDialog(null); setMutationReturnFocus(null); } }} onError={setNotice} onRun={runMutation} /> : null}
       </AnimatePresence>
     </PageFrame>
   );

@@ -574,7 +574,7 @@ export function TipPolicyConfiguration({
                     </select>
                   </label>
                   <span className="rounded-xl bg-[var(--canvas)] p-3 text-[9px] leading-4 text-[var(--ink-faint)]">
-                    Largest-remainder cent allocation is fixed. Points-only policies are not available for payroll-support runs.
+                    Largest-remainder cent allocation is fixed. Weighted hours multiply each eligible hour by its role points; Le Yard&apos;s current basis is 10 for servers and bartenders, 6 for support staff. Points-only policies are not available for payroll-support runs.
                   </span>
                   <label>
                     <span className="mb-1.5 block text-[10px] font-semibold">Effective from</span>
@@ -639,7 +639,7 @@ export function TipPolicyConfiguration({
                             <span><span className="block text-[10px] font-semibold">{role.name}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{role.code}</span></span>
                           </label>
                           <label>
-                            <span className="mb-1 block text-[9px] text-[var(--ink-faint)]">Weight</span>
+                            <span className="mb-1 block text-[9px] text-[var(--ink-faint)]">Tip points</span>
                             <input
                               name={`points:${role.id}`}
                               type="number"

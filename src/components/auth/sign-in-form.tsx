@@ -38,14 +38,14 @@ export function SignInForm({
       <input type="hidden" name="next" value={nextPath} />
       <label className="block">
         <span className="mb-2 block text-xs font-semibold text-[var(--ink-soft)]">
-          {playgroundMode ? "Username" : "Work email"}
+          {playgroundMode ? "Username" : "Username or work email"}
         </span>
         <input
           required
           name="identifier"
-          type={playgroundMode ? "text" : "email"}
-          autoComplete={playgroundMode ? "username" : "email"}
-          placeholder={playgroundMode ? "Your preview username" : "you@leyard.com"}
+          type="text"
+          autoComplete="username"
+          placeholder={playgroundMode ? "Your preview username" : "donaldlena or you@leyard.com"}
           className="h-12 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-4 text-sm outline-none transition-colors placeholder:text-[var(--ink-faint)] hover:border-[var(--line-strong)] focus:border-[var(--accent)]"
         />
       </label>

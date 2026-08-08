@@ -27,6 +27,7 @@ import type {
 import type {
   ResolveReceiptDuplicateInput,
   SetReceiptReferenceLinkInput,
+  AssignReceiptInventoryMatchInput,
 } from "../receipt-schemas";
 import type { Json } from "@/types/database.generated";
 
@@ -176,6 +177,104 @@ export async function reviewReceipt(
     reviewedAt: result.reviewed_at as string,
     alreadyApplied: false,
   };
+}
+
+/**
+ * Store a manager-confirmed invoice-line → inventory-item mapping using the
+ * existing extraction evidence table. A future OCR provider can populate the
+ * same line keys automatically, while this workflow keeps the final mapping
+ * tenant-scoped, idempotent, and blocked after a receipt is locked.
+ */
+export async function assignReceiptInventoryMatch(
+  context: WorkflowContext,
+  input: AssignReceiptInventoryMatchInput,
+) {
+  const { supabase, actor } = context;
+  const { data: receipt, error: receiptError } = await supabase
+    .from("receipts")
+    .select("id, organization_id, location_id, review_status")
+    .eq("id", input.receiptId)
+    .maybeSingle();
+  if (receiptError) throwDatabaseError(receiptError, "The receipt could not be loaded.");
+  const foundReceipt = assertFound(receipt, "The receipt was not found.");
+  requireLocationManagement(actor, foundReceipt.organization_id, foundReceipt.location_id);
+  assertCondition(
+    !["approved", "rejected"].includes(foundReceipt.review_status),
+    "conflict",
+    "Inventory mappings cannot change after the receipt is locked.",
+  );
+
+  const { data: item, error: itemError } = await supabase
+    .from("inventory_items")
+    .select("id, organization_id, name")
+    .eq("id", input.inventoryItemId)
+    .eq("organization_id", foundReceipt.organization_id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (itemError) throwDatabaseError(itemError, "The inventory item could not be verified.");
+  assertFound(item, "The inventory item was not found in this organization.");
+
+  const fieldName = `inventory_item:${input.lineKey}`;
+  const { data: existingByRequest, error: requestError } = await supabase
+    .from("receipt_extractions")
+    .select("id, receipt_id, field_name, normalized_value")
+    .eq("id", input.requestId)
+    .maybeSingle();
+  if (requestError) throwDatabaseError(requestError, "The inventory mapping request could not be checked.");
+  if (existingByRequest) {
+    assertCondition(
+      existingByRequest.receipt_id === foundReceipt.id &&
+        existingByRequest.field_name === fieldName &&
+        existingByRequest.normalized_value === input.inventoryItemId,
+      "conflict",
+      "This mapping request ID was already used for a different line.",
+    );
+    return { id: existingByRequest.id, receiptId: foundReceipt.id, inventoryItemId: input.inventoryItemId, alreadyApplied: true };
+  }
+
+  const { data: existingLine, error: lineError } = await supabase
+    .from("receipt_extractions")
+    .select("id, normalized_value")
+    .eq("receipt_id", foundReceipt.id)
+    .eq("field_name", fieldName)
+    .maybeSingle();
+  if (lineError) throwDatabaseError(lineError, "The invoice line mapping could not be checked.");
+  if (existingLine) {
+    const { data: updated, error: updateError } = await supabase
+      .from("receipt_extractions")
+      .update({
+        extracted_value: input.description,
+        normalized_value: input.inventoryItemId,
+        confidence: input.confidence,
+        review_status: "approved",
+        reviewed_by: actor.userId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", existingLine.id)
+      .select("id")
+      .single();
+    if (updateError) throwDatabaseError(updateError, "The invoice line mapping could not be updated.");
+    return { id: updated.id, receiptId: foundReceipt.id, inventoryItemId: input.inventoryItemId, alreadyApplied: false };
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("receipt_extractions")
+    .insert({
+      id: input.requestId,
+      organization_id: foundReceipt.organization_id,
+      receipt_id: foundReceipt.id,
+      field_name: fieldName,
+      extracted_value: input.description,
+      normalized_value: input.inventoryItemId,
+      confidence: input.confidence,
+      review_status: "approved",
+      reviewed_by: actor.userId,
+      reviewed_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+  if (insertError) throwDatabaseError(insertError, "The invoice line mapping could not be saved.");
+  return { id: inserted.id, receiptId: foundReceipt.id, inventoryItemId: input.inventoryItemId, alreadyApplied: false };
 }
 
 export function normalizeUploadFileName(fileName: string): string {
