@@ -52,8 +52,8 @@ export const navigationSections: Array<{
         roles: ["owner", "admin", "manager"],
       },
       { href: "/team", label: "Team", icon: UsersRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/vendors", label: "Vendors", icon: Truck, mobile: true, roles: ["owner", "admin", "manager", "employee"] },
-      { href: "/earnings", label: "Earnings", icon: WalletCards, hiddenPersonas: ["chef"] },
+      { href: "/vendors", label: "Vendors", icon: Truck, roles: ["owner", "admin", "manager"] },
+      { href: "/earnings", label: "Earnings", icon: WalletCards, mobile: true, hiddenPersonas: ["chef"] },
       {
         href: "/messages",
         label: "Messages",

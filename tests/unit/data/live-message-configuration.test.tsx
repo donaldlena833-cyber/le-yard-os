@@ -34,7 +34,12 @@ vi.mock("@/app/actions/workflows/files", () => ({
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({ channel: vi.fn(), removeChannel: vi.fn() }),
+  createClient: () => ({
+    auth: { getSession: vi.fn().mockResolvedValue({ data: { session: null } }) },
+    realtime: { setAuth: vi.fn().mockResolvedValue(undefined) },
+    channel: vi.fn(),
+    removeChannel: vi.fn(),
+  }),
 }));
 
 const workspace: WorkspaceContextValue = {

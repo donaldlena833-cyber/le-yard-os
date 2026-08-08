@@ -60,6 +60,7 @@ const chatAttachmentTypes = [
 type ChatMessageRow = Database["public"]["Tables"]["chat_messages"]["Row"];
 type ChatReactionRow = Database["public"]["Tables"]["chat_reactions"]["Row"];
 type ChatAttachmentRow = Database["public"]["Tables"]["chat_attachments"]["Row"];
+type ChatAcknowledgementRow = Database["public"]["Tables"]["announcement_acknowledgements"]["Row"];
 
 function MessagesReadError({ message }: { message: string }) {
   return (
@@ -320,7 +321,11 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
     let realtimeChannel: RealtimeChannel | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
 
-    const connect = () => {
+    const connect = async () => {
+      if (stopped) return;
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (stopped) return;
+      await supabase.realtime.setAuth(sessionData.session?.access_token ?? null);
       if (stopped) return;
       realtimeChannel = supabase
         .channel(`chat:${selectedChannel.id}:${workspace.identity.userId}`)
@@ -400,6 +405,20 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
             };
           }));
         })
+        .on("postgres_changes", { event: "*", schema: "public", table: "announcement_acknowledgements", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
+          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as Partial<ChatAcknowledgementRow>;
+          if (!row.message_id) return;
+          setMessages((current) => current.map((message) => {
+            if (message.id !== row.message_id) return message;
+            const acknowledgedByMe = row.user_id === workspace.identity.userId
+              ? payload.eventType !== "DELETE"
+              : message.acknowledgedByMe;
+            const acknowledgementCount = payload.eventType === "DELETE"
+              ? Math.max(0, message.acknowledgementCount - 1)
+              : message.acknowledgementCount + 1;
+            return { ...message, acknowledgedByMe, acknowledgementCount };
+          }));
+        })
         .on("postgres_changes", { event: "*", schema: "public", table: "chat_read_receipts", filter: `channel_id=eq.${selectedChannel.id}` }, () => {
           void supabase.from("chat_read_receipts").select("user_id, last_read_message_id").eq("organization_id", workspace.organization.id).eq("channel_id", selectedChannel.id).then(({ data: receiptRows }) => {
             if (!receiptRows) return;
@@ -422,12 +441,12 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
             if (retry) clearTimeout(retry);
             retry = setTimeout(() => {
               if (realtimeChannel) void supabase.removeChannel(realtimeChannel);
-              connect();
+              void connect();
             }, 1_500);
           }
         });
     };
-    connect();
+    void connect();
     return () => {
       stopped = true;
       if (retry) clearTimeout(retry);
