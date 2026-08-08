@@ -95,8 +95,8 @@ export async function createChatAttachmentUploadUrl(
   const objectPath = buildPrivateObjectPath({
     organizationId: message.organization_id,
     locationId: channel.location_id ?? "global",
-    resourceKind: "chat",
-    resourceId: message.id,
+    resourceKind: "channels",
+    resourceId: channel.id,
     uploadId: input.uploadId,
     fileName: input.fileName,
   });
@@ -157,8 +157,8 @@ export async function finalizeChatAttachment(
   assertCondition(
     parsedPath?.organizationId === message.organization_id &&
       parsedPath.locationId === expectedLocation &&
-      parsedPath.segments[2] === "chat" &&
-      parsedPath.segments[3] === message.id &&
+      parsedPath.segments[2] === "channels" &&
+      parsedPath.segments[3] === channel.id &&
       parsedPath.segments[4]?.startsWith(`${input.uploadId}-`),
     "forbidden",
     "The uploaded object is outside this message's private scope.",
