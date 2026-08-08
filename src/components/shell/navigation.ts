@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Boxes,
+  ChefHat,
   CalendarDays,
   ChartNoAxesCombined,
   CheckSquare2,
@@ -25,6 +26,8 @@ export type NavItem = {
   badge?: string;
   mobile?: boolean;
   roles?: readonly AppRole[];
+  personas?: readonly ("chef")[];
+  hiddenPersonas?: readonly ("chef")[];
 };
 
 export const navigationSections: Array<{
@@ -41,9 +44,10 @@ export const navigationSections: Array<{
         icon: CalendarDays,
         mobile: true,
       },
-      { href: "/team", label: "Team", icon: UsersRound, roles: ["owner", "admin", "manager"] },
+      { href: "/kitchen", label: "Kitchen", icon: ChefHat, mobile: true, personas: ["chef"] },
+      { href: "/team", label: "Team", icon: UsersRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
       { href: "/time-clock", label: "Time clock", icon: Clock3, mobile: true },
-      { href: "/earnings", label: "Earnings", icon: WalletCards },
+      { href: "/earnings", label: "Earnings", icon: WalletCards, hiddenPersonas: ["chef"] },
       {
         href: "/messages",
         label: "Messages",
@@ -56,10 +60,10 @@ export const navigationSections: Array<{
   {
     label: "Back office",
     items: [
-      { href: "/closeout", label: "Closeout & tips", icon: HandCoins, roles: ["owner", "admin", "manager"] },
-      { href: "/receipts", label: "Receipts", icon: ReceiptText, badge: "3", roles: ["owner", "admin", "manager"] },
-      { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["owner", "admin", "manager"] },
-      { href: "/guests", label: "Guests", icon: ContactRound, roles: ["owner", "admin", "manager"] },
+      { href: "/closeout", label: "Closeout & tips", icon: HandCoins, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
+      { href: "/receipts", label: "Receipts", icon: ReceiptText, badge: "3", roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
+      { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
+      { href: "/guests", label: "Guests", icon: ContactRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
       { href: "/tasks", label: "Tasks & SOPs", icon: CheckSquare2 },
     ],
   },
@@ -70,10 +74,10 @@ export const navigationSections: Array<{
         href: "/reports",
         label: "Reports",
         icon: ChartNoAxesCombined,
-        roles: ["owner", "admin", "manager"],
+        roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"],
       },
-      { href: "/assistant", label: "Ask Le Yard", icon: Sparkles, roles: ["owner", "admin", "manager"] },
-      { href: "/integrations", label: "Integrations", icon: PlugZap, roles: ["owner", "admin", "manager"] },
+      { href: "/assistant", label: "Ask Le Yard", icon: Sparkles, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
+      { href: "/integrations", label: "Integrations", icon: PlugZap, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
     ],
   },
 ];
@@ -82,7 +86,7 @@ export const settingsItem: NavItem = {
   href: "/settings",
   label: "Settings",
   icon: Settings2,
-  roles: ["owner", "admin", "manager"],
+  roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"],
 };
 
 export const allNavItems = [
@@ -94,7 +98,9 @@ export const mobileNavItems = navigationSections[0].items.filter(
   (item) => item.mobile,
 );
 
-export function isNavItemVisible(item: NavItem, role: AppRole): boolean {
+export function isNavItemVisible(item: NavItem, role: AppRole, persona?: "chef"): boolean {
+  if (item.personas && (!persona || !item.personas.includes(persona))) return false;
+  if (item.hiddenPersonas?.some((hidden) => hidden === persona)) return false;
   return !item.roles || item.roles.includes(role);
 }
 
@@ -114,6 +120,10 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/time-clock": {
     title: "Time clock",
     detail: "Live attendance · Current location",
+  },
+  "/kitchen": {
+    title: "Kitchen",
+    detail: "BOH schedule · Recipes · Portion cost",
   },
   "/earnings": {
     title: "Earnings",

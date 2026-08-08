@@ -348,7 +348,7 @@ function Sidebar({
       <nav aria-label="Primary navigation" className="mt-5 flex-1 overflow-y-auto px-3 pb-4">
         {navigationSections.map((section, index) => {
           const visibleItems = section.items.filter((item) =>
-            isNavItemVisible(item, workspace.role),
+            isNavItemVisible(item, workspace.role, workspace.persona),
           );
           if (!visibleItems.length) return null;
           return (
@@ -401,10 +401,12 @@ function CommandPalette({
   open,
   onClose,
   role,
+  persona,
 }: {
   open: boolean;
   onClose: () => void;
   role: WorkspaceContextValue["role"];
+  persona?: WorkspaceContextValue["persona"];
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -413,10 +415,10 @@ function CommandPalette({
     () =>
       allNavItems.filter(
         (item) =>
-          isNavItemVisible(item, role) &&
+          isNavItemVisible(item, role, persona) &&
           item.label.toLowerCase().includes(query.trim().toLowerCase()),
       ),
-    [query, role],
+    [persona, query, role],
   );
 
   useEffect(() => {
@@ -562,7 +564,7 @@ function MobileDrawer({
             <nav className="flex-1 overflow-y-auto" aria-label="Mobile navigation">
               {navigationSections.map((section, index) => {
                 const visibleItems = section.items.filter((item) =>
-                  isNavItemVisible(item, workspace.role),
+                  isNavItemVisible(item, workspace.role, workspace.persona),
                 );
                 if (!visibleItems.length) return null;
                 return (
@@ -583,7 +585,7 @@ function MobileDrawer({
                 );
               })}
               <div className="mt-5 border-t border-white/[0.07] pt-3">
-                {isNavItemVisible(settingsItem, workspace.role) ? (
+                {isNavItemVisible(settingsItem, workspace.role, workspace.persona) ? (
                   <NavigationLink item={settingsItem} pathname={pathname} onNavigate={onClose} />
                 ) : null}
               </div>
@@ -745,6 +747,7 @@ function ShellContent({ children }: { children: ReactNode }) {
         key={commandOpen ? "open" : "closed"}
         open={commandOpen}
         role={workspace.role}
+        persona={workspace.persona}
         onClose={() => setCommandOpen(false)}
       />
       <MobileDrawer

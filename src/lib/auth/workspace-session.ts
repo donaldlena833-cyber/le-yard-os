@@ -52,12 +52,15 @@ async function createDemoWorkspaceContext(
       isPrimary: index === 0,
     }));
   const isEmployee = principal === "irini";
+  const isChef = principal === "mateo";
   const identityId =
     principal === "maris"
       ? demoIds.people.maris
       : isEmployee
         ? demoIds.people.irini
-        : demoIds.people.donald;
+        : isChef
+          ? demoIds.people.mateo
+          : demoIds.people.donald;
   const identity = demoWorkspace.people.find(
     (person) => person.id === identityId,
   )!;
@@ -84,7 +87,8 @@ async function createDemoWorkspaceContext(
     },
     locations: accessibleLocations,
     role,
-    organizationWide: role !== "employee",
+    organizationWide: role === "owner",
+    ...(isChef ? { persona: "chef" as const } : {}),
   };
 
   return {
@@ -101,7 +105,8 @@ async function createDemoWorkspaceContext(
     availableWorkspaces: [workspaceChoice],
     membershipId: membership.id,
     role,
-    organizationWide: role !== "employee",
+    organizationWide: role === "owner",
+    ...(isChef ? { persona: "chef" as const } : {}),
   };
 }
 

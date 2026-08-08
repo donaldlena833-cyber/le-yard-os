@@ -43,6 +43,14 @@ function configuration(): PlaygroundAuthConfiguration {
           Buffer.alloc(16, 3),
         ),
       },
+      {
+        principal: "mateo",
+        username: "chef-one",
+        passwordHash: createPlaygroundPasswordHash(
+          "fixture chef four4",
+          Buffer.alloc(16, 4),
+        ),
+      },
     ],
   };
 }
@@ -57,7 +65,7 @@ function assessmentSource(config = configuration()) {
 }
 
 describe("playground authentication", () => {
-  it("accepts the two owner and one employee credentials only in Vercel Preview", () => {
+  it("accepts owner, employee, and chef credentials only in Vercel Preview", () => {
     const accepted = assessPlaygroundAuthConfiguration(assessmentSource());
     const wrongEnvironment = assessPlaygroundAuthConfiguration({
       ...assessmentSource(),
@@ -73,6 +81,7 @@ describe("playground authentication", () => {
       "donald",
       "irini",
       "maris",
+      "mateo",
     ]);
     expect(wrongEnvironment.ready).toBe(false);
     expect(wrongEnvironment.issues).toContain("playground_not_vercel_preview");

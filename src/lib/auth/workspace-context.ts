@@ -28,6 +28,7 @@ export interface WorkspaceChoice {
   locations: readonly WorkspaceLocation[];
   role: AppRole;
   organizationWide: boolean;
+  persona?: "chef";
 }
 
 /**
@@ -44,6 +45,7 @@ export interface WorkspaceContextValue {
   membershipId: string;
   role: AppRole;
   organizationWide: boolean;
+  persona?: "chef";
 }
 
 export type WorkspaceMembershipRow = Pick<

@@ -92,4 +92,3 @@ export function canRequestOrganizationWideReport(
 ): boolean {
   return membership.role === "owner" || membership.role === "admin";
 }
-

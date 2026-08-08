@@ -63,7 +63,7 @@ export default async function SignInPage({
         <div className="relative grid max-w-xl grid-cols-3 border-t border-white/10 pt-6">
           {(playgroundMode
             ? [
-                ["3", "Temporary demo accounts"],
+                ["4", "Temporary demo accounts"],
                 ["Mock", "Operational records"],
                 ["8h", "Secure session window"],
               ]
@@ -99,7 +99,7 @@ export default async function SignInPage({
           </h2>
           <p className="mt-3 text-sm leading-6 text-[var(--ink-faint)]">
             {playgroundMode
-              ? "Use one of the three temporary demo accounts created for this playground link."
+              ? "Use one of the temporary demo accounts created for this playground link."
               : "Sign in with the account your owner or administrator invited."}
           </p>
           {localSignOutNotice ? (

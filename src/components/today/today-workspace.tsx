@@ -115,12 +115,27 @@ function EmployeeTodayWorkspace() {
   );
 }
 
+function ChefTodayWorkspace() {
+  const workspace = useWorkspaceContext();
+  const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "Chef";
+  return (
+    <PageFrame>
+      <section className="relative overflow-hidden rounded-[26px] bg-[var(--graphite)] px-5 py-6 text-white sm:px-7 sm:py-7 lg:px-8">
+        <div className="absolute inset-0 workspace-grid opacity-20" />
+        <div className="relative flex flex-col justify-between gap-7 xl:flex-row xl:items-end"><div><p className="text-[10px] font-semibold tracking-[0.16em] text-[#dfa14a] uppercase">Kitchen today</p><h2 className="mt-4 text-[clamp(2rem,4.2vw,4rem)] leading-none font-medium tracking-[-0.065em]">Good afternoon, {firstName}.</h2><p className="mt-4 text-sm leading-6 text-white/55">Le Yard · Back of house · Friday service</p></div><div className="flex items-end gap-8 border-t border-white/10 pt-5 xl:border-0 xl:pt-0"><div><p className="text-[9px] tracking-[0.14em] text-white/55 uppercase">Covers tonight</p><p className="numeric mt-2 text-3xl font-medium tracking-[-0.05em]">86</p></div><div><p className="text-[9px] tracking-[0.14em] text-white/55 uppercase">Line status</p><p className="mt-2 text-2xl font-medium tracking-[-0.05em]">Ready</p></div></div></div>
+      </section>
+      <div className="mt-8 grid gap-8 xl:grid-cols-[1.2fr_.8fr]"><section><div className="flex items-end justify-between gap-3"><SectionHeading eyebrow="Priority" title="Kitchen worklist" detail="Keep the line covered and the menu specs current." className="mb-0" /><Link href="/kitchen" className="focus-ring hidden items-center gap-1 text-[10px] font-semibold text-[var(--accent-strong)] sm:flex">Open kitchen <ArrowRight className="size-3" /></Link></div><div className="mt-4 border-y border-[var(--line)]">{[{ title: "Publish BOH schedule", detail: "Saturday prep coverage has one open shift", tone: "warning" as const }, { title: "Review filet au poivre spec", detail: "Portion cost changes with the 180 g filet", tone: "neutral" as const }, { title: "Check produce count", detail: "Roma tomatoes and basil need a count before prep", tone: "positive" as const }].map((item) => <div key={item.title} className="flex items-center gap-3 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className={cn("size-2 rounded-full", item.tone === "warning" ? "bg-[var(--warning)]" : item.tone === "positive" ? "bg-[var(--positive)]" : "bg-[var(--accent)]")} /><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{item.title}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{item.detail}</p></div><ChevronRight className="size-3.5 text-[var(--ink-faint)]" /></div>)}</div></section><section><SectionHeading eyebrow="Menu costing" title="Recipes to review" detail="Exact portions make inventory and cost tracking useful." /><div className="border-y border-[var(--line)]"><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4 first:border-0"><div><p className="text-xs font-semibold">Filet au poivre</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">180 g filet · sauce · fries</p></div><StatusPill tone="warning">Adjust</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4"><div><p className="text-xs font-semibold">Tomato toast</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">Yield and ingredient costs current</p></div><StatusPill tone="positive">Costed</StatusPill></div></div></section></div>
+    </PageFrame>
+  );
+}
+
 export function TodayWorkspace() {
   const workspace = useWorkspaceContext();
   const [actions, setActions] = useState(initialActions);
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
 
   if (workspace.role === "employee") return <EmployeeTodayWorkspace />;
+  if (workspace.persona === "chef") return <ChefTodayWorkspace />;
 
   return (
     <PageFrame>

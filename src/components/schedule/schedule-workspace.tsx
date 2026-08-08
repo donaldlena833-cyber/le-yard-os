@@ -168,6 +168,31 @@ const employeeOpenShifts = [
   { id: "open-fri", day: "Fri · Aug 14", time: "4:30–11:30 PM", role: "Server", covers: 86 },
 ];
 
+const chefBackOfHouseShifts = [
+  { id: "boh-fri", day: "Fri · Aug 8", time: "1:00–11:00 PM", role: "Line cook", people: "Leo M. · Priya S.", status: "Ready" },
+  { id: "boh-sat", day: "Sat · Aug 9", time: "12:00–11:30 PM", role: "Prep + line", people: "Sam O. · Leo M.", status: "Needs coverage" },
+  { id: "boh-sun", day: "Sun · Aug 10", time: "12:00–10:00 PM", role: "Prep + line", people: "Priya S. · Open", status: "Open shift" },
+];
+
+function ChefScheduleWorkspace() {
+  const [published, setPublished] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  return (
+    <PageFrame width="full" className="max-w-[1400px]">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div><div className="flex items-center gap-2"><StatusPill tone={published ? "positive" : "warning"} dot>{published ? "Published" : "Draft"}</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Le Yard · Back of house</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Kitchen schedule</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Build the BOH plan, assign coverage, and publish when the line is ready.</p></div>
+        <Button variant="accent" size="sm" onClick={() => { setPublished(true); setNotice("Back-of-house schedule published. The team can now see their shifts."); }}><Send className="size-3.5" /> Publish BOH schedule</Button>
+      </div>
+      {notice ? <p role="status" className="mt-4 rounded-xl bg-[var(--positive-soft)] px-3.5 py-3 text-[10px] text-[var(--positive)]">{notice}</p> : null}
+      <section className="mt-7 grid gap-8 lg:grid-cols-[1.4fr_.6fr]">
+        <div><SectionHeading eyebrow="Back of house" title="Aug 8–10 service plan" detail="Only kitchen roles are shown here. Front-of-house schedules remain with owners and managers." /><div className="border-y border-[var(--line)]">{chefBackOfHouseShifts.map((shift) => <div key={shift.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Clock3 className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{shift.day} · {shift.role}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time} · {shift.people}</p></div><StatusPill tone={shift.status === "Ready" ? "positive" : "warning"}>{shift.status}</StatusPill><Button variant="quiet" size="sm" onClick={() => setNotice(`${shift.day} is ready to adjust. Drag-and-drop editing will connect to the BOH schedule records next.`)}>Adjust</Button></div>)}</div></div>
+        <aside><SectionHeading eyebrow="Coverage" title="Kitchen staffing" detail="A quick read before publishing." /><div className="border-y border-[var(--line)]"><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="text-[10px] text-[var(--ink-faint)]">Line coverage</span><StatusPill tone="positive">2 / 2</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4"><span className="text-[10px] text-[var(--ink-faint)]">Prep coverage</span><StatusPill tone="warning">1 open</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4"><span className="text-[10px] text-[var(--ink-faint)]">Recipes to review</span><StatusPill tone="neutral">2</StatusPill></div></div></aside>
+      </section>
+    </PageFrame>
+  );
+}
+
 function EmployeeScheduleWorkspace() {
   const [releasePending, setReleasePending] = useState<string | null>(null);
   const [claimPending, setClaimPending] = useState<string | null>(null);
@@ -392,5 +417,7 @@ function ManagerScheduleWorkspace() {
 
 export function ScheduleWorkspace() {
   const workspace = useWorkspaceContext();
-  return workspace.role === "employee" ? <EmployeeScheduleWorkspace /> : <ManagerScheduleWorkspace />;
+  if (workspace.role === "employee") return <EmployeeScheduleWorkspace />;
+  if (workspace.persona === "chef") return <ChefScheduleWorkspace />;
+  return <ManagerScheduleWorkspace />;
 }

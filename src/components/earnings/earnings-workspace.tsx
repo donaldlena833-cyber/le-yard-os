@@ -2,6 +2,7 @@
 
 import { ArrowLeft, ArrowRight, Check, Clock3, WalletCards } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -84,11 +85,16 @@ function money(value: number) {
 }
 
 export function EarningsWorkspace() {
+  const workspace = useWorkspaceContext();
   const [period, setPeriod] = useState<Period>("week");
   const [selectedId, setSelectedId] = useState(paystubs[0]!.id);
   const selected = useMemo(() => paystubs.find((stub) => stub.id === selectedId) ?? paystubs[0]!, [selectedId]);
   const total = selected.hourly + selected.tips;
   const summary = periodTotals[period];
+
+  if (workspace.persona === "chef") {
+    return <PageFrame><SectionHeading eyebrow="Restricted workspace" title="Earnings are not part of your role" detail="Payroll and paystubs are available only to employees, managers, and owners." /></PageFrame>;
+  }
 
   return (
     <PageFrame width="wide">
