@@ -17,6 +17,7 @@ The actionable authorization and interface findings from this audit were address
 - F-05, F-06, F-14, and F-18: direct workspace routes now use the same navigation permission model. Employee administration/intelligence routes and Chef people/pay routes return to Today before loading restricted content.
 - F-13: Manager Log is no longer rendered to sessions without `manager_log.manage`; employees retain realtime availability and published pre-shift access.
 - F-07 through F-12 and F-16 describe intentionally empty connected data or confirmed working role behavior. They required no synthetic data insertion.
+- Live acceptance exposed and resolved a final session-boundary defect: PostgREST returned the single-column capability RPC as `{ capability_key }` rows while the generated client type described `string[]`. The session loader now normalizes both representations, so persisted Chef grants reach navigation and route guards.
 
 The release does not populate vendors, recipes, inventory, shifts, earnings, messages, pre-shifts, manager logs, or availability events.
 

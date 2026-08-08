@@ -26,7 +26,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   DEMO_CAPABILITY_TEMPLATES,
   OPERATIONAL_CAPABILITIES,
-  isOperationalCapability,
+  normalizeOperationalCapabilities,
   type OperationalCapability,
 } from "@/lib/permissions/capabilities";
 
@@ -311,7 +311,7 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
     });
     return { status: "data_error", identity };
   }
-  const capabilities = (capabilityResult.data ?? []).filter(isOperationalCapability);
+  const capabilities = normalizeOperationalCapabilities(capabilityResult.data);
 
   return {
     status: "ready",

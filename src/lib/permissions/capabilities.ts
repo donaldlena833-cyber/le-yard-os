@@ -76,6 +76,29 @@ export function isOperationalCapability(value: string): value is OperationalCapa
   return capabilitySet.has(value);
 }
 
+/**
+ * PostgREST represents a single-column `returns table` RPC as row objects at
+ * runtime, while generated clients can describe the same response as a string
+ * array. Accept both shapes so authorization does not disappear at the session
+ * boundary when the transport representation differs from its generated type.
+ */
+export function normalizeOperationalCapabilities(value: unknown): OperationalCapability[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((entry) => {
+    const capability =
+      typeof entry === "string"
+        ? entry
+        : entry && typeof entry === "object" && "capability_key" in entry
+          ? (entry as { capability_key?: unknown }).capability_key
+          : null;
+
+    return typeof capability === "string" && isOperationalCapability(capability)
+      ? [capability]
+      : [];
+  });
+}
+
 export const DEMO_CAPABILITY_TEMPLATES = {
   executiveChef: [
     "inventory.item.manage",

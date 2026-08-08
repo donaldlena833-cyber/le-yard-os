@@ -17,6 +17,7 @@ Started: 2026-08-08
 - Use capability-based authorization layered over existing roles instead of one-off Manager/Chef exceptions.
 - Keep connected mode free of synthetic operational records.
 - Keep restaurant operating tables empty until the Owners populate real records. The 2026-08-08 remediation was explicitly authorized for the connected Le Yard polishing project and changes authorization metadata only.
+- Normalize both supported PostgREST representations of the single-column effective-capability RPC at the authenticated session boundary. This prevents valid persisted grants from being lost because of a generated-type/runtime-shape mismatch.
 
 ## Migrations
 
@@ -57,6 +58,7 @@ Initial tracked status document created:
 - Added demo Playwright checks proving Time Clock no longer redirects and Service Control is reachable.
 - Added non-secret GitHub Actions jobs for lint, generated types, TypeScript, unit, integration, build, and desktop Chromium demo E2E.
 - Added role-prioritized mobile navigation and direct-route permission coverage for Executive Chef and Employee sessions.
+- Added focused capability-response normalization tests for both generated string arrays and PostgREST row objects, including malformed/unknown-value rejection.
 - `npm run verify` passed after the remediation: 74 unit-test files / 419 tests, all portable migration and security verifiers, generated database types, lint, typecheck, and the production build.
 
 ## Completed Requirements
@@ -82,18 +84,17 @@ Initial tracked status document created:
 - Manager Log attachment upload and related-record pickers are schema-ready only at the command boundary; the initial UI captures the core handoff.
 - Pre-shift station assignments, previous-handoff picker, and comment questions need follow-up UI.
 - Session lifecycle has existing coverage for credential separation, MFA gating, logout cookie cleanup, signed-session expiry/tampering, second-user credential resolution, and invalid cookie cleanup; a live Supabase stale-refresh-token acceptance test still requires an approved nonproduction Auth environment.
-- Package version remains `0.1.0`; the instruction says to bump only after every acceptance criterion passes.
-- Native Supabase RLS/database lint and connected Playwright were not run because no approved local Docker/nonproduction Supabase target is configured in this workspace.
+- Native Supabase RLS/database lint was not run locally because Docker is unavailable. The authorized Le Yard polishing project migration was applied only after portable verification, and connected browser acceptance was performed against the deployed application.
 
 ## Blockers
 
-- Connected Auth/provider acceptance requires an approved nonproduction Supabase project and its non-secret test fixture configuration.
-- Live production migrations remain intentionally out of scope and were not applied.
+- External provider acceptance remains blocked until Toast/reservation/payroll or other provider credentials are configured. No provider behavior is simulated in connected mode.
 
 ## Exact Verification Results
 
 - `npm run lint` — PASS.
 - `npm run typecheck` — PASS after service-control/type generation.
+- Focused capability-response normalization tests — PASS: 3/3.
 - `npm run types:database` — PASS: generated 121 tables, 3 views, 198 functions, and 16 enums.
 - `npm run test:function-grants:pglite` — PASS: 198 public functions verified.
 - `npm run test:capabilities:pglite` — PASS: grants/denials, tenant/location isolation, Chef catalog/foundation workflow, replay, audit, and direct-DML revocation.
