@@ -153,32 +153,38 @@ try {
     set role authenticated;
   `);
 
-  await assumeUser(ids.admin);
   const capabilities = [
     "inventory.item.manage",
     "inventory.category.manage",
     "inventory.unit.manage",
     "inventory.par.manage",
+    "inventory.count.create",
+    "inventory.count.approve",
+    "inventory.waste.create",
+    "inventory.waste.approve",
+    "inventory.transfer.create",
+    "inventory.purchase.create",
+    "inventory.purchase.approve",
+    "inventory.receive",
     "inventory.vendor.manage",
     "inventory.price.manage",
     "recipe.manage",
+    "prep.manage",
+    "prep.complete",
+    "menu.manage",
+    "schedule.manage",
+    "schedule.publish",
+    "service.availability.manage",
+    "reports.operational.view",
   ];
-  for (const [index, capability] of capabilities.entries()) {
-    const suffix = String(index + 1).padStart(12, "0");
-    await assignCapability(
-      `c1000000-0000-4000-8000-${suffix}`,
-      `c1100000-0000-4000-8000-${suffix}`,
-      capability,
-    );
-  }
-
   await assumeUser(ids.manager);
   const effective = await db.query(
     "select capability_key from public.effective_capabilities($1::uuid, $2::uuid)",
     [ids.organization, ids.location],
   );
-  if (effective.rows.length !== capabilities.length) {
-    throw new Error(`Expected ${capabilities.length} effective capabilities, got ${effective.rows.length}`);
+  const effectiveKeys = effective.rows.map((row) => row.capability_key).sort();
+  if (JSON.stringify(effectiveKeys) !== JSON.stringify([...capabilities].sort())) {
+    throw new Error(`Expected default Executive Chef capabilities, got ${JSON.stringify(effectiveKeys)}`);
   }
   const boundaries = (await db.query(`
     select

@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { WorkspaceSwitcher } from "@/components/shell/workspace-switcher";
 import {
   allNavItems,
+  getMobileNavItems,
   navigationSections,
   isNavItemVisible,
   routeMeta,
@@ -606,9 +607,7 @@ function MobileDrawer({
 function ShellContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const workspace = useWorkspaceContext();
-  const visibleMobileNavItems = navigationSections[0].items
-    .filter((item) => item.mobile && isNavItemVisible(item, workspace))
-    .slice(0, 4);
+  const visibleMobileNavItems = getMobileNavItems(workspace);
   const [commandOpen, setCommandOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
@@ -706,14 +705,14 @@ function ShellContent({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main key={pathname} className="page-enter min-h-[calc(100svh-64px)] pb-24 lg:min-h-[calc(100svh-74px)] lg:pb-8">
+        <main key={pathname} className="page-enter min-h-[calc(100svh-64px)] pb-[calc(7rem+env(safe-area-inset-bottom))] lg:min-h-[calc(100svh-74px)] lg:pb-8">
           {children}
         </main>
       </div>
 
       <nav
         aria-label="Primary mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-30 grid h-[76px] grid-cols-5 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--paper-strong)_94%,transparent)] px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid min-h-[72px] grid-cols-5 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--paper-strong)_96%,transparent)] px-2 pt-1.5 pb-[calc(.375rem+env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(20,23,19,.06)] backdrop-blur-xl lg:hidden"
       >
         {visibleMobileNavItems.map((item) => {
           const Icon = item.icon;

@@ -16,9 +16,11 @@ Started: 2026-08-08
 - Preserve existing Supabase/PostgREST behavior while tightening function execution grants.
 - Use capability-based authorization layered over existing roles instead of one-off Manager/Chef exceptions.
 - Keep connected mode free of synthetic operational records.
-- Do not deploy or apply migrations to production data.
+- Keep restaurant operating tables empty until the Owners populate real records. The 2026-08-08 remediation was explicitly authorized for the connected Le Yard polishing project and changes authorization metadata only.
 
 ## Migrations
+
+- `20260808194246_role_capability_templates_and_route_access.sql`: backfills safe operational capability defaults for recognized Chef/management job roles and applies the same templates to newly created recognized roles without creating restaurant operating data.
 
 - `20260808135755_capability_authorization_foundation.sql`: persisted capability catalog, job-role grants, user overrides, location/effective-date scope, audit-backed administration, effective-capability loading, and Chef catalog command foundation.
 - `20260808170406_public_function_grant_hardening.sql`: deny-by-default public-schema function execution, explicit authenticated RPC manifest, service-only isolation, and future default-privilege hardening.
@@ -54,6 +56,8 @@ Initial tracked status document created:
 - Added unit coverage for capability navigation, empty-catalog Chef actions, and all reusable permission-action states.
 - Added demo Playwright checks proving Time Clock no longer redirects and Service Control is reachable.
 - Added non-secret GitHub Actions jobs for lint, generated types, TypeScript, unit, integration, build, and desktop Chromium demo E2E.
+- Added role-prioritized mobile navigation and direct-route permission coverage for Executive Chef and Employee sessions.
+- `npm run verify` passed after the remediation: 74 unit-test files / 419 tests, all portable migration and security verifiers, generated database types, lint, typecheck, and the production build.
 
 ## Completed Requirements
 

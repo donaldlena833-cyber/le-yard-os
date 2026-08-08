@@ -117,6 +117,34 @@ export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue
   );
 }
 
+const defaultMobileRoutes = ["/today", "/schedule", "/service", "/messages"] as const;
+const employeeMobileRoutes = ["/today", "/schedule", "/messages", "/earnings"] as const;
+const chefMobileRoutes = ["/today", "/schedule", "/kitchen", "/messages"] as const;
+
+export function getMobileNavItems(workspace: WorkspaceContextValue): NavItem[] {
+  const preferredRoutes = workspace.persona === "chef"
+    ? chefMobileRoutes
+    : workspace.role === "employee"
+      ? employeeMobileRoutes
+      : defaultMobileRoutes;
+  const visibleByHref = new Map(
+    allNavItems
+      .filter((item) => isNavItemVisible(item, workspace))
+      .map((item) => [item.href, item]),
+  );
+  return preferredRoutes
+    .map((href) => visibleByHref.get(href))
+    .filter((item): item is NavItem => Boolean(item));
+}
+
+export function isWorkspaceRouteAccessible(
+  pathname: string,
+  workspace: WorkspaceContextValue,
+): boolean {
+  const item = allNavItems.find((candidate) => candidate.href === pathname);
+  return item ? isNavItemVisible(item, workspace) : true;
+}
+
 export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/today": { title: "Today", detail: "Current service" },
   "/schedule": { title: "Service", detail: "Schedule and availability" },

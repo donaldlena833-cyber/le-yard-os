@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   allNavItems,
+  getMobileNavItems,
   isNavItemVisible,
+  isWorkspaceRouteAccessible,
 } from "@/components/shell/navigation";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { DEMO_CAPABILITY_TEMPLATES } from "@/lib/permissions/capabilities";
@@ -64,10 +66,33 @@ describe("capability-aware navigation", () => {
   });
 
   it("keeps an ordinary employee on personal and team workflows", () => {
-    const labels = visibleLabels(workspace("employee", []));
+    const employeeWorkspace = workspace("employee", []);
+    const labels = visibleLabels(employeeWorkspace);
     expect(labels).toEqual(expect.arrayContaining(["Today", "Schedule", "Time Clock", "Service Control", "Messages", "Earnings", "Tasks & SOPs"]));
     expect(labels).not.toContain("Inventory");
     expect(labels).not.toContain("Guests");
     expect(labels).not.toContain("Settings");
+    expect(getMobileNavItems(employeeWorkspace).map((item) => item.label)).toEqual([
+      "Today",
+      "Schedule",
+      "Messages",
+      "Earnings",
+    ]);
+    expect(isWorkspaceRouteAccessible("/settings", employeeWorkspace)).toBe(false);
+    expect(isWorkspaceRouteAccessible("/assistant", employeeWorkspace)).toBe(false);
+    expect(isWorkspaceRouteAccessible("/vendors", employeeWorkspace)).toBe(false);
+  });
+
+  it("prioritizes Kitchen in the Chef mobile navigation and blocks unrelated direct routes", () => {
+    const chefWorkspace = workspace("manager", DEMO_CAPABILITY_TEMPLATES.executiveChef, "chef");
+    expect(getMobileNavItems(chefWorkspace).map((item) => item.label)).toEqual([
+      "Today",
+      "Schedule",
+      "Kitchen",
+      "Messages",
+    ]);
+    expect(isWorkspaceRouteAccessible("/kitchen", chefWorkspace)).toBe(true);
+    expect(isWorkspaceRouteAccessible("/team", chefWorkspace)).toBe(false);
+    expect(isWorkspaceRouteAccessible("/earnings", chefWorkspace)).toBe(false);
   });
 });
