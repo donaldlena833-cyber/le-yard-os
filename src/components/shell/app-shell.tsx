@@ -346,25 +346,29 @@ function Sidebar({
       <WorkspaceSwitcher key={workspace.activeLocation.id} className="px-3" />
 
       <nav aria-label="Primary navigation" className="mt-5 flex-1 overflow-y-auto px-3 pb-4">
-        {navigationSections.map((section, index) => (
-          <div key={section.label} className={cn(index > 0 && "mt-5")}>
-            <p className="mb-1.5 px-3 text-[9px] font-semibold tracking-[0.16em] text-white/55 uppercase">
-              {section.label}
-            </p>
-            <div className="space-y-0.5">
-              {section.items.map((item) =>
-                isNavItemVisible(item, workspace.role) ? (
+        {navigationSections.map((section, index) => {
+          const visibleItems = section.items.filter((item) =>
+            isNavItemVisible(item, workspace.role),
+          );
+          if (!visibleItems.length) return null;
+          return (
+            <div key={section.label} className={cn(index > 0 && "mt-5")}>
+              <p className="mb-1.5 px-3 text-[9px] font-semibold tracking-[0.16em] text-white/55 uppercase">
+                {section.label}
+              </p>
+              <div className="space-y-0.5">
+                {visibleItems.map((item) => (
                   <NavigationLink
                     key={item.href}
                     item={item}
                     pathname={pathname}
                     showBadges={workspace.mode === "demo"}
                   />
-                ) : null,
-              )}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       <div className="border-t border-white/[0.07] p-3">
@@ -556,13 +560,17 @@ function MobileDrawer({
               onSelected={onClose}
             />
             <nav className="flex-1 overflow-y-auto" aria-label="Mobile navigation">
-              {navigationSections.map((section, index) => (
-                <div key={section.label} className={cn(index > 0 && "mt-5")}>
-                  <p className="mb-1.5 px-3 text-[9px] font-semibold tracking-[0.16em] text-white/55 uppercase">
-                    {section.label}
-                  </p>
-                  {section.items.map((item) =>
-                    isNavItemVisible(item, workspace.role) ? (
+              {navigationSections.map((section, index) => {
+                const visibleItems = section.items.filter((item) =>
+                  isNavItemVisible(item, workspace.role),
+                );
+                if (!visibleItems.length) return null;
+                return (
+                  <div key={section.label} className={cn(index > 0 && "mt-5")}>
+                    <p className="mb-1.5 px-3 text-[9px] font-semibold tracking-[0.16em] text-white/55 uppercase">
+                      {section.label}
+                    </p>
+                    {visibleItems.map((item) => (
                       <NavigationLink
                         key={item.href}
                         item={item}
@@ -570,10 +578,10 @@ function MobileDrawer({
                         onNavigate={onClose}
                         showBadges={workspace.mode === "demo"}
                       />
-                    ) : null,
-                  )}
-                </div>
-              ))}
+                    ))}
+                  </div>
+                );
+              })}
               <div className="mt-5 border-t border-white/[0.07] pt-3">
                 {isNavItemVisible(settingsItem, workspace.role) ? (
                   <NavigationLink item={settingsItem} pathname={pathname} onNavigate={onClose} />
