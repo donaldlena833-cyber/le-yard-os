@@ -127,6 +127,7 @@ select:focus-visible {
 
 .numeric {
   font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
 }
 
 .eyebrow {

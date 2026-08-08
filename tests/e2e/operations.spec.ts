@@ -5,34 +5,14 @@ import {
   openWorkspace,
 } from "./helpers/workspace";
 
-test("clocks a shift, records a break, and approves a correction", async ({ page }) => {
-  await openWorkspace(page, "/time-clock", "Time, without the guesswork");
+test("reviews vendor price movement and open purchasing records", async ({ page }) => {
+  await openWorkspace(page, "/vendors", "Vendors & prices");
 
-  await page.getByRole("button", { name: "Clock in", exact: true }).click();
-  await expect(page.getByText("Clock-in recorded at this device and added to the audit trail.")).toBeVisible();
-  await page.getByLabel("Break type").selectOption("paid");
-  await page.getByRole("button", { name: "Start break", exact: true }).click();
-  await expect(page.getByText("Paid break started.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "End break", exact: true }).click();
-  await expect(page.getByText(/Break ended after/)).toBeVisible();
-  await page.getByRole("button", { name: "Clock out", exact: true }).click();
-  await expect(page.getByText(/Clock-out recorded\. Session total:/)).toBeVisible();
-
-  await page.getByRole("button", { name: "Request correction", exact: true }).click();
-  const dialog = page.getByRole("dialog", { name: "Request a punch correction" });
-  await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Business date").fill("2026-08-01");
-  await dialog.getByLabel("Punch to correct").selectOption("clock_out");
-  await dialog.getByLabel("Correct time").fill("23:20");
-  const reason = "Forgot to clock out after completing the demo closing shift.";
-  await dialog.getByLabel("What happened?").fill(reason);
-  await dialog.getByRole("button", { name: "Submit for approval" }).click();
-
-  await expect(page.getByText("Correction submitted for manager approval. The original punch is unchanged.")).toBeVisible();
-  await expect(page.getByText(reason, { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText("Donald was approved.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Correction approved", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Harbor Produce", { exact: false }).first()).toBeVisible();
+  await expect(page.getByText("Roma tomatoes", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("$1.89", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /Northstar Foods/ }).click();
+  await expect(page.getByText("No verified price records for this vendor yet.", { exact: true })).toBeVisible();
   await expectNoViewportOverflow(page);
 });
 

@@ -43,7 +43,7 @@ const commonReactions = ["👍", "✨", "✅"];
 
 function channelDescription(channel: ChatChannel) {
   if (channel.kind === "all_staff") {
-    return `Everyone in ${demoWorkspace.organizations[0]?.name ?? "this organization"}`;
+    return "Everyone at Le Yard";
   }
   if (channel.kind === "management") return "Private · owners and managers";
   if (channel.kind === "location") return "Everyone assigned to this location";
@@ -122,8 +122,11 @@ export function MessagesWorkspace() {
   const [mobileInfoOpen, setMobileInfoOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedChannel = demoWorkspace.chatChannels.find((channel) => channel.id === selectedChannelId) ?? demoWorkspace.chatChannels[0];
-  const visibleChannels = demoWorkspace.chatChannels.filter((channel) => channel.name.toLowerCase().includes(channelQuery.trim().toLowerCase()));
+  const visibleChannels = useMemo(() => demoWorkspace.chatChannels
+    .filter((channel) => !channel.locationId || workspace.locations.some((location) => location.id === channel.locationId))
+    .map((channel) => channel.locationId ? { ...channel, name: workspace.locations.find((location) => location.id === channel.locationId)?.name ?? channel.name } : channel)
+    .filter((channel) => channel.name.toLowerCase().includes(channelQuery.trim().toLowerCase())), [channelQuery, workspace.locations]);
+  const selectedChannel = useMemo(() => visibleChannels.find((channel) => channel.id === selectedChannelId) ?? visibleChannels[0] ?? demoWorkspace.chatChannels[0], [selectedChannelId, visibleChannels]);
   const channelMessages = messages.filter((message) => message.channelId === selectedChannel.id);
 
   const channelMembers = useMemo(() => {
@@ -184,7 +187,7 @@ export function MessagesWorkspace() {
 
       <div className="grid min-h-[calc(100svh-190px)] overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--paper)] shadow-[0_12px_42px_rgba(25,28,24,.04)] lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)_290px]">
         <nav aria-label="Message channels" className={cn("border-[var(--line)] bg-[var(--canvas)] p-3 lg:block lg:border-r", mobileChatOpen ? "hidden" : "block")}>
-          <div className="px-2 pt-2 pb-4"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-xl bg-[var(--graphite)] text-white"><MessageCircleMore className="size-3.5" /></span><div><p className="text-[11px] font-semibold">Le Yard Demo</p><p className="mt-0.5 text-[9px] text-[var(--ink-faint)]">8 people · 2 locations</p></div></div></div>
+          <div className="px-2 pt-2 pb-4"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-xl bg-[var(--graphite)] text-white"><MessageCircleMore className="size-3.5" /></span><div><p className="text-[11px] font-semibold">Le Yard</p><p className="mt-0.5 text-[9px] text-[var(--ink-faint)]">Team chat · main dining room</p></div></div></div>
           <label className="relative mb-4 block"><span className="sr-only">Search channels</span><Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" /><input type="search" value={channelQuery} onChange={(event) => setChannelQuery(event.target.value)} placeholder="Find a channel" className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-[10px] placeholder:text-[var(--ink-faint)]" /></label>
           <div className="space-y-5">
             <section><p className="px-3 text-[9px] font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Team</p><div className="mt-2 space-y-1">{visibleChannels.filter((channel) => ["all_staff", "management"].includes(channel.kind)).map((channel) => <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannel.id} unread={unread[channel.id] ?? 0} onSelect={() => selectChannel(channel.id)} />)}</div></section>

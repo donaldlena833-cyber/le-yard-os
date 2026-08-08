@@ -87,7 +87,7 @@ export function GuestsWorkspace() {
       </div>
 
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric label="Guest profiles" value={guests.filter((guest) => !guest.mergedIntoId).length.toLocaleString()} detail="Across both locations" />
+        <Metric label="Guest profiles" value={guests.filter((guest) => !guest.mergedIntoId).length.toLocaleString()} detail="Across Le Yard" />
         <Metric label="Returning · 90d" value="68%" detail="At least two visits" trend={{ label: "+4.2pt", tone: "positive" }} />
         <Metric label="VIP guests" value={String(guests.filter((guest) => guest.vip).length)} detail="Flagged by an owner or manager" />
         <Metric label="Possible duplicates" value={String(openDuplicates.length)} detail="Never auto-merged" trend={{ label: openDuplicates.length ? "Review" : "Clear", tone: openDuplicates.length ? "negative" : "positive" }} />

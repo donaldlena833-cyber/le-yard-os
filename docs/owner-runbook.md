@@ -81,13 +81,13 @@ The routines below describe a future connected workspace. In the temporary playg
 
 1. Open Today and review open shifts, staffing warnings, tasks, inventory alerts, and pending approvals.
 2. Confirm the published schedule and resolve open-shift or swap requests.
-3. Review missed punches; approve only after comparing the employee request with a known source.
+3. Review current vendor prices and open purchase orders before approving the kitchen plan.
 4. Review urgent maintenance/incidents and assign a responsible person.
 5. Confirm low-stock decisions against the current count and order status.
 
 ### During service
 
-1. Watch live attendance and break status.
+1. Keep schedule break timing visible for every shift longer than six hours; managers approve whether the 30-minute unpaid break sits during, before, or after the shift.
 2. Use location chat for operational handoffs; use management channels for sensitive discussion.
 3. Record waste, deliveries, tasks, incidents, and maintenance events when they occur.
 4. Do not edit a completed financial or inventory ledger record to hide a mistake; use the documented correction/compensating flow.

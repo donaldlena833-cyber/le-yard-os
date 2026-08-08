@@ -46,7 +46,6 @@ import type { AppRole, PersonProfile } from "@/types";
 const demoInvitationActionIds = {
   organization: "11111111-1111-4111-8111-111111111111",
   garden: "22222222-2222-4222-8222-222222222221",
-  market: "22222222-2222-4222-8222-222222222222",
 } as const;
 
 const initialInviteState: AuthActionState = { status: "idle" };
@@ -73,6 +72,7 @@ function availabilitySummary(person: PersonProfile) {
 
 function TeamRow({
   person,
+  visibleLocations,
   selected,
   role,
   status,
@@ -80,13 +80,14 @@ function TeamRow({
   onSelect,
 }: {
   person: PersonProfile;
+  visibleLocations: WorkspaceLocation[];
   selected: boolean;
   role: AppRole;
   status: PersonProfile["status"];
   index: number;
   onSelect: () => void;
 }) {
-  const locations = demoWorkspace.locations.filter((location) => person.locationIds.includes(location.id));
+  const locations = visibleLocations.filter((location) => person.locationIds.includes(location.id));
   const jobs = demoWorkspace.jobRoles.filter((job) => person.jobRoleIds.includes(job.id));
 
   return (
@@ -216,6 +217,7 @@ function InviteDialog({
 }
 
 function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) {
+  const visibleLocations = workspace.locations as WorkspaceLocation[];
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | AppRole>("all");
   const [locationFilter, setLocationFilter] = useState("all");
@@ -238,19 +240,20 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
   const filteredPeople = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return demoWorkspace.people.filter((person) => {
+      const inScope = person.locationIds.some((locationId) => visibleLocations.some((location) => location.id === locationId));
       const role = roleOverrides[person.id] ?? person.primaryRole;
       const jobs = demoWorkspace.jobRoles.filter((job) => person.jobRoleIds.includes(job.id));
       const matchesQuery = !normalizedQuery || [person.displayName, person.email, ...jobs.map((job) => job.name)].some((value) => value.toLowerCase().includes(normalizedQuery));
-      return matchesQuery && (roleFilter === "all" || role === roleFilter) && (locationFilter === "all" || person.locationIds.includes(locationFilter));
+      return inScope && matchesQuery && (roleFilter === "all" || role === roleFilter) && (locationFilter === "all" || person.locationIds.includes(locationFilter));
     });
-  }, [locationFilter, query, roleFilter, roleOverrides]);
+  }, [locationFilter, query, roleFilter, roleOverrides, visibleLocations]);
 
   const selected = demoWorkspace.people.find((person) => person.id === selectedId) ?? filteredPeople[0] ?? demoWorkspace.people[0];
   const selectedRole = roleOverrides[selected.id] ?? selected.primaryRole;
   const selectedStatus = statusOverrides[selected.id] ?? selected.status;
   const selectedMembership = demoWorkspace.memberships.find((membership) => membership.userId === selected.id);
   const selectedJobs = demoWorkspace.jobRoles.filter((job) => selected.jobRoleIds.includes(job.id));
-  const selectedLocations = demoWorkspace.locations.filter((location) => selected.locationIds.includes(location.id));
+  const selectedLocations = visibleLocations.filter((location) => selected.locationIds.includes(location.id));
   const selectedTimeOff = demoWorkspace.timeOffRequests.filter((request) => request.personId === selected.id);
   const selectedCertifications = demoWorkspace.certifications.filter((certification) => certification.personId === selected.id);
   const selectedDocuments = demoWorkspace.employeeDocuments.filter((document) => document.personId === selected.id);
@@ -278,7 +281,7 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
         <div>
           <div className="flex items-center gap-2"><StatusPill tone="positive" dot>{activeCount} active</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Synthetic workspace</span></div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Your whole team, in one place</h2>
-          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">Profiles, access, availability, and documents across both demo locations.</p>
+          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">Profiles, access, availability, and documents within your visible Le Yard scope.</p>
         </div>
         <Button variant="accent" onClick={() => setInviteOpen(true)} disabled={!canCreateUsers(viewer)}><UserRoundPlus className="size-4" /> Invite teammate</Button>
       </div>
@@ -286,7 +289,7 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
       <section aria-label="Team metrics" className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Active team" value={String(activeCount)} detail={`${demoWorkspace.people.length - activeCount} pending or suspended`} />
         <Metric label="Leadership" value={String(managerCount)} detail="Owners and managers" />
-        <Metric label="Locations" value={String(demoWorkspace.locations.length)} detail="Organization-wide directory" />
+        <Metric label="Locations" value={String(visibleLocations.length)} detail="Visible restaurant scope" />
         <Metric label="Needs review" value="3" detail="Time off, certificate, invitation" trend={{ label: "Action", tone: "negative" }} />
       </section>
 
@@ -311,13 +314,13 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
                 <span className="sr-only">Filter by location</span>
                 <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[10px]">
                   <option value="all">All locations</option>
-                  {demoWorkspace.locations.map((location) => <option key={location.id} value={location.id}>{location.name.replace(" — Demo", "")}</option>)}
+                  {visibleLocations.map((location) => <option key={location.id} value={location.id}>{location.name.replace(" — Demo", "")}</option>)}
                 </select>
               </label>
             </div>
           </div>
           <div className="max-h-[690px] overflow-y-auto">
-            {filteredPeople.map((person, index) => <TeamRow key={person.id} person={person} index={index} selected={selected.id === person.id} role={roleOverrides[person.id] ?? person.primaryRole} status={statusOverrides[person.id] ?? person.status} onSelect={() => setSelectedId(person.id)} />)}
+            {filteredPeople.map((person, index) => <TeamRow key={person.id} person={person} visibleLocations={visibleLocations} index={index} selected={selected.id === person.id} role={roleOverrides[person.id] ?? person.primaryRole} status={statusOverrides[person.id] ?? person.status} onSelect={() => setSelectedId(person.id)} />)}
             {!filteredPeople.length ? <div className="px-5 py-14 text-center"><Search className="mx-auto size-5 text-[var(--ink-faint)]" /><p className="mt-3 text-xs font-semibold">No people match</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">Try a different search or filter.</p></div> : null}
           </div>
         </section>
@@ -388,8 +391,7 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
         onClose={() => setInviteOpen(false)}
         organizationId={demoInvitationActionIds.organization}
         locations={[
-          { id: demoInvitationActionIds.garden, name: "Garden Room" },
-          { id: demoInvitationActionIds.market, name: "Market Room" },
+          { id: demoInvitationActionIds.garden, name: "Le Yard" },
         ]}
         roles={invitableRolesForActor("owner")}
         actorRole="owner"

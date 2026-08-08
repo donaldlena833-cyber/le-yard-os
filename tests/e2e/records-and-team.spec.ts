@@ -63,7 +63,7 @@ test("prepares a tenant-scoped teammate invitation", async ({ page }) => {
   await dialog.getByLabel("Full name").fill("Riley Test");
   await dialog.getByLabel("Work email").fill("riley.test@example.invalid");
   await dialog.getByLabel("Access role").selectOption({ label: "Manager" });
-  await dialog.getByLabel("Primary location").selectOption({ label: "Market Room" });
+  await dialog.getByLabel("Primary location").selectOption({ label: "Le Yard" });
   await dialog.getByRole("button", { name: "Send invitation", exact: true }).click();
 
   await expect(dialog.getByRole("status")).toContainText(

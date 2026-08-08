@@ -281,7 +281,7 @@ export function TimeClockWorkspace() {
         </aside>
       </div>
 
-      <div className="mt-8 flex items-start gap-3 rounded-[16px] border border-[var(--line)] bg-[var(--paper)] px-4 py-3 text-[10px] leading-4 text-[var(--ink-faint)]"><UserCheck className="mt-0.5 size-4 shrink-0 text-[var(--positive)]" /><span><strong className="text-[var(--ink-soft)]">Human approval boundary:</strong> missed punches and AI-suggested corrections can be reviewed here, but they are never finalized automatically.</span></div>
+      <div className="mt-8 flex items-start gap-3 rounded-[16px] border border-[var(--line)] bg-[var(--paper)] px-4 py-3 text-[10px] leading-4 text-[var(--ink-faint)]"><UserCheck className="mt-0.5 size-4 shrink-0 text-[var(--positive)]" /><span>Manager review is required for corrections; original records remain unchanged.</span></div>
       <CorrectionDialog open={correctionDialogOpen} onClose={() => setCorrectionDialogOpen(false)} onSubmit={submitCorrection} />
     </PageFrame>
   );

@@ -5,7 +5,6 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   CheckSquare2,
-  Clock3,
   ContactRound,
   Gauge,
   HandCoins,
@@ -15,6 +14,7 @@ import {
   Settings2,
   Sparkles,
   UsersRound,
+  Truck,
   WalletCards,
 } from "lucide-react";
 import type { AppRole } from "@/types";
@@ -46,7 +46,7 @@ export const navigationSections: Array<{
       },
       { href: "/kitchen", label: "Kitchen", icon: ChefHat, mobile: true, personas: ["chef"] },
       { href: "/team", label: "Team", icon: UsersRound, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
-      { href: "/time-clock", label: "Time clock", icon: Clock3, mobile: true },
+      { href: "/vendors", label: "Vendors", icon: Truck, mobile: true, roles: ["owner", "admin", "manager", "employee"] },
       { href: "/earnings", label: "Earnings", icon: WalletCards, hiddenPersonas: ["chef"] },
       {
         href: "/messages",
@@ -94,10 +94,6 @@ export const allNavItems = [
   settingsItem,
 ];
 
-export const mobileNavItems = navigationSections[0].items.filter(
-  (item) => item.mobile,
-);
-
 export function isNavItemVisible(item: NavItem, role: AppRole, persona?: "chef"): boolean {
   if (item.personas && (!persona || !item.personas.includes(persona))) return false;
   if (item.hiddenPersonas?.some((hidden) => hidden === persona)) return false;
@@ -115,11 +111,11 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   },
   "/team": {
     title: "Team",
-    detail: "18 active people · 2 locations",
+    detail: "18 active people · Le Yard",
   },
-  "/time-clock": {
-    title: "Time clock",
-    detail: "Live attendance · Current location",
+  "/vendors": {
+    title: "Vendors",
+    detail: "Prices · Purchasing · Current room",
   },
   "/kitchen": {
     title: "Kitchen",
@@ -155,7 +151,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   },
   "/reports": {
     title: "Reports",
-    detail: "Jul 26–Aug 1 · All locations",
+    detail: "Jul 26–Aug 1 · Le Yard",
   },
   "/assistant": {
     title: "Ask Le Yard",

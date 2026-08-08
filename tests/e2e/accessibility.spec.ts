@@ -7,7 +7,7 @@ const keyRoutes: Array<{ path: string; heading: string }> = [
   { path: "/today", heading: "Good afternoon, Donald." },
   { path: "/schedule", heading: "Dinner schedule" },
   { path: "/messages", heading: "Stay close to service" },
-  { path: "/time-clock", heading: "Time, without the guesswork" },
+  { path: "/vendors", heading: "Vendors & prices" },
   { path: "/receipts", heading: "Receipts & invoices" },
   { path: "/inventory", heading: "Inventory" },
   { path: "/guests", heading: "Guestbook" },

@@ -35,7 +35,6 @@ import { Button } from "@/components/ui/button";
 import { WorkspaceSwitcher } from "@/components/shell/workspace-switcher";
 import {
   allNavItems,
-  mobileNavItems,
   navigationSections,
   isNavItemVisible,
   routeMeta,
@@ -94,7 +93,7 @@ interface ShellNotification {
 }
 
 const demoNotifications: ShellNotification[] = [
-  { id: "demo-clock", title: "Missed clock-out", body: "Maya’s Friday shift needs review", actionUrl: "/time-clock", readAt: null, createdAt: new Date(Date.now() - 8 * 60_000).toISOString() },
+  { id: "demo-vendor", title: "Vendor price watch", body: "Roma tomatoes moved 8.6% since June", actionUrl: "/vendors", readAt: null, createdAt: new Date(Date.now() - 8 * 60_000).toISOString() },
   { id: "demo-stock", title: "Low stock", body: "Japanese whisky is below par", actionUrl: "/inventory", readAt: null, createdAt: new Date(Date.now() - 22 * 60_000).toISOString() },
   { id: "demo-swap", title: "Shift swap", body: "Eli offered Saturday dinner", actionUrl: "/schedule", readAt: null, createdAt: new Date(Date.now() - 60 * 60_000).toISOString() },
 ];
@@ -612,6 +611,9 @@ function MobileDrawer({
 function ShellContent({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const workspace = useWorkspaceContext();
+  const visibleMobileNavItems = navigationSections[0].items
+    .filter((item) => item.mobile && isNavItemVisible(item, workspace.role, workspace.persona))
+    .slice(0, 4);
   const [commandOpen, setCommandOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
@@ -652,7 +654,7 @@ function ShellContent({ children }: { children: ReactNode }) {
                 <h1 className="truncate text-[15px] font-semibold tracking-[-0.02em] text-[var(--ink)] lg:text-base">
                   {meta.title}
                 </h1>
-                {workspace.mode === "demo" && (pathname === "/today" || pathname === "/time-clock") ? (
+                {workspace.mode === "demo" && pathname === "/today" ? (
                   <span className="hidden items-center gap-1.5 text-[10px] font-semibold text-[var(--positive)] sm:flex">
                     <span className="pulse-dot size-1.5 rounded-full bg-[var(--positive)]" />
                     Live
@@ -714,9 +716,9 @@ function ShellContent({ children }: { children: ReactNode }) {
 
       <nav
         aria-label="Primary mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-30 grid h-[72px] grid-cols-5 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--paper-strong)_94%,transparent)] px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 grid h-[76px] grid-cols-5 border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--paper-strong)_94%,transparent)] px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden"
       >
-        {mobileNavItems.map((item) => {
+        {visibleMobileNavItems.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href;
           return (
@@ -725,20 +727,20 @@ function ShellContent({ children }: { children: ReactNode }) {
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "focus-ring flex flex-col items-center justify-center gap-1 rounded-xl text-[9px] font-semibold",
+                "focus-ring flex flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold",
                 active ? "text-[var(--accent-strong)]" : "text-[var(--ink-faint)]",
               )}
             >
-              <Icon className="size-[18px]" strokeWidth={active ? 2.3 : 1.8} />
-              {item.label === "Time clock" ? "Clock" : item.label}
+              <Icon className="size-[20px]" strokeWidth={active ? 2.3 : 1.8} />
+              {item.label}
             </Link>
           );
         })}
         <button
           onClick={() => setDrawerOpen(true)}
-          className="focus-ring flex flex-col items-center justify-center gap-1 rounded-xl text-[9px] font-semibold text-[var(--ink-faint)]"
+          className="focus-ring flex flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold text-[var(--ink-faint)]"
         >
-          <Menu className="size-[18px]" />
+          <Menu className="size-[20px]" />
           More
         </button>
       </nav>

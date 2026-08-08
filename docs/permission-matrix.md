@@ -27,8 +27,7 @@ Owners and admins have organization-wide access. Owner administrative writes add
 | Create/archive channels and set private members | Full (AAL2) | Full | Operate assigned | None |
 | Announcements | Full | Full | Create assigned | Read/acknowledge |
 | Own messages, reactions, read receipts | Full | Full | Self | Self |
-| Clock in/out and breaks | Full | Full | Operate assigned | Self at assigned location |
-| Punch correction request | Full | Full | Review/apply assigned | Self request/cancel pending |
+| Vendor contacts, prices, and purchasing context | Full | Full | Operate assigned | Read assigned |
 | Closeouts and cash reconciliation | Full | Full | Operate assigned | None |
 | Author tip policies and versions | Full (AAL2) | Full | Read approved policy | None |
 | Tip calculation and approval | Full | Full | Operate assigned | Self final allocation read |

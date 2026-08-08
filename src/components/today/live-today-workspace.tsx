@@ -3,7 +3,6 @@ import {
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
-  Clock3,
   Megaphone,
   PackageSearch,
   UsersRound,
@@ -77,7 +76,7 @@ export function LiveTodayWorkspace({
 
       <section aria-label="Today’s live metrics" className="grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-b border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Scheduled" value={String(data.scheduledCount)} detail={`${data.openShiftCount} open for coverage`} />
-        <Metric label="Clocked in" value={String(data.openPunchCount)} detail={`${data.clockedInCount} linked to today’s shifts`} />
+        <Metric label="Coverage" value={String(Math.max(0, data.scheduledCount - data.openShiftCount))} detail={`${data.openShiftCount} open for coverage`} />
         <Metric label="Open tasks" value={String(data.openTaskCount)} detail="Visible in your access scope" />
         <Metric
           label="Closeout"
@@ -106,8 +105,8 @@ export function LiveTodayWorkspace({
                 </span>
                 <span className="numeric hidden text-[10px] text-[var(--ink-faint)] sm:block">{shift.startLabel}–{shift.endLabel}</span>
                 <span className="flex justify-end">
-                  <StatusPill tone={shift.clockedIn ? "positive" : shift.isOpen ? "warning" : "neutral"} dot={shift.clockedIn}>
-                    {shift.clockedIn ? "Clocked in" : shift.isOpen ? "Open" : shift.status.replaceAll("_", " ")}
+                  <StatusPill tone={shift.isOpen ? "warning" : "neutral"} dot={false}>
+                    {shift.isOpen ? "Open" : shift.status.replaceAll("_", " ")}
                   </StatusPill>
                 </span>
               </div>
@@ -165,7 +164,7 @@ export function LiveTodayWorkspace({
             <SectionHeading eyebrow="Control points" title="Closeout & inventory" />
             <div className="space-y-3">
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4">
-                <div className="flex items-center gap-3"><Clock3 className="size-4 text-[var(--accent-strong)]" /><p className="text-xs font-semibold">Today’s closeout</p></div>
+                <div className="flex items-center gap-3"><ClipboardCheck className="size-4 text-[var(--accent-strong)]" /><p className="text-xs font-semibold">Today’s closeout</p></div>
                 <p className="mt-3 text-[10px] leading-4 text-[var(--ink-faint)]">{data.closeout ? `${data.closeout.status} · ${dollars(data.closeout.netSalesCents, data.currencyCode)} net sales · ${data.closeout.covers} covers` : "No closeout has been filed for this business date."}</p>
               </div>
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4">

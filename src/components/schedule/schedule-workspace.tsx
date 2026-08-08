@@ -27,7 +27,7 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type DragEvent } from "react";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -115,6 +115,7 @@ function ShiftCard({ shift, onSelect }: { shift: Shift; onSelect: () => void }) 
           <span aria-label="Awaiting acknowledgement" className="size-1.5 rounded-full bg-[var(--warning)]" />
         )}
       </span>
+      {shift.hours > 6 ? <span className="mt-1 block text-[9px] text-[var(--ink-faint)]">30m unpaid break · manager timing</span> : null}
     </motion.button>
   );
 }
@@ -159,8 +160,8 @@ function DayColumn({
 }
 
 const employeeScheduleShifts = [
-  { id: "irini-tonight", day: "Fri · Aug 8", date: "Tonight", time: "4:00–11:00 PM", role: "Server", covers: 86, status: "confirmed" as const },
-  { id: "irini-sat", day: "Sat · Aug 9", date: "Tomorrow", time: "4:30–11:30 PM", role: "Server", covers: 74, status: "published" as const },
+  { id: "irini-tonight", day: "Fri · Aug 8", date: "Tonight", time: "4:00–11:00 PM", hours: 7, role: "Server", covers: 86, status: "confirmed" as const },
+  { id: "irini-sat", day: "Sat · Aug 9", date: "Tomorrow", time: "4:30–11:30 PM", hours: 7, role: "Server", covers: 74, status: "published" as const },
 ];
 
 const employeeOpenShifts = [
@@ -169,25 +170,38 @@ const employeeOpenShifts = [
 ];
 
 const chefBackOfHouseShifts = [
-  { id: "boh-fri", day: "Fri · Aug 8", time: "1:00–11:00 PM", role: "Line cook", people: "Leo M. · Priya S.", status: "Ready" },
-  { id: "boh-sat", day: "Sat · Aug 9", time: "12:00–11:30 PM", role: "Prep + line", people: "Sam O. · Leo M.", status: "Needs coverage" },
-  { id: "boh-sun", day: "Sun · Aug 10", time: "12:00–10:00 PM", role: "Prep + line", people: "Priya S. · Open", status: "Open shift" },
+  { id: "boh-fri", dayId: "fri", day: "Fri · Aug 8", time: "1:00–11:00 PM", role: "Line cook", people: "Leo M. · Priya S.", status: "Ready" },
+  { id: "boh-sat", dayId: "sat", day: "Sat · Aug 9", time: "12:00–11:30 PM", role: "Prep + line", people: "Sam O. · Leo M.", status: "Needs coverage" },
+  { id: "boh-sun", dayId: "sun", day: "Sun · Aug 10", time: "12:00–10:00 PM", role: "Prep + line", people: "Priya S. · Open", status: "Open shift" },
 ];
 
 function ChefScheduleWorkspace() {
   const [published, setPublished] = useState(false);
   const [notice, setNotice] = useState("");
+  const [shifts, setShifts] = useState(chefBackOfHouseShifts);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+
+  function moveShift(event: DragEvent<HTMLDivElement>, dayId: string) {
+    event.preventDefault();
+    if (!draggedId) return;
+    const shift = shifts.find((item) => item.id === draggedId);
+    if (!shift || shift.dayId === dayId) return;
+    const day = shifts.find((item) => item.dayId === dayId)?.day ?? dayId;
+    setShifts((current) => current.map((item) => item.id === draggedId ? { ...item, dayId, day } : item));
+    setNotice(`${shift.role} moved to ${day}. Publish the BOH schedule when the change is ready.`);
+    setDraggedId(null);
+  }
 
   return (
     <PageFrame width="full" className="max-w-[1400px]">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div><div className="flex items-center gap-2"><StatusPill tone={published ? "positive" : "warning"} dot>{published ? "Published" : "Draft"}</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Le Yard · Back of house</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Kitchen schedule</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Build the BOH plan, assign coverage, and publish when the line is ready.</p></div>
+        <div><div className="flex items-center gap-2"><StatusPill tone={published ? "positive" : "warning"} dot>{published ? "Published" : "Draft"}</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Le Yard · Back of house</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Kitchen schedule</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Build the BOH plan, assign coverage, and publish the schedule.</p></div>
         <Button variant="accent" size="sm" onClick={() => { setPublished(true); setNotice("Back-of-house schedule published. The team can now see their shifts."); }}><Send className="size-3.5" /> Publish BOH schedule</Button>
       </div>
       {notice ? <p role="status" className="mt-4 rounded-xl bg-[var(--positive-soft)] px-3.5 py-3 text-[10px] text-[var(--positive)]">{notice}</p> : null}
       <section className="mt-7 grid gap-8 lg:grid-cols-[1.4fr_.6fr]">
-        <div><SectionHeading eyebrow="Back of house" title="Aug 8–10 service plan" detail="Only kitchen roles are shown here. Front-of-house schedules remain with owners and managers." /><div className="border-y border-[var(--line)]">{chefBackOfHouseShifts.map((shift) => <div key={shift.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Clock3 className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{shift.day} · {shift.role}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time} · {shift.people}</p></div><StatusPill tone={shift.status === "Ready" ? "positive" : "warning"}>{shift.status}</StatusPill><Button variant="quiet" size="sm" onClick={() => setNotice(`${shift.day} is ready to adjust. Drag-and-drop editing will connect to the BOH schedule records next.`)}>Adjust</Button></div>)}</div></div>
-        <aside><SectionHeading eyebrow="Coverage" title="Kitchen staffing" detail="A quick read before publishing." /><div className="border-y border-[var(--line)]"><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="text-[10px] text-[var(--ink-faint)]">Line coverage</span><StatusPill tone="positive">2 / 2</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4"><span className="text-[10px] text-[var(--ink-faint)]">Prep coverage</span><StatusPill tone="warning">1 open</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4"><span className="text-[10px] text-[var(--ink-faint)]">Recipes to review</span><StatusPill tone="neutral">2</StatusPill></div></div></aside>
+        <div><SectionHeading eyebrow="Back of house" title="Aug 8–10 service plan" detail="Drag a kitchen shift between days to adjust the BOH plan." /><div className="grid gap-3 md:grid-cols-3">{[{ id: "fri", label: "Fri · Aug 8" }, { id: "sat", label: "Sat · Aug 9" }, { id: "sun", label: "Sun · Aug 10" }].map((day) => <div key={day.id} onDragOver={(event) => event.preventDefault()} onDrop={(event) => moveShift(event, day.id)} className="min-h-48 rounded-[18px] border border-dashed border-[var(--line-strong)] bg-[var(--canvas)] p-2.5"><div className="flex items-center justify-between px-1.5 pb-2"><p className="text-[10px] font-semibold">{day.label}</p><span className="text-[9px] text-[var(--ink-faint)]">Drop here</span></div>{shifts.filter((shift) => shift.dayId === day.id).map((shift) => <div key={shift.id} draggable onDragStart={() => setDraggedId(shift.id)} onDragEnd={() => setDraggedId(null)} className="mb-2 cursor-grab rounded-[14px] border border-[var(--line)] bg-[var(--paper-strong)] p-3 shadow-sm active:cursor-grabbing"><div className="flex items-start justify-between gap-2"><p className="text-[11px] font-semibold">{shift.role}</p><span className="text-[9px] text-[var(--ink-faint)]">Drag</span></div><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time}</p><p className="mt-2 text-[9px] text-[var(--ink-faint)]">{shift.people}</p><p className="mt-2 text-[9px] text-[var(--ink-faint)]">30m unpaid break · manager timing</p><div className="mt-2"><StatusPill tone={shift.status === "Ready" ? "positive" : "warning"}>{shift.status}</StatusPill></div></div>)}</div>)}</div></div>
+        <aside><SectionHeading eyebrow="Coverage" title="Kitchen staffing" detail="Current BOH coverage before publishing." /><div className="border-y border-[var(--line)]"><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="text-[11px] text-[var(--ink-faint)]">Line coverage</span><StatusPill tone="positive">2 / 2</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4"><span className="text-[11px] text-[var(--ink-faint)]">Prep coverage</span><StatusPill tone="warning">1 open</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-3 py-4"><span className="text-[11px] text-[var(--ink-faint)]">Recipes to review</span><StatusPill tone="neutral">2</StatusPill></div></div></aside>
       </section>
     </PageFrame>
   );
@@ -233,7 +247,7 @@ function EmployeeScheduleWorkspace() {
         <div className="border-y border-[var(--line)]">
           {employeeScheduleShifts.map((shift) => {
             const pending = releasePending === shift.id;
-            return <div key={shift.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><CalendarCheck2 className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{shift.day} · {shift.role}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time} · {shift.covers} covers scheduled</p></div>{pending ? <StatusPill tone="warning">Release pending approval</StatusPill> : shift.status === "confirmed" ? <><StatusPill tone="positive">Confirmed</StatusPill><Button variant="quiet" size="sm" onClick={() => { setReleasePending(shift.id); setNotice("Release request sent. The shift remains yours until Donald or Maris approves the release."); }}>Release shift</Button></> : <StatusPill tone="neutral">Published</StatusPill>}</div>;
+            return <div key={shift.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><CalendarCheck2 className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{shift.day} · {shift.role}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time} · {shift.covers} covers scheduled</p>{shift.hours > 6 ? <p className="mt-1 text-[9px] text-[var(--ink-faint)]">30m unpaid break · manager timing</p> : null}</div>{pending ? <StatusPill tone="warning">Release pending approval</StatusPill> : shift.status === "confirmed" ? <><StatusPill tone="positive">Confirmed</StatusPill><Button variant="quiet" size="sm" onClick={() => { setReleasePending(shift.id); setNotice("Release request sent. The shift remains yours until Donald or Maris approves the release."); }}>Release shift</Button></> : <StatusPill tone="neutral">Published</StatusPill>}</div>;
           })}
         </div>
       </section>

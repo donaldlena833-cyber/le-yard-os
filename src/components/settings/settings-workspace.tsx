@@ -48,8 +48,8 @@ const tabs: Array<{ id: Tab; label: string; icon: typeof Building2 }> = [
 const roleSummary: Array<{ role: AppRole; scope: string; people: string }> = [
   { role: "owner", scope: "All settings, financial approvals, and owner assignment", people: "2" },
   { role: "admin", scope: "Users, locations, integrations, exports, and operations", people: "0" },
-  { role: "manager", scope: "Assigned-location schedules, time, closeouts, and operations", people: "2" },
-  { role: "employee", scope: "Own profile, shifts, clock, chat, tasks, and own tips", people: "4" },
+  { role: "manager", scope: "Assigned-location schedules, purchasing, closeouts, and operations", people: "2" },
+  { role: "employee", scope: "Own profile, shifts, chat, tasks, and own tips", people: "4" },
 ];
 
 function downloadDemoExport() {
@@ -70,7 +70,7 @@ function downloadDemoExport() {
 }
 
 function OrganizationPanel() {
-  const organization = demoWorkspace.organizations[0];
+  const organization = { ...demoWorkspace.organizations[0], name: "Le Yard" };
   const owners = demoWorkspace.people.filter((person) => organization.ownerIds.includes(person.id));
   return (
     <div className="space-y-9">
@@ -86,7 +86,7 @@ function OrganizationPanel() {
           <div className="flex items-start gap-3"><MapPin className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" /><div><p className="text-xs font-semibold">Le Yard · Ninth Avenue</p><p className="mt-1 text-[10px] leading-4 text-white/60">858 9th Ave, New York, NY 10019 · Owner-supplied playground address</p></div></div>
           <StatusPill className="bg-white/10 text-white">Playground only</StatusPill>
         </div>
-        <p className="mt-3 flex items-start gap-2 text-[10px] leading-4 text-[var(--ink-faint)]"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />Donald and Maris are the only playground identities. Staff profiles, job codes, schedules, receipts, guests, and financial records are clearly synthetic mock data.</p>
+        <p className="mt-3 flex items-start gap-2 text-[10px] leading-4 text-[var(--ink-faint)]"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />Donald, Maris, Irini, and Mateo are temporary playground identities. Staff profiles, job codes, schedules, receipts, guests, and financial records are clearly synthetic mock data.</p>
       </section>
 
       <section>
@@ -118,16 +118,16 @@ function LocationsPanel() {
     <div>
       <SectionHeading title="Restaurant locations" detail="Each location has independent membership scope, operational records, and timezone handling." action={<Button variant="secondary" size="sm" disabled>Add location</Button>} />
       <div className="grid gap-4 sm:grid-cols-2">
-        {demoWorkspace.locations.map((location, index) => (
+        {demoWorkspace.locations.slice(0, 1).map((location, index) => (
           <article key={location.id} className="rounded-[20px] border border-[var(--line)] bg-[var(--paper)] p-5">
             <div className="flex items-start justify-between gap-3"><span className={cn("flex size-10 items-center justify-center rounded-[13px]", index === 0 ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "bg-[var(--canvas-strong)] text-[var(--ink-faint)]")}><MapPin className="size-4" /></span><StatusPill tone={index === 0 ? "accent" : "neutral"} dot>{index === 0 ? "Owner supplied" : "Synthetic mock"}</StatusPill></div>
-            <h3 className="mt-5 text-base font-semibold tracking-[-0.03em]">{location.name}</h3>
+            <h3 className="mt-5 text-base font-semibold tracking-[-0.03em]">{index === 0 ? "Le Yard" : location.name}</h3>
             <p className="mt-2 text-[10px] leading-4 text-[var(--ink-faint)]">{location.address.line1}<br />{location.address.city}, {location.address.region} {location.address.postalCode}</p>
             <div className="mt-5 flex items-center justify-between border-t border-[var(--line)] pt-4"><span className="text-[9px] text-[var(--ink-faint)]">{location.timezone}</span><Button variant="quiet" size="sm">Review <ChevronRight className="size-3" /></Button></div>
           </article>
         ))}
       </div>
-      <p className="mt-5 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-[10px] leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />The Ninth Avenue address is owner supplied. Phone, service periods, job codes, and the second location are mock values for testing.</p>
+      <p className="mt-5 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-[10px] leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />Le Yard is currently configured as one main dining room. Phone, service periods, and job codes remain mock values for testing.</p>
     </div>
   );
 }
@@ -180,15 +180,15 @@ function OperatingDraftPanel() {
             Icon={Clock3}
             title="Scheduled break"
             value={`>${shiftHours}h → ${assumptions.break.minimumUnpaidBreakMinutes} min unpaid`}
-            detail="Fixture schedules include the break. Exact timing and compliance review are still pending, so this note does not enforce scheduling."
-            status="Review timing"
+            detail="Every shift longer than six hours receives a 30-minute unpaid break. A manager approves whether it sits during, before, or after the shift."
+            status="Manager approval"
           />
           <DraftRuleRow
             Icon={CalendarClock}
             title="Overtime"
             value={`${assumptions.overtime.multiplier}× owner input`}
-            detail="Threshold, workweek, and exemptions are not configured. Overtime and payroll calculations remain disabled."
-            status="Missing inputs"
+            detail="Overtime is paid at 1.5× where applicable. Threshold, workweek, and exemptions are not configured in this demo; managers approve the schedule context and payroll remains a separate workflow."
+            status="Manager approval"
           />
           <DraftRuleRow
             Icon={HandCoins}

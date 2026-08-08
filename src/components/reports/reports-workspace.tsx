@@ -14,6 +14,7 @@ import {
 import { useMemo, useState } from "react";
 
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
+import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { StatusPill } from "@/components/ui/status-pill";
 import { demoWorkspace } from "@/lib/demo";
 import { cn } from "@/lib/utils";
@@ -132,6 +133,7 @@ function ExportLink({ href, format }: { href: string; format: "CSV" | "PDF" }) {
 }
 
 export function ReportsWorkspace() {
+  const workspace = useWorkspaceContext();
   const [kind, setKind] = useState<ReportKind>("labor");
   const [filters, setFilters] = useState<ReportFilters>(DEFAULT_REPORT_FILTERS);
   const report = useMemo(() => getReportView(kind, filters), [kind, filters]);
@@ -141,6 +143,7 @@ export function ReportsWorkspace() {
   }
 
   const invalidRange = filters.startsOn > filters.endsOn;
+  const visibleLocations = workspace.locations;
 
   return (
     <PageFrame width="full" className="max-w-[1700px]">
@@ -163,8 +166,8 @@ export function ReportsWorkspace() {
               onChange={(event) => updateFilter("locationId", event.target.value)}
               className="h-10 w-full appearance-none rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-7 pl-9 text-[11px] font-semibold outline-none"
             >
-              <option value="all">All locations</option>
-              {demoWorkspace.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+              <option value="all">Le Yard</option>
+              {visibleLocations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
             </select>
           </label>
           <label className="relative">

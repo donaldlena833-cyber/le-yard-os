@@ -69,15 +69,15 @@ export function Metric({
 }) {
   return (
     <div className={cn("min-w-0 px-4 py-4 first:pl-0 sm:px-5", className)}>
-      <p className="text-[10px] font-medium text-[var(--ink-faint)]">{label}</p>
+      <p className="text-[11px] font-medium text-[var(--ink-faint)]">{label}</p>
       <div className="mt-2 flex items-baseline gap-2">
-        <p className="numeric truncate text-[1.55rem] leading-none font-medium tracking-[-0.055em] text-[var(--ink)] sm:text-[1.8rem]">
+        <p className="numeric truncate text-[1.65rem] leading-none font-medium tracking-[-0.055em] text-[var(--ink)] sm:text-[1.95rem]">
           {value}
         </p>
         {trend ? (
           <span
             className={cn(
-              "text-[9px] font-semibold",
+              "text-[10px] font-semibold",
               trend.tone === "positive" && "text-[var(--positive)]",
               trend.tone === "negative" && "text-[var(--danger)]",
               trend.tone === "neutral" && "text-[var(--ink-faint)]",
@@ -88,7 +88,7 @@ export function Metric({
         ) : null}
       </div>
       {detail ? (
-        <p className="mt-2 truncate text-[9px] text-[var(--ink-faint)]">{detail}</p>
+        <p className="mt-2 truncate text-[10px] text-[var(--ink-faint)]">{detail}</p>
       ) : null}
     </div>
   );

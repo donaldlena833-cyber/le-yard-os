@@ -1,6 +1,6 @@
 # Le Yard OS
 
-Le Yard OS is a mobile-first, multi-tenant restaurant back-office application. It brings scheduling, team communication, time tracking, closeouts, tip pooling, receipts, inventory, guest CRM, tasks, reporting, integrations, and guarded operational intelligence into one workspace.
+Le Yard OS is a mobile-first, multi-tenant restaurant back-office application. It brings scheduling, team communication, vendor purchasing, closeouts, tip pooling, receipts, inventory, guest CRM, tasks, reporting, integrations, and guarded operational intelligence into one workspace.
 
 The repository is intentionally isolated from the existing `le-yard` public website. Demo mode uses synthetic people, transactions, documents, job codes, and operational activity. The Ninth Avenue address shown in the playground was supplied by the owner; it does not make the surrounding demo records real restaurant data.
 
@@ -37,7 +37,7 @@ See [Known limitations](docs/known-limitations.md) for the precise boundary betw
 - Team: profiles, roles, locations, availability, time off, certifications, private fields, documents, invitations, and suspension controls
 - Schedule: reusable weekly surface, drag-and-drop changes, publish, acknowledgement, open shifts, and swap context
 - Messages: all-staff, location, and management channels with unread state, reactions, attachments, announcements, and read state
-- Time clock: clock in/out, paid and unpaid breaks, job code, correction requests, approval, overtime warnings, and audit history
+- Vendors & purchasing: vendor contacts, current food prices, open orders, and price context for kitchen planning
 - Closeout and tips: sales/cash reconciliation, attachments, approval lock, versioned tip rules, cent-safe distribution, explanations, and payroll CSV
 - Receipts: private upload/review surface, paginated search, stored extraction evidence, duplicate decisions, and approved expense/delivery links
 - Inventory: catalog, units, vendors, counts, purchasing, transfers, waste, price history, recipe costing, and variance signals

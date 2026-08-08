@@ -38,9 +38,9 @@ const coreReadinessChecks: ReadinessCheck[] = [
     ready: (page) => page.getByRole("region", { name: "Live team metrics" }),
   },
   {
-    path: "/time-clock",
-    title: "Time clock",
-    ready: (page) => page.getByRole("region", { name: "Your live time clock" }),
+    path: "/vendors",
+    title: "Vendors",
+    ready: (page) => page.getByRole("heading", { name: "Vendors & prices", exact: true, level: 2 }),
   },
   {
     path: "/closeout",

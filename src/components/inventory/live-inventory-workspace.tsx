@@ -711,13 +711,19 @@ function InventoryMutationDialog({
 export function LiveInventoryWorkspace({
   workspace,
   result,
+  initialTab,
+  title = "Inventory",
+  description,
 }: {
   workspace: WorkspaceContextValue;
   result: LiveReadResult<LiveInventoryModel>;
+  initialTab?: Tab;
+  title?: string;
+  description?: string;
 }) {
   const router = useRouter();
   const model = result.ok ? result.data : null;
-  const [activeTab, setActiveTab] = useState<Tab>("stock");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? "stock");
   const [query, setQuery] = useState("");
   const [countOpen, setCountOpen] = useState(false);
   const [countSubmissionId, setCountSubmissionId] = useState<string | null>(null);
@@ -919,8 +925,8 @@ export function LiveInventoryWorkspace({
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex items-center gap-2"><StatusPill tone="positive" dot>Connected</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Ledger-backed · tenant scoped</span></div>
-          <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Inventory</h2>
-          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">Stock, counts, purchasing, recipes, and waste for {workspace.activeLocation.name}.</p>
+          <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">{title}</h2>
+          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">{description ?? `Stock, counts, purchasing, recipes, and waste for ${workspace.activeLocation.name}.`}</p>
         </div>
         <div className="flex flex-wrap gap-2"><Button variant="secondary" disabled={!model.items.length || !model.vendors.length} onClick={() => { setNotice(""); setMutationDialog({ kind: "purchase-order", requestId: crypto.randomUUID() }); }}><ShoppingCart className="size-4" />New order</Button><Button variant="accent" disabled={!model.items.length} onClick={openCount}><ClipboardCheck className="size-4" />Start full count</Button></div>
       </div>
@@ -1020,8 +1026,8 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "vendors" ? (
             <section className="mt-5">
-              <SectionHeading title="Vendors" detail="Active organization vendors, contacts, and stored payment terms." />
-              {model.vendors.length ? <div className="grid gap-x-8 md:grid-cols-2">{model.vendors.map((vendor) => <div key={vendor.id} className="flex items-start gap-3 border-b border-[var(--line)] py-4"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><PackageOpen className="size-4 text-[var(--ink-faint)]" /></span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{vendor.name}</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">{[vendor.contactName, vendor.paymentTerms].filter(Boolean).join(" · ") || "No contact or terms recorded"}</p><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[var(--ink-soft)]">{vendor.email ? <a className="hover:text-[var(--accent-strong)]" href={`mailto:${vendor.email}`}>{vendor.email}</a> : null}{vendor.phone ? <a className="hover:text-[var(--accent-strong)]" href={`tel:${vendor.phone}`}>{vendor.phone}</a> : null}</div></div><StatusPill tone="positive">Active</StatusPill></div>)}</div> : <EmptyState icon={<PackageOpen className="size-4" />} title="No active vendors" detail="Active vendors in this organization will appear here." />}
+              <SectionHeading title="Vendors & prices" detail="Active vendors, stored terms, and the latest recorded food prices." />
+              {model.vendors.length ? <div className="grid gap-4 md:grid-cols-2">{model.vendors.map((vendor) => { const prices = (model.catalog?.vendorItems ?? []).filter((item) => item.vendorId === vendor.id && item.isActive && item.lastPriceCents !== null); return <div key={vendor.id} className="rounded-[18px] border border-[var(--line)] p-4"><div className="flex items-start gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><PackageOpen className="size-4 text-[var(--ink-faint)]" /></span><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{vendor.name}</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">{[vendor.contactName, vendor.paymentTerms].filter(Boolean).join(" · ") || "No contact or terms recorded"}</p><div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-[var(--ink-soft)]">{vendor.email ? <a className="hover:text-[var(--accent-strong)]" href={`mailto:${vendor.email}`}>{vendor.email}</a> : null}{vendor.phone ? <a className="hover:text-[var(--accent-strong)]" href={`tel:${vendor.phone}`}>{vendor.phone}</a> : null}</div></div><StatusPill tone="positive">Active</StatusPill></div><div className="mt-4 border-t border-[var(--line)] pt-3">{prices.length ? prices.map((price) => { const item = model.catalog?.items.find((candidate) => candidate.id === price.inventoryItemId); const unit = model.catalog?.units.find((candidate) => candidate.id === price.purchaseUnitId); return <div key={price.id} className="flex items-center gap-3 border-t border-[var(--line)] py-2 first:border-0"><span className="min-w-0 flex-1 truncate text-[10px] font-semibold">{item?.name ?? "Inventory item"}</span><span className="numeric text-[11px] font-semibold">{formatMoney(price.lastPriceCents!, model.currencyCode)} <span className="font-normal text-[var(--ink-faint)]">/{unit?.symbol ?? "unit"}</span></span></div>; }) : <p className="text-[10px] text-[var(--ink-faint)]">No current item prices recorded.</p>}</div></div>; })}</div> : <EmptyState icon={<PackageOpen className="size-4" />} title="No active vendors" detail="Active vendors in this organization will appear here." />}
             </section>
           ) : null}
 
