@@ -457,8 +457,8 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
   }, [profilesById, selectedChannel, selectedChannelId, workspace.identity.userId, workspace.organization.id]);
 
   function selectChannel(channel: LiveChatChannel) {
+    if (channel.id !== selectedChannelId) setRealtimeState("connecting");
     setSelectedChannelId(channel.id);
-    setRealtimeState("connecting");
     setMobileChatOpen(true);
     setMobileInfoOpen(false);
   }
