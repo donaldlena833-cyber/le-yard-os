@@ -42,9 +42,9 @@ function WorkspaceAccessState({
     data_error: {
       icon: ShieldAlert,
       eyebrow: "Workspace unavailable",
-      title: "Tenant access could not be verified",
+      title: "Workspace data could not be loaded",
       detail:
-        "Le Yard OS could not safely resolve your organization and location. Try again, then contact an owner if this continues.",
+        "Your sign-in succeeded, but Le Yard OS could not load the authorized workspace records. Try again, then sign out and back in if this continues.",
     },
   }[resolution.status];
   const Icon = content.icon;

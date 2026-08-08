@@ -19,6 +19,7 @@ Started: 2026-08-08
 - Keep restaurant operating tables empty until the Owners populate real records. The 2026-08-08 remediation was explicitly authorized for the connected Le Yard polishing project and changes authorization metadata only.
 - Normalize both supported PostgREST representations of the single-column effective-capability RPC at the authenticated session boundary. This prevents valid persisted grants from being lost because of a generated-type/runtime-shape mismatch.
 - Do not geofence authentication. Authorized users may sign in from any physical location. Browser geolocation is disabled by response policy; database location membership remains a tenant record-access scope and never represents device position.
+- Treat the authenticated user's optional profile as display data, not authorization evidence. A transient profile read error falls back to signed Auth claims while membership, organization, location, and capability checks continue to fail closed.
 
 ## Migrations
 

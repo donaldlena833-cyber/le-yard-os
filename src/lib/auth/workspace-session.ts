@@ -233,10 +233,21 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
     email,
   };
 
-  if (membershipResult.error || profileResult.error) {
-    console.error("[workspace-session] membership/profile query failed", {
-      membership: membershipResult.error?.message ?? null,
-      profile: profileResult.error?.message ?? null,
+  // Profile data improves the greeting, but it is not authorization evidence.
+  // A transient profile read failure must never strand an otherwise valid
+  // owner/member outside their tenant. Identity safely falls back to signed
+  // Auth claims while membership and all subsequent scope checks still fail
+  // closed.
+  if (profileResult.error) {
+    console.warn("[workspace-session] optional profile query failed", {
+      userId,
+      error: profileResult.error.message,
+    });
+  }
+
+  if (membershipResult.error) {
+    console.error("[workspace-session] membership query failed", {
+      membership: membershipResult.error.message,
     });
     return { status: "data_error", identity };
   }
