@@ -57,6 +57,49 @@ export function GuestsWorkspace() {
     setSelected(next);
   }
 
+  function addGuest() {
+    const now = new Date().toISOString();
+    const guest: Guest = {
+      id: `local-guest-${Date.now()}`,
+      organizationId: workspace.organization.id,
+      firstName: "New",
+      lastName: "Guest",
+      contact: { email: null, phone: null, preferredChannel: "none" },
+      birthdayMonthDay: null,
+      preferences: [],
+      allergies: [],
+      tags: [],
+      vip: false,
+      notes: "",
+      lifetimeSpendCents: 0,
+      visitCount: 0,
+      lastVisitAt: null,
+      mergedIntoId: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setGuests((current) => [guest, ...current]);
+    setSelected(guest);
+  }
+
+  function addGuestNote() {
+    if (!selected) return;
+    updateGuest({
+      ...selected,
+      notes: selected.notes || "Follow-up note added from Guestbook.",
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function addGuestTag() {
+    if (!selected) return;
+    updateGuest({
+      ...selected,
+      tags: selected.tags.includes("follow-up") ? selected.tags : [...selected.tags, "follow-up"],
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   function exportGuests() {
     if (workspace.mode !== "demo") return;
 
@@ -81,7 +124,7 @@ export function GuestsWorkspace() {
           <p className="mt-1 text-[11px] text-[var(--ink-faint)]">Unified profiles with consent, preferences, and visit history</p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <div className="flex gap-2"><Button variant="secondary" onClick={exportGuests} disabled={workspace.mode !== "demo"} aria-describedby={workspace.mode === "live" ? "guest-export-readiness" : undefined}><Download className="size-4" /> Export filtered</Button><Button variant="accent"><UserRoundPlus className="size-4" /> Add guest</Button></div>
+          <div className="flex gap-2"><Button variant="secondary" onClick={exportGuests} disabled={workspace.mode !== "demo"} aria-describedby={workspace.mode === "live" ? "guest-export-readiness" : undefined}><Download className="size-4" /> Export filtered</Button><Button variant="accent" onClick={addGuest}><UserRoundPlus className="size-4" /> Add guest</Button></div>
           {workspace.mode === "live" ? <p id="guest-export-readiness" role="status" className="max-w-xs text-right text-[10px] leading-4 text-[var(--ink-faint)]">Guest export is disabled until the tenant-scoped live CRM export passes connected acceptance.</p> : null}
         </div>
       </div>
@@ -120,7 +163,7 @@ export function GuestsWorkspace() {
           <motion.div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}>
             <motion.aside className="absolute inset-y-0 right-0 w-[min(95vw,560px)] overflow-y-auto bg-[var(--paper-strong)] p-5 shadow-2xl sm:p-7" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 350, damping: 35 }}>
               <div className="flex items-start justify-between gap-4"><div className="flex items-center gap-3"><Avatar name={`${selected.firstName} ${selected.lastName}`} size="lg" /><div><p className="flex items-center gap-2 text-lg font-semibold tracking-[-0.035em]">{selected.firstName} {selected.lastName}{selected.vip ? <Star className="size-4 fill-[var(--accent)] text-[var(--accent)]" /> : null}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{selected.visitCount} visits · {formatMoney(selected.lifetimeSpendCents)} lifetime</p></div></div><Button variant="quiet" size="icon" onClick={() => setSelected(null)}><X className="size-4" /></Button></div>
-              <div className="mt-6 flex flex-wrap gap-2"><Button variant={selected.vip ? "accent" : "secondary"} size="sm" onClick={() => updateGuest({ ...selected, vip: !selected.vip, updatedAt: new Date().toISOString() })}><Star className="size-3.5" /> {selected.vip ? "VIP" : "Mark VIP"}</Button><Button variant="secondary" size="sm"><MessageSquareText className="size-3.5" /> Add note</Button><Button variant="quiet" size="sm"><Tag className="size-3.5" /> Add tag</Button></div>
+              <div className="mt-6 flex flex-wrap gap-2"><Button variant={selected.vip ? "accent" : "secondary"} size="sm" onClick={() => updateGuest({ ...selected, vip: !selected.vip, updatedAt: new Date().toISOString() })}><Star className="size-3.5" /> {selected.vip ? "VIP" : "Mark VIP"}</Button><Button variant="secondary" size="sm" onClick={addGuestNote}><MessageSquareText className="size-3.5" /> Add note</Button><Button variant="quiet" size="sm" onClick={addGuestTag}><Tag className="size-3.5" /> Add tag</Button></div>
               <section className="mt-7 border-y border-[var(--line)] py-5"><SectionHeading title="Contact & consent" className="mb-4" /><div className="grid gap-3 text-[10px] sm:grid-cols-2"><div className="flex items-center gap-2"><Mail className="size-3.5 text-[var(--ink-faint)]" /><span className="truncate">{selected.contact.email || "No email"}</span></div><div className="flex items-center gap-2"><Phone className="size-3.5 text-[var(--ink-faint)]" /><span>{selected.contact.phone || "No phone"}</span></div></div><div className="mt-4 flex flex-wrap gap-2">{demoWorkspace.consentRecords.filter((record) => record.guestId === selected.id).map((record) => <StatusPill key={record.id} tone={record.status === "granted" ? "positive" : record.status === "withdrawn" ? "danger" : "neutral"}>{record.channel}: {record.status}</StatusPill>)}{!demoWorkspace.consentRecords.some((record) => record.guestId === selected.id) ? <StatusPill tone="neutral">Consent unknown</StatusPill> : null}</div></section>
               <section className="mt-6"><SectionHeading title="Hospitality notes" detail="Visible to authorized service staff" /><div className="space-y-4"><div><p className="eyebrow mb-2">Allergies</p><div className="flex flex-wrap gap-1.5">{selected.allergies.length ? selected.allergies.map((allergy) => <StatusPill key={allergy} tone="danger"><AlertTriangle className="size-3" /> {allergy}</StatusPill>) : <span className="text-[10px] text-[var(--ink-faint)]">None recorded</span>}</div></div><div><p className="eyebrow mb-2">Preferences</p><div className="flex flex-wrap gap-1.5">{selected.preferences.map((preference) => <StatusPill key={preference} tone="accent">{preference}</StatusPill>)}</div></div><div><p className="eyebrow mb-2">Notes</p><p className="text-[11px] leading-5 text-[var(--ink-soft)]">{selected.notes || "No notes yet."}</p></div></div></section>
               <section className="mt-7"><SectionHeading title="Visit history" detail="Reservation and spend context" /><div className="border-y border-[var(--line)]">{demoWorkspace.guestVisits.filter((visit) => visit.guestId === selected.id).map((visit) => <div key={visit.id} className="flex items-center gap-3 border-t border-[var(--line)] py-3.5 first:border-0"><span className="flex size-8 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><Check className="size-3.5 text-[var(--positive)]" /></span><div className="min-w-0 flex-1"><p className="text-[10px] font-semibold">{new Date(visit.visitedAt).toLocaleDateString("en-US", { month: "long", day: "numeric" })} · party of {visit.partySize}</p><p className="mt-1 truncate text-[9px] text-[var(--ink-faint)]">{visit.source} · {visit.notes || "No visit note"}</p></div><span className="numeric text-xs font-semibold">{formatMoney(visit.spendCents)}</span></div>)}{!demoWorkspace.guestVisits.some((visit) => visit.guestId === selected.id) ? <p className="py-5 text-center text-[10px] text-[var(--ink-faint)]">No visit records yet.</p> : null}</div></section>

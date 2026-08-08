@@ -29,7 +29,7 @@ export default async function SignInPage({
 
   return (
     <main className="paper-noise relative grid min-h-svh overflow-hidden bg-[var(--graphite)] lg:grid-cols-[1.05fr_.95fr]">
-      <section className="relative hidden min-h-svh flex-col justify-between p-10 text-white lg:flex xl:p-14">
+      <section className="relative hidden min-h-svh flex-col justify-between p-10 text-white lg:flex xl:p-14 rise-in">
         <div className="absolute inset-0 workspace-grid opacity-20" />
         <div className="relative flex items-center gap-3">
           <BrandMark className="size-10 rounded-xl" />
@@ -87,7 +87,7 @@ export default async function SignInPage({
         </div>
       </section>
 
-      <section className="relative flex min-h-svh items-center justify-center bg-[var(--paper-strong)] px-5 py-10 sm:px-10 lg:rounded-l-[34px]">
+      <section className="relative flex min-h-svh items-center justify-center bg-[var(--paper-strong)] px-5 py-10 sm:px-10 lg:rounded-l-[34px] rise-in rise-in-delay-1">
         <div className="w-full max-w-[390px]">
           <div className="mb-12 flex items-center gap-3 lg:hidden">
             <BrandMark />

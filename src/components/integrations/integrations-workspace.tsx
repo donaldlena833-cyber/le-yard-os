@@ -36,6 +36,7 @@ export function IntegrationsWorkspace() {
   const [syncs, setSyncs] = useState<typeof demoWorkspace.integrationSyncs>([]);
   const [selected, setSelected] = useState<IntegrationProvider | null>(null);
   const [importing, setImporting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function importCsv(file?: File) {
@@ -44,7 +45,9 @@ export function IntegrationsWorkspace() {
     const startedAt = new Date().toISOString();
     await new Promise((resolve) => window.setTimeout(resolve, 700));
     const csvConnection = connections.find((connection) => connection.provider === "csv");
-    if (csvConnection) {
+    if (!csvConnection) {
+      setMessage("CSV import is ready once a CSV adapter is configured. No file was posted.");
+    } else {
       const created: IntegrationSync = {
         id: `sync-${Date.now()}`,
         organizationId: csvConnection.organizationId,
@@ -63,6 +66,7 @@ export function IntegrationsWorkspace() {
         updatedAt: new Date().toISOString(),
       };
       setSyncs((current) => [created, ...current]);
+      setMessage(`${file.name} was imported and queued for review.`);
     }
     setImporting(false);
   }
@@ -93,6 +97,7 @@ export function IntegrationsWorkspace() {
         <input ref={fileRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => void importCsv(event.target.files?.[0])} />
         <Button variant="accent" onClick={() => fileRef.current?.click()} disabled={importing}>{importing ? <LoaderCircle className="size-4 animate-spin" /> : <FileUp className="size-4" />}{importing ? "Validating…" : "Import CSV"}</Button>
       </div>
+      {message ? <p role="status" className="mt-3 rounded-xl bg-[var(--canvas-strong)] px-3 py-2 text-[10px] text-[var(--ink-soft)]">{message}</p> : null}
 
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Connected" value={`${configured}/${connections.length}`} detail="Live or manual adapters" />
@@ -109,7 +114,7 @@ export function IntegrationsWorkspace() {
             const connection = connections.find((item) => item.provider === provider);
             const status = connection?.status || "not_configured";
             return (
-              <button key={provider} onClick={() => setSelected(provider)} className="focus-ring group flex items-start gap-4 border-b border-[var(--line)] py-5 text-left">
+              <button type="button" key={provider} onClick={() => { setMessage(null); setSelected(provider); }} className="focus-ring group flex items-start gap-4 border-b border-[var(--line)] py-5 text-left">
                 <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-[13px] text-[11px] font-bold", status === "connected" ? "bg-[var(--positive-soft)] text-[var(--positive)]" : "bg-[var(--canvas-strong)] text-[var(--ink-soft)]")}>{providerMarks[provider]}</span>
                 <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="text-xs font-semibold">{adapter.label}</span><StatusPill tone={status === "connected" ? "positive" : status === "degraded" ? "warning" : "neutral"}>{status.replaceAll("_", " ")}</StatusPill></span><span className="mt-1.5 block text-[10px] leading-4 text-[var(--ink-faint)]">{adapter.description}</span><span className="mt-2 block text-[9px] text-[var(--ink-faint)]">{connection?.lastSyncAt ? `Last sync ${new Date(connection.lastSyncAt).toLocaleString()}` : adapter.accessNote}</span></span>
                 <ChevronRight className="mt-3 size-4 text-[var(--ink-faint)] transition-transform group-hover:translate-x-0.5" />
@@ -140,7 +145,7 @@ export function IntegrationsWorkspace() {
       <AnimatePresence>{selected ? (() => {
         const adapter = integrationAdapters[selected];
         const connection = connections.find((item) => item.provider === selected);
-        return <motion.div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}><motion.aside className="absolute inset-y-0 right-0 w-[min(94vw,500px)] overflow-y-auto bg-[var(--paper-strong)] p-5 shadow-2xl sm:p-7" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 350, damping: 35 }}><div className="flex items-start justify-between"><div><p className="eyebrow">Integration adapter</p><h3 className="mt-3 text-xl font-semibold tracking-[-0.04em]">{adapter.label}</h3><p className="mt-2 text-[10px] leading-4 text-[var(--ink-faint)]">{adapter.description}</p></div><Button variant="quiet" size="icon" onClick={() => setSelected(null)}><X className="size-4" /></Button></div><div className="mt-6 rounded-[16px] bg-[var(--canvas)] p-4"><p className="text-[10px] font-semibold">Access boundary</p><p className="mt-2 text-[10px] leading-4 text-[var(--ink-faint)]">{adapter.accessNote}</p></div><section className="mt-7"><SectionHeading title="Capabilities" /><div className="border-y border-[var(--line)]">{adapter.capabilities.map((capability) => <div key={capability.id} className="flex items-center gap-3 border-t border-[var(--line)] py-3.5 first:border-0"><span className="flex size-7 items-center justify-center rounded-full bg-[var(--canvas-strong)]"><Check className="size-3 text-[var(--positive)]" /></span><span className="min-w-0 flex-1 text-[10px] font-semibold">{capability.label}</span><StatusPill tone={capability.requiresApproval ? "warning" : "neutral"}>{capability.requiresApproval ? "Approval required" : capability.direction}</StatusPill></div>)}</div></section><section className="mt-7"><SectionHeading title="Credential handling" /><div className="flex items-start gap-3 rounded-[16px] border border-[var(--line)] p-4"><KeyRound className="mt-0.5 size-4 text-[var(--ink-faint)]" /><div><p className="text-[10px] font-semibold">Server-only encrypted secret</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Credentials are never returned to this panel after saving. Rotations create an audit event.</p></div></div></section><div className="mt-8 flex gap-2 border-t border-[var(--line)] pt-5">{adapter.supportsManualImport ? <Button variant="secondary" onClick={() => fileRef.current?.click()}><Upload className="size-3.5" /> Import file</Button> : null}<Button className="ml-auto" variant="accent" disabled={connection?.status === "connected"}><Link2 className="size-3.5" /> {connection?.status === "connected" ? "Connected" : "Configure access"}</Button></div></motion.aside></motion.div>;
+        return <motion.div className="fixed inset-0 z-50 bg-black/20 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(event) => { if (event.target === event.currentTarget) setSelected(null); }}><motion.aside className="absolute inset-y-0 right-0 w-[min(94vw,500px)] overflow-y-auto bg-[var(--paper-strong)] p-5 shadow-2xl sm:p-7" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 350, damping: 35 }}><div className="flex items-start justify-between"><div><p className="eyebrow">Integration adapter</p><h3 className="mt-3 text-xl font-semibold tracking-[-0.04em]">{adapter.label}</h3><p className="mt-2 text-[10px] leading-4 text-[var(--ink-faint)]">{adapter.description}</p></div><Button variant="quiet" size="icon" onClick={() => setSelected(null)}><X className="size-4" /></Button></div><div className="mt-6 rounded-[16px] bg-[var(--canvas)] p-4"><p className="text-[10px] font-semibold">Access boundary</p><p className="mt-2 text-[10px] leading-4 text-[var(--ink-faint)]">{adapter.accessNote}</p></div><section className="mt-7"><SectionHeading title="Capabilities" /><div className="border-y border-[var(--line)]">{adapter.capabilities.map((capability) => <div key={capability.id} className="flex items-center gap-3 border-t border-[var(--line)] py-3.5 first:border-0"><span className="flex size-7 items-center justify-center rounded-full bg-[var(--canvas-strong)]"><Check className="size-3 text-[var(--positive)]" /></span><span className="min-w-0 flex-1 text-[10px] font-semibold">{capability.label}</span><StatusPill tone={capability.requiresApproval ? "warning" : "neutral"}>{capability.requiresApproval ? "Approval required" : capability.direction}</StatusPill></div>)}</div></section><section className="mt-7"><SectionHeading title="Credential handling" /><div className="flex items-start gap-3 rounded-[16px] border border-[var(--line)] p-4"><KeyRound className="mt-0.5 size-4 text-[var(--ink-faint)]" /><div><p className="text-[10px] font-semibold">Server-only encrypted secret</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Credentials are never returned to this panel after saving. Rotations create an audit event.</p></div></div></section><div className="mt-8 flex gap-2 border-t border-[var(--line)] pt-5">{adapter.supportsManualImport ? <Button variant="secondary" onClick={() => fileRef.current?.click()}><Upload className="size-3.5" /> Import file</Button> : null}<Button className="ml-auto" variant="accent" disabled={connection?.status === "connected"} onClick={() => setMessage(`${adapter.label} access is not connected yet. Add approved credentials when ready.`)}><Link2 className="size-3.5" /> {connection?.status === "connected" ? "Connected" : "Configure access"}</Button></div></motion.aside></motion.div>;
       })() : null}</AnimatePresence>
     </PageFrame>
   );

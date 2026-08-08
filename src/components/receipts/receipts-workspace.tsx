@@ -34,6 +34,7 @@ export function ReceiptsWorkspace() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<UiReceipt | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const filtered = useMemo(() => {
@@ -110,6 +111,7 @@ export function ReceiptsWorkspace() {
           <Button variant="accent" onClick={() => fileRef.current?.click()}><Upload className="size-4" /> Upload document</Button>
         </div>
       </div>
+      {notice ? <p role="status" className="mt-3 rounded-xl bg-[var(--canvas-strong)] px-3 py-2 text-[10px] text-[var(--ink-soft)]">{notice}</p> : null}
 
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="This period" value={formatMoney(total)} detail={`${receipts.length} documents`} />
@@ -171,7 +173,7 @@ export function ReceiptsWorkspace() {
               <div className="mt-6"><p className="text-[10px] font-semibold">Recognized text</p><p className="mt-2 rounded-xl bg-[var(--canvas)] p-3 font-mono text-[9px] leading-4 text-[var(--ink-faint)]">{selected.ocrText}</p></div>
               <InvoiceInventoryMatches text={selected.ocrText} catalog={[]} />
               {selected.duplicateOfId ? <div className="mt-5 flex gap-3 rounded-xl bg-[var(--warning-soft)] p-3 text-[10px] text-[var(--warning)]"><CircleAlert className="size-4 shrink-0" />Possible duplicate of {selected.duplicateOfId}. Verify before posting.</div> : null}
-              <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-5"><Button variant="secondary"><Link2 className="size-3.5" /> Link purchase</Button><Button variant="quiet"><ArrowUpRight className="size-3.5" /> Open file</Button><Button className="ml-auto" variant="accent" disabled={selected.reviewStatus === "verified"} onClick={() => verifyReceipt(selected)}><Check className="size-3.5" /> {selected.reviewStatus === "verified" ? "Verified" : "Verify fields"}</Button></div>
+              <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-5"><Button variant="secondary" onClick={() => setNotice("Purchase linking will be enabled when the live inventory catalog is connected.")}><Link2 className="size-3.5" /> Link purchase</Button><Button variant="quiet" onClick={() => setNotice("This local preview file is held in the browser until private storage is connected.")}><ArrowUpRight className="size-3.5" /> Open file</Button><Button className="ml-auto" variant="accent" disabled={selected.reviewStatus === "verified"} onClick={() => verifyReceipt(selected)}><Check className="size-3.5" /> {selected.reviewStatus === "verified" ? "Verified" : "Verify fields"}</Button></div>
             </motion.aside>
           </motion.div>
         ) : null}

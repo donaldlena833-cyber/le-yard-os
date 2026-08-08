@@ -13,8 +13,10 @@ import {
 
 export interface LiveTodayShift {
   id: string;
+  employeeId: string | null;
   employeeName: string;
   jobName: string;
+  department: string | null;
   startsAt: string;
   endsAt: string;
   startLabel: string;
@@ -59,6 +61,7 @@ export interface LiveTodayModel {
   } | null;
   pendingInventoryCounts: number;
   configuredParLevels: number;
+  currentEmployeeId?: string | null;
 }
 
 type ShiftRow = {
@@ -99,6 +102,16 @@ export async function loadLiveToday(
     const timeZone = location.timezone;
     const now = new Date();
     const date = localDateKey(now, timeZone);
+    const canSeeManagement = workspace.role !== "employee" && workspace.persona !== "chef";
+    const { data: currentEmployee, error: currentEmployeeError } = await supabase
+      .from("employees")
+      .select("id")
+      .eq("organization_id", organizationId)
+      .eq("user_id", workspace.identity.userId)
+      .eq("employment_status", "active")
+      .maybeSingle();
+    if (currentEmployeeError) return readFailure();
+    const currentEmployeeId = currentEmployee?.id ?? null;
     const { data: settings, error: settingsError } = await supabase
       .from("organization_settings")
       .select("week_starts_on")
@@ -147,14 +160,16 @@ export async function loadLiveToday(
         .eq("organization_id", organizationId)
         .eq("location_id", locationId)
         .is("clocked_out_at", null),
-      supabase
-        .from("tasks")
-        .select("id, title, priority, status, due_at, assigned_employee_id", { count: "exact" })
-        .eq("organization_id", organizationId)
-        .or(`location_id.is.null,location_id.eq.${locationId}`)
-        .in("status", ["open", "in_progress", "blocked"])
-        .order("due_at", { ascending: true, nullsFirst: false })
-        .limit(8),
+      canSeeManagement
+        ? supabase
+            .from("tasks")
+            .select("id, title, priority, status, due_at, assigned_employee_id", { count: "exact" })
+            .eq("organization_id", organizationId)
+            .or(`location_id.is.null,location_id.eq.${locationId}`)
+            .in("status", ["open", "in_progress", "blocked"])
+            .order("due_at", { ascending: true, nullsFirst: false })
+            .limit(8)
+        : Promise.resolve({ data: [], error: null, count: 0 }),
       supabase
         .from("chat_messages")
         .select("id, body, author_id, created_at")
@@ -163,26 +178,32 @@ export async function loadLiveToday(
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(3),
-      supabase
-        .from("shift_closeouts")
-        .select("status, net_sales_cents, covers, submitted_at")
-        .eq("organization_id", organizationId)
-        .eq("location_id", locationId)
-        .eq("business_date", date)
-        .order("submitted_at", { ascending: false })
-        .limit(1),
-      supabase
-        .from("inventory_counts")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .eq("location_id", locationId)
-        .in("status", ["pending", "in_review"]),
-      supabase
-        .from("inventory_par_levels")
-        .select("inventory_item_id")
-        .eq("organization_id", organizationId)
-        .eq("location_id", locationId)
-        .lte("effective_from", date),
+      canSeeManagement
+        ? supabase
+            .from("shift_closeouts")
+            .select("status, net_sales_cents, covers, submitted_at")
+            .eq("organization_id", organizationId)
+            .eq("location_id", locationId)
+            .eq("business_date", date)
+            .order("submitted_at", { ascending: false })
+            .limit(1)
+        : Promise.resolve({ data: [], error: null }),
+      canSeeManagement
+        ? supabase
+            .from("inventory_counts")
+            .select("id", { count: "exact", head: true })
+            .eq("organization_id", organizationId)
+            .eq("location_id", locationId)
+            .in("status", ["pending", "in_review"])
+        : Promise.resolve({ data: [], error: null, count: 0 }),
+      canSeeManagement
+        ? supabase
+            .from("inventory_par_levels")
+            .select("inventory_item_id")
+            .eq("organization_id", organizationId)
+            .eq("location_id", locationId)
+            .lte("effective_from", date)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (
@@ -198,7 +219,10 @@ export async function loadLiveToday(
     }
 
     const broadShifts = (shiftResult.data ?? []) as ShiftRow[];
-    const todayShifts = broadShifts.filter(
+    const visibleShifts = workspace.role === "employee"
+      ? broadShifts.filter((shift) => shift.is_open || shift.employee_id === currentEmployeeId)
+      : broadShifts;
+    const todayShifts = visibleShifts.filter(
       (shift) => localDateKey(shift.starts_at, timeZone) === date,
     );
     const employeeIds = [
@@ -225,7 +249,7 @@ export async function loadLiveToday(
       jobRoleIds.length
         ? supabase
             .from("job_roles")
-            .select("id, name")
+            .select("id, name, department")
             .eq("organization_id", organizationId)
             .in("id", jobRoleIds)
         : Promise.resolve({ data: [], error: null }),
@@ -239,7 +263,9 @@ export async function loadLiveToday(
     const employeeNames = new Map(
       (employeeResult.data ?? []).map((employee) => [employee.id, employee.display_name]),
     );
-    const roleNames = new Map((roleResult.data ?? []).map((role) => [role.id, role.name]));
+    const roleDetails = new Map(
+      (roleResult.data ?? []).map((role) => [role.id, { name: role.name, department: role.department }]),
+    );
     const profileNames = new Map(
       (profileResult.data ?? []).map((profile) => [
         profile.id,
@@ -258,10 +284,12 @@ export async function loadLiveToday(
       currencyCode: organization.currency_code,
       shifts: todayShifts.map((shift) => ({
         id: shift.id,
+        employeeId: shift.employee_id,
         employeeName: shift.employee_id
           ? employeeNames.get(shift.employee_id) ?? "Assigned team member"
           : "Open shift",
-        jobName: roleNames.get(shift.job_role_id) ?? "Assigned role",
+        jobName: roleDetails.get(shift.job_role_id)?.name ?? "Assigned role",
+        department: roleDetails.get(shift.job_role_id)?.department ?? null,
         startsAt: shift.starts_at,
         endsAt: shift.ends_at,
         startLabel: formatLocalTime(shift.starts_at, timeZone),
@@ -302,6 +330,7 @@ export async function loadLiveToday(
       configuredParLevels: new Set(
         (parResult.data ?? []).map((par) => par.inventory_item_id),
       ).size,
+      currentEmployeeId,
     });
   } catch {
     return readFailure();

@@ -462,7 +462,7 @@ function CommandPalette({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-md border border-[var(--line)] px-1.5 py-1 text-[9px] font-semibold text-[var(--ink-faint)]"
+                className="rounded-md border border-[var(--line)] px-1.5 py-1 text-[9px] font-semibold text-[var(--ink-faint)] transition-[background-color,color,transform] duration-150 hover:-translate-y-px hover:bg-[var(--canvas)] hover:text-[var(--ink)]"
               >
                 ESC
               </button>
@@ -542,9 +542,10 @@ function MobileDrawer({
               <BrandMark />
               <span className="flex-1 text-sm font-semibold">Le Yard OS</span>
               <button
+                type="button"
                 aria-label="Close navigation"
                 onClick={onClose}
-                className="focus-ring flex size-9 items-center justify-center rounded-xl bg-white/[0.06] text-white/70"
+                className="focus-ring flex size-9 items-center justify-center rounded-xl bg-white/[0.06] text-white/70 transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-white/[0.12] hover:text-white"
               >
                 <X className="size-4" />
               </button>
@@ -667,9 +668,10 @@ function ShellContent({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <button
+              <button
+              type="button"
               onClick={() => setCommandOpen(true)}
-              className="focus-ring hidden h-9 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs text-[var(--ink-faint)] transition-colors hover:border-[var(--line-strong)] hover:text-[var(--ink)] md:flex"
+              className="focus-ring hidden h-9 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs text-[var(--ink-faint)] transition-[background-color,border-color,color,transform] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:text-[var(--ink)] md:flex"
             >
               <Search className="size-3.5" />
               <span className="pr-6">Search</span>
@@ -688,15 +690,16 @@ function ShellContent({ children }: { children: ReactNode }) {
             </Button>
             <NotificationsControl workspace={workspace} />
             {workspace.mode === "demo" ? (
-              <Button variant="primary" size="sm" className="hidden sm:inline-flex">
+              <Button variant="primary" size="sm" className="hidden sm:inline-flex" onClick={() => setCommandOpen(true)}>
                 <Plus className="size-3.5" />
                 Create
               </Button>
             ) : null}
             <button
+              type="button"
               aria-label="Open navigation"
               onClick={() => setDrawerOpen(true)}
-              className="focus-ring flex size-9 items-center justify-center rounded-xl text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)] lg:hidden"
+              className="focus-ring flex size-9 items-center justify-center rounded-xl text-[var(--ink-soft)] transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-[var(--canvas-strong)] lg:hidden"
             >
               <Menu className="size-5" />
             </button>
@@ -721,7 +724,7 @@ function ShellContent({ children }: { children: ReactNode }) {
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "focus-ring flex flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold",
+                "focus-ring flex flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-[var(--canvas)]",
                 active ? "text-[var(--accent-strong)]" : "text-[var(--ink-faint)]",
               )}
             >
@@ -731,8 +734,9 @@ function ShellContent({ children }: { children: ReactNode }) {
           );
         })}
         <button
+          type="button"
           onClick={() => setDrawerOpen(true)}
-          className="focus-ring flex flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold text-[var(--ink-faint)]"
+          className="focus-ring flex flex-col items-center justify-center gap-1 rounded-xl text-[10px] font-semibold text-[var(--ink-faint)] transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-[var(--canvas)]"
         >
           <Menu className="size-[20px]" />
           More
