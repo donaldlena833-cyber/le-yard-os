@@ -321,11 +321,7 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
     let realtimeChannel: RealtimeChannel | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
 
-    const connect = async () => {
-      if (stopped) return;
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (stopped) return;
-      await supabase.realtime.setAuth(sessionData.session?.access_token ?? null);
+    const connect = () => {
       if (stopped) return;
       realtimeChannel = supabase
         .channel(`chat:${selectedChannel.id}:${workspace.identity.userId}`)
@@ -441,12 +437,18 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
             if (retry) clearTimeout(retry);
             retry = setTimeout(() => {
               if (realtimeChannel) void supabase.removeChannel(realtimeChannel);
-              void connect();
+              connect();
             }, 1_500);
           }
         });
+      void supabase.auth.getSession().then(({ data: sessionData }) => {
+        if (!stopped && sessionData.session?.access_token) {
+          return supabase.realtime.setAuth(sessionData.session.access_token);
+        }
+        return undefined;
+      }).catch(() => undefined);
     };
-    void connect();
+    connect();
     return () => {
       stopped = true;
       if (retry) clearTimeout(retry);
