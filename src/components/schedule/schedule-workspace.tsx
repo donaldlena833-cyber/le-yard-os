@@ -18,6 +18,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   CircleAlert,
   Copy,
   GripVertical,
@@ -27,9 +28,10 @@ import {
   X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Metric, PageFrame } from "@/components/ui/page-frame";
+import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import { cn } from "@/lib/utils";
 
@@ -156,7 +158,72 @@ function DayColumn({
   );
 }
 
-export function ScheduleWorkspace() {
+const employeeScheduleShifts = [
+  { id: "irini-tonight", day: "Fri · Aug 8", date: "Tonight", time: "4:00–11:00 PM", role: "Server", covers: 86, status: "confirmed" as const },
+  { id: "irini-sat", day: "Sat · Aug 9", date: "Tomorrow", time: "4:30–11:30 PM", role: "Server", covers: 74, status: "published" as const },
+];
+
+const employeeOpenShifts = [
+  { id: "open-tue", day: "Tue · Aug 11", time: "5:00–11:00 PM", role: "Server", covers: 72 },
+  { id: "open-fri", day: "Fri · Aug 14", time: "4:30–11:30 PM", role: "Server", covers: 86 },
+];
+
+function EmployeeScheduleWorkspace() {
+  const [releasePending, setReleasePending] = useState<string | null>(null);
+  const [claimPending, setClaimPending] = useState<string | null>(null);
+  const [panel, setPanel] = useState<"time-off" | "availability" | null>(null);
+  const [notice, setNotice] = useState("");
+
+  function requestTimeOff(kind: "Full day" | "Lunch" | "Dinner") {
+    setNotice(`${kind} time-off request sent to Donald and Maris for approval.`);
+    setPanel(null);
+  }
+
+  function blockAvailability(kind: "Lunch" | "Dinner") {
+    setNotice(`${kind} availability blocked for this week. Managers will see the update before publishing.`);
+    setPanel(null);
+  }
+
+  return (
+    <PageFrame width="full" className="max-w-[1400px]">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div><div className="flex items-center gap-2"><StatusPill tone="positive" dot>Published</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Le Yard · Aug 3–9</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Your schedule</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">See your shifts, offer coverage, and tell managers when you are unavailable.</p></div>
+        <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" onClick={() => setPanel("availability")}><Clock3 className="size-3.5" /> Block availability</Button><Button variant="accent" size="sm" onClick={() => setPanel("time-off")}><CalendarCheck2 className="size-3.5" /> Request time off</Button></div>
+      </div>
+
+      {notice ? <p role="status" className="mt-4 rounded-xl bg-[var(--positive-soft)] px-3.5 py-3 text-[10px] text-[var(--positive)]">{notice}</p> : null}
+
+      <section className="mt-7">
+        <SectionHeading eyebrow="Priority" title="Open shifts & swaps" detail="Pick up a shift if it works for you. It is not yours until a manager approves it." />
+        <div className="border-y border-[var(--line)]">
+          {employeeOpenShifts.map((shift) => {
+            const pending = claimPending === shift.id;
+            return <div key={shift.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><CalendarCheck2 className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{shift.day} · {shift.role}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time} · {shift.covers} covers scheduled</p></div>{pending ? <StatusPill tone="warning">Pending manager approval</StatusPill> : <Button variant="secondary" size="sm" onClick={() => { setClaimPending(shift.id); setNotice("Pickup request sent. Donald or Maris must approve it before the shift is added to your schedule."); }}>Ask to pick up</Button>}</div>;
+          })}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <SectionHeading eyebrow="Your shifts" title="This week at Le Yard" detail="Covers are shown for service planning; pay is in Earnings." />
+        <div className="border-y border-[var(--line)]">
+          {employeeScheduleShifts.map((shift) => {
+            const pending = releasePending === shift.id;
+            return <div key={shift.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><CalendarCheck2 className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{shift.day} · {shift.role}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time} · {shift.covers} covers scheduled</p></div>{pending ? <StatusPill tone="warning">Release pending approval</StatusPill> : shift.status === "confirmed" ? <><StatusPill tone="positive">Confirmed</StatusPill><Button variant="quiet" size="sm" onClick={() => { setReleasePending(shift.id); setNotice("Release request sent. The shift remains yours until Donald or Maris approves the release."); }}>Release shift</Button></> : <StatusPill tone="neutral">Published</StatusPill>}</div>;
+          })}
+        </div>
+      </section>
+
+      <section className="mt-8 grid gap-8 lg:grid-cols-2">
+        <div><SectionHeading eyebrow="Availability" title="Block a part of a day" detail="Lunch and dinner can be blocked separately." /><div className="border-y border-[var(--line)]"><div className="flex items-center justify-between gap-3 border-t border-[var(--line)] px-3 py-4 first:border-0"><div><p className="text-xs font-semibold">Wed · Aug 12</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">Lunch · 11:00 AM–3:00 PM</p></div><Button variant="secondary" size="sm" onClick={() => blockAvailability("Lunch")}>Block lunch</Button></div><div className="flex items-center justify-between gap-3 border-t border-[var(--line)] px-3 py-4"><div><p className="text-xs font-semibold">Sun · Aug 16</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">Dinner · 4:00–11:00 PM</p></div><Button variant="secondary" size="sm" onClick={() => blockAvailability("Dinner")}>Block dinner</Button></div></div></div>
+        <div><SectionHeading eyebrow="Approval trail" title="Requests stay visible" detail="You will see the decision here when a manager reviews it." /><div className="border-y border-[var(--line)]"><div className="flex items-center gap-3 px-3 py-4"><StatusPill tone="warning">Example</StatusPill><p className="text-[10px] leading-4 text-[var(--ink-faint)]">Release and pickup requests never silently change your schedule.</p></div></div></div>
+      </section>
+
+      {panel ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 px-4 backdrop-blur-[3px]" onMouseDown={(event) => { if (event.currentTarget === event.target) setPanel(null); }}><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-[22px] bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-float)]"><div className="flex items-start justify-between"><div><p className="eyebrow">{panel === "time-off" ? "Time off" : "Availability"}</p><h3 className="mt-2 text-lg font-semibold">{panel === "time-off" ? "Tell managers when you need off" : "Block a partial shift"}</h3></div><Button variant="quiet" size="icon" aria-label="Close request" onClick={() => setPanel(null)}><X className="size-4" /></Button></div>{panel === "time-off" ? <div className="mt-6 grid gap-2"><Button variant="secondary" onClick={() => requestTimeOff("Full day")}>Full day · Aug 15</Button><Button variant="secondary" onClick={() => requestTimeOff("Lunch")}>Lunch · Aug 15</Button><Button variant="secondary" onClick={() => requestTimeOff("Dinner")}>Dinner · Aug 15</Button></div> : <div className="mt-6 grid gap-2"><Button variant="secondary" onClick={() => blockAvailability("Lunch")}>Block lunch · Aug 12</Button><Button variant="secondary" onClick={() => blockAvailability("Dinner")}>Block dinner · Aug 16</Button></div>}</div></div> : null}
+    </PageFrame>
+  );
+}
+
+function ManagerScheduleWorkspace() {
   const [shifts, setShifts] = useState(initialShifts);
   const [selected, setSelected] = useState<Shift | null>(null);
   const [published, setPublished] = useState(false);
@@ -321,4 +388,9 @@ export function ScheduleWorkspace() {
       </div>
     </PageFrame>
   );
+}
+
+export function ScheduleWorkspace() {
+  const workspace = useWorkspaceContext();
+  return workspace.role === "employee" ? <EmployeeScheduleWorkspace /> : <ManagerScheduleWorkspace />;
 }

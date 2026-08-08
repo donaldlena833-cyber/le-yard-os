@@ -14,6 +14,7 @@ import {
   Settings2,
   Sparkles,
   UsersRound,
+  WalletCards,
 } from "lucide-react";
 import type { AppRole } from "@/types";
 
@@ -42,6 +43,7 @@ export const navigationSections: Array<{
       },
       { href: "/team", label: "Team", icon: UsersRound, roles: ["owner", "admin", "manager"] },
       { href: "/time-clock", label: "Time clock", icon: Clock3, mobile: true },
+      { href: "/earnings", label: "Earnings", icon: WalletCards },
       {
         href: "/messages",
         label: "Messages",
@@ -112,6 +114,10 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/time-clock": {
     title: "Time clock",
     detail: "Live attendance · Current location",
+  },
+  "/earnings": {
+    title: "Earnings",
+    detail: "Paystubs · Tips and hourly pay",
   },
   "/messages": {
     title: "Messages",

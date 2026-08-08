@@ -1,9 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
+import Link from "next/link";
 import {
   AlertTriangle,
   ArrowRight,
+  CalendarDays,
   Check,
   ChevronRight,
   CircleDollarSign,
@@ -13,6 +15,7 @@ import {
   Sparkles,
   UsersRound,
   Utensils,
+  WalletCards,
 } from "lucide-react";
 import { useState } from "react";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
@@ -37,10 +40,87 @@ const initialActions = [
   { id: "a3", tone: "warning", title: "Japanese whisky below par", detail: "2.4 bottles on hand · par is 5", icon: PackageSearch },
 ];
 
+const employeeOpenShifts = [
+  { id: "open-tue", day: "Tue · Aug 11", time: "5:00–11:00 PM", role: "Server", covers: 72 },
+  { id: "open-fri", day: "Fri · Aug 14", time: "4:30–11:30 PM", role: "Server", covers: 86 },
+];
+
+function EmployeeTodayWorkspace() {
+  const workspace = useWorkspaceContext();
+  const [requestedShift, setRequestedShift] = useState<string | null>(null);
+  const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
+
+  return (
+    <PageFrame>
+      <section className="relative overflow-hidden rounded-[26px] bg-[var(--graphite)] px-5 py-6 text-white sm:px-7 sm:py-7 lg:px-8">
+        <div className="absolute inset-0 workspace-grid opacity-20" />
+        <div className="relative flex flex-col justify-between gap-7 xl:flex-row xl:items-end">
+          <div className="max-w-xl">
+            <p className="text-[10px] font-semibold tracking-[0.16em] text-[#dfa14a] uppercase">Your shift</p>
+            <h2 className="mt-4 text-[clamp(2rem,4.2vw,4rem)] leading-none font-medium tracking-[-0.065em]">Good afternoon, {firstName}.</h2>
+            <p className="mt-4 text-sm leading-6 text-white/55">Le Yard · Server · Tonight, 4:00–11:00 PM</p>
+          </div>
+          <div className="flex items-end gap-8 border-t border-white/10 pt-5 xl:border-0 xl:pt-0">
+            <div>
+              <p className="text-[9px] tracking-[0.14em] text-white/55 uppercase">Covers on your shift</p>
+              <p className="numeric mt-2 text-3xl font-medium tracking-[-0.05em]">86</p>
+            </div>
+            <div>
+              <p className="text-[9px] tracking-[0.14em] text-white/55 uppercase">Local time</p>
+              <p className="mt-2 text-2xl font-medium tracking-[-0.05em]"><LiveClock /></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-8 grid gap-8 xl:grid-cols-[1.2fr_.8fr]">
+        <section>
+          <div className="flex items-end justify-between gap-3">
+            <SectionHeading eyebrow="Priority" title="Open shifts & swaps" detail="Ask to pick up a shift; an owner or manager approves it." className="mb-0" />
+            <Link href="/schedule" className="focus-ring hidden items-center gap-1 text-[10px] font-semibold text-[var(--accent-strong)] sm:flex">Open schedule <ArrowRight className="size-3" /></Link>
+          </div>
+          <div className="mt-4 border-y border-[var(--line)]">
+            {employeeOpenShifts.map((shift) => {
+              const requested = requestedShift === shift.id;
+              return (
+                <div key={shift.id} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-3 py-4 first:border-0">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><CalendarDays className="size-4" /></span>
+                  <div className="min-w-0 flex-1"><p className="text-xs font-semibold">{shift.day} · {shift.role}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time} · {shift.covers} covers scheduled</p></div>
+                  {requested ? <StatusPill tone="warning">Pending approval</StatusPill> : <Button variant="secondary" size="sm" onClick={() => setRequestedShift(shift.id)}>Ask to pick up</Button>}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section>
+          <div className="flex items-end justify-between gap-3"><SectionHeading eyebrow="Pay" title="This week" detail="Tips and hourly pay update after approval." className="mb-0" /><WalletCards className="mb-1 size-5 text-[var(--accent)]" /></div>
+          <div className="mt-4 border-y border-[var(--line)]">
+            <div className="flex items-baseline justify-between gap-3 px-3 py-4"><span className="text-[10px] text-[var(--ink-faint)]">Estimated earned</span><span className="numeric text-xl font-semibold">$464.40</span></div>
+            <div className="grid grid-cols-3 divide-x border-t border-[var(--line)]"><div className="px-3 py-3"><p className="numeric text-sm font-semibold">22.5h</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">Hours</p></div><div className="px-3 py-3"><p className="numeric text-sm font-semibold">$104</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">Tips</p></div><div className="px-3 py-3"><p className="numeric text-sm font-semibold">$360</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">Hourly</p></div></div>
+          </div>
+          <Link href="/earnings" className="focus-ring mt-4 flex items-center justify-between border-b border-[var(--line)] pb-3 text-[11px] font-semibold">View earnings & paystubs <ArrowRight className="size-3.5 text-[var(--accent-strong)]" /></Link>
+        </section>
+      </div>
+
+      <section className="mt-8">
+        <div className="flex items-end justify-between gap-3"><SectionHeading eyebrow="Your week" title="Upcoming shifts" detail="Release a shift from the schedule when you need coverage." className="mb-0" /><Link href="/schedule" className="focus-ring text-[10px] font-semibold text-[var(--accent-strong)]">Manage availability</Link></div>
+        <div className="mt-4 border-y border-[var(--line)]">
+          {[{ day: "Tonight · Aug 8", time: "4:00–11:00 PM", covers: 86 }, { day: "Sat · Aug 9", time: "4:30–11:30 PM", covers: 74 }].map((shift, index) => (
+            <div key={shift.day} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-3 py-4 first:border-0"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><CalendarDays className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-xs font-semibold">{shift.day}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.time} · {shift.covers} covers scheduled</p></div>{index === 0 ? <StatusPill tone="positive">Confirmed</StatusPill> : <StatusPill tone="neutral">Published</StatusPill>}</div>
+          ))}
+        </div>
+      </section>
+    </PageFrame>
+  );
+}
+
 export function TodayWorkspace() {
   const workspace = useWorkspaceContext();
   const [actions, setActions] = useState(initialActions);
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
+
+  if (workspace.role === "employee") return <EmployeeTodayWorkspace />;
 
   return (
     <PageFrame>

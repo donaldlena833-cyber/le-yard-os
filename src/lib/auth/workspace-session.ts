@@ -46,7 +46,7 @@ async function createDemoWorkspaceContext(
       organizationId: location.organizationId,
       name: playground
         ? index === 0
-          ? "Le Yard · Ninth Avenue"
+          ? "Le Yard"
           : "Private Events · Mock"
         : location.name,
       isPrimary: index === 0,
@@ -67,7 +67,9 @@ async function createDemoWorkspaceContext(
 
   const preference = await readWorkspacePreference(identity.id);
   const role = isEmployee ? ("employee" as const) : ("owner" as const);
-  const accessibleLocations = role === "employee" ? locations.slice(0, 1) : locations;
+  // The playground represents one real room. Keep the legacy second mock location
+  // out of every role's visible scope until multi-room operations are enabled.
+  const accessibleLocations = playground ? locations.slice(0, 1) : role === "employee" ? locations.slice(0, 1) : locations;
   const activeLocation =
     preference?.organizationId === organization.id
       ? accessibleLocations.find((location) => location.id === preference.locationId) ?? accessibleLocations[0]!
