@@ -51,8 +51,13 @@ async function createDemoWorkspaceContext(
         : location.name,
       isPrimary: index === 0,
     }));
+  const isEmployee = principal === "irini";
   const identityId =
-    principal === "maris" ? demoIds.people.maris : demoIds.people.donald;
+    principal === "maris"
+      ? demoIds.people.maris
+      : isEmployee
+        ? demoIds.people.irini
+        : demoIds.people.donald;
   const identity = demoWorkspace.people.find(
     (person) => person.id === identityId,
   )!;
@@ -61,10 +66,12 @@ async function createDemoWorkspaceContext(
   )!;
 
   const preference = await readWorkspacePreference(identity.id);
+  const role = isEmployee ? ("employee" as const) : ("owner" as const);
+  const accessibleLocations = role === "employee" ? locations.slice(0, 1) : locations;
   const activeLocation =
     preference?.organizationId === organization.id
-      ? locations.find((location) => location.id === preference.locationId) ?? locations[0]!
-      : locations[0]!;
+      ? accessibleLocations.find((location) => location.id === preference.locationId) ?? accessibleLocations[0]!
+      : accessibleLocations[0]!;
   const workspaceChoice = {
     membershipId: membership.id,
     organization: {
@@ -73,9 +80,9 @@ async function createDemoWorkspaceContext(
         ? "Le Yard"
         : organization.name.replace(" Demo Group", " Hospitality"),
     },
-    locations,
-    role: "owner" as const,
-    organizationWide: true,
+    locations: accessibleLocations,
+    role,
+    organizationWide: role !== "employee",
   };
 
   return {
@@ -88,11 +95,11 @@ async function createDemoWorkspaceContext(
     },
     organization: workspaceChoice.organization,
     activeLocation,
-    locations,
+    locations: accessibleLocations,
     availableWorkspaces: [workspaceChoice],
     membershipId: membership.id,
-    role: "owner",
-    organizationWide: true,
+    role,
+    organizationWide: role !== "employee",
   };
 }
 

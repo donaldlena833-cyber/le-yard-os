@@ -8,9 +8,9 @@ import {
 export const PLAYGROUND_SESSION_COOKIE =
   "__Host-le-yard-playground-session";
 export const PLAYGROUND_SESSION_TTL_SECONDS = 8 * 60 * 60;
-export const PLAYGROUND_PASSWORD_MINIMUM_LENGTH = 10;
+export const PLAYGROUND_PASSWORD_MINIMUM_LENGTH = 9;
 
-export type PlaygroundPrincipalId = "donald" | "maris";
+export type PlaygroundPrincipalId = "donald" | "maris" | "irini";
 
 export interface PlaygroundUser {
   principal: PlaygroundPrincipalId;
@@ -54,7 +54,7 @@ interface PlaygroundSessionPayload {
   exp: number;
 }
 
-const PRINCIPALS: readonly PlaygroundPrincipalId[] = ["donald", "maris"];
+const PRINCIPALS: readonly PlaygroundPrincipalId[] = ["donald", "maris", "irini"];
 const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,62}[a-z0-9])?$/;
 const HASH_PREFIX = "scrypt-v1";
 const SCRYPT_OPTIONS = {

@@ -37,6 +37,7 @@ import {
   allNavItems,
   mobileNavItems,
   navigationSections,
+  isNavItemVisible,
   routeMeta,
   settingsItem,
 } from "@/components/shell/navigation";
@@ -351,14 +352,16 @@ function Sidebar({
               {section.label}
             </p>
             <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <NavigationLink
-                  key={item.href}
-                  item={item}
-                  pathname={pathname}
-                  showBadges={workspace.mode === "demo"}
-                />
-              ))}
+              {section.items.map((item) =>
+                isNavItemVisible(item, workspace.role) ? (
+                  <NavigationLink
+                    key={item.href}
+                    item={item}
+                    pathname={pathname}
+                    showBadges={workspace.mode === "demo"}
+                  />
+                ) : null,
+              )}
             </div>
           </div>
         ))}
@@ -393,19 +396,23 @@ function Sidebar({
 function CommandPalette({
   open,
   onClose,
+  role,
 }: {
   open: boolean;
   onClose: () => void;
+  role: WorkspaceContextValue["role"];
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const filtered = useMemo(
     () =>
-      allNavItems.filter((item) =>
-        item.label.toLowerCase().includes(query.trim().toLowerCase()),
+      allNavItems.filter(
+        (item) =>
+          isNavItemVisible(item, role) &&
+          item.label.toLowerCase().includes(query.trim().toLowerCase()),
       ),
-    [query],
+    [query, role],
   );
 
   useEffect(() => {
@@ -554,19 +561,23 @@ function MobileDrawer({
                   <p className="mb-1.5 px-3 text-[9px] font-semibold tracking-[0.16em] text-white/55 uppercase">
                     {section.label}
                   </p>
-                  {section.items.map((item) => (
-                    <NavigationLink
-                      key={item.href}
-                      item={item}
-                      pathname={pathname}
-                      onNavigate={onClose}
-                      showBadges={workspace.mode === "demo"}
-                    />
-                  ))}
+                  {section.items.map((item) =>
+                    isNavItemVisible(item, workspace.role) ? (
+                      <NavigationLink
+                        key={item.href}
+                        item={item}
+                        pathname={pathname}
+                        onNavigate={onClose}
+                        showBadges={workspace.mode === "demo"}
+                      />
+                    ) : null,
+                  )}
                 </div>
               ))}
               <div className="mt-5 border-t border-white/[0.07] pt-3">
-                <NavigationLink item={settingsItem} pathname={pathname} onNavigate={onClose} />
+                {isNavItemVisible(settingsItem, workspace.role) ? (
+                  <NavigationLink item={settingsItem} pathname={pathname} onNavigate={onClose} />
+                ) : null}
               </div>
             </nav>
             <div className="mt-3 border-t border-white/[0.07] pt-4 pb-1">
@@ -725,6 +736,7 @@ function ShellContent({ children }: { children: ReactNode }) {
       <CommandPalette
         key={commandOpen ? "open" : "closed"}
         open={commandOpen}
+        role={workspace.role}
         onClose={() => setCommandOpen(false)}
       />
       <MobileDrawer

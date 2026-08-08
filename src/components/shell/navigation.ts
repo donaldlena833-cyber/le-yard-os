@@ -15,6 +15,7 @@ import {
   Sparkles,
   UsersRound,
 } from "lucide-react";
+import type { AppRole } from "@/types";
 
 export type NavItem = {
   href: string;
@@ -22,6 +23,7 @@ export type NavItem = {
   icon: LucideIcon;
   badge?: string;
   mobile?: boolean;
+  roles?: readonly AppRole[];
 };
 
 export const navigationSections: Array<{
@@ -38,7 +40,7 @@ export const navigationSections: Array<{
         icon: CalendarDays,
         mobile: true,
       },
-      { href: "/team", label: "Team", icon: UsersRound },
+      { href: "/team", label: "Team", icon: UsersRound, roles: ["owner", "admin", "manager"] },
       { href: "/time-clock", label: "Time clock", icon: Clock3, mobile: true },
       {
         href: "/messages",
@@ -52,10 +54,10 @@ export const navigationSections: Array<{
   {
     label: "Back office",
     items: [
-      { href: "/closeout", label: "Closeout & tips", icon: HandCoins },
-      { href: "/receipts", label: "Receipts", icon: ReceiptText, badge: "3" },
-      { href: "/inventory", label: "Inventory", icon: Boxes },
-      { href: "/guests", label: "Guests", icon: ContactRound },
+      { href: "/closeout", label: "Closeout & tips", icon: HandCoins, roles: ["owner", "admin", "manager"] },
+      { href: "/receipts", label: "Receipts", icon: ReceiptText, badge: "3", roles: ["owner", "admin", "manager"] },
+      { href: "/inventory", label: "Inventory", icon: Boxes, roles: ["owner", "admin", "manager"] },
+      { href: "/guests", label: "Guests", icon: ContactRound, roles: ["owner", "admin", "manager"] },
       { href: "/tasks", label: "Tasks & SOPs", icon: CheckSquare2 },
     ],
   },
@@ -66,9 +68,10 @@ export const navigationSections: Array<{
         href: "/reports",
         label: "Reports",
         icon: ChartNoAxesCombined,
+        roles: ["owner", "admin", "manager"],
       },
-      { href: "/assistant", label: "Ask Le Yard", icon: Sparkles },
-      { href: "/integrations", label: "Integrations", icon: PlugZap },
+      { href: "/assistant", label: "Ask Le Yard", icon: Sparkles, roles: ["owner", "admin", "manager"] },
+      { href: "/integrations", label: "Integrations", icon: PlugZap, roles: ["owner", "admin", "manager"] },
     ],
   },
 ];
@@ -77,6 +80,7 @@ export const settingsItem: NavItem = {
   href: "/settings",
   label: "Settings",
   icon: Settings2,
+  roles: ["owner", "admin", "manager"],
 };
 
 export const allNavItems = [
@@ -87,6 +91,10 @@ export const allNavItems = [
 export const mobileNavItems = navigationSections[0].items.filter(
   (item) => item.mobile,
 );
+
+export function isNavItemVisible(item: NavItem, role: AppRole): boolean {
+  return !item.roles || item.roles.includes(role);
+}
 
 export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/today": {

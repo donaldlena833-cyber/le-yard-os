@@ -42,6 +42,14 @@ describe("playground password hashing script", () => {
             Buffer.alloc(16, 9),
           ),
         },
+        {
+          principal: "irini",
+          username: "employee-three",
+          passwordHash: createPlaygroundPasswordHash(
+            "third fixture password9",
+            Buffer.alloc(16, 10),
+          ),
+        },
       ]),
     });
 

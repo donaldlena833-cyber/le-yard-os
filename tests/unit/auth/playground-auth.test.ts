@@ -35,6 +35,14 @@ function configuration(): PlaygroundAuthConfiguration {
           Buffer.alloc(16, 2),
         ),
       },
+      {
+        principal: "irini",
+        username: "employee-one",
+        passwordHash: createPlaygroundPasswordHash(
+          "fixture employee three3",
+          Buffer.alloc(16, 3),
+        ),
+      },
     ],
   };
 }
@@ -49,7 +57,7 @@ function assessmentSource(config = configuration()) {
 }
 
 describe("playground authentication", () => {
-  it("accepts exactly two salted owner credentials only in Vercel Preview", () => {
+  it("accepts the two owner and one employee credentials only in Vercel Preview", () => {
     const accepted = assessPlaygroundAuthConfiguration(assessmentSource());
     const wrongEnvironment = assessPlaygroundAuthConfiguration({
       ...assessmentSource(),
@@ -63,6 +71,7 @@ describe("playground authentication", () => {
     expect(accepted.ready).toBe(true);
     expect(accepted.configuration?.users.map((user) => user.principal)).toEqual([
       "donald",
+      "irini",
       "maris",
     ]);
     expect(wrongEnvironment.ready).toBe(false);
@@ -183,7 +192,7 @@ describe("playground authentication", () => {
   it("refuses to create weak preview password hashes", () => {
     expect(() =>
       createPlaygroundPasswordHash("short1", Buffer.alloc(16, 3)),
-    ).toThrow(/10–128/);
+    ).toThrow(/9–128/);
     expect(() =>
       createPlaygroundPasswordHash("letters-only", Buffer.alloc(16, 3)),
     ).toThrow(/letter and number/);
