@@ -365,7 +365,9 @@ function Sidebar({
       </nav>
 
       <div className="border-t border-white/[0.07] p-3">
-        <NavigationLink item={settingsItem} pathname={pathname} />
+        {isNavItemVisible(settingsItem, workspace.role, workspace.persona) ? (
+          <NavigationLink item={settingsItem} pathname={pathname} />
+        ) : null}
         <div className="mt-2 flex items-center gap-3 px-3 py-2.5">
           <Avatar name={workspace.identity.displayName} size="sm" />
           <div className="min-w-0 flex-1">
