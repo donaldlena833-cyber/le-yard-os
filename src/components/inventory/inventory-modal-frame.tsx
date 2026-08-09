@@ -2,7 +2,9 @@
 
 import { motion } from "motion/react";
 import { X } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useRef } from "react";
+import { createPortal } from "react-dom";
+import { useModalDialog } from "@/lib/accessibility/use-modal-dialog";
 import { cn } from "@/lib/utils";
 
 export function InventoryModalFrame({
@@ -11,112 +13,38 @@ export function InventoryModalFrame({
   labelledBy,
   notice,
   onClose,
+  returnFocus,
   children,
   width = "max-w-3xl",
+  layout = "scroll",
 }: {
   title: string;
   description: string;
   labelledBy: string;
   notice?: string;
   onClose: () => void;
+  returnFocus?: HTMLElement | null;
   children: ReactNode;
   width?: string;
+  layout?: "scroll" | "task";
 }) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
-  const onCloseRef = useRef(onClose);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(
-    typeof document !== "undefined" && document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null,
-  );
+  useModalDialog({
+    dialogRef,
+    overlayRef,
+    onClose,
+    initialFocusSelector: "[autofocus], [data-modal-initial]",
+    returnFocusTarget: returnFocus,
+  });
 
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
+  if (typeof document === "undefined") return null;
 
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    const previouslyFocused = previouslyFocusedRef.current;
-    const hiddenSiblings: Array<{
-      element: HTMLElement;
-      inert: boolean;
-      ariaHidden: string | null;
-    }> = [];
-    let branch: HTMLElement | null = overlayRef.current;
-    while (branch?.parentElement && branch.parentElement !== document.body) {
-      for (const sibling of branch.parentElement.children) {
-        if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
-        hiddenSiblings.push({
-          element: sibling,
-          inert: sibling.inert,
-          ariaHidden: sibling.getAttribute("aria-hidden"),
-        });
-        sibling.inert = true;
-        sibling.setAttribute("aria-hidden", "true");
-      }
-      branch = branch.parentElement;
-    }
-    document.body.style.overflow = "hidden";
-
-    const selector = [
-      "button:not([disabled])",
-      "[href]",
-      "input:not([disabled])",
-      "select:not([disabled])",
-      "textarea:not([disabled])",
-      "[tabindex]:not([tabindex='-1'])",
-    ].join(",");
-    const focusable = () => Array.from(
-      dialogRef.current?.querySelectorAll<HTMLElement>(selector) ?? [],
-    ).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
-
-    function keepFocusInside(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const elements = focusable();
-      if (!elements.length) {
-        event.preventDefault();
-        dialogRef.current?.focus();
-        return;
-      }
-      const first = elements[0];
-      const last = elements[elements.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (active === last || !dialogRef.current?.contains(active))) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-    document.addEventListener("keydown", keepFocusInside, true);
-    if (!dialogRef.current?.contains(document.activeElement)) {
-      (dialogRef.current?.querySelector<HTMLElement>("[autofocus]") ??
-        focusable()[0] ??
-        dialogRef.current)?.focus();
-    }
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", keepFocusInside, true);
-      for (const { element, inert, ariaHidden } of hiddenSiblings) {
-        element.inert = inert;
-        if (ariaHidden === null) element.removeAttribute("aria-hidden");
-        else element.setAttribute("aria-hidden", ariaHidden);
-      }
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
-    };
-  }, []);
-
-  return (
+  return createPortal(
     <motion.div
       ref={overlayRef}
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/30 px-3 py-5 backdrop-blur-[3px] sm:py-8"
+      data-inventory-modal-overlay
+      className="fixed inset-0 z-[100] flex items-stretch justify-center bg-black/35 p-0 backdrop-blur-[4px] sm:items-center sm:p-6"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -126,13 +54,15 @@ export function InventoryModalFrame({
     >
       <motion.section
         ref={dialogRef}
+        data-inventory-modal-layout={layout}
         aria-labelledby={labelledBy}
         aria-describedby={`${labelledBy}-description`}
         aria-modal="true"
         role="dialog"
         tabIndex={-1}
         className={cn(
-          "mx-auto w-full overflow-hidden rounded-[26px] bg-[var(--paper-strong)] shadow-[var(--shadow-float)]",
+          "relative flex h-[100dvh] max-h-[100dvh] w-full flex-col overflow-hidden bg-[var(--paper-strong)] shadow-[var(--shadow-float)] sm:h-auto sm:max-h-[calc(100dvh-3rem)] sm:rounded-[26px] sm:border sm:border-[var(--line)]",
+          layout === "task" && "sm:h-[min(840px,calc(100dvh-3rem))]",
           width,
         )}
         initial={{ y: 14, scale: 0.985 }}
@@ -140,26 +70,35 @@ export function InventoryModalFrame({
         exit={{ y: 10, scale: 0.985 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
       >
-        <header className="flex items-start justify-between gap-5 border-b border-[var(--line)] px-5 py-5 sm:px-7">
+        <header className="flex shrink-0 items-start justify-between gap-5 border-b border-[var(--line)] bg-[var(--paper-strong)] px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-4 sm:px-7 sm:py-5">
           <div>
             <h3 id={labelledBy} className="text-xl font-medium tracking-[-0.04em]">
               {title}
             </h3>
-            <p id={`${labelledBy}-description`} className="mt-1 max-w-xl text-[11px] leading-5 text-[var(--ink-faint)]">
+            <p id={`${labelledBy}-description`} className="mt-1 max-w-xl text-[13px] leading-5 text-[var(--ink-faint)]">
               {description}
             </p>
           </div>
-          <button type="button" aria-label="Close dialog" onClick={onClose} className="focus-ring flex size-9 shrink-0 items-center justify-center rounded-full text-[var(--ink-faint)] transition hover:bg-[var(--canvas-strong)] hover:text-[var(--ink)]">
+          <button type="button" aria-label="Close dialog" onClick={onClose} className="focus-ring flex size-11 shrink-0 items-center justify-center rounded-full text-[var(--ink-faint)] transition hover:bg-[var(--canvas-strong)] hover:text-[var(--ink)]">
             <X className="size-4" />
           </button>
         </header>
         {notice ? (
-          <div role="alert" aria-live="assertive" className="mx-5 mt-4 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-[10px] leading-4 text-[var(--danger)] sm:mx-7">
+          <div role="alert" aria-live="assertive" className="mx-5 mt-4 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-xs leading-4 text-[var(--danger)] sm:mx-7">
             {notice}
           </div>
         ) : null}
-        {children}
+        <div
+          data-inventory-modal-body
+          className={cn(
+            "min-h-0 flex-1",
+            layout === "scroll" ? "overflow-y-auto overscroll-contain" : "overflow-hidden",
+          )}
+        >
+          {children}
+        </div>
       </motion.section>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }

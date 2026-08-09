@@ -85,7 +85,7 @@ export function SignInForm({
       <SubmitButton />
 
       {demoMode && !playgroundMode ? (
-        <p className="text-center text-[10px] leading-4 text-[var(--ink-faint)]">
+        <p className="text-center text-xs leading-4 text-[var(--ink-faint)]">
           Local demo mode accepts any non-empty sign-in values.
         </p>
       ) : null}

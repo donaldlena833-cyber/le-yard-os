@@ -93,31 +93,31 @@ export function CapabilityConfiguration({
         />
         <div className="grid gap-3 rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <label>
-            <span className="mb-1.5 block text-[9px] font-semibold tracking-[.08em] text-[var(--ink-faint)] uppercase">Job role</span>
-            <select value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[11px]">
+            <span className="mb-1.5 block text-xs font-semibold tracking-[.08em] text-[var(--ink-faint)] uppercase">Job role</span>
+            <select value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[13px]">
               {data.jobRoles.map((role) => <option key={role.id} value={role.id}>{role.name}{role.active ? "" : " · inactive"}</option>)}
             </select>
           </label>
           <div className="flex rounded-xl border border-[var(--line)] bg-[var(--canvas)] p-1" role="group" aria-label="Capability scope">
-            <button type="button" onClick={() => setScope("location")} className={cn("focus-ring flex min-h-8 items-center gap-1.5 rounded-lg px-3 text-[10px] font-semibold", scope === "location" ? "bg-[var(--paper-strong)] text-[var(--ink)] shadow-sm" : "text-[var(--ink-faint)]")}><MapPin className="size-3" />This location</button>
-            <button type="button" onClick={() => setScope("organization")} className={cn("focus-ring flex min-h-8 items-center gap-1.5 rounded-lg px-3 text-[10px] font-semibold", scope === "organization" ? "bg-[var(--paper-strong)] text-[var(--ink)] shadow-sm" : "text-[var(--ink-faint)]")}><ShieldCheck className="size-3" />All locations</button>
+            <button type="button" onClick={() => setScope("location")} className={cn("focus-ring flex min-h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold", scope === "location" ? "bg-[var(--paper-strong)] text-[var(--ink)] shadow-sm" : "text-[var(--ink-faint)]")}><MapPin className="size-3" />This location</button>
+            <button type="button" onClick={() => setScope("organization")} className={cn("focus-ring flex min-h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold", scope === "organization" ? "bg-[var(--paper-strong)] text-[var(--ink)] shadow-sm" : "text-[var(--ink-faint)]")}><ShieldCheck className="size-3" />All locations</button>
           </div>
         </div>
-        <p className="mt-3 text-[10px] leading-4 text-[var(--ink-faint)]">
+        <p className="mt-3 text-xs leading-4 text-[var(--ink-faint)]">
           {scope === "location" ? `Assignments below apply only at ${workspace.activeLocation.name}.` : "Assignments below apply at every active location this employee can access."}
         </p>
       </section>
 
       {selectedRole ? domains.map(([domain, definitions]) => (
         <section key={domain}>
-          <div className="mb-3 flex items-center gap-2"><KeyRound className="size-3.5 text-[var(--accent-strong)]" /><h3 className="text-[10px] font-semibold tracking-[.12em] uppercase">{domain}</h3></div>
+          <div className="mb-3 flex items-center gap-2"><KeyRound className="size-3.5 text-[var(--accent-strong)]" /><h3 className="text-xs font-semibold tracking-[.12em] uppercase">{domain}</h3></div>
           <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
             {definitions.map((definition) => {
               const assignment = assignments.get(definition.key);
               const active = assignment?.active === true;
               return (
                 <div key={definition.key} className="flex items-center gap-3 py-3.5">
-                  <span className="min-w-0 flex-1"><span className="block text-[11px] font-semibold">{definition.label}</span><span className="mt-1 block text-[9px] leading-4 text-[var(--ink-faint)]">{definition.description}</span><code className="mt-1.5 block text-[8px] text-[var(--ink-faint)]">{definition.key}</code></span>
+                  <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">{definition.label}</span><span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">{definition.description}</span><code className="mt-1.5 block text-xs text-[var(--ink-faint)]">{definition.key}</code></span>
                   <StatusPill tone={active ? "positive" : "neutral"}>{active ? "Assigned" : "Off"}</StatusPill>
                   <Button variant={active ? "quiet" : "secondary"} size="sm" disabled={pending || !selectedRole.active} onClick={() => toggle(definition.key)}>
                     {pending ? <LoaderCircle className="size-3 animate-spin" /> : active ? null : <Check className="size-3" />}
@@ -128,10 +128,10 @@ export function CapabilityConfiguration({
             })}
           </div>
         </section>
-      )) : <p className="rounded-[18px] border border-dashed border-[var(--line-strong)] p-8 text-center text-[10px] text-[var(--ink-faint)]">Create a job role before assigning operational capabilities.</p>}
+      )) : <p className="rounded-[18px] border border-dashed border-[var(--line-strong)] p-8 text-center text-xs text-[var(--ink-faint)]">Create a job role before assigning operational capabilities.</p>}
 
-      {message ? <p role="status" aria-live="polite" className="rounded-xl bg-[var(--canvas)] px-4 py-3 text-[10px]">{message}</p> : null}
-      <p className="flex items-start gap-2 rounded-[16px] bg-[var(--accent-soft)]/50 p-4 text-[10px] leading-4 text-[var(--accent-strong)]"><ShieldCheck className="mt-0.5 size-4 shrink-0" />Owners and Admins retain their existing administrative boundary. A job-role capability never grants user management, credentials, security settings, or owner approval powers.</p>
+      {message ? <p role="status" aria-live="polite" className="rounded-xl bg-[var(--canvas)] px-4 py-3 text-xs">{message}</p> : null}
+      <p className="flex items-start gap-2 rounded-[16px] bg-[var(--accent-soft)]/50 p-4 text-xs leading-4 text-[var(--accent-strong)]"><ShieldCheck className="mt-0.5 size-4 shrink-0" />Owners and Admins retain their existing administrative boundary. A job-role capability never grants user management, credentials, security settings, or owner approval powers.</p>
     </div>
   );
 }

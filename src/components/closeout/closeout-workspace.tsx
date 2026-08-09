@@ -235,11 +235,11 @@ function MoneyField({
   return (
     <label htmlFor={id} className="grid grid-cols-[minmax(0,1fr)_132px] items-center gap-4 py-3">
       <span className="min-w-0">
-        <span className="block text-[11px] font-semibold">{label}</span>
-        {detail ? <span className="mt-1 block text-[9px] leading-4 text-[var(--ink-faint)]">{detail}</span> : null}
+        <span className="block text-[13px] font-semibold">{label}</span>
+        {detail ? <span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">{detail}</span> : null}
       </span>
       <span className={cn("flex h-10 items-center rounded-xl border bg-[var(--paper-strong)] px-3", valid ? "border-[var(--line)]" : "border-[var(--danger)]")}>
-        <span className="mr-1 text-[11px] text-[var(--ink-faint)]">$</span>
+        <span className="mr-1 text-[13px] text-[var(--ink-faint)]">$</span>
         <input
           id={id}
           value={value}
@@ -481,31 +481,31 @@ export function CloseoutWorkspace() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill tone={currentStatus.tone} dot>{currentStatus.label}</StatusPill>
-            <span className="text-[10px] text-[var(--ink-faint)]">{rule.name} · Policy v{rule.version}</span>
+            <span className="text-xs text-[var(--ink-faint)]">{rule.name} · Policy v{rule.version}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Closeout & tips</h2>
-          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">Sales, cash, tip allocation, and owner approval in one audit path.</p>
+          <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Sales, cash, tip allocation, and owner approval in one audit path.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <label className="grid gap-1">
-            <span className="text-[9px] font-semibold text-[var(--ink-faint)]">Location</span>
+            <span className="text-xs font-semibold text-[var(--ink-faint)]">Location</span>
             <select
               value={scenario.locationId}
               disabled={locked}
               onChange={(event) => selectLocation(event.target.value)}
-              className="h-10 min-w-[190px] rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[11px] font-semibold outline-none"
+              className="h-10 min-w-[190px] rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[13px] font-semibold outline-none"
             >
               {demoWorkspace.locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           </label>
           <label className="grid gap-1">
-            <span className="text-[9px] font-semibold text-[var(--ink-faint)]">Business date</span>
+            <span className="text-xs font-semibold text-[var(--ink-faint)]">Business date</span>
             <input
               type="date"
               value={draft.businessDate}
               disabled={locked}
               onChange={(event) => updateDraft("businessDate", event.target.value)}
-              className="h-10 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[11px] font-semibold outline-none"
+              className="h-10 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[13px] font-semibold outline-none"
             />
           </label>
         </div>
@@ -523,7 +523,7 @@ export function CloseoutWorkspace() {
           <SectionHeading eyebrow="01 / Sales ledger" title="Service summary" detail="All money fields are parsed to integer cents before reconciliation." />
           <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
             <label className="grid grid-cols-[minmax(0,1fr)_132px] items-center gap-4 py-3">
-              <span><span className="block text-[11px] font-semibold">Covers</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Completed guests for the close</span></span>
+              <span><span className="block text-[13px] font-semibold">Covers</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">Completed guests for the close</span></span>
               <input value={draft.covers} disabled={locked} inputMode="numeric" onChange={(event) => updateDraft("covers", event.target.value)} className="numeric h-10 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-right text-xs font-semibold outline-none disabled:opacity-60" />
             </label>
             <MoneyField id="gross-sales" label="Gross sales" value={draft.grossSales} onChange={(value) => updateDraft("grossSales", value)} disabled={locked} />
@@ -532,7 +532,7 @@ export function CloseoutWorkspace() {
             <MoneyField id="comps" label="Comps" value={draft.comps} onChange={(value) => updateDraft("comps", value)} disabled={locked} />
             <MoneyField id="voids" label="Voids" value={draft.voids} onChange={(value) => updateDraft("voids", value)} disabled={locked} />
           </div>
-          <div className={cn("mt-3 flex items-center justify-between gap-4 rounded-xl px-4 py-3 text-[10px]", financial.paymentDifference === 0 ? "bg-[var(--positive-soft)] text-[var(--positive)]" : "bg-[var(--danger-soft)] text-[var(--danger)]")}>
+          <div className={cn("mt-3 flex items-center justify-between gap-4 rounded-xl px-4 py-3 text-xs", financial.paymentDifference === 0 ? "bg-[var(--positive-soft)] text-[var(--positive)]" : "bg-[var(--danger-soft)] text-[var(--danger)]")}>
             <span className="flex items-center gap-2">{financial.paymentDifference === 0 ? <Check className="size-3.5" /> : <CircleAlert className="size-3.5" />} Cash + card compared with calculated net sales</span>
             <strong className="numeric">{financial.paymentDifference === 0 ? "Exact" : formatMoney(financial.paymentDifference)}</strong>
           </div>
@@ -544,20 +544,20 @@ export function CloseoutWorkspace() {
             <MoneyField id="expected-cash" label="Expected cash" value={draft.expectedCash} onChange={(value) => updateDraft("expectedCash", value)} disabled={locked} detail="Drawer expectation from the close" />
             <MoneyField id="actual-cash" label="Actual cash" value={draft.actualCash} onChange={(value) => updateDraft("actualCash", value)} disabled={locked} detail="Counted cash in drawer" />
             <div className="flex items-center justify-between py-4">
-              <span><span className="block text-[11px] font-semibold">Cash variance</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Actual less expected</span></span>
+              <span><span className="block text-[13px] font-semibold">Cash variance</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">Actual less expected</span></span>
               <span className={cn("numeric text-lg font-medium tracking-[-0.04em]", financial.cashVariance === 0 ? "text-[var(--positive)]" : "text-[var(--danger)]")}>{formatMoney(financial.cashVariance)}</span>
             </div>
           </div>
 
           <label className="mt-5 block">
-            <span className="mb-2 block text-[10px] font-semibold">End-of-shift notes</span>
-            <textarea value={draft.notes} disabled={locked} onChange={(event) => updateDraft("notes", event.target.value)} rows={4} className="w-full resize-none rounded-[14px] border border-[var(--line)] bg-[var(--paper-strong)] p-3 text-[11px] leading-5 outline-none disabled:opacity-60" />
+            <span className="mb-2 block text-xs font-semibold">End-of-shift notes</span>
+            <textarea value={draft.notes} disabled={locked} onChange={(event) => updateDraft("notes", event.target.value)} rows={4} className="w-full resize-none rounded-[14px] border border-[var(--line)] bg-[var(--paper-strong)] p-3 text-[13px] leading-5 outline-none disabled:opacity-60" />
           </label>
 
           <input ref={attachmentRef} aria-label="Attach closeout evidence" type="file" accept="image/*,application/pdf" capture="environment" className="sr-only" onChange={(event) => setAttachmentName(event.target.files?.[0]?.name ?? null)} />
           <button disabled={locked} onClick={() => attachmentRef.current?.click()} className="focus-ring mt-3 flex w-full items-center gap-3 rounded-xl border border-dashed border-[var(--line-strong)] px-3.5 py-3 text-left disabled:opacity-50">
             <span className="flex size-8 items-center justify-center rounded-lg bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><Paperclip className="size-3.5" /></span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-semibold">{attachmentName ?? "Attach closeout photo or document"}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Production files use private storage and signed access.</span></span>
+            <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{attachmentName ?? "Attach closeout photo or document"}</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">Production files use private storage and signed access.</span></span>
           </button>
         </section>
       </div>
@@ -567,10 +567,10 @@ export function CloseoutWorkspace() {
           <div>
             <p className="eyebrow">03 / Tip sources</p>
             <h3 className="mt-2 text-base font-semibold tracking-[-0.03em]">Build the distributable pool</h3>
-            <p className="mt-1 text-[10px] text-[var(--ink-faint)]">Policy {rule.id} · version {rule.version} · effective {rule.effectiveFrom}</p>
-            <p className="mt-2 text-[10px] font-semibold text-[var(--ink-soft)]">Point basis: servers 10 · bartenders 10 · support staff 6 · multiplied by eligible hours.</p>
+            <p className="mt-1 text-xs text-[var(--ink-faint)]">Policy {rule.id} · version {rule.version} · effective {rule.effectiveFrom}</p>
+            <p className="mt-2 text-xs font-semibold text-[var(--ink-soft)]">Point basis: servers 10 · bartenders 10 · support staff 6 · multiplied by eligible hours.</p>
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-[var(--ink-faint)]"><ShieldCheck className="size-3.5 text-[var(--positive)]" /> Largest remainder · employee ID tie-break</div>
+          <div className="flex items-center gap-2 text-xs text-[var(--ink-faint)]"><ShieldCheck className="size-3.5 text-[var(--positive)]" /> Largest remainder · employee ID tie-break</div>
         </div>
 
         <div className="mt-5 grid divide-y divide-[var(--line)] border-y border-[var(--line)] md:grid-cols-3 md:divide-x md:divide-y-0">
@@ -580,9 +580,9 @@ export function CloseoutWorkspace() {
             { key: "serviceCharges" as const, label: "Service charges", detail: "Reported outside pool", separate: true },
           ].map((source) => (
             <label key={source.key} className="px-4 py-4 md:px-5">
-              <span className="flex items-center justify-between gap-3"><span className="text-[10px] font-semibold">{source.label}</span><StatusPill tone={source.separate ? "warning" : "positive"}>{source.separate ? "Separate" : "Pooled"}</StatusPill></span>
+              <span className="flex items-center justify-between gap-3"><span className="text-xs font-semibold">{source.label}</span><StatusPill tone={source.separate ? "warning" : "positive"}>{source.separate ? "Separate" : "Pooled"}</StatusPill></span>
               <span className="mt-4 flex items-baseline border-b border-[var(--line-strong)] pb-2"><span className="text-sm text-[var(--ink-faint)]">$</span><input value={draft[source.key]} disabled={locked} inputMode="decimal" onChange={(event) => updateDraft(source.key, event.target.value)} className="numeric min-w-0 flex-1 bg-transparent px-2 text-2xl font-medium tracking-[-0.05em] outline-none disabled:opacity-60" /></span>
-              <span className="mt-2 block text-[9px] text-[var(--ink-faint)]">{source.detail}</span>
+              <span className="mt-2 block text-xs text-[var(--ink-faint)]">{source.detail}</span>
             </label>
           ))}
         </div>
@@ -599,12 +599,12 @@ export function CloseoutWorkspace() {
           <table className="w-full min-w-[880px] border-collapse text-left">
             <thead className="bg-[var(--canvas-strong)]">
               <tr>
-                <th className="px-4 py-2.5 text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Team member / job</th>
-                <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Eligible time</th>
-                <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Points</th>
-                <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Adjustment</th>
-                <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Allocation</th>
-                <th className="px-4 py-2.5 text-right text-[9px] font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Include</th>
+                <th className="px-4 py-2.5 text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Team member / job</th>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Eligible time</th>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Points</th>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Adjustment</th>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Allocation</th>
+                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Include</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line)]">
@@ -616,23 +616,23 @@ export function CloseoutWorkspace() {
                     <motion.tr layout className="group hover:bg-[var(--paper)]">
                       <td className="px-4 py-3.5">
                         <button disabled={!allocation} aria-expanded={expanded} aria-controls={`explanation-${participant.personId}`} onClick={() => setExpandedEmployee(expanded ? null : participant.personId)} className="flex items-center gap-3 text-left disabled:cursor-default">
-                          <span className="flex size-8 items-center justify-center rounded-full bg-[var(--canvas-strong)] text-[10px] font-semibold">{participant.displayName.slice(0, 1)}</span>
-                          <span><span className="block text-[11px] font-semibold">{participant.displayName}</span><span className="mt-1 flex items-center gap-1.5 text-[9px] text-[var(--ink-faint)]">{participant.jobName} · {participant.sourceLabel}{allocation ? <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} /> : null}</span></span>
+                          <span className="flex size-8 items-center justify-center rounded-full bg-[var(--canvas-strong)] text-xs font-semibold">{participant.displayName.slice(0, 1)}</span>
+                          <span><span className="block text-[13px] font-semibold">{participant.displayName}</span><span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--ink-faint)]">{participant.jobName} · {participant.sourceLabel}{allocation ? <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} /> : null}</span></span>
                         </button>
                       </td>
-                      <td className="numeric px-4 py-3.5 text-right text-[11px] font-semibold">{(participant.minutes / 60).toFixed(2)}h</td>
-                      <td className="px-4 py-3.5 text-right"><input aria-label={`${participant.displayName} tip points`} value={weights[participant.personId] ?? ""} disabled={locked || !participant.policyEligible} onChange={(event) => { setWeights((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric h-8 w-20 rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-right text-[10px] font-semibold outline-none disabled:opacity-45" /></td>
-                      <td className="px-4 py-3.5 text-right"><span className="inline-flex h-8 w-24 items-center rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2"><span className="text-[9px] text-[var(--ink-faint)]">$</span><input aria-label={`${participant.displayName} adjustment`} value={adjustments[participant.personId] ?? "0.00"} disabled={locked} onChange={(event) => { setAdjustments((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric min-w-0 flex-1 bg-transparent text-right text-[10px] font-semibold outline-none disabled:opacity-45" /></span></td>
-                      <td className="numeric px-4 py-3.5 text-right text-[11px] font-semibold">{allocation ? formatMoney(allocation.totalTipCents) : "—"}<span className="mt-1 block text-[8px] font-normal text-[var(--ink-faint)]">{allocation?.explanation.eligibilityCode.replaceAll("_", " ") ?? (participant.policyEligible ? "Pending" : "Policy excluded")}</span></td>
-                      <td className="px-4 py-3.5 text-right"><label className="inline-flex items-center gap-2 text-[9px] text-[var(--ink-faint)]"><input type="checkbox" checked={!exclusions[participant.personId]} disabled={locked} onChange={(event) => { setExclusions((current) => ({ ...current, [participant.personId]: !event.target.checked })); invalidateCalculation(); }} className="size-4 accent-[var(--accent)]" /><span>{exclusions[participant.personId] ? "Excluded" : "Included"}</span></label></td>
+                      <td className="numeric px-4 py-3.5 text-right text-[13px] font-semibold">{(participant.minutes / 60).toFixed(2)}h</td>
+                      <td className="px-4 py-3.5 text-right"><input aria-label={`${participant.displayName} tip points`} value={weights[participant.personId] ?? ""} disabled={locked || !participant.policyEligible} onChange={(event) => { setWeights((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric h-8 w-20 rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-right text-xs font-semibold outline-none disabled:opacity-45" /></td>
+                      <td className="px-4 py-3.5 text-right"><span className="inline-flex h-8 w-24 items-center rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2"><span className="text-xs text-[var(--ink-faint)]">$</span><input aria-label={`${participant.displayName} adjustment`} value={adjustments[participant.personId] ?? "0.00"} disabled={locked} onChange={(event) => { setAdjustments((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric min-w-0 flex-1 bg-transparent text-right text-xs font-semibold outline-none disabled:opacity-45" /></span></td>
+                      <td className="numeric px-4 py-3.5 text-right text-[13px] font-semibold">{allocation ? formatMoney(allocation.totalTipCents) : "—"}<span className="mt-1 block text-xs font-normal text-[var(--ink-faint)]">{allocation?.explanation.eligibilityCode.replaceAll("_", " ") ?? (participant.policyEligible ? "Pending" : "Policy excluded")}</span></td>
+                      <td className="px-4 py-3.5 text-right"><label className="inline-flex items-center gap-2 text-xs text-[var(--ink-faint)]"><input type="checkbox" checked={!exclusions[participant.personId]} disabled={locked} onChange={(event) => { setExclusions((current) => ({ ...current, [participant.personId]: !event.target.checked })); invalidateCalculation(); }} className="size-4 accent-[var(--accent)]" /><span>{exclusions[participant.personId] ? "Excluded" : "Included"}</span></label></td>
                     </motion.tr>
                     {expanded && allocation ? (
                       <motion.tr id={`explanation-${participant.personId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-[var(--paper)]">
                         <td colSpan={6} className="px-5 py-4">
-                          <div className="grid gap-4 text-[9px] leading-4 text-[var(--ink-faint)] lg:grid-cols-[1fr_1fr_auto]">
-                            <div><strong className="block text-[10px] text-[var(--ink)]">Eligibility</strong><span>{allocation.explanation.eligibilityNote}</span><span className="mt-1 block">{allocation.explanation.segments.map((segment) => segment.note).join(" ")}</span></div>
-                            <div><strong className="block text-[10px] text-[var(--ink)]">Exact share</strong><span className="font-mono">{allocation.explanation.exactShareNumerator} / {allocation.explanation.exactShareDenominator}</span><span className="mt-1 block">Floor {allocation.explanation.floorShareCents}¢ + rounding {allocation.explanation.roundingAwardCents}¢</span></div>
-                            <div className="text-right"><strong className="block text-[10px] text-[var(--ink)]">Reconciled</strong><span>{allocation.explanation.reconciliation}</span></div>
+                          <div className="grid gap-4 text-xs leading-4 text-[var(--ink-faint)] lg:grid-cols-[1fr_1fr_auto]">
+                            <div><strong className="block text-xs text-[var(--ink)]">Eligibility</strong><span>{allocation.explanation.eligibilityNote}</span><span className="mt-1 block">{allocation.explanation.segments.map((segment) => segment.note).join(" ")}</span></div>
+                            <div><strong className="block text-xs text-[var(--ink)]">Exact share</strong><span className="font-mono">{allocation.explanation.exactShareNumerator} / {allocation.explanation.exactShareDenominator}</span><span className="mt-1 block">Floor {allocation.explanation.floorShareCents}¢ + rounding {allocation.explanation.roundingAwardCents}¢</span></div>
+                            <div className="text-right"><strong className="block text-xs text-[var(--ink)]">Reconciled</strong><span>{allocation.explanation.reconciliation}</span></div>
                           </div>
                         </td>
                       </motion.tr>
@@ -646,7 +646,7 @@ export function CloseoutWorkspace() {
 
         {calculation ? (
           <div className="mt-4 grid gap-3 rounded-[16px] bg-[var(--graphite)] px-5 py-4 text-white sm:grid-cols-[1fr_auto_auto] sm:items-center">
-            <div><p className="text-[10px] font-semibold">Exact reconciliation</p><p className="mt-1 text-[9px] text-white/55">Pool {formatMoney(calculation.totals.pooledTipCents)} + adjustments {formatMoney(calculation.totals.adjustmentCents)} = payroll tips {formatMoney(calculation.totals.payrollTipCents)}</p></div>
+            <div><p className="text-xs font-semibold">Exact reconciliation</p><p className="mt-1 text-xs text-white/55">Pool {formatMoney(calculation.totals.pooledTipCents)} + adjustments {formatMoney(calculation.totals.adjustmentCents)} = payroll tips {formatMoney(calculation.totals.payrollTipCents)}</p></div>
             <div className="numeric text-sm font-semibold">Difference {formatMoney(calculation.reconciliation.payrollDifferenceCents)}</div>
             <StatusPill tone="positive"><Check className="size-3" /> Balanced</StatusPill>
           </div>
@@ -654,11 +654,11 @@ export function CloseoutWorkspace() {
       </section>
 
       <AnimatePresence mode="wait">
-        {message ? <motion.div key={message} role="status" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-6 flex items-start gap-3 rounded-xl bg-[var(--accent-soft)]/55 px-4 py-3 text-[10px] leading-4 text-[var(--ink-soft)]"><FileText className="mt-0.5 size-3.5 shrink-0 text-[var(--accent-strong)]" />{message}</motion.div> : null}
+        {message ? <motion.div key={message} role="status" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-6 flex items-start gap-3 rounded-xl bg-[var(--accent-soft)]/55 px-4 py-3 text-xs leading-4 text-[var(--ink-soft)]"><FileText className="mt-0.5 size-3.5 shrink-0 text-[var(--accent-strong)]" />{message}</motion.div> : null}
       </AnimatePresence>
 
       <footer className="sticky bottom-[calc(72px+env(safe-area-inset-bottom)+0.75rem)] z-20 mt-7 rounded-[18px] border border-white/10 bg-[var(--graphite)] px-4 py-3 text-white shadow-[var(--shadow-float)] sm:flex sm:items-center sm:justify-between lg:bottom-3">
-        <div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-xl bg-white/10">{status === "approved" ? <LockKeyhole className="size-4 text-[var(--positive)]" /> : <WalletCards className="size-4 text-[var(--accent)]" />}</span><div><p className="text-[11px] font-semibold">{location.name} · {draft.businessDate}</p><p className="mt-1 text-[9px] text-white/50">{status === "draft" ? "Manager draft · calculate before submitting" : status === "submitted" ? "Awaiting owner approval" : `Locked by ${currentDisplayName}`}</p></div></div>
+        <div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-xl bg-white/10">{status === "approved" ? <LockKeyhole className="size-4 text-[var(--positive)]" /> : <WalletCards className="size-4 text-[var(--accent)]" />}</span><div><p className="text-[13px] font-semibold">{location.name} · {draft.businessDate}</p><p className="mt-1 text-xs text-white/50">{status === "draft" ? "Manager draft · calculate before submitting" : status === "submitted" ? "Awaiting owner approval" : `Locked by ${currentDisplayName}`}</p></div></div>
         <div className="mt-3 flex flex-wrap gap-2 sm:mt-0">
           {status === "draft" ? <><Button variant="secondary" size="sm" className="border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={calculate}><Calculator className="size-3.5" /> Calculate</Button><Button variant="accent" size="sm" onClick={submitCloseout}><ShieldCheck className="size-3.5" /> Submit closeout</Button></> : null}
           {status === "submitted" ? <><Button variant="quiet" size="sm" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={returnToDraft}><RotateCcw className="size-3.5" /> Return to draft</Button><Button variant="accent" size="sm" onClick={approveCloseout}><Check className="size-3.5" /> Owner approve</Button></> : null}

@@ -129,7 +129,7 @@ export function OwnerMfaGate({
           <BrandMark />
           <div>
             <p className="text-sm font-semibold tracking-[-0.02em]">Le Yard OS</p>
-            <p className="mt-0.5 text-[10px] tracking-[0.08em] text-white/55 uppercase">Owner verification</p>
+            <p className="mt-0.5 text-xs tracking-[0.08em] text-white/55 uppercase">Owner verification</p>
           </div>
         </div>
 
@@ -137,7 +137,7 @@ export function OwnerMfaGate({
           <span className="flex size-11 items-center justify-center rounded-2xl bg-[#dfa14a]/15 text-[#dfa14a]">
             <LockKeyhole className="size-5" />
           </span>
-          <p className="mt-7 text-[10px] font-semibold tracking-[0.18em] text-[#dfa14a] uppercase">Second factor required</p>
+          <p className="mt-7 text-xs font-semibold tracking-[0.18em] text-[#dfa14a] uppercase">Second factor required</p>
           <h1 className="mt-3 max-w-lg text-[clamp(2.35rem,5vw,4.8rem)] font-medium leading-[.96] tracking-[-0.065em]">
             Verify before operations.
           </h1>
@@ -146,7 +146,7 @@ export function OwnerMfaGate({
           </p>
         </div>
 
-        <div className="relative hidden items-center gap-3 text-[10px] text-white/55 lg:flex">
+        <div className="relative hidden items-center gap-3 text-xs text-white/55 lg:flex">
           <ShieldCheck className="size-4 text-[#dfa14a]" />
           <span>{organizationName} · session protected</span>
         </div>
@@ -162,9 +162,9 @@ export function OwnerMfaGate({
           <div className="flex items-center justify-between gap-4 border-b border-[var(--line)] pb-5">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{displayName}</p>
-              <p className="mt-1 truncate text-[10px] text-[var(--ink-faint)]">{email || "Authenticated Owner"}</p>
+              <p className="mt-1 truncate text-xs text-[var(--ink-faint)]">{email || "Authenticated Owner"}</p>
             </div>
-            <span className="rounded-full border border-[var(--line)] px-2.5 py-1 text-[9px] font-semibold text-[var(--ink-faint)]">AAL1</span>
+            <span className="rounded-full border border-[var(--line)] px-2.5 py-1 text-xs font-semibold text-[var(--ink-faint)]">AAL1</span>
           </div>
 
           <div className="pt-8" aria-live="polite" aria-busy={state.kind === "checking" || busy}>
@@ -173,7 +173,7 @@ export function OwnerMfaGate({
                 <motion.div key="checking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="py-10 text-center">
                   <LoaderCircle className="mx-auto size-5 animate-spin text-[var(--accent-strong)]" />
                   <p className="mt-4 text-xs font-semibold">Checking authenticators</p>
-                  <p className="mt-1 text-[10px] text-[var(--ink-faint)]">Only verified TOTP factors can unlock Owner access.</p>
+                  <p className="mt-1 text-xs text-[var(--ink-faint)]">Only verified TOTP factors can unlock Owner access.</p>
                 </motion.div>
               ) : null}
 
@@ -181,10 +181,10 @@ export function OwnerMfaGate({
                 <motion.div key="challenge" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>
                   <span className="flex size-10 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><KeyRound className="size-4" /></span>
                   <h2 className="mt-5 text-xl font-medium tracking-[-0.04em]">Enter your authenticator code</h2>
-                  <p className="mt-2 text-[11px] leading-5 text-[var(--ink-faint)]">Use the current six-digit code from {state.factor.friendlyName}.</p>
+                  <p className="mt-2 text-[13px] leading-5 text-[var(--ink-faint)]">Use the current six-digit code from {state.factor.friendlyName}.</p>
                   <form onSubmit={(event) => void verifyChallenge(event)} className="mt-6">
                     <label className="block">
-                      <span className="mb-2 block text-[10px] font-semibold">Six-digit code</span>
+                      <span className="mb-2 block text-xs font-semibold">Six-digit code</span>
                       <input
                         autoFocus
                         aria-describedby={message ? "owner-mfa-message" : undefined}
@@ -201,7 +201,7 @@ export function OwnerMfaGate({
                         placeholder="000000"
                       />
                     </label>
-                    {message ? <p id="owner-mfa-message" role="alert" className="mt-3 text-[10px] leading-4 text-[var(--danger)]">{message}</p> : null}
+                    {message ? <p id="owner-mfa-message" role="alert" className="mt-3 text-xs leading-4 text-[var(--danger)]">{message}</p> : null}
                     <Button type="submit" variant="accent" size="lg" className="mt-5 w-full" disabled={busy || code.length !== 6}>
                       {busy ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
                       {busy ? "Verifying…" : "Verify and continue"}
@@ -213,7 +213,7 @@ export function OwnerMfaGate({
               {state.kind === "enroll" ? (
                 <motion.div key="enroll" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}>
                   <h2 className="text-xl font-medium tracking-[-0.04em]">Add an authenticator</h2>
-                  <p className="mt-2 text-[11px] leading-5 text-[var(--ink-faint)]">No verified TOTP factor is attached to this Owner account. Enroll one to continue.</p>
+                  <p className="mt-2 text-[13px] leading-5 text-[var(--ink-faint)]">No verified TOTP factor is attached to this Owner account. Enroll one to continue.</p>
                   <div className="mt-6">
                     <MfaEnrollment
                       knownFactorState={{ kind: "enroll" }}
@@ -229,7 +229,7 @@ export function OwnerMfaGate({
                 <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="py-4">
                   <span className="flex size-10 items-center justify-center rounded-2xl bg-[var(--danger-soft)] text-[var(--danger)]"><RefreshCw className="size-4" /></span>
                   <h2 className="mt-5 text-xl font-medium tracking-[-0.04em]">Verification is unavailable</h2>
-                  <p role="alert" className="mt-2 text-[11px] leading-5 text-[var(--danger)]">{message}</p>
+                  <p role="alert" className="mt-2 text-[13px] leading-5 text-[var(--danger)]">{message}</p>
                   <Button
                     variant="secondary"
                     className="mt-5"
@@ -248,7 +248,7 @@ export function OwnerMfaGate({
                 <motion.div key="success" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="py-8 text-center">
                   <span className="mx-auto flex size-11 items-center justify-center rounded-2xl bg-[var(--positive-soft)] text-[var(--positive)]"><Check className="size-5" /></span>
                   <h2 className="mt-5 text-xl font-medium tracking-[-0.04em]">Identity verified</h2>
-                  <p className="mt-2 text-[11px] text-[var(--ink-faint)]">{message}</p>
+                  <p className="mt-2 text-[13px] text-[var(--ink-faint)]">{message}</p>
                 </motion.div>
               ) : null}
             </AnimatePresence>

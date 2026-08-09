@@ -243,6 +243,35 @@ const mutationModel: LiveInventoryModel = {
 };
 
 describe("connected Inventory review interactions", () => {
+  it("renders the count as a body-ported single-scroll task with safe actions and no input autofocus", async () => {
+    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
+    const opener = screen.getByRole("button", { name: "Start full count" });
+    opener.focus();
+
+    fireEvent.click(opener);
+    const dialog = screen.getByRole("dialog", { name: "Full inventory count" });
+    const overlay = dialog.closest<HTMLElement>("[data-inventory-modal-overlay]");
+    const modalBody = dialog.querySelector<HTMLElement>("[data-inventory-modal-body]");
+    const countScroll = dialog.querySelector<HTMLElement>("[data-inventory-count-scroll]");
+    const actions = dialog.querySelector<HTMLElement>("[data-inventory-count-actions]");
+    const row = dialog.querySelector<HTMLElement>("[data-inventory-count-row]");
+    const input = within(dialog).getByRole("spinbutton", { name: "Counted quantity for Lemons" });
+    const close = within(dialog).getByRole("button", { name: "Close dialog" });
+
+    expect(overlay?.parentElement).toBe(document.body);
+    expect(dialog.dataset.inventoryModalLayout).toBe("task");
+    expect(modalBody?.className).toContain("overflow-hidden");
+    expect(countScroll?.className).toContain("overflow-y-auto");
+    expect(countScroll?.className).not.toContain("overflow-x-auto");
+    expect(row?.className).not.toContain("min-w-");
+    expect(input.hasAttribute("autofocus")).toBe(false);
+    expect(actions?.className).toContain("safe-area-inset-bottom");
+    await waitFor(() => expect(document.activeElement).toBe(close));
+
+    fireEvent.click(close);
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
   it("submits counted quantities while leaving expected stock and cost to the server", async () => {
     vi.mocked(submitInventoryCountAction).mockResolvedValue({
       ok: true,

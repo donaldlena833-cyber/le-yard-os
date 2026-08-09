@@ -20,6 +20,8 @@ Started: 2026-08-08
 - Normalize both supported PostgREST representations of the single-column effective-capability RPC at the authenticated session boundary. This prevents valid persisted grants from being lost because of a generated-type/runtime-shape mismatch.
 - Do not geofence authentication. Authorized users may sign in from any physical location. Browser geolocation is disabled by response policy; database location membership remains a tenant record-access scope and never represents device position.
 - Treat the authenticated user's optional profile as display data, not authorization evidence. A transient profile read error falls back to signed Auth claims while membership, organization, location, and capability checks continue to fail closed.
+- Keep Geist as the single application typeface and improve legibility through a deliberate operational scale rather than introducing another font. Mobile metadata now has a 12px floor, controls use 44px-or-larger touch targets, and iOS form controls remain at 16px to avoid input zoom.
+- Treat long mobile operational workflows as viewport-bound tasks. Inventory-count dialogs now portal to the document body, own a single vertical scroll region, and keep their header and safe-area action bar reachable above shell navigation.
 
 ## Migrations
 
@@ -54,6 +56,21 @@ Initial tracked status document created:
 - `scripts/import-le-yard-opening-menu.mjs`
 - `tests/unit/data/le-yard-opening-menu.test.ts`
 - `supabase/migrations/20260809032415_fix_recipe_save_authorization_and_variable_scope.sql`
+- `src/app/globals.css`
+- `src/components/shell/app-shell.tsx`
+- `src/components/ui/page-frame.tsx`
+- `src/components/ui/button.tsx`
+- `src/components/ui/status-pill.tsx`
+- `src/components/ui/surface.tsx`
+- `src/components/inventory/inventory-modal-frame.tsx`
+- `src/components/inventory/live-inventory-workspace.tsx`
+- `src/components/inventory/inventory-workspace.tsx`
+- `src/components/today/live-today-workspace.tsx`
+- `src/components/today/today-workspace.tsx`
+- `src/components/kitchen/kitchen-workspace.tsx`
+- `src/lib/accessibility/use-modal-dialog.ts`
+- `tests/unit/data/live-inventory-interactions.test.tsx`
+- `tests/unit/ui/primitives.test.tsx`
 
 ## Tests
 
@@ -69,6 +86,8 @@ Initial tracked status document created:
 - Added a deterministic 20-recipe opening-menu specification test covering unique dish names, exact gram portions, valid waste factors, declared ingredients, prices, and the absence of vendor/pack/par/stock assignments.
 - Extended the PGlite capability verifier to prove Chef recipe creation, exact replay, immutable version creation, and database-level `recipe.manage` denial.
 - `npm run verify` passed after the opening-menu import: 76 unit-test files / 425 tests, all portable migration and security verifiers, generated database types, lint, typecheck, and the production build.
+- Added focused UI primitive coverage for the shared page header, surfaces, buttons, and status pills.
+- Added an inventory-count mobile regression that verifies the body portal, task layout, single scroll owner, responsive rows, absence of input autofocus, safe-area actions, initial close focus, and opener focus return.
 
 ## Completed Requirements
 
@@ -85,6 +104,9 @@ Initial tracked status document created:
 - Service Control is persisted and realtime: authorized staff can record running-low/86/restored events, managers can add versioned handoffs and publish pre-shifts, and employees can acknowledge published pre-shifts.
 - Today shows current availability and published pre-shift context without inventing reservation figures.
 - The connected Le Yard Kitchen now contains 20 active menu recipes, 142 exact-weight ingredient lines, 79 ingredient items in eight categories, and 20 immutable recipe versions. Every import write is attributed to Mateo's authenticated Chef account. No vendor, vendor pack, vendor price, par, stock transaction, or purchase record was created.
+- The application shell now has consistent mobile navigation controls, safe-area-aware drawers, deduplicated workspace context, stronger active states, and portaled/focus-managed command and navigation overlays.
+- The P0 inventory-count overlap is fixed: route animation no longer leaves a transformed containing block, the count is responsive without horizontal scrolling or autofocus jumps, and the submission controls remain above the phone home indicator and shell navigation.
+- Today, Kitchen, and Inventory now use the same editorial warm-ivory surface hierarchy, clearer page headers, larger operational numbers, calm raised metric cards, and shared interaction primitives. The typography floor was raised across the remaining workspaces for consistent legibility.
 
 ## Incomplete Requirements
 
@@ -119,3 +141,6 @@ Initial tracked status document created:
 - Inventory modal focus/animation regression — PASS: 8 consecutive runs / 80 assertions after waiting for animated dialog cleanup before checking restored focus or reopening.
 - `npm run test:e2e` — PASS: 50/50 desktop/mobile Chromium tests, including the 20-route axe matrix, Time Clock restoration, and Service Control.
 - `npm install --package-lock-only --ignore-scripts` — PASS; npm reported 0 vulnerabilities (Node 25 emitted the expected engine warning because the project supports Node 22/24).
+- UI-polish browser review — PASS in the in-app browser: Today, Kitchen, Inventory, shell navigation, and the command palette were visually inspected; the desktop inventory document had no horizontal overflow and the command palette opened, focused, closed with Escape, and returned control correctly.
+- Focused UI tests — PASS: 4/4 shared primitive tests and 12/12 live-inventory interaction tests.
+- `npm run verify` after the UI/UX polish — PASS: lint, 121-table generated database contract check, TypeScript, 430/430 unit tests across 77 files, all nine portable integration/security verifiers, and the optimized Next.js production build.

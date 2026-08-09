@@ -62,20 +62,20 @@ function AnswerCard({ answer }: { answer: OperationsAnswer }) {
         </div>
         <h3 className="mt-5 text-xl font-medium tracking-[-0.04em]">{answer.title}</h3>
         <p className="mt-3 max-w-3xl text-[13px] leading-6 text-[var(--ink-soft)]">{answer.summary}</p>
-        {policy.humanApprovalRequired ? <p className="mt-4 flex items-start gap-2 rounded-[14px] bg-[var(--warning-soft)] p-3 text-[10px] leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />This proposal cannot execute until an authorized person reviews and approves it.</p> : null}
+        {policy.humanApprovalRequired ? <p className="mt-4 flex items-start gap-2 rounded-[14px] bg-[var(--warning-soft)] p-3 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-3.5 shrink-0" />This proposal cannot execute until an authorized person reviews and approves it.</p> : null}
       </div>
       <div className="border-t border-[var(--line)] bg-[var(--canvas)] px-5 py-4 sm:px-7">
-        <p className="text-[9px] font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase">Underlying records</p>
+        <p className="text-xs font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase">Underlying records</p>
         <div className="mt-2 grid gap-1 sm:grid-cols-2">
           {answer.citations.map((source) => (
             <Link key={source.id} href={recordRoutes[source.entityType] || "/reports"} className="focus-ring group flex items-start gap-3 rounded-xl p-3 transition-colors hover:bg-[var(--paper)]">
               <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--paper-strong)]"><FileSearch className="size-3.5 text-[var(--ink-faint)]" /></span>
-              <span className="min-w-0 flex-1"><span className="block truncate text-[10px] font-semibold">{source.label}</span><span className="mt-1 block line-clamp-2 text-[9px] leading-4 text-[var(--ink-faint)]">{source.excerpt}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{source.label}</span><span className="mt-1 block line-clamp-2 text-xs leading-4 text-[var(--ink-faint)]">{source.excerpt}</span></span>
               <ArrowRight className="mt-2 size-3 text-[var(--ink-faint)] transition-transform group-hover:translate-x-0.5" />
             </Link>
           ))}
         </div>
-        {!citations.valid ? <p role="alert" className="mt-2 text-[9px] text-[var(--danger)]">{citations.reason}</p> : null}
+        {!citations.valid ? <p role="alert" className="mt-2 text-xs text-[var(--danger)]">{citations.reason}</p> : null}
       </div>
     </article>
   );
@@ -119,7 +119,7 @@ export function AssistantWorkspace() {
       <section className="relative overflow-hidden rounded-[26px] bg-[var(--graphite)] px-5 py-7 text-white sm:px-8 sm:py-9">
         <div className="absolute inset-0 workspace-grid opacity-20" />
         <div className="relative max-w-3xl">
-          <div className="flex flex-wrap items-center gap-2"><StatusPill className="bg-white/[.08] text-[#e4aa55]"><Sparkles className="size-3" /> Ask Le Yard</StatusPill><span className="text-[9px] text-white/55">{workspace.mode === "live" ? `${workspace.activeLocation.name} · ${workspace.role}` : "Synthetic demo · owner preview"}</span></div>
+          <div className="flex flex-wrap items-center gap-2"><StatusPill className="bg-white/[.08] text-[#e4aa55]"><Sparkles className="size-3" /> Ask Le Yard</StatusPill><span className="text-xs text-white/55">{workspace.mode === "live" ? `${workspace.activeLocation.name} · ${workspace.role}` : "Synthetic demo · owner preview"}</span></div>
           <h2 className="mt-5 text-[clamp(2rem,5vw,3.5rem)] leading-[1.02] font-medium tracking-[-0.06em]">Answers that show their work.</h2>
           <p className="mt-4 max-w-2xl text-xs leading-5 text-white/55">Search the operational record with citations, confidence, and human approval boundaries. This release uses deterministic evidence while external model access remains deferred.</p>
           <form onSubmit={submit} className="mt-7 flex items-center gap-2 rounded-[17px] bg-white/[.08] p-2 ring-1 ring-white/10 focus-within:ring-[#e1a34d]/70">
@@ -131,22 +131,22 @@ export function AssistantWorkspace() {
       </section>
 
       <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
-        {prompts.map((prompt) => <button key={prompt} disabled={isPending} onClick={() => ask(prompt)} className={cn("focus-ring shrink-0 rounded-full border px-3 py-2 text-[10px] font-semibold transition-colors disabled:opacity-50", lastQuery === prompt ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--line)] bg-[var(--paper)] text-[var(--ink-faint)] hover:text-[var(--ink)]")}>{prompt}</button>)}
+        {prompts.map((prompt) => <button key={prompt} disabled={isPending} onClick={() => ask(prompt)} className={cn("focus-ring shrink-0 rounded-full border px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-50", lastQuery === prompt ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "border-[var(--line)] bg-[var(--paper)] text-[var(--ink-faint)] hover:text-[var(--ink)]")}>{prompt}</button>)}
       </div>
 
-      {notice ? <p role="alert" className="mt-5 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-[10px] leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />{notice}</p> : null}
-      <div className="mt-5">{answer ? <AnswerCard answer={answer} /> : <section className="rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[var(--paper)] px-6 py-12 text-center"><FileSearch className="mx-auto size-5 text-[var(--ink-faint)]" /><h3 className="mt-4 text-base font-semibold">Ask from the active location’s record</h3><p className="mx-auto mt-2 max-w-md text-[10px] leading-4 text-[var(--ink-faint)]">Connected search reads the last 30 days through your authenticated tenant and location scope. It returns nothing when it cannot cite a source record.</p></section>}</div>
+      {notice ? <p role="alert" className="mt-5 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />{notice}</p> : null}
+      <div className="mt-5">{answer ? <AnswerCard answer={answer} /> : <section className="rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[var(--paper)] px-6 py-12 text-center"><FileSearch className="mx-auto size-5 text-[var(--ink-faint)]" /><h3 className="mt-4 text-base font-semibold">Ask from the active location’s record</h3><p className="mx-auto mt-2 max-w-md text-xs leading-4 text-[var(--ink-faint)]">Connected search reads the last 30 days through your authenticated tenant and location scope. It returns nothing when it cannot cite a source record.</p></section>}</div>
 
       <section className="mt-9">
         <SectionHeading title="Hard safety boundaries" detail="These controls apply even after a live model is connected." />
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[18px] border border-[var(--line)] p-4"><LockKeyhole className="size-4 text-[var(--accent-strong)]" /><p className="mt-4 text-xs font-semibold">Permission aware</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Sources inherit the current user’s organization, location, role, and field-level access.</p></div>
-          <div className="rounded-[18px] border border-[var(--line)] p-4"><BookOpenCheck className="size-4 text-[var(--positive)]" /><p className="mt-4 text-xs font-semibold">Citations required</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">An answer without identifiable source records is invalid and cannot support an action.</p></div>
-          <div className="rounded-[18px] border border-[var(--line)] p-4"><ShieldCheck className="size-4 text-[var(--positive)]" /><p className="mt-4 text-xs font-semibold">No silent mutations</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Payroll, tips, punches, inventory, and guest changes always require authorized human approval.</p></div>
+          <div className="rounded-[18px] border border-[var(--line)] p-4"><LockKeyhole className="size-4 text-[var(--accent-strong)]" /><p className="mt-4 text-xs font-semibold">Permission aware</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Sources inherit the current user’s organization, location, role, and field-level access.</p></div>
+          <div className="rounded-[18px] border border-[var(--line)] p-4"><BookOpenCheck className="size-4 text-[var(--positive)]" /><p className="mt-4 text-xs font-semibold">Citations required</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">An answer without identifiable source records is invalid and cannot support an action.</p></div>
+          <div className="rounded-[18px] border border-[var(--line)] p-4"><ShieldCheck className="size-4 text-[var(--positive)]" /><p className="mt-4 text-xs font-semibold">No silent mutations</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Payroll, tips, punches, inventory, and guest changes always require authorized human approval.</p></div>
         </div>
       </section>
 
-      <p className="mt-6 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-[10px] leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />This release uses cited, deterministic evidence only. Live model calls and provider-backed OCR are not enabled, and no restaurant data is sent externally.</p>
+      <p className="mt-6 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />This release uses cited, deterministic evidence only. Live model calls and provider-backed OCR are not enabled, and no restaurant data is sent externally.</p>
     </PageFrame>
   );
 }

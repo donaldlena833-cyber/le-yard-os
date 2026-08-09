@@ -182,7 +182,7 @@ export function MfaEnrollment({
         <LoaderCircle className="size-4 animate-spin text-[var(--accent-strong)]" />
         <div>
           <p className="text-xs font-semibold">Checking authenticator status</p>
-          <p className="mt-1 text-[10px] text-[var(--ink-faint)]">Verified factors are read directly from your Auth account.</p>
+          <p className="mt-1 text-xs text-[var(--ink-faint)]">Verified factors are read directly from your Auth account.</p>
         </div>
       </div>
     );
@@ -194,7 +194,7 @@ export function MfaEnrollment({
         <ShieldCheck className="mt-0.5 size-4 shrink-0" />
         <div>
           <p className="text-xs font-semibold">Authenticator already enrolled</p>
-          <p className="mt-1 text-[10px] leading-4">
+          <p className="mt-1 text-xs leading-4">
             {message || `${factorState?.kind === "challenge" ? factorState.factor.friendlyName : "A verified TOTP factor"} is active. A duplicate factor will not be created.`}
           </p>
         </div>
@@ -211,7 +211,7 @@ export function MfaEnrollment({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold">Authenticator app</p>
-            <p className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">Use a time-based one-time code. The setup secret is shown only during enrollment.</p>
+            <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Use a time-based one-time code. The setup secret is shown only during enrollment.</p>
           </div>
           <Button variant="secondary" size="sm" onClick={() => void beginEnrollment()} disabled={status === "loading"}>
             {status === "loading" ? <LoaderCircle className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
@@ -220,7 +220,7 @@ export function MfaEnrollment({
         </div>
         {status === "error" && message ? (
           <div className="mt-4 flex items-start justify-between gap-3 rounded-xl bg-[var(--danger-soft)] px-3 py-3 text-[var(--danger)]">
-            <p role="alert" className="text-[10px] leading-4">{message}</p>
+            <p role="alert" className="text-xs leading-4">{message}</p>
             {!knownFactorState && !isDemoMode ? (
               <Button
                 variant="quiet"
@@ -245,7 +245,7 @@ export function MfaEnrollment({
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold">Scan with your authenticator</p>
-          <p className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">The setup secret is shown once and is never written to application data.</p>
+          <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">The setup secret is shown once and is never written to application data.</p>
         </div>
         <Button
           variant="quiet"
@@ -272,12 +272,12 @@ export function MfaEnrollment({
               unoptimized
             />
           ) : (
-            <div className="text-center text-[9px] leading-4 text-[#4f554d]">Demo mode<br />No scannable secret</div>
+            <div className="text-center text-xs leading-4 text-[#4f554d]">Demo mode<br />No scannable secret</div>
           )}
         </div>
         <div>
           <label className="block">
-            <span className="mb-1.5 block text-[10px] font-semibold">Six-digit verification code</span>
+            <span className="mb-1.5 block text-xs font-semibold">Six-digit verification code</span>
             <input
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -290,12 +290,12 @@ export function MfaEnrollment({
             />
           </label>
           <div className="mt-3">
-            <p className="text-[9px] font-semibold text-[var(--ink-soft)]">Manual setup key</p>
-            <code className="mt-1 block break-all rounded-lg bg-[var(--canvas)] px-2.5 py-2 font-mono text-[9px] text-[var(--ink-faint)]">
+            <p className="text-xs font-semibold text-[var(--ink-soft)]">Manual setup key</p>
+            <code className="mt-1 block break-all rounded-lg bg-[var(--canvas)] px-2.5 py-2 font-mono text-xs text-[var(--ink-faint)]">
               {enrollment.secret}
             </code>
           </div>
-          {message ? <p role="alert" className="mt-2 text-[9px] text-[var(--danger)]">{message}</p> : null}
+          {message ? <p role="alert" className="mt-2 text-xs text-[var(--danger)]">{message}</p> : null}
           <Button className="mt-3" variant="accent" size="sm" onClick={() => void verifyEnrollment()} disabled={status === "loading" || code.length !== 6}>
             {status === "loading" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
             Verify and enable
