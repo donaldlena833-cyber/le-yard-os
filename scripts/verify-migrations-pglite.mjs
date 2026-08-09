@@ -405,14 +405,12 @@ try {
       false
     );
   `);
-  await expectDatabaseError(
+  await db.exec(
     `insert into storage.objects (id, bucket_id, name, owner_id) values (
       '90000000-0000-4000-8000-000000000033', 'receipts',
       '20000000-0000-4000-8000-000000000001/global/owner-aal1-global.pdf',
       '10000000-0000-4000-8000-000000000001'
     )`,
-    "42501",
-    "owner AAL1 global storage insert",
   );
   await db.exec(`
     select set_config(
@@ -427,7 +425,7 @@ try {
     );
     reset role;
   `);
-  process.stdout.write("PASS strict storage path, tenant/location, role, and AAL policies\n");
+  process.stdout.write("PASS strict storage path, tenant/location, role, and password-authenticated Owner policies\n");
 
   // The synthetic seed is a fixed business snapshot, while the clock-in RPC
   // intentionally validates against the database clock. Add an isolated,
@@ -1030,7 +1028,7 @@ try {
   }
   process.stdout.write("PASS canonical shift claim/reopen and actor-bound swap workflows\n");
 
-  // 009: Owner AAL1 receives only the minimal workspace/MFA context.
+  // 032: password-authenticated Owner receives the normal tenant workspace.
   await db.exec(`
     reset role;
     set role authenticated;
@@ -1057,16 +1055,14 @@ try {
   if (
     ownerAal1.organizations !== 1 ||
     ownerAal1.locations !== 2 ||
-    ownerAal1.organization_memberships !== 1 ||
-    ownerAal1.profiles !== 1 ||
-    ownerAal1.employees !== 0 ||
-    ownerAal1.receipts !== 0 ||
-    ownerAal1.tasks !== 0 ||
-    ownerAal1.audit_events !== 0 ||
-    ownerAal1.invitations !== 0 ||
-    ownerAal1.storage_objects !== 0
+    ownerAal1.organization_memberships < 1 ||
+    ownerAal1.profiles < 5 ||
+    ownerAal1.employees < 6 ||
+    ownerAal1.tasks < 1 ||
+    ownerAal1.audit_events < 1 ||
+    ownerAal1.storage_objects < 1
   ) {
-    throw new Error(`Owner AAL1 read boundary failed: ${JSON.stringify(ownerAal1)}`);
+    throw new Error(`Password-authenticated Owner read boundary failed: ${JSON.stringify(ownerAal1)}`);
   }
   await db.exec(`
     select set_config(
@@ -1083,7 +1079,7 @@ try {
   `);
   const ownerAal2 = ownerAal2Query.rows[0];
   if (ownerAal2.employees < 6 || ownerAal2.audit_events < 1 || ownerAal2.storage_objects < 1) {
-    throw new Error(`Owner AAL2 access restoration failed: ${JSON.stringify(ownerAal2)}`);
+    throw new Error(`Optional MFA Owner access failed: ${JSON.stringify(ownerAal2)}`);
   }
   await db.exec(`
     select public.administer_organization_member(

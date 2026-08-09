@@ -109,7 +109,7 @@ export async function loadLiveSchedule(
     const canManage =
       workspace.role === "admin" ||
       workspace.role === "manager" ||
-      (workspace.role === "owner" && workspace.identity.aal === "aal2");
+      workspace.role === "owner";
 
     const [scheduleResult, jobRoleResult, employeeResult, templateResult, selfEmployeeResult] = await Promise.all([
       supabase

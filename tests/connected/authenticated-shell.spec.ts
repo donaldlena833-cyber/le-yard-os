@@ -32,14 +32,8 @@ test("connected deployment reports ready without exposing dependency details", a
 for (const role of ["Owner", "Admin", "Manager", "Employee"] as const) {
   test(`${role} credentials resolve through connected Supabase Auth and tenant membership`, async ({ page }) => {
     await signIn(page, role);
-    if (role === "Owner") {
-      await expect(page.getByText("Owner verification", { exact: true })).toBeVisible();
-      await expect(page.getByText("Second factor required", { exact: true })).toBeVisible();
-      return;
-    }
-
     await expect(page).toHaveURL(/\/today(?:\?|$)/);
-    await expect(page.getByText(new RegExp(`^${role} · MFA (available|on)$`)).first()).toBeVisible();
+    await expect(page.getByText(new RegExp(`^${role} · Password secured$`)).first()).toBeVisible();
     await expect(page.getByRole("navigation", { name: /Primary/ })).toBeVisible();
     await expect(page.locator("body")).not.toContainText("Synthetic Saturday service preview");
   });

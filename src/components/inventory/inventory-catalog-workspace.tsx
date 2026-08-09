@@ -6,6 +6,7 @@ import {
   Boxes,
   Check,
   CircleAlert,
+  CircleDollarSign,
   LoaderCircle,
   MapPin,
   PackageOpen,
@@ -19,7 +20,11 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { configureInventoryCatalogAction } from "@/app/actions/workflows/inventory";
+import {
+  configureInventoryCatalogAction,
+  recordInventoryItemCostAction,
+  submitInventoryCountAction,
+} from "@/app/actions/workflows/inventory";
 import { Button } from "@/components/ui/button";
 import { PermissionAwareAction } from "@/components/permissions/action-permission";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -46,6 +51,8 @@ type CatalogDialog =
   | { kind: "vendor"; requestId: string; record?: VendorRecord }
   | { kind: "item"; requestId: string; record?: ItemRecord }
   | { kind: "vendor-item"; requestId: string; record?: VendorItemRecord }
+  | { kind: "cost"; requestId: string }
+  | { kind: "stock"; requestId: string }
   | { kind: "par"; requestId: string }
   | { kind: "recipe"; requestId: string; record?: RecipeRecord };
 
@@ -56,6 +63,7 @@ const emptyCatalog: LiveInventoryCatalog = {
   vendors: [],
   items: [],
   vendorItems: [],
+  priceHistory: [],
   pars: [],
   recipes: [],
 };
@@ -109,6 +117,142 @@ function FormActions({ busy, onClose }: { busy: boolean; onClose: () => void }) 
         Save change
       </Button>
     </div>
+  );
+}
+
+function ItemCostDialog({
+  dialog,
+  catalog,
+  model,
+  workspace,
+  busy,
+  notice,
+  onClose,
+  onError,
+  onSave,
+}: {
+  dialog: Extract<CatalogDialog, { kind: "cost" }>;
+  catalog: LiveInventoryCatalog;
+  model: LiveInventoryModel;
+  workspace: WorkspaceContextValue;
+  busy: boolean;
+  notice: string;
+  onClose: () => void;
+  onError: (message: string) => void;
+  onSave: (input: unknown) => Promise<boolean>;
+}) {
+  const items = catalog.items.filter((item) => item.isActive);
+  const units = catalog.units.filter((unit) => unit.isActive);
+  const [itemId, setItemId] = useState(items[0]?.id ?? "");
+  const selectedItem = items.find((item) => item.id === itemId);
+  const compatibleIds = new Set(selectedItem ? [selectedItem.baseUnitId] : []);
+  for (const conversion of catalog.conversions) {
+    if (!conversion.isActive || !selectedItem) continue;
+    if (conversion.inventoryItemId && conversion.inventoryItemId !== selectedItem.id) continue;
+    if (conversion.fromUnitId === selectedItem.baseUnitId) compatibleIds.add(conversion.toUnitId);
+    if (conversion.toUnitId === selectedItem.baseUnitId) compatibleIds.add(conversion.fromUnitId);
+  }
+  const compatibleUnits = units.filter((unit) => compatibleIds.has(unit.id));
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const priceQuantity = parseDecimal(String(form.get("priceQuantity")), 6);
+    const unitPriceCents = parseInventoryMoneyToCents(String(form.get("unitPrice")));
+    const [priceDate = "", priceTime = ""] = String(form.get("effectiveAt")).split("T");
+    const effectiveAt = zonedLocalToIso(priceDate, priceTime, model.timeZone);
+    if (priceQuantity === null || unitPriceCents === null || !effectiveAt) {
+      onError("Enter a positive cost quantity, valid two-decimal cost, and effective time.");
+      return;
+    }
+    const saved = await onSave({
+      requestId: dialog.requestId,
+      locationId: workspace.activeLocation.id,
+      inventoryItemId: itemId,
+      unitId: String(form.get("unitId")),
+      priceQuantity,
+      unitPriceCents,
+      effectiveAt,
+      notes: optionalText(form, "notes"),
+    });
+    if (saved) onClose();
+  };
+
+  return (
+    <InventoryModalFrame title="Add ingredient unit cost" description="Record a direct cost per gram, ounce, each, or another configured unit. It becomes effective-dated price history without requiring a vendor." labelledBy="catalog-cost-dialog" notice={notice} onClose={onClose}>
+      <form onSubmit={(event) => void submit(event)}>
+        <div className="grid gap-5 px-5 py-5 sm:px-7">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Inventory item"><select name="inventoryItemId" required autoFocus value={itemId} onChange={(event) => setItemId(event.target.value)} className={fieldClass}>{items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field>
+            <Field label="Cost unit" hint="Only units with a canonical conversion are available."><select name="unitId" required key={itemId} defaultValue={selectedItem?.baseUnitId} className={fieldClass}>{compatibleUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} ({unit.symbol})</option>)}</select></Field>
+            <Field label="Price quantity" hint="Use 1 for per-unit cost, or 1000 for a cost per kilogram expressed in grams."><input name="priceQuantity" required inputMode="decimal" defaultValue="1" className={fieldClass} /></Field>
+            <Field label={`Cost for that quantity · ${model.currencyCode}`}><input name="unitPrice" required inputMode="decimal" className={fieldClass} placeholder="0.00" /></Field>
+            <Field label={`Effective time · ${model.timeZone}`}><input name="effectiveAt" type="datetime-local" required defaultValue={localPriceTime(model.timeZone)} className={fieldClass} /></Field>
+          </div>
+          <Field label="Cost note" hint="Optional source or context for the price history."><textarea name="notes" rows={2} maxLength={2000} className={textAreaClass} placeholder="Opening estimate, market quote, or verified invoice context" /></Field>
+          <FormActions busy={busy} onClose={onClose} />
+        </div>
+      </form>
+    </InventoryModalFrame>
+  );
+}
+
+function OpeningStockDialog({
+  dialog,
+  model,
+  workspace,
+  busy,
+  notice,
+  onClose,
+  onError,
+  onSave,
+}: {
+  dialog: Extract<CatalogDialog, { kind: "stock" }>;
+  model: LiveInventoryModel;
+  workspace: WorkspaceContextValue;
+  busy: boolean;
+  notice: string;
+  onClose: () => void;
+  onError: (message: string) => void;
+  onSave: (input: unknown) => Promise<boolean>;
+}) {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const lines = model.items.map((item) => ({
+      inventoryItemId: item.id,
+      unitId: item.baseUnitId,
+      expectedQuantity: item.onHand,
+      countedQuantity: parseInventoryQuantity(String(form.get(`stock:${item.id}`)), { allowZero: true }),
+      unitCostCents: item.lastUnitCostCents,
+      notes: null,
+    }));
+    if (lines.some((line) => line.countedQuantity === null)) {
+      onError("Enter a non-negative stock quantity with no more than four decimal places for every item.");
+      return;
+    }
+    const saved = await onSave({
+      submissionId: dialog.requestId,
+      locationId: workspace.activeLocation.id,
+      countType: "full",
+      notes: optionalText(form, "notes") ?? "Manual opening stock entered from Kitchen Setup",
+      lines: lines.map((line) => ({ ...line, countedQuantity: line.countedQuantity! })),
+    });
+    if (saved) onClose();
+  };
+
+  return (
+    <InventoryModalFrame title="Enter opening stock" description="Enter the current quantity for every tracked item. This creates a pending full count so another authorized manager can approve the ledger adjustment." labelledBy="catalog-stock-dialog" notice={notice} onClose={onClose} layout="task">
+      <form onSubmit={(event) => void submit(event)} className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 sm:px-7" data-inventory-opening-stock-scroll>
+          <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
+            {model.items.map((item) => <label key={item.id} className="grid grid-cols-[1fr_minmax(7rem,9rem)] items-center gap-4 py-3"><span className="min-w-0"><span className="block truncate text-sm font-semibold">{item.name}</span><span className="mt-0.5 block text-xs text-[var(--ink-faint)]">Current {item.onHand} {item.unitSymbol}{item.lastUnitCostCents == null ? " · cost missing" : ` · ${formatMoney(item.lastUnitCostCents, model.currencyCode)} / ${item.unitSymbol}`}</span></span><input name={`stock:${item.id}`} required inputMode="decimal" defaultValue={item.onHand} aria-label={`${item.name} opening stock`} className={fieldClass} /></label>)}
+          </div>
+          <Field label="Count note"><textarea name="notes" rows={2} maxLength={10000} className={`${textAreaClass} mt-4`} placeholder="Optional opening count context" /></Field>
+        </div>
+        <div className="border-t border-[var(--line)] bg-[var(--paper-strong)] px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-7 sm:pb-4"><FormActions busy={busy} onClose={onClose} /></div>
+      </form>
+    </InventoryModalFrame>
   );
 }
 
@@ -231,6 +375,14 @@ function CatalogMutationDialog({
     );
   }
 
+  if (dialog.kind === "cost") {
+    return <ItemCostDialog dialog={dialog} catalog={catalog} model={model} workspace={workspace} busy={busy} notice={notice} onClose={onClose} onError={onError} onSave={onSave} />;
+  }
+
+  if (dialog.kind === "stock") {
+    return <OpeningStockDialog dialog={dialog} model={model} workspace={workspace} busy={busy} notice={notice} onClose={onClose} onError={onError} onSave={onSave} />;
+  }
+
   return <RecipeDialog dialog={dialog} catalog={catalog} model={model} workspace={workspace} busy={busy} notice={notice} onClose={onClose} onError={onError} onSave={onSave} />;
 }
 
@@ -348,8 +500,7 @@ export function InventoryCatalogWorkspace({ model, workspace }: { model: LiveInv
   const [dialog, setDialog] = useState<CatalogDialog | null>(null);
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const roleAllows = workspace.role === "owner" || workspace.role === "admin";
-  const canConfigureFoundation = workspace.role === "admin" || (workspace.role === "owner" && workspace.identity.aal === "aal2");
+  const canConfigureFoundation = workspace.role === "admin" || workspace.role === "owner";
   const canConfigureUnits = canConfigureFoundation || hasCapability(workspace.capabilities, "inventory.unit.manage");
   const canConfigureCategories = canConfigureFoundation || hasCapability(workspace.capabilities, "inventory.category.manage");
   const canConfigureItems = canConfigureFoundation || hasCapability(workspace.capabilities, "inventory.item.manage") || hasCapability(workspace.capabilities, "inventory.catalog.manage");
@@ -358,13 +509,20 @@ export function InventoryCatalogWorkspace({ model, workspace }: { model: LiveInv
     hasCapability(workspace.capabilities, "inventory.vendor.manage")
     && hasCapability(workspace.capabilities, "inventory.price.manage")
   );
+  const canConfigureCosts = canConfigureFoundation || hasCapability(workspace.capabilities, "inventory.price.manage");
+  const canEnterStock = canConfigureFoundation || hasCapability(workspace.capabilities, "inventory.count.create");
   const canConfigurePars = canConfigureFoundation || hasCapability(workspace.capabilities, "inventory.par.manage");
   const canConfigureRecipes = canConfigureFoundation || hasCapability(workspace.capabilities, "recipe.manage");
-  const canConfigureOperations = canConfigureUnits || canConfigureCategories || canConfigureItems || canConfigureVendors || canConfigureVendorItems || canConfigurePars || canConfigureRecipes;
+  const canConfigureOperations = canConfigureUnits || canConfigureCategories || canConfigureItems || canConfigureVendors || canConfigureVendorItems || canConfigureCosts || canEnterStock || canConfigurePars || canConfigureRecipes;
   const unitById = new Map(catalog.units.map((unit) => [unit.id, unit]));
   const itemById = new Map(catalog.items.map((item) => [item.id, item]));
+  const stockById = new Map(model.items.map((item) => [item.id, item]));
   const vendorById = new Map(catalog.vendors.map((vendor) => [vendor.id, vendor]));
   const locationById = new Map(model.locations.map((location) => [location.id, location]));
+  const latestPriceByItem = new Map<string, NonNullable<LiveInventoryCatalog["priceHistory"]>[number]>();
+  for (const price of catalog.priceHistory ?? []) {
+    if (!latestPriceByItem.has(price.inventoryItemId)) latestPriceByItem.set(price.inventoryItemId, price);
+  }
   const open = (
     kind: CatalogDialog["kind"],
     record?: UnitRecord | ConversionRecord | CategoryRecord | VendorRecord | ItemRecord | VendorItemRecord | RecipeRecord,
@@ -376,7 +534,12 @@ export function InventoryCatalogWorkspace({ model, workspace }: { model: LiveInv
     setBusy(true);
     setNotice("");
     try {
-      const result = await configureInventoryCatalogAction(input);
+      const candidate = input as Record<string, unknown>;
+      const result = "submissionId" in candidate
+        ? await submitInventoryCountAction(input)
+        : "unitPriceCents" in candidate && !("command" in candidate)
+          ? await recordInventoryItemCostAction(input)
+          : await configureInventoryCatalogAction(input);
       if (!result.ok) {
         setNotice(result.message ?? "The inventory setup change could not be saved.");
         return false;
@@ -394,8 +557,8 @@ export function InventoryCatalogWorkspace({ model, workspace }: { model: LiveInv
 
   return (
     <section className="mt-5">
-      <div className="flex flex-col justify-between gap-4 pb-5 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><Settings2 className="size-4 text-[var(--accent-strong)]" /><span className="text-xs font-semibold tracking-[.14em] text-[var(--accent-strong)] uppercase">Dependency-ordered setup</span></div><h3 className="mt-3 text-xl font-medium tracking-[-0.04em]">Inventory foundation</h3><p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">Start with units, then build the catalog downward. Records deactivate or version; they are not deleted from operational history.</p></div><StatusPill tone={canConfigureOperations ? "positive" : "neutral"}>{canConfigureFoundation ? "Full configuration" : canConfigureOperations ? "Job-role access" : "Read only"}</StatusPill></div>
-      {!canConfigureFoundation ? <div className="mb-5 flex items-start gap-3 rounded-xl bg-[var(--warning-soft)] px-4 py-3 text-xs leading-5 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />{roleAllows ? "Owner changes require a current multi-factor session." : canConfigureOperations ? "Available actions are assigned by job role for this location. Unit conversions that affect existing records remain administrative configuration." : "No inventory configuration capability is assigned to your job role at this location."}</div> : null}
+      <div className="flex flex-col justify-between gap-4 pb-5 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><Settings2 className="size-4 text-[var(--accent-strong)]" /><span className="text-xs font-semibold tracking-[.14em] text-[var(--accent-strong)] uppercase">Guided setup</span></div><h3 className="mt-3 text-xl font-medium tracking-[-0.04em]">Inventory foundation</h3><p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">Start with units, then add products, costs, opening stock, and recipe specs.</p></div><StatusPill tone={canConfigureOperations ? "positive" : "neutral"}>{canConfigureOperations ? "Ready to configure" : "Read only"}</StatusPill></div>
+      {!canConfigureOperations ? <div className="mb-5 flex items-start gap-3 rounded-xl bg-[var(--warning-soft)] px-4 py-3 text-xs leading-5 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />Inventory setup is read only for this account.</div> : null}
 
       <SetupStep number="01" icon={<ArrowRightLeft className="size-4" />} title="Units & conversions" detail="Define the canonical language for count, mass, volume, and length before creating items." action={<div className="flex gap-2">{action("Unit", "unit", false, canConfigureUnits)}{action("Conversion", "conversion", catalog.units.filter((unit) => unit.isActive).length < 2)}</div>}>
         {catalog.units.length ? <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{catalog.units.map((unit) => <div key={unit.id} className="flex items-center gap-3 py-3"><span className="numeric w-14 text-xs font-semibold">{unit.symbol}</span><span className="min-w-0 flex-1 text-xs">{unit.name}<span className="ml-2 text-xs text-[var(--ink-faint)]">{unit.dimension}{unit.isBase ? " · base" : ""}</span></span><StatusPill tone={unit.isActive ? "positive" : "neutral"}>{unit.isActive ? "Active" : "Inactive"}</StatusPill><EditButton disabled={!canConfigureUnits} onClick={() => open("unit", unit)} /></div>)}</div> : <EmptyLine>Add the first canonical unit—typically each, ounce, pound, or milliliter.</EmptyLine>}
@@ -414,15 +577,19 @@ export function InventoryCatalogWorkspace({ model, workspace }: { model: LiveInv
         {catalog.items.length ? <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{catalog.items.map((item) => <div key={item.id} className="flex items-center gap-3 py-3"><span className="min-w-0 flex-1"><span className="block text-xs font-semibold">{item.name}</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">{item.sku || "No SKU"} · base {unitById.get(item.baseUnitId)?.symbol ?? "?"} · {item.trackInventory ? "tracked" : "not tracked"}</span></span><StatusPill tone={item.isActive ? "positive" : "neutral"}>{item.isActive ? "Active" : "Inactive"}</StatusPill><EditButton disabled={!canConfigureItems} onClick={() => open("item", item)} /></div>)}</div> : <EmptyLine>Create units first, then add the restaurant’s real inventory items.</EmptyLine>}
       </SetupStep>
 
-      <SetupStep number="05" icon={<PackageOpen className="size-4" />} title="Purchase packs & prices" detail="Map how each vendor sells an item. Prices are stored in integer cents and append dated history." action={action("Purchase pack", "vendor-item", !catalog.vendors.some((vendor) => vendor.isActive) || !catalog.items.some((item) => item.isActive) || !catalog.units.some((unit) => unit.isActive), canConfigureVendorItems)}>
+      <SetupStep number="05" icon={<CircleDollarSign className="size-4" />} title="Unit costs & opening stock" detail="Price an ingredient directly per gram, ounce, each, or another configured unit. Enter current stock as an auditable full count." action={<div className="flex flex-wrap gap-2">{action("Unit cost", "cost", !catalog.items.some((item) => item.isActive) || !catalog.units.some((unit) => unit.isActive), canConfigureCosts)}{action("Opening stock", "stock", !model.items.length, canEnterStock)}</div>}>
+        {catalog.items.some((item) => item.isActive) ? <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{catalog.items.filter((item) => item.isActive).map((item) => { const price = latestPriceByItem.get(item.id); const stock = stockById.get(item.id); return <div key={item.id} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3 text-xs sm:grid-cols-[1fr_.7fr_.7fr]"><span className="font-semibold">{item.name}</span><span className="numeric text-right sm:text-left">{price ? `${formatMoney(price.unitPriceCents, model.currencyCode)} / ${price.priceQuantity} ${unitById.get(price.unitId)?.symbol ?? "unit"}` : "Cost missing"}</span><span className="numeric hidden text-[var(--ink-faint)] sm:block">{stock ? `${stock.onHand} ${stock.unitSymbol} on hand` : "Not stock-tracked"}</span></div>; })}</div> : <EmptyLine>Create an inventory item before adding a direct unit cost or opening stock.</EmptyLine>}
+      </SetupStep>
+
+      <SetupStep number="06" icon={<PackageOpen className="size-4" />} title="Purchase packs & vendor prices" detail="Optionally map how each vendor sells an item. Vendor prices remain separate, effective-dated evidence." action={action("Purchase pack", "vendor-item", !catalog.vendors.some((vendor) => vendor.isActive) || !catalog.items.some((item) => item.isActive) || !catalog.units.some((unit) => unit.isActive), canConfigureVendorItems)}>
         {catalog.vendorItems.length ? <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{catalog.vendorItems.map((vendorItem) => <div key={vendorItem.id} className="flex items-center gap-3 py-3"><span className="min-w-0 flex-1"><span className="block text-xs font-semibold">{vendorById.get(vendorItem.vendorId)?.name ?? "Vendor"} · {itemById.get(vendorItem.inventoryItemId)?.name ?? "Item"}</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">{vendorItem.packQuantity} {unitById.get(vendorItem.purchaseUnitId)?.symbol ?? "unit"}{vendorItem.vendorSku ? ` · ${vendorItem.vendorSku}` : ""}{vendorItem.isPreferred ? " · preferred" : ""}</span></span><span className="numeric text-xs font-semibold">{vendorItem.lastPriceCents == null ? "—" : formatMoney(vendorItem.lastPriceCents, model.currencyCode)}</span><StatusPill tone={vendorItem.isActive ? "positive" : "neutral"}>{vendorItem.isActive ? "Active" : "Inactive"}</StatusPill><EditButton disabled={!canConfigureVendorItems} onClick={() => open("vendor-item", vendorItem)} /></div>)}</div> : <EmptyLine>Purchase packs become available after an active vendor, item, unit, and canonical conversion exist.</EmptyLine>}
       </SetupStep>
 
-      <SetupStep number="06" icon={<MapPin className="size-4" />} title="Location pars" detail="Effective-dated targets let each room or kitchen carry the right amount without overwriting prior periods." action={action("Set par", "par", !catalog.items.some((item) => item.isActive) || !model.locations.length, canConfigurePars)}>
+      <SetupStep number="07" icon={<MapPin className="size-4" />} title="Location pars" detail="Effective-dated targets let the kitchen carry the right amount without overwriting prior periods." action={action("Set par", "par", !catalog.items.some((item) => item.isActive) || !model.locations.length, canConfigurePars)}>
         {catalog.pars.length ? <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{catalog.pars.map((par) => <div key={par.id} className="grid grid-cols-[1fr_auto] gap-3 py-3 text-xs sm:grid-cols-[1fr_.6fr_.6fr_auto]"><span className="font-semibold">{itemById.get(par.inventoryItemId)?.name ?? "Inventory item"}<span className="ml-2 text-xs font-normal text-[var(--ink-faint)]">{locationById.get(par.locationId)?.name ?? "Location"}</span></span><span className="numeric hidden sm:block">Par {par.parQuantity}</span><span className="numeric hidden sm:block">Reorder {par.reorderQuantity ?? "—"}</span><span className="text-xs text-[var(--ink-faint)]">from {par.effectiveFrom}</span></div>)}</div> : <EmptyLine>No location targets have been set.</EmptyLine>}
       </SetupStep>
 
-      <SetupStep number="07" icon={<UtensilsCrossed className="size-4" />} title="Recipes & ingredients" detail="Recipes version on every save, preserving the exact ingredient snapshot behind historical costing." action={action("Recipe", "recipe", !catalog.units.some((unit) => unit.isActive), canConfigureRecipes)}>
+      <SetupStep number="08" icon={<UtensilsCrossed className="size-4" />} title="Recipes & ingredients" detail="Recipes version on every save. Ingredient costs resolve from the direct unit prices or vendor price history above." action={action("Recipe", "recipe", !catalog.units.some((unit) => unit.isActive), canConfigureRecipes)}>
         {catalog.recipes.length ? <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{catalog.recipes.map((recipe) => <div key={recipe.id} className="flex items-center gap-3 py-3"><span className="min-w-0 flex-1"><span className="block text-xs font-semibold">{recipe.name}</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">Yields {recipe.yieldQuantity} {unitById.get(recipe.yieldUnitId)?.symbol ?? "unit"} · {recipe.ingredients.length} ingredients{recipe.ingredients.length ? "" : " · costing incomplete"}</span></span><span className="numeric text-xs font-semibold">{recipe.menuPriceCents == null ? "—" : formatMoney(recipe.menuPriceCents, model.currencyCode)}</span><StatusPill tone={recipe.isActive ? "positive" : "neutral"}>{recipe.isActive ? "Published" : "Draft"}</StatusPill><EditButton disabled={!canConfigureRecipes} onClick={() => open("recipe", recipe)} /></div>)}</div> : <EmptyLine>Create a recipe draft now. Inventory ingredients and prices can be added later.</EmptyLine>}
       </SetupStep>
 

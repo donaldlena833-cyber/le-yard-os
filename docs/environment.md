@@ -28,7 +28,7 @@ There are no implicit runtime-mode or application-origin defaults. Missing or in
 | `OWNER_MARIS_EMAIL` | Server-only bootstrap | Production bootstrap | Verified owner email; never seeded with a guessed address |
 | `LE_YARD_BOOTSTRAP_CONFIRM` | Server-only, one run | Production bootstrap execution | Exact plan-bound confirmation emitted by the dry run; remove immediately afterward |
 | `E2E_CONNECTED_APP_URL` | Test runner only | Connected acceptance | Canonical preview origin exercised by the connected Playwright project |
-| `E2E_CONNECTED_OWNER_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Owner fixture; the suite proves the AAL2 gate appears after password sign-in |
+| `E2E_CONNECTED_OWNER_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Owner fixture; the suite proves password sign-in reaches the scoped workspace without an MFA gate |
 | `E2E_CONNECTED_ADMIN_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Admin fixture |
 | `E2E_CONNECTED_MANAGER_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Manager fixture with explicit location membership |
 | `E2E_CONNECTED_EMPLOYEE_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Employee fixture with explicit location membership |

@@ -668,6 +668,19 @@ export const configureInventoryCatalogInputSchema = z.discriminatedUnion("comman
   }),
 ]);
 
+export const recordInventoryItemCostInputSchema = z
+  .object({
+    requestId: uuid,
+    locationId: uuid,
+    inventoryItemId: uuid,
+    unitId: uuid,
+    priceQuantity: recipeQuantity,
+    unitPriceCents: cents,
+    effectiveAt: z.string().datetime({ offset: true }),
+    notes: shortNote,
+  })
+  .strict();
+
 export const searchGuestsInputSchema = z
   .object({
     organizationId: uuid,
@@ -753,5 +766,6 @@ export type ReviewWasteRecordInput = z.infer<typeof reviewWasteRecordInputSchema
 export type CreateInventoryTransferInput = z.infer<typeof createInventoryTransferInputSchema>;
 export type ReviewInventoryTransferInput = z.infer<typeof reviewInventoryTransferInputSchema>;
 export type ConfigureInventoryCatalogInput = z.infer<typeof configureInventoryCatalogInputSchema>;
+export type RecordInventoryItemCostInput = z.infer<typeof recordInventoryItemCostInputSchema>;
 export type SearchGuestsInput = z.infer<typeof searchGuestsInputSchema>;
 export type RequestReportExportInput = z.infer<typeof requestReportExportInputSchema>;

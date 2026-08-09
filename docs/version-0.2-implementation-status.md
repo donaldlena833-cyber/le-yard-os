@@ -124,6 +124,21 @@ Initial tracked status document created:
 
 ## Exact Verification Results
 
+### 2026-08-09 password-only Owner and manual costing follow-up
+
+- Added forward migration `20260809142645_password_only_owners_and_direct_inventory_costs.sql`.
+- Owner authorization now accepts authenticated AAL1 password sessions while preserving organization, location, role, capability, RLS, idempotency, audit, and final-owner protections. Existing MFA factors remain optional and are not deleted.
+- Added `record_inventory_item_cost(...)`: a vendor-neutral, effective-dated, append-only cost command scoped by `inventory.price.manage`, active location access, and exact request replay.
+- Added Kitchen Setup authoring for cost per compatible unit and opening stock. Opening stock reuses the full-count workflow and requires independent approval before changing the ledger.
+- Updated the visual tokens to a lighter off-white canvas with quieter borders, flatter shadows, and reduced paper texture.
+- `npm run types:database` — PASS: 121 tables, 3 views, 201 functions, and 16 enums.
+- `npm run test:capabilities:pglite` — PASS: direct-cost create/replay, changed replay rejection, cross-location denial, audit evidence, Chef capability, and password-only Owner authorization.
+- `npm run test:function-grants:pglite` — PASS: 201 public functions with deny-by-default execution and explicit client/service boundaries.
+- `npm run verify` — PASS: lint, generated database contract check, TypeScript, 431/431 unit tests across 77 files, all nine portable integration/security verifiers, and the optimized Next.js production build.
+- `npm run test:e2e` — 49/50 passed in one desktop/mobile run; one mobile `/guests` request hit a transient Next development-server JSON parse 500. The exact failed accessibility test was rerun immediately and passed 1/1 with no code change.
+- Connected Le Yard Supabase migration — PASS: `password_only_owners_and_direct_inventory_costs` applied to project `qcmwqnonxabdsntfsuzy` after the full portable verifier passed. No other Supabase project was modified.
+- Removed passive Chef access-boundary banners and similar role narration from Kitchen, Chef Today, Vendors, and the authorized Inventory Setup state. Permission enforcement and actionable read-only feedback remain intact.
+
 - `npm run lint` — PASS.
 - `npm run typecheck` — PASS after service-control/type generation.
 - Focused capability-response normalization tests — PASS: 3/3.

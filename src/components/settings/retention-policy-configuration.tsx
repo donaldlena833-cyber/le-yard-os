@@ -7,7 +7,6 @@ import {
   FilePenLine,
   LoaderCircle,
   Plus,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -66,9 +65,7 @@ export function RetentionPolicyConfiguration({
   const [busy, setBusy] = useState(false);
   const [dialogNotice, setDialogNotice] = useState("");
   const [pageNotice, setPageNotice] = useState("");
-  const mayWrite =
-    canManage &&
-    (workspace.role !== "owner" || workspace.identity.aal === "aal2");
+  const mayWrite = canManage;
 
   useEffect(() => {
     const element = dialogRef.current;
@@ -173,11 +170,6 @@ export function RetentionPolicyConfiguration({
         ) : null}
       </div>
 
-      {workspace.role === "owner" && workspace.identity.aal !== "aal2" ? (
-        <p className="mt-4 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0" />Complete MFA verification before changing retention decisions.
-        </p>
-      ) : null}
       {pageNotice ? (
         <p role="status" className="mt-4 rounded-xl bg-[var(--canvas)] px-4 py-3 text-xs">
           {pageNotice}

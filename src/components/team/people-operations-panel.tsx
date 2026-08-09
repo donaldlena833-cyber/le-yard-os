@@ -361,7 +361,7 @@ export function PeopleOperationsPanel({
   const canManage =
     workspace.role === "admin" ||
     workspace.role === "manager" ||
-    (workspace.role === "owner" && workspace.identity.aal === "aal2");
+    workspace.role === "owner";
   const canEditAvailability = Boolean(member.employeeId && (isSelf || canManage));
   const canSubmitTimeOff = Boolean(member.employeeId && isSelf && member.locationIds.length);
   const canDecideTimeOff = Boolean(member.employeeId && canManage && !isSelf);

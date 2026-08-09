@@ -240,9 +240,9 @@ describe("invitation authority", () => {
     expect(invitableRolesForActor("admin")).not.toContain("owner");
   });
 
-  it("allows only MFA-verified owners or admins to open invitations", () => {
+  it("allows password-authenticated owners or admins to open invitations", () => {
     expect(canInviteFromWorkspace("owner", "aal2")).toBe(true);
-    expect(canInviteFromWorkspace("owner", "aal1")).toBe(false);
+    expect(canInviteFromWorkspace("owner", "aal1")).toBe(true);
     expect(canInviteFromWorkspace("admin", "aal1")).toBe(true);
     expect(canInviteFromWorkspace("manager", "aal2")).toBe(false);
     expect(canInviteFromWorkspace("employee", "aal2")).toBe(false);

@@ -79,7 +79,7 @@ function canApprove(
   ) {
     return false;
   }
-  if (workspace.role === "owner") return workspace.identity.aal === "aal2";
+  if (workspace.role === "owner") return true;
   return workspace.role === "admin";
 }
 
@@ -298,11 +298,6 @@ export function TipPolicyConfiguration({
       {!model.roles.length ? (
         <p className="mt-4 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]">
           <CircleAlert className="mt-0.5 size-4 shrink-0" />Create active job roles in Team before authoring eligibility rules.
-        </p>
-      ) : null}
-      {workspace.role === "owner" && workspace.identity.aal !== "aal2" ? (
-        <p className="mt-4 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0" />Complete MFA verification before changing or approving financial policy.
         </p>
       ) : null}
       {pageNotice ? (

@@ -3185,37 +3185,43 @@ export type Database = {
           "id": string
           "organization_id": string
           "inventory_item_id": string
-          "vendor_id": string
+          "vendor_id": string | null
           "unit_id": string
           "unit_price_cents": number
           "effective_at": string
           "source_type": string | null
           "source_id": string | null
           "created_at": string
+          "price_quantity": number
+          "notes": string | null
         }
         Insert: {
           "id"?: string
           "organization_id": string
           "inventory_item_id": string
-          "vendor_id": string
+          "vendor_id"?: string | null
           "unit_id": string
           "unit_price_cents": number
           "effective_at": string
           "source_type"?: string | null
           "source_id"?: string | null
           "created_at"?: string
+          "price_quantity"?: number
+          "notes"?: string | null
         }
         Update: {
           "id"?: string
           "organization_id"?: string
           "inventory_item_id"?: string
-          "vendor_id"?: string
+          "vendor_id"?: string | null
           "unit_id"?: string
           "unit_price_cents"?: number
           "effective_at"?: string
           "source_type"?: string | null
           "source_id"?: string | null
           "created_at"?: string
+          "price_quantity"?: number
+          "notes"?: string | null
         }
         Relationships: [
           {
@@ -7021,6 +7027,21 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["checklist_responses"]["Row"]
       };
+      "bind_verified_checklist_photo_response_aal2_legacy": {
+        Args: {
+          "p_request_id": string | null
+          "p_actor_id": string | null
+          "p_actor_aal": string | null
+          "p_run_id": string | null
+          "p_template_item_id": string | null
+          "p_response": Json | null
+          "p_storage_path": string | null
+          "p_notes": string | null
+          "p_mime_type": string | null
+          "p_size_bytes": number | null
+        }
+        Returns: Database["public"]["Tables"]["checklist_responses"]["Row"]
+      };
       "bootstrap_initial_tenant": {
         Args: {
           "p_request_id": string | null
@@ -7808,6 +7829,20 @@ export type Database = {
         }
         Returns: string
       };
+      "provision_user_invitation_aal2_legacy": {
+        Args: {
+          "p_auth_user_id": string | null
+          "p_organization_id": string | null
+          "p_email": string | null
+          "p_display_name": string | null
+          "p_role": Database["public"]["Enums"]["app_role"] | null
+          "p_location_ids": string[] | null
+          "p_token_hash": string | null
+          "p_expires_at": string | null
+          "p_employee_id": string | null
+        }
+        Returns: string
+      };
       "publish_checklist_template": {
         Args: {
           "p_request_id": string | null
@@ -7877,6 +7912,20 @@ export type Database = {
           "p_evidence_note"?: string | null
         }
         Returns: Database["public"]["Tables"]["guest_consents"]["Row"]
+      };
+      "record_inventory_item_cost": {
+        Args: {
+          "p_request_id": string | null
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_inventory_item_id": string | null
+          "p_unit_id": string | null
+          "p_price_quantity": number | null
+          "p_unit_price_cents": number | null
+          "p_effective_at": string | null
+          "p_notes"?: string | null
+        }
+        Returns: Json
       };
       "record_missed_time_entry": {
         Args: {
@@ -8695,6 +8744,7 @@ export const DatabaseObjectNames = {
       "approve_tip_run",
       "assign_guest_tag",
       "bind_verified_checklist_photo_response",
+      "bind_verified_checklist_photo_response_aal2_legacy",
       "bootstrap_initial_tenant",
       "calculate_tip_run",
       "calculate_tip_run_unchecked",
@@ -8810,6 +8860,7 @@ export const DatabaseObjectNames = {
       "prevent_ledger_mutation",
       "prevent_locked_tip_mutation",
       "provision_user_invitation",
+      "provision_user_invitation_aal2_legacy",
       "publish_checklist_template",
       "publish_schedule",
       "publish_sop_version",
@@ -8818,6 +8869,7 @@ export const DatabaseObjectNames = {
       "record_clock_in",
       "record_clock_out",
       "record_guest_consent",
+      "record_inventory_item_cost",
       "record_missed_time_entry",
       "record_receipt_fingerprint",
       "record_service_availability_event",

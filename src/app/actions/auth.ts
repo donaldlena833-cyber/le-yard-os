@@ -266,10 +266,6 @@ export async function inviteUserAction(
     };
   }
 
-  if (workspace.role === "owner" && workspace.identity.aal !== "aal2") {
-    return { status: "error", message: "Complete MFA before inviting or assigning users." };
-  }
-
   const supabase = await createClient();
 
   const normalizedEmail = parsed.data.email.toLowerCase();

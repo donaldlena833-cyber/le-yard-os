@@ -65,11 +65,6 @@ function categoryAccess(context: WorkflowContext, organizationId: string) {
     "forbidden",
     "Expense categories require Owner or Admin access.",
   );
-  assertCondition(
-    membership.role !== "owner" || context.actor.aal === "aal2",
-    "forbidden",
-    "Owner write actions require multi-factor authentication.",
-  );
 }
 
 export async function createChatChannel(

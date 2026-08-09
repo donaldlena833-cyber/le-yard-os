@@ -2,17 +2,17 @@
 
 Legend: **Full** means create/read/update/delete within the allowed tenant scope; **Operate** means operational create/update but not user, role, security, or integration administration; **Self** means only the signed-in employee's records; **Assigned** means only locations in `location_memberships`; **Read** means no mutation; **None** means RLS returns no rows and rejects inserts.
 
-Owners and admins have organization-wide access. Owner administrative writes additionally require an AAL2 JWT. Managers and employees receive operational capabilities from effective job-role assignments at accessible locations; an explicit user denial overrides grants. Capabilities never grant organization security administration.
+Owners and admins have organization-wide access. Password-authenticated Owner sessions currently authorize administrative writes; optional MFA factors do not change the permission matrix during this rollout. Managers and employees receive operational capabilities from effective job-role assignments at accessible locations; an explicit user denial overrides grants. Capabilities never grant organization security administration.
 
 | Capability | Owner | Admin | Manager | Employee |
 | --- | --- | --- | --- | --- |
-| Organization and settings | Full (AAL2 writes) | Full | Read | Read |
+| Organization and settings | Full | Full | Read | Read |
 | Locations | Full | Full | Assigned read | Assigned read |
-| Create/invite/suspend users | Full (AAL2) | Full | None | None |
-| Assign organization roles or locations | Full (AAL2) | Full | None | None |
-| Configure job-role definitions | Full (AAL2) | Full | Read | Read |
-| Configure job-role capabilities or user overrides | Full (AAL2) | Full | None | None |
-| Employee job assignments | Full (AAL2); private rate write-only | Full; private rate write-only | Assigned metadata read; no rate access | Self metadata read; no rate access |
+| Create/invite/suspend users | Full | Full | None | None |
+| Assign organization roles or locations | Full | Full | None | None |
+| Configure job-role definitions | Full | Full | Read | Read |
+| Configure job-role capabilities or user overrides | Full | Full | None | None |
+| Employee job assignments | Full; private rate write-only | Full; private rate write-only | Assigned metadata read; no rate access | Self metadata read; no rate access |
 | Employee directory/sensitive employment record | Full | Full | Operate | Self |
 | Availability | Full | Full | Operate assigned | Self create/update/delete |
 | Time off | Full | Full | Decide assigned for another employee | Self submit/edit/cancel pending |

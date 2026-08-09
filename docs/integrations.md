@@ -16,7 +16,7 @@ The connected read model also omits the public connection's free-form `configura
 
 ## Manual CSV flow
 
-1. An Owner/Admin with the required MFA assurance selects an active location and a supported import contract.
+1. A password-authenticated Owner/Admin selects an active location and a supported import contract.
 2. The browser performs a fast validation pass for UTF-8 CSV structure, normalized unique headers, exact row width, size/row/cell ceilings, required fields, unsafe control bytes, and spreadsheet formulas.
 3. The server authorizes the actor from the session and issues a one-use signed upload for the tenant/location path in the private `imports` bucket.
 4. After upload, the server downloads the exact stored bytes, checks the signed size and path again, repeats validation, and calculates a SHA-256 fingerprint.

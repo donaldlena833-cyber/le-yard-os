@@ -5,13 +5,14 @@ import {
   assertFound,
   throwDatabaseError,
 } from "../errors";
-import { requireManagedLocation } from "../resources";
+import { requireAccessibleLocation, requireManagedLocation } from "../resources";
 import type { WorkflowContext } from "../execute";
 import type {
   ApproveInventoryCountInput,
   CreateInventoryTransferInput,
   CreatePurchaseOrderInput,
   ConfigureInventoryCatalogInput,
+  RecordInventoryItemCostInput,
   ReceiveInventoryDeliveryInput,
   ReviewInventoryTransferInput,
   ReviewWasteRecordInput,
@@ -153,6 +154,49 @@ export async function configureInventoryCatalog(
   };
 }
 
+export async function recordInventoryItemCost(
+  context: WorkflowContext,
+  input: RecordInventoryItemCostInput,
+) {
+  const location = await requireAccessibleLocation(
+    context.supabase,
+    context.actor,
+    input.locationId,
+  );
+  const membership = context.actor.memberships.find(
+    (candidate) => candidate.organizationId === location.organizationId,
+  );
+  const elevated = membership?.role === "owner" || membership?.role === "admin";
+  if (!elevated) {
+    const { data, error } = await context.supabase.rpc("has_capability", {
+      p_organization_id: location.organizationId,
+      p_location_id: location.id,
+      p_capability_key: "inventory.price.manage",
+    });
+    if (error) throwDatabaseError(error, "Your inventory pricing capability could not be verified.");
+    assertCondition(data === true, "forbidden", "Inventory price management is not assigned at this location.");
+  }
+  const { data, error } = await context.supabase.rpc("record_inventory_item_cost", {
+    p_request_id: input.requestId,
+    p_organization_id: location.organizationId,
+    p_location_id: location.id,
+    p_inventory_item_id: input.inventoryItemId,
+    p_unit_id: input.unitId,
+    p_price_quantity: input.priceQuantity,
+    p_unit_price_cents: input.unitPriceCents,
+    p_effective_at: input.effectiveAt,
+    p_notes: normalizedNote(input.notes),
+  });
+  if (error) throwDatabaseError(error, "The inventory unit cost could not be saved.");
+  assertCondition(
+    typeof data === "object" && data !== null && "id" in data,
+    "database",
+    "The inventory unit cost was not returned.",
+  );
+  const result = data as { id: unknown; replayed?: unknown };
+  return { id: String(result.id), replayed: result.replayed === true };
+}
+
 async function replayExistingInventoryCount(
   context: WorkflowContext,
   organizationId: string,
@@ -258,7 +302,7 @@ async function buildAuthoritativeCountLines(
         .in("inventory_item_id", itemIds),
       context.supabase
         .from("item_price_history")
-        .select("inventory_item_id, unit_id, unit_price_cents, effective_at")
+        .select("inventory_item_id, unit_id, price_quantity, unit_price_cents, effective_at")
         .eq("organization_id", organizationId)
         .in("inventory_item_id", itemIds)
         .order("effective_at", { ascending: false })
@@ -273,7 +317,12 @@ async function buildAuthoritativeCountLines(
   const latestPrice = new Map<string, number>();
   for (const price of priceRows ?? []) {
     const key = `${price.inventory_item_id}:${price.unit_id}`;
-    if (!latestPrice.has(key)) latestPrice.set(key, Number(price.unit_price_cents));
+    if (!latestPrice.has(key)) {
+      latestPrice.set(
+        key,
+        Math.round(Number(price.unit_price_cents) / Number(price.price_quantity)),
+      );
+    }
   }
 
   return items.map((item) => {

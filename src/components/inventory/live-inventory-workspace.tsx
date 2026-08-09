@@ -612,7 +612,7 @@ export function LiveInventoryWorkspace({
   description?: string;
 }) {
   const administrativeWrite = workspace.role === "admin"
-    || (workspace.role === "owner" && workspace.identity.aal === "aal2");
+    || workspace.role === "owner";
   const can = (capability: Parameters<typeof hasCapability>[1]) =>
     administrativeWrite || hasCapability(workspace.capabilities, capability);
   const canCountCreate = can("inventory.count.create");

@@ -388,11 +388,11 @@ function Sidebar({
               {workspace.identity.displayName}
             </p>
             <p className="mt-0.5 truncate text-xs text-white/55">
-              {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : workspace.identity.aal === "aal2" ? "MFA on" : workspace.role === "owner" ? "MFA required" : "MFA available"}
+              {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : "Password secured"}
             </p>
           </div>
           <ShieldCheck
-            aria-label={workspace.mode === "demo" ? "Temporary playground session" : workspace.identity.aal === "aal2" ? "Multi-factor authentication verified" : "Standard assurance session"}
+            aria-label={workspace.mode === "demo" ? "Temporary playground session" : "Authenticated password session"}
             className={cn(
               "size-3.5",
               workspace.mode !== "demo" && workspace.identity.aal === "aal2" ? "text-[#dfa14a]" : "text-white/55",
@@ -642,7 +642,7 @@ function MobileDrawer({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-white/90">{workspace.identity.displayName}</p>
                   <p className="mt-0.5 truncate text-xs text-white/55">
-                    {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : workspace.identity.aal === "aal2" ? "MFA on" : workspace.role === "owner" ? "MFA required" : "MFA available"}
+                    {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : "Password secured"}
                   </p>
                 </div>
               </div>

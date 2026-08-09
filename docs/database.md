@@ -81,7 +81,7 @@ The diagram is intentionally a domain overview. The migrations are authoritative
 The four application roles are `owner`, `admin`, `manager`, and `employee`.
 
 - Owners and admins can manage users, roles, invitations, locations, integrations, retention configuration, and data exports.
-- Owners must present an Authenticator Assurance Level 2 (`aal2`) JWT for administrative writes. Reads remain available at AAL1 so an owner can reach the MFA setup/recovery experience.
+- Owners currently use an authenticated password session (`aal1` is sufficient) for administrative writes. MFA remains available as an optional Supabase Auth factor; tenant, role, location, capability, replay, and audit boundaries still apply.
 - Managers can operate only locations in `location_memberships`. Tenant-wide resources that are intentionally unified—such as the guest CRM and shared vendor/item catalog—remain management-only.
 - Employees can access their assigned locations, published schedule context, permitted chat channels, assigned tasks/checklists/SOPs, and their own sensitive employee/time/tip records.
 - Suspended and invited memberships grant no tenant access.

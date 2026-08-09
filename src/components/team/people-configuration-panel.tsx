@@ -46,7 +46,7 @@ const fieldClass =
 function canConfigurePeople(workspace: WorkspaceContextValue) {
   return (
     workspace.role === "admin" ||
-    (workspace.role === "owner" && workspace.identity.aal === "aal2")
+    workspace.role === "owner"
   );
 }
 

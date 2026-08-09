@@ -46,14 +46,14 @@ See [Known limitations](docs/known-limitations.md) for the precise boundary betw
 - Reports: 14 operational report types with location/date filters plus real CSV and PDF output
 - Integrations: adapter registry, manual CSV import, sync attempts, retry state, and server-only credential boundary
 - Ask Le Yard: deterministic tenant-record search in connected mode, with citations, confidence, and mandatory human approval boundaries; external model calls are not part of this release
-- Settings: live organization, locations, role boundaries, MFA assurance, notification preferences, encrypted push-subscription custody, audit, export history, retention, backup evidence, and monitoring state
+- Settings: live organization, locations, role boundaries, optional MFA, notification preferences, encrypted push-subscription custody, audit, export history, retention, backup evidence, and monitoring state
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   Browser["Responsive PWA"] --> Next["Next.js App Router"]
-  Next --> Auth["Supabase Auth + MFA"]
+  Next --> Auth["Supabase Auth · password access · optional MFA"]
   Next --> Data["User-scoped Supabase client"]
   Data --> RLS["Postgres + forced RLS"]
   RLS --> Storage["Private Storage + signed URLs"]
@@ -141,7 +141,7 @@ The tip engine uses integer cents and minutes, deterministic largest-remainder a
 - Audit events and approved financial ledgers are immutable.
 - AI output must cite records, display confidence, and cannot silently mutate payroll, tips, punches, inventory, or guests.
 - Playground passwords are never stored in plaintext. The registry and session secret remain server-only and scoped to their Vercel target, and the signed session expires after eight hours.
-- Playground Owner identities are not Supabase Auth identities and do not satisfy the live-production MFA requirement.
+- Playground Owner identities are not Supabase Auth identities. Connected Owners currently use password-only access; enrolled Supabase MFA factors remain optional and are not removed by the application.
 - Authentication return paths accept only normalized origin-relative paths; absolute, scheme-relative, backslash, encoded-control, and off-origin redirects are rejected.
 - Connected CSV/PDF report exports use the authenticated tenant read model, refuse truncated evidence, and never substitute demo records. Raw whole-tenant/guest exports remain locked until an owner approves their destination and retention rule.
 - Owner-supplied operating assumptions remain visibly draft until their timing, eligibility, accounting, payroll, and compliance details are approved. Retention is unset, so the app performs no policy-driven automatic deletion.

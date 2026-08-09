@@ -19,11 +19,13 @@ const ids = {
   manager: "10000000-0000-4000-8000-000000000004",
   employee: "10000000-0000-4000-8000-000000000005",
   admin: "10000000-0000-4000-8000-000000000003",
+  owner: "10000000-0000-4000-8000-000000000001",
   chefRole: "c0100000-0000-4000-8000-000000000001",
   chefAssignment: "c0200000-0000-4000-8000-000000000001",
   unit: "c0250000-0000-4000-8000-000000000001",
   category: "c0260000-0000-4000-8000-000000000001",
   item: "c0300000-0000-4000-8000-000000000001",
+  itemCost: "c0350000-0000-4000-8000-000000000001",
   vendor: "c0400000-0000-4000-8000-000000000001",
   vendorItem: "c0500000-0000-4000-8000-000000000001",
   par: "c0600000-0000-4000-8000-000000000001",
@@ -261,6 +263,58 @@ try {
   if (createdItem.replayed !== false || replayedItem.replayed !== true) {
     throw new Error("Operational item command did not preserve exact replay semantics");
   }
+  const recordDirectCost = (price = 3, locationId = ids.location) => db.query(
+    `select public.record_inventory_item_cost(
+      $1::uuid, $2::uuid, $3::uuid, $4::uuid,
+      '70000000-0000-4000-8000-000000000002'::uuid,
+      1000::numeric, $5::bigint, '2026-08-09T12:00:00.000Z'::timestamptz,
+      'Opening direct gram cost'
+    ) as result`,
+    [ids.itemCost, ids.organization, locationId, ids.item, price],
+  );
+  const createdCost = (await recordDirectCost()).rows[0].result;
+  const replayedCost = (await recordDirectCost()).rows[0].result;
+  if (createdCost.replayed !== false || replayedCost.replayed !== true) {
+    throw new Error("Direct inventory cost did not preserve exact replay semantics");
+  }
+  await expectDatabaseError(
+    () => recordDirectCost(4),
+    "23505",
+    "changed direct cost replay",
+  );
+  await expectDatabaseError(
+    () => db.query(
+      `select public.record_inventory_item_cost(
+        'c0350000-0000-4000-8000-000000000002'::uuid, $1::uuid, $2::uuid,
+        $3::uuid, '70000000-0000-4000-8000-000000000002'::uuid,
+        1000::numeric, 3::bigint, '2026-08-09T12:00:00.000Z'::timestamptz, null
+      )`,
+      [ids.organization, ids.otherLocation, ids.item],
+    ),
+    "42501",
+    "cross-location direct cost",
+  );
+  await assumeUser(ids.owner, "aal1");
+  const directCostEvidence = (await db.query(
+    `select
+      count(*) filter (where vendor_id is null and source_type = 'manual_unit_cost')::int as price_rows,
+      (select count(*)::int from public.audit_events
+       where table_name = 'item_price_history' and record_id = $1::text) as audit_rows
+     from public.item_price_history`,
+    [ids.itemCost],
+  )).rows[0];
+  if (directCostEvidence.price_rows !== 1 || directCostEvidence.audit_rows < 1) {
+    throw new Error(`Direct cost evidence is incomplete: ${JSON.stringify(directCostEvidence)}`);
+  }
+
+  const ownerPasswordAccess = (await db.query(
+    "select public.can_manage_org($1::uuid) as can_manage, public.is_owner_pending_mfa($1::uuid) as pending_mfa",
+    [ids.organization],
+  )).rows[0];
+  if (!ownerPasswordAccess.can_manage || ownerPasswordAccess.pending_mfa) {
+    throw new Error(`Password-only Owner policy failed: ${JSON.stringify(ownerPasswordAccess)}`);
+  }
+  await assumeUser(ids.manager);
   await configure(ids.vendor, "vendor.save", {
     name: "Capability Produce",
     email: "orders@capability.example.invalid",

@@ -37,6 +37,7 @@ const approvedAuthenticatedFunctions = new Set([
   "provision_user_invitation", "publish_checklist_template", "publish_schedule",
   "publish_sop_version", "receive_inventory_delivery", "record_checklist_response",
   "record_clock_in", "record_clock_out", "record_guest_consent", "record_missed_time_entry",
+  "record_inventory_item_cost",
   "record_service_availability_event",
   "record_receipt_fingerprint", "record_tip_payroll_export", "remove_push_subscription",
   "reopen_shift", "report_filters_are_scope_safe", "request_report_export",

@@ -201,7 +201,7 @@ function InviteDialog({
               </label>
               <div className="sm:col-span-2 rounded-xl bg-[var(--canvas)] px-3.5 py-3 text-xs leading-4 text-[var(--ink-faint)]">
                 <span className="flex items-center gap-2 font-semibold text-[var(--ink-soft)]"><KeyRound className="size-3.5" /> Secure account handoff</span>
-                <p className="mt-1">{actorRole === "admin" ? "Admins can invite admins, managers, and employees. Only an owner can grant owner access." : "Owners must use MFA before inviting or assigning access."}</p>
+                <p className="mt-1">{actorRole === "admin" ? "Admins can invite admins, managers, and employees. Only an owner can grant owner access." : "Owners can invite and assign access with their authenticated password session."}</p>
               </div>
               {state.status !== "idle" ? (
                 <p role="status" aria-live="polite" className={cn("sm:col-span-2 rounded-xl px-3.5 py-3 text-[13px]", state.status === "success" ? "bg-[var(--positive-soft)] text-[var(--positive)]" : "bg-[var(--danger-soft)] text-[var(--danger)]")}>
@@ -411,7 +411,6 @@ function ConnectedTeamWorkspace({ workspace }: { workspace: WorkspaceContextValu
   const roles = invitableRolesForActor(workspace.role);
   const canInvite = canInviteFromWorkspace(workspace.role, workspace.identity.aal);
   const isAuthorizedRole = workspace.role === "owner" || workspace.role === "admin";
-  const needsMfa = workspace.role === "owner" && workspace.identity.aal !== "aal2";
 
   return (
     <PageFrame width="wide">
@@ -438,7 +437,7 @@ function ConnectedTeamWorkspace({ workspace }: { workspace: WorkspaceContextValu
         <Metric label="Access role" value={roleLabel[workspace.role]} detail="Active organization membership" />
         <Metric label="Locations" value={String(workspace.locations.length)} detail={workspace.organizationWide ? "Organization-wide access" : "Assigned access"} />
         <Metric label="Current location" value={workspace.activeLocation.name} detail="Selected on the server" />
-        <Metric label="Session" value={workspace.identity.aal.toUpperCase()} detail={workspace.identity.aal === "aal2" ? "MFA verified" : "Standard assurance"} />
+        <Metric label="Session" value="Password" detail={workspace.identity.aal === "aal2" ? "Optional MFA also verified" : "Authenticated access"} />
       </section>
 
       <section className="mt-6 rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] p-6 sm:p-8">
@@ -449,20 +448,16 @@ function ConnectedTeamWorkspace({ workspace }: { workspace: WorkspaceContextValu
           <div>
             <p className="eyebrow">Invitation authority</p>
             <h3 className="mt-2 text-lg font-medium tracking-[-0.035em]">
-              {needsMfa
-                ? "Complete MFA to invite teammates"
-                : isAuthorizedRole
-                  ? `${roleLabel[workspace.role]} access verified`
-                  : "Owner or admin access is required"}
+              {isAuthorizedRole
+                ? `${roleLabel[workspace.role]} access verified`
+                : "Owner or admin access is required"}
             </h3>
             <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">
-              {needsMfa
-                ? "Owner invitations stay locked until this session reaches AAL2."
-                : isAuthorizedRole
-                  ? workspace.role === "admin"
-                    ? "You can invite admins, managers, and employees. Owner access is not offered and is rejected server-side."
-                    : "You can invite all access roles. New owners must enroll in MFA."
-                  : "Managers and employees can view team operations, but cannot create accounts or assign access."}
+              {isAuthorizedRole
+                ? workspace.role === "admin"
+                  ? "You can invite admins, managers, and employees. Owner access is not offered and is rejected server-side."
+                  : "You can invite all access roles. New owners create their own password; MFA remains optional."
+                : "Managers and employees can view team operations, but cannot create accounts or assign access."}
             </p>
           </div>
         </div>

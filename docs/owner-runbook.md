@@ -40,7 +40,7 @@ Retention is the rule for how long each kind of record is kept before archival o
 
 1. In a local or approved nonproduction Supabase project, apply the forward migrations and run `npm run test:integration`.
 2. In Settings, assign the Executive Chef job role only the location-scoped operational capabilities it needs. Do not promote the Chef to Admin.
-3. Open Kitchen/Inventory Setup and add real units, categories, vendors, items, packs/prices, pars, and draft recipes. Do not copy synthetic demo values.
+3. Open Kitchen/Inventory Setup and add real units, categories, items, per-unit costs, opening stock, pars, and draft recipes. Add vendors and purchase packs only when the real purchasing records are available. Do not copy synthetic demo values.
 4. Open Service Control to test a running-low event, restore it with a compensating event, add a Manager Log handoff, publish a pre-shift, and acknowledge it as an employee.
 5. Verify `/time-clock` with an employee and a manager. Punch correction approval boundaries remain independent of kitchen capabilities.
 6. Review the explicit function-grant verifier output before migration approval. Do not grant browser execution to trigger-only or service-only functions.
@@ -75,8 +75,8 @@ The application must not infer these inputs from demo content or from the tempor
 5. Run `npm run bootstrap:owners -- --config /absolute/path/to/approved-bootstrap.json`. This is a dry run: it validates the complete plan, derives stable identifiers, makes no network calls, and prints a plan-bound confirmation.
 6. Both owners review the exact organization, locations, emails, timezones, currency, and generated identifiers. Set `LE_YARD_BOOTSTRAP_CONFIRM` to the emitted value only after approval.
 7. Run the same command with `--execute`. It refuses demo/local origins, verifies an empty application database, sends two Supabase Auth invitations, and atomically creates the tenant plus two pending Owner memberships through a service-only database function. It never creates or prints a password.
-8. Unset `LE_YARD_BOOTSTRAP_CONFIRM`. Each owner opens their own one-time link, sets their own password, and enrolls and verifies an authenticator factor.
-9. Confirm both active Owner memberships and AAL2 administrative access. Verify neither account can view the other's password or authenticator secret.
+8. Unset `LE_YARD_BOOTSTRAP_CONFIRM`. Each owner opens their own one-time link and sets their own password. Optional MFA may be enrolled later without blocking workspace access.
+9. Confirm both active Owner memberships and password-authenticated administrative access. Verify neither account can view the other's password or optional authenticator secret.
 10. Configure approved job codes and operating policies only from the signed-off launch sheet.
 11. Invite a non-owner test user, verify role/location isolation, then suspend the test account.
 

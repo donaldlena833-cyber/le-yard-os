@@ -872,12 +872,6 @@ export function LiveIntegrationsWorkspace({
         )}
       </div>
 
-      {model.ownerNeedsMfa ? (
-        <div className="mt-5 flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-xs leading-4 text-[var(--warning)]">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-          Owner integration changes require an MFA-verified session. Existing status remains readable.
-        </div>
-      ) : null}
       {message ? (
         <div role="status" className="mt-5 flex items-start gap-3 rounded-[16px] bg-[var(--accent-soft)]/45 px-4 py-3 text-xs leading-4 text-[var(--accent-strong)]">
           <Clock3 className="mt-0.5 size-4 shrink-0" /> {message}

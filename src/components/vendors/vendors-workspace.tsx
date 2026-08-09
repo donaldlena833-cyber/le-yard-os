@@ -2,7 +2,6 @@
 
 import { ArrowUpRight, PackageOpen, Search, Truck } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -19,7 +18,6 @@ const playgroundPurchaseOrders = demoWorkspace.purchaseOrders.filter(
 );
 
 export function VendorsWorkspace() {
-  const workspace = useWorkspaceContext();
   // These fixtures are visibly synthetic and exist only in demo mode.
   const vendors = playgroundVendors;
   const inventoryItems = playgroundInventoryItems;
@@ -43,7 +41,7 @@ export function VendorsWorkspace() {
         <div>
           <div className="flex items-center gap-2">
             <StatusPill tone="positive" dot>Purchasing context</StatusPill>
-            <span className="text-xs text-[var(--ink-faint)]">Le Yard · {workspace.persona === "chef" ? "Chef view" : "Back office"}</span>
+            <span className="text-xs text-[var(--ink-faint)]">Le Yard · Purchasing</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Vendors & prices</h2>
           <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Compare current food costs, review recent price movement, and see open orders before building the kitchen plan.</p>

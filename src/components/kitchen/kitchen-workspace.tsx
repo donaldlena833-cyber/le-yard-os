@@ -65,7 +65,7 @@ export function KitchenWorkspace() {
     <PageFrame width="full" className="max-w-[1400px]">
       <PageHeader
         eyebrow="Kitchen · Main dining room"
-        status={<StatusPill tone="positive" dot>{canEdit ? "Manager kitchen access" : "Kitchen read-only"}</StatusPill>}
+        status={<StatusPill tone="positive" dot>Kitchen</StatusPill>}
         title="Recipes & portion cost"
         detail="Define every measurable plate component so purchasing, inventory, and menu costing share one reliable source."
         actions={<Button variant="accent" onClick={addRecipe} disabled={!canEdit}><Plus className="size-4" /> New recipe</Button>}
@@ -96,7 +96,7 @@ export function KitchenWorkspace() {
             <div className="min-w-0 flex-1">
               <p className="eyebrow">Recipe specification</p>
               <input disabled={!canEdit} aria-label="Recipe name" value={selected.name} onChange={(event) => setRecipes((current) => current.map((recipe) => recipe.id === selected.id ? { ...recipe, name: event.target.value } : recipe))} className="mt-3 h-12 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xl font-semibold tracking-[-0.04em] outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-60 sm:text-2xl" />
-              <p className="mt-2 text-sm leading-6 text-[var(--ink-faint)]">{canEdit ? "Edit each component name and measured amount. Add as many components as the plate needs." : "Managers and the chef can edit recipe components and measured amounts."}</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--ink-faint)]">Measured components, portions, and current cost for one finished yield.</p>
             </div>
             <span className="flex size-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Scale className="size-5" /></span>
           </div>
@@ -123,7 +123,6 @@ export function KitchenWorkspace() {
           </div>
         </Surface>
       </section>
-      <div className="mt-8 flex items-start gap-3 rounded-[18px] border border-[var(--accent)]/15 bg-[var(--accent-soft)]/50 px-4 py-3.5 text-xs leading-5 text-[var(--accent-strong)]"><Scale className="mt-0.5 size-4 shrink-0" /><span>Chef access is limited to Le Yard’s BOH schedule, recipe specs, and inventory context. Payroll, earnings, CRM, receipts, reports, and owner approvals stay outside this workspace.</span></div>
     </PageFrame>
   );
 }

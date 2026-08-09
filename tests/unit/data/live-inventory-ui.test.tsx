@@ -128,9 +128,11 @@ describe("connected Inventory UI", () => {
         }}
       />,
     );
-    expect(markup).toContain("Job-role access");
+    expect(markup).toContain("Ready to configure");
     expect(markup).toContain("Add your first inventory category");
     expect(markup).toContain("Create a recipe draft now");
+    expect(markup).toContain("Unit costs &amp; opening stock");
+    expect(markup).toContain("Unit cost");
     expect(markup).toContain("Recipe");
   });
 });

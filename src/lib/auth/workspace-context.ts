@@ -279,7 +279,8 @@ export function invitableRolesForActor(role: AppRole): readonly AppRole[] {
 
 export function canInviteFromWorkspace(
   role: AppRole,
-  aal: AssuranceLevel,
+  _aal: AssuranceLevel,
 ): boolean {
-  return role === "admin" || (role === "owner" && aal === "aal2");
+  void _aal;
+  return role === "admin" || role === "owner";
 }
