@@ -1642,13 +1642,17 @@ try {
        '20000000-0000-4000-8000-000000000001',
        '30000000-0000-4000-8000-000000000001',
        'b5000000-0000-4000-8000-000000000001',
-       current_date, 'forged', 'approved', 100, 100,
+       (clock_timestamp() at time zone 'America/New_York')::date,
+       'forged', 'approved', 100, 100,
        '10000000-0000-4000-8000-000000000003', now(), now(),
        '10000000-0000-4000-8000-000000000004'
      )`,
     "42501",
     "forged approved tip run insert",
   );
+  // The CI database session runs in UTC while the synthetic restaurant is in
+  // America/New_York. Derive closeout business dates in the location timezone
+  // so late-evening labor is not incorrectly assigned to the next UTC day.
   await db.exec(`
     select set_config(
       'request.jwt.claims',
@@ -1663,7 +1667,8 @@ try {
       'b5050000-0000-4000-8000-000000000001',
       '20000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
-      current_date, 'security-follow-up-tip-run',
+      (clock_timestamp() at time zone 'America/New_York')::date,
+      'security-follow-up-tip-run',
       100000, 90000, 9000, 1000, 0,
       '10000000-0000-4000-8000-000000000004'
     );
@@ -1843,7 +1848,8 @@ try {
       'b5200000-0000-4000-8000-000000000001',
       '20000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
-      current_date, 'maker-checker-closeout',
+      (clock_timestamp() at time zone 'America/New_York')::date,
+      'maker-checker-closeout',
       100000, 90000, 0,
       '10000000-0000-4000-8000-000000000004'
     );
