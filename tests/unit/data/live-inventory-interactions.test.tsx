@@ -243,6 +243,74 @@ const mutationModel: LiveInventoryModel = {
 };
 
 describe("connected Inventory review interactions", () => {
+  it("opens a complete recipe editor from the Recipes tab and persists manual changes", async () => {
+    const chefWorkspace = {
+      ...workspace,
+      capabilities: [...workspace.capabilities, "recipe.manage"],
+    } satisfies WorkspaceContextValue;
+    const recipeId = "91000000-0000-4000-8000-000000000001";
+    const recipeModel: LiveInventoryModel = {
+      ...model,
+      recipes: [{
+        id: recipeId,
+        name: "Affogato",
+        yieldQuantity: 1,
+        yieldUnit: "ea",
+        menuPriceCents: 1000,
+        ingredientCount: 1,
+        knownCostCents: 55,
+        missingCostCount: 0,
+      }],
+      catalog: {
+        units: [{ ...model.units[0], isBase: true, isActive: true, updatedAt: "2026-08-01T12:00:00Z" }],
+        conversions: [],
+        categories: [],
+        vendors: [],
+        items: [{ id: model.items[0].id, name: "Lemons", sku: model.items[0].sku, description: null, categoryId: null, baseUnitId: model.items[0].baseUnitId, trackInventory: true, isActive: true }],
+        vendorItems: [],
+        priceHistory: [],
+        pars: [],
+        recipes: [{
+          id: recipeId,
+          name: "Affogato",
+          yieldQuantity: 1,
+          yieldUnitId: model.items[0].baseUnitId,
+          menuPriceCents: 1000,
+          isActive: true,
+          ingredients: [{ inventoryItemId: model.items[0].id, unitId: model.items[0].baseUnitId, quantity: 1, wasteFactor: 0 }],
+        }],
+      },
+    };
+    vi.mocked(configureInventoryCatalogAction).mockResolvedValue({
+      ok: true,
+      persisted: true,
+      mode: "live",
+      data: { id: recipeId, command: "recipe.save", replayed: false },
+    });
+
+    render(<LiveInventoryWorkspace workspace={chefWorkspace} result={{ ok: true, data: recipeModel }} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Recipes" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Affogato" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Edit Affogato" });
+    expect(dialog.dataset.inventoryModalLayout).toBe("task");
+    expect(dialog.querySelector("[data-recipe-editor-scroll]")?.className).toContain("overflow-y-auto");
+    expect((within(dialog).getByLabelText("Recipe name") as HTMLInputElement).value).toBe("Affogato");
+    expect((within(dialog).getByLabelText("Ingredient item 1") as HTMLSelectElement).value).toBe(model.items[0].id);
+    fireEvent.change(within(dialog).getByLabelText("Menu price · USD"), { target: { value: "12.00" } });
+    fireEvent.change(within(dialog).getByLabelText("Ingredient quantity 1"), { target: { value: "2" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save change" }));
+
+    await waitFor(() => expect(configureInventoryCatalogAction).toHaveBeenCalledOnce());
+    expect(vi.mocked(configureInventoryCatalogAction).mock.calls[0][0]).toMatchObject({
+      command: "recipe.save",
+      id: recipeId,
+      name: "Affogato",
+      menuPriceCents: 1200,
+      ingredients: [{ inventoryItemId: model.items[0].id, quantity: 2 }],
+    });
+  });
+
   it("renders the count as a body-ported single-scroll task with safe actions and no input autofocus", async () => {
     render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
     const opener = screen.getByRole("button", { name: "Start full count" });

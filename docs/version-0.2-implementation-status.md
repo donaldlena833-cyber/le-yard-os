@@ -139,6 +139,17 @@ Initial tracked status document created:
 - Connected Le Yard Supabase migration — PASS: `password_only_owners_and_direct_inventory_costs` applied to project `qcmwqnonxabdsntfsuzy` after the full portable verifier passed. No other Supabase project was modified.
 - Removed passive Chef access-boundary banners and similar role narration from Kitchen, Chef Today, Vendors, and the authorized Inventory Setup state. Permission enforcement and actionable read-only feedback remain intact.
 
+### 2026-08-09 direct recipe authoring and modal polish
+
+- The connected Recipes tab now exposes `New recipe` and a per-recipe `Edit` action to Owner/Admin and users with `recipe.manage`; recipe authors no longer need to enter Setup to edit a recipe.
+- The shared immutable recipe command now powers both Setup and the Recipes tab. The editor covers recipe name, yield, yield unit, menu price, draft/published state, ingredient selection, quantities, units, waste factors, add, and remove.
+- Recipe costing is presented as responsive cards with visible cost coverage. A direct `Costs & stock` action opens the existing manual unit-cost and opening-stock setup surface.
+- Catalog edit dialogs now keep Cancel/Save controls visible in a safe-area-aware sticky footer. The recipe editor uses responsive ingredient cards with no desktop minimum width or horizontal scrolling.
+- Added a focused interaction test proving an authorized Chef can open an existing recipe from Recipes, change its menu price and ingredient quantity, and submit the actor-derived `recipe.save` command.
+- Focused verification: 15/15 inventory UI/interaction tests passed; TypeScript, focused ESLint, and whitespace verification passed.
+- Final `npm run verify` — PASS: lint, generated database contract check, TypeScript, 432/432 unit tests across 77 files, all nine portable integration/security verifiers, and the optimized Next.js production build. An unrelated message-channel timing test missed its first full-suite wait, passed immediately in isolation, and passed again in the clean full verification run.
+- Local in-app browser inspection was unavailable because the browser security policy blocks agent access to `localhost`; no alternate browser or policy workaround was used. The existing local dev preview remained available to the Owner.
+
 - `npm run lint` — PASS.
 - `npm run typecheck` — PASS after service-control/type generation.
 - Focused capability-response normalization tests — PASS: 3/3.

@@ -12,6 +12,7 @@ import {
   ClipboardList,
   LoaderCircle,
   PackageOpen,
+  Pencil,
   Plus,
   Search,
   ShieldCheck,
@@ -26,6 +27,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   approveInventoryCountAction,
+  configureInventoryCatalogAction,
   createInventoryTransferAction,
   createPurchaseOrderAction,
   receiveInventoryDeliveryAction,
@@ -35,7 +37,11 @@ import {
   submitWasteRecordAction,
 } from "@/app/actions/workflows/inventory";
 import { Button } from "@/components/ui/button";
-import { InventoryCatalogWorkspace } from "@/components/inventory/inventory-catalog-workspace";
+import {
+  InventoryCatalogWorkspace,
+  RecipeEditorDialog,
+  type RecipeRecord,
+} from "@/components/inventory/inventory-catalog-workspace";
 import { InventoryModalFrame } from "@/components/inventory/inventory-modal-frame";
 import { Metric, PageFrame, PageHeader, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -623,6 +629,7 @@ export function LiveInventoryWorkspace({
   const canTransferApprove = can("inventory.transfer.approve");
   const canWasteCreate = can("inventory.waste.create");
   const canWasteApprove = can("inventory.waste.approve");
+  const canManageRecipes = can("recipe.manage");
   const canSeeVendors = administrativeWrite || ["inventory.vendor.manage", "inventory.price.manage", "inventory.purchase.create", "inventory.receive"].some((capability) =>
     hasCapability(workspace.capabilities, capability as Parameters<typeof hasCapability>[1]),
   );
@@ -656,6 +663,7 @@ export function LiveInventoryWorkspace({
   const [selectedCountId, setSelectedCountId] = useState<string | null>(null);
   const [countReviewRequestId, setCountReviewRequestId] = useState<string | null>(null);
   const [mutationDialog, setMutationDialog] = useState<InventoryMutationDialog | null>(null);
+  const [recipeDialog, setRecipeDialog] = useState<{ requestId: string; record?: RecipeRecord } | null>(null);
   const [mutationReturnFocus, setMutationReturnFocus] = useState<HTMLElement | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -851,6 +859,26 @@ export function LiveInventoryWorkspace({
     }
   }
 
+  async function saveRecipe(input: unknown) {
+    setBusy(true);
+    setNotice("");
+    try {
+      const response = await configureInventoryCatalogAction(input);
+      if (!response.ok) {
+        setNotice(response.message ?? "The recipe could not be saved.");
+        return false;
+      }
+      setNotice("Recipe saved.");
+      router.refresh();
+      return true;
+    } catch {
+      setNotice("The recipe could not be saved. Try again.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <PageFrame width="wide">
       <PageHeader
@@ -963,8 +991,12 @@ export function LiveInventoryWorkspace({
 
           {activeTab === "recipes" ? (
             <section className="mt-5">
-              <SectionHeading title="Recipe costing" detail="Known ingredient cost from current matching-unit price records; missing conversions remain visibly incomplete." />
-              {model.recipes.length ? <div className="border-y border-[var(--line)]">{model.recipes.map((recipe) => <div key={recipe.id} className="grid grid-cols-[1fr_auto] gap-3 border-t border-[var(--line)] px-4 py-4 first:border-t-0 sm:grid-cols-[1.2fr_.55fr_.55fr_.45fr]"><div className="flex min-w-0 items-center gap-3"><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><UtensilsCrossed className="size-4 text-[var(--ink-faint)]" /></span><span className="min-w-0"><span className="block truncate text-xs font-semibold">{recipe.name}</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">Yields {quantityLabel(recipe.yieldQuantity)} {recipe.yieldUnit} · {recipe.ingredientCount} ingredients</span></span></div><div className="hidden sm:block"><p className="text-xs text-[var(--ink-faint)]">Known input cost</p><p className="numeric mt-1 text-xs font-semibold">{formatMoney(recipe.knownCostCents, model.currencyCode)}</p></div><div className="hidden sm:block"><p className="text-xs text-[var(--ink-faint)]">Menu price</p><p className="numeric mt-1 text-xs font-semibold">{recipe.menuPriceCents === null ? "—" : formatMoney(recipe.menuPriceCents, model.currencyCode)}</p></div><div className="text-right sm:text-left"><p className="text-xs text-[var(--ink-faint)]">Cost coverage</p><div className="mt-1"><StatusPill tone={recipe.missingCostCount ? "warning" : "positive"}>{recipe.missingCostCount ? `${recipe.missingCostCount} missing` : "Complete"}</StatusPill></div></div></div>)}</div> : <EmptyState icon={<UtensilsCrossed className="size-4" />} title="No active recipes" detail="Recipe ingredients and source-backed costs will appear here after configuration." />}
+              <SectionHeading
+                title="Recipe costing"
+                detail="Edit recipe specs here. Ingredient prices and opening stock remain available in Setup."
+                action={canManageRecipes && model.catalog ? <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => setActiveTab("catalog")}>Costs & stock</Button><Button size="sm" variant="accent" disabled={!model.catalog.units.some((unit) => unit.isActive)} onClick={() => setRecipeDialog({ requestId: crypto.randomUUID() })}><Plus className="size-3.5" />New recipe</Button></div> : undefined}
+              />
+              {model.recipes.length ? <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{model.recipes.map((recipe) => { const editableRecipe = model.catalog?.recipes.find((candidate) => candidate.id === recipe.id); return <article key={recipe.id} className="group rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-4 transition hover:border-[var(--line-strong)] hover:bg-[var(--paper-strong)]"><div className="flex items-start gap-3"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]"><UtensilsCrossed className="size-4 text-[var(--ink-faint)]" /></span><div className="min-w-0 flex-1"><h4 className="truncate text-sm font-semibold">{recipe.name}</h4><p className="mt-1 text-[13px] text-[var(--ink-faint)]">Yields {quantityLabel(recipe.yieldQuantity)} {recipe.yieldUnit} · {recipe.ingredientCount} ingredients</p></div>{canManageRecipes && editableRecipe ? <button type="button" aria-label={`Edit ${recipe.name}`} onClick={() => setRecipeDialog({ requestId: crypto.randomUUID(), record: editableRecipe })} className="focus-ring flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--paper-strong)] text-[var(--ink-faint)] transition hover:border-[var(--line-strong)] hover:text-[var(--ink)]"><Pencil className="size-4" /></button> : null}</div><div className="mt-4 grid grid-cols-2 gap-3 border-t border-[var(--line)] pt-4"><div><p className="text-[12px] text-[var(--ink-faint)]">Ingredient cost</p><p className="numeric mt-1 text-sm font-semibold">{formatMoney(recipe.knownCostCents, model.currencyCode)}</p></div><div><p className="text-[12px] text-[var(--ink-faint)]">Menu price</p><p className="numeric mt-1 text-sm font-semibold">{recipe.menuPriceCents === null ? "—" : formatMoney(recipe.menuPriceCents, model.currencyCode)}</p></div></div><div className="mt-4 flex items-center justify-between"><span className="text-[12px] text-[var(--ink-faint)]">Cost coverage</span><StatusPill tone={recipe.missingCostCount ? "warning" : "positive"}>{recipe.missingCostCount ? `${recipe.missingCostCount} missing` : "Complete"}</StatusPill></div></article>; })}</div> : <EmptyState icon={<UtensilsCrossed className="size-4" />} title="No active recipes" detail="Create a recipe draft, then add ingredients when the inventory catalog is ready." />}
             </section>
           ) : null}
 
@@ -985,6 +1017,7 @@ export function LiveInventoryWorkspace({
         {countOpen ? <CountDialog key="count" model={model} values={countValues} notes={countNotes} notice={notice} busy={busy} onValueChange={(itemId, value) => setCountValues((current) => ({ ...current, [itemId]: value }))} onNotesChange={setCountNotes} onClose={() => { if (!busy) { setCountOpen(false); setCountSubmissionId(null); } }} onSubmit={submitCount} /> : null}
         {selectedCount ? <ReviewDialog key="review" count={selectedCount} model={model} currentUserId={workspace.identity.userId} note={reviewNote} notice={notice} busy={busy} onNoteChange={setReviewNote} onClose={() => { if (!busy) { setSelectedCountId(null); setCountReviewRequestId(null); } }} onDecision={(approve) => void decideCount(approve)} /> : null}
         {mutationDialog ? <InventoryMutationDialog key={`${mutationDialog.kind}:${mutationDialog.requestId}`} dialog={mutationDialog} workspace={workspace} model={model} busy={busy} notice={notice} returnFocus={mutationReturnFocus} onClose={() => { if (!busy) { setMutationDialog(null); setMutationReturnFocus(null); } }} onError={setNotice} onRun={runMutation} /> : null}
+        {recipeDialog && model.catalog ? <RecipeEditorDialog key={recipeDialog.requestId} dialog={{ kind: "recipe", ...recipeDialog }} catalog={model.catalog} model={model} workspace={workspace} busy={busy} notice={notice} onClose={() => { if (!busy) setRecipeDialog(null); }} onError={setNotice} onSave={saveRecipe} /> : null}
       </AnimatePresence>
     </PageFrame>
   );

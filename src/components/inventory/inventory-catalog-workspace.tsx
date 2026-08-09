@@ -33,7 +33,7 @@ import { localDateTimeParts, zonedLocalToIso } from "@/data/read-models/local-ti
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { parseInventoryMoneyToCents, parseInventoryQuantity } from "@/lib/inventory/input-parsing";
 import { hasCapability } from "@/lib/permissions/capabilities";
-import { formatMoney } from "@/lib/utils";
+import { cn, formatMoney } from "@/lib/utils";
 import { InventoryModalFrame } from "./inventory-modal-frame";
 
 type UnitRecord = LiveInventoryCatalog["units"][number];
@@ -42,7 +42,7 @@ type CategoryRecord = LiveInventoryCatalog["categories"][number];
 type VendorRecord = LiveInventoryCatalog["vendors"][number];
 type ItemRecord = LiveInventoryCatalog["items"][number];
 type VendorItemRecord = LiveInventoryCatalog["vendorItems"][number];
-type RecipeRecord = LiveInventoryCatalog["recipes"][number];
+export type RecipeRecord = LiveInventoryCatalog["recipes"][number];
 
 type CatalogDialog =
   | { kind: "unit"; requestId: string; record?: UnitRecord }
@@ -108,9 +108,9 @@ function localPriceTime(timeZone: string) {
   return `${parts.date}T${parts.time}`;
 }
 
-function FormActions({ busy, onClose }: { busy: boolean; onClose: () => void }) {
+function FormActions({ busy, onClose, pinned = false }: { busy: boolean; onClose: () => void; pinned?: boolean }) {
   return (
-    <div className="flex justify-end gap-2">
+    <div className={cn("flex items-center justify-end gap-2 bg-[var(--paper-strong)]/95 backdrop-blur", pinned ? "shrink-0 border-t border-[var(--line)] px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-7 sm:pb-5" : "sticky bottom-0 z-10 -mx-5 -mb-5 border-t border-[var(--line)] px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:-mx-7 sm:px-7 sm:pb-5")}>
       <Button type="button" variant="quiet" disabled={busy} onClick={onClose}>Cancel</Button>
       <Button type="submit" variant="accent" disabled={busy}>
         {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />}
@@ -383,10 +383,10 @@ function CatalogMutationDialog({
     return <OpeningStockDialog dialog={dialog} model={model} workspace={workspace} busy={busy} notice={notice} onClose={onClose} onError={onError} onSave={onSave} />;
   }
 
-  return <RecipeDialog dialog={dialog} catalog={catalog} model={model} workspace={workspace} busy={busy} notice={notice} onClose={onClose} onError={onError} onSave={onSave} />;
+  return <RecipeEditorDialog dialog={dialog} catalog={catalog} model={model} workspace={workspace} busy={busy} notice={notice} onClose={onClose} onError={onError} onSave={onSave} />;
 }
 
-function RecipeDialog({
+export function RecipeEditorDialog({
   dialog,
   catalog,
   model,
@@ -458,20 +458,22 @@ function RecipeDialog({
   };
 
   return (
-    <InventoryModalFrame title={record ? "Edit recipe" : "Add recipe"} description="Each save creates an immutable recipe snapshot. Ingredients stay connected to canonical item units for live costing." labelledBy="catalog-recipe-dialog" notice={notice} onClose={onClose} width="max-w-5xl">
-      <form onSubmit={(event) => void submit(event)}>
-        <div className="grid gap-5 px-5 py-5 sm:px-7">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Field label="Recipe name"><input name="name" required autoFocus maxLength={160} defaultValue={record?.name} className={fieldClass} /></Field><Field label="Yield"><input name="yieldQuantity" required inputMode="decimal" defaultValue={record?.yieldQuantity ?? 1} className={fieldClass} /></Field><Field label="Yield unit"><select name="yieldUnitId" required defaultValue={record?.yieldUnitId} className={fieldClass}>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} ({unit.symbol})</option>)}</select></Field><Field label={`Menu price · ${model.currencyCode}`}><input name="menuPrice" inputMode="decimal" defaultValue={record?.menuPriceCents == null ? "" : (record.menuPriceCents / 100).toFixed(2)} className={fieldClass} /></Field></div>
-          <div>
-            <div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-[var(--ink-soft)]">Ingredients</p><Button type="button" size="sm" variant="secondary" disabled={!initialItem || busy} onClick={() => setIngredients((current) => [...current, { key: crypto.randomUUID(), inventoryItemId: initialItem!.id, unitId: initialItem!.baseUnitId, quantity: "1", wastePercent: "0" }])}><Plus className="size-3.5" />Add ingredient</Button></div>
-            <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
-              {ingredients.map((ingredient, index) => <div key={ingredient.key} className="grid gap-3 py-3 sm:grid-cols-[1.2fr_.8fr_.55fr_.55fr_auto]"><Field label={`Item ${index + 1}`}><select aria-label={`Ingredient item ${index + 1}`} value={ingredient.inventoryItemId} onChange={(event) => { const item = itemById.get(event.target.value); updateIngredient(ingredient.key, { inventoryItemId: event.target.value, unitId: item?.baseUnitId ?? "" }); }} className={fieldClass}>{items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Unit"><select aria-label={`Ingredient unit ${index + 1}`} value={ingredient.unitId} onChange={(event) => updateIngredient(ingredient.key, { unitId: event.target.value })} className={fieldClass}>{compatibleUnits(ingredient.inventoryItemId).map((unit) => <option key={unit.id} value={unit.id}>{unit.symbol}</option>)}</select></Field><Field label="Quantity"><input aria-label={`Ingredient quantity ${index + 1}`} inputMode="decimal" value={ingredient.quantity} onChange={(event) => updateIngredient(ingredient.key, { quantity: event.target.value })} className={fieldClass} /></Field><Field label="Waste %"><input aria-label={`Ingredient waste ${index + 1}`} inputMode="decimal" value={ingredient.wastePercent} onChange={(event) => updateIngredient(ingredient.key, { wastePercent: event.target.value })} className={fieldClass} /></Field><button type="button" aria-label={`Remove ingredient ${index + 1}`} disabled={busy} onClick={() => setIngredients((current) => current.filter((candidate) => candidate.key !== ingredient.key))} className="focus-ring mt-5 flex size-9 items-center justify-center rounded-full text-[var(--ink-faint)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"><X className="size-4" /></button></div>)}
-              {!ingredients.length ? <p className="py-5 text-center text-xs text-[var(--ink-faint)]">Inactive recipes may be saved without ingredients. Add one before activating.</p> : null}
+    <InventoryModalFrame title={record ? `Edit ${record.name}` : "Add recipe"} description="Update the yield, menu price, status, and every ingredient in one place." labelledBy="catalog-recipe-dialog" notice={notice} onClose={onClose} width="max-w-5xl" layout="task">
+      <form className="flex h-full min-h-0 flex-col" onSubmit={(event) => void submit(event)}>
+        <div data-recipe-editor-scroll className="grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 sm:py-6">
+          <section className="rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-4 sm:p-5">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Field label="Recipe name"><input name="name" required autoFocus maxLength={160} defaultValue={record?.name} className={fieldClass} /></Field><Field label="Yield"><input name="yieldQuantity" required inputMode="decimal" defaultValue={record?.yieldQuantity ?? 1} className={fieldClass} /></Field><Field label="Yield unit"><select name="yieldUnitId" required defaultValue={record?.yieldUnitId} className={fieldClass}>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} ({unit.symbol})</option>)}</select></Field><Field label={`Menu price · ${model.currencyCode}`}><input name="menuPrice" inputMode="decimal" defaultValue={record?.menuPriceCents == null ? "" : (record.menuPriceCents / 100).toFixed(2)} className={fieldClass} placeholder="0.00" /></Field></div>
+            <div className="mt-4 max-w-sm"><Toggle name="isActive" defaultChecked={record?.isActive ?? false} label="Published and active" /></div>
+          </section>
+          <section>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-sm font-semibold">Ingredients</h4><p className="mt-1 text-[13px] text-[var(--ink-faint)]">Edit the item, measured quantity, unit, or expected waste.</p></div><Button type="button" size="sm" variant="secondary" disabled={!initialItem || busy} onClick={() => setIngredients((current) => [...current, { key: crypto.randomUUID(), inventoryItemId: initialItem!.id, unitId: initialItem!.baseUnitId, quantity: "1", wastePercent: "0" }])}><Plus className="size-3.5" />Add ingredient</Button></div>
+            <div className="grid gap-3">
+              {ingredients.map((ingredient, index) => <article key={ingredient.key} className="rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-4"><div className="mb-3 flex items-center justify-between gap-3"><span className="numeric text-[12px] font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase">Ingredient {index + 1}</span><button type="button" aria-label={`Remove ingredient ${index + 1}`} disabled={busy} onClick={() => setIngredients((current) => current.filter((candidate) => candidate.key !== ingredient.key))} className="focus-ring flex size-10 items-center justify-center rounded-full text-[var(--ink-faint)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"><X className="size-4" /></button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.5fr_.75fr_.9fr_.65fr]"><Field label="Inventory item"><select aria-label={`Ingredient item ${index + 1}`} value={ingredient.inventoryItemId} onChange={(event) => { const item = itemById.get(event.target.value); updateIngredient(ingredient.key, { inventoryItemId: event.target.value, unitId: item?.baseUnitId ?? "" }); }} className={fieldClass}>{items.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></Field><Field label="Quantity"><input aria-label={`Ingredient quantity ${index + 1}`} inputMode="decimal" value={ingredient.quantity} onChange={(event) => updateIngredient(ingredient.key, { quantity: event.target.value })} className={fieldClass} /></Field><Field label="Unit"><select aria-label={`Ingredient unit ${index + 1}`} value={ingredient.unitId} onChange={(event) => updateIngredient(ingredient.key, { unitId: event.target.value })} className={fieldClass}>{compatibleUnits(ingredient.inventoryItemId).map((unit) => <option key={unit.id} value={unit.id}>{unit.name} ({unit.symbol})</option>)}</select></Field><Field label="Waste %"><input aria-label={`Ingredient waste ${index + 1}`} inputMode="decimal" value={ingredient.wastePercent} onChange={(event) => updateIngredient(ingredient.key, { wastePercent: event.target.value })} className={fieldClass} /></Field></div></article>)}
+              {!ingredients.length ? <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] px-5 py-8 text-center"><UtensilsCrossed className="mx-auto size-5 text-[var(--ink-faint)]" /><p className="mt-3 text-sm font-semibold">No ingredients yet</p><p className="mt-1 text-[13px] text-[var(--ink-faint)]">Save this as a draft, or add an inventory item in Setup.</p></div> : null}
             </div>
-          </div>
-          <Toggle name="isActive" defaultChecked={record?.isActive ?? false} label="Published and active" />
-          <FormActions busy={busy} onClose={onClose} />
+          </section>
         </div>
+        <FormActions busy={busy} onClose={onClose} pinned />
       </form>
     </InventoryModalFrame>
   );
