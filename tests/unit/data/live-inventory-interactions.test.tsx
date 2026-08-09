@@ -344,7 +344,10 @@ describe("connected Inventory review interactions", () => {
     expect(alert.textContent).toContain("The response was interrupted. Retry this order.");
     fireEvent.click(screen.getByRole("button", { name: "Create order" }));
     expect(await screen.findByText(/Purchase order created/)).toBeTruthy();
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByRole("button", { name: "New order" })).toBeTruthy();
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "New order" }));
     fireEvent.change(screen.getByLabelText("PO number"), { target: { value: "PO-2050" } });
@@ -426,9 +429,11 @@ describe("connected Inventory review interactions", () => {
     expect(document.activeElement).toBe(close);
     fireEvent.click(close);
 
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(document.activeElement).toBe(opener);
-    expect(opener.closest('[aria-hidden="true"]')).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(opener);
+      expect(opener.closest('[aria-hidden="true"]')).toBeNull();
+    });
   });
 
   it("keeps a waste recorder from approving their own observation", async () => {
