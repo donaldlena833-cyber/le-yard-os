@@ -34,6 +34,7 @@ Every tenant row carries `organization_id`. Location-owned records also carry `l
 | `202608010021_operations_security_configuration.sql` | Receipt fingerprint custody, verified checklist photos, replay-safe operations, chat-channel setup, expense-category setup, and exact private-bucket limits |
 | `202608010022_financial_retention_configuration.sql` | Owner/Admin tip-policy drafts, independent version approval, and explicit timed or no-auto-delete retention decisions |
 | `202608010023_tip_policy_approval_role_boundary.sql` | Forward-only correction that reserves tip-policy version approval to a different Owner/Admin and rechecks authorization before replay |
+| `20260809032415_fix_recipe_save_authorization_and_variable_scope.sql` | Forward-only repair for Manager/Chef recipe versioning: removes an ambiguous organization variable and enforces `recipe.manage` inside the RPC boundary |
 
 Migrations are forward-only and must be reviewed like application code. Never edit an already-applied migration in a shared environment; add a new timestamped migration.
 

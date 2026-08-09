@@ -27,6 +27,7 @@ const ids = {
   vendor: "c0400000-0000-4000-8000-000000000001",
   vendorItem: "c0500000-0000-4000-8000-000000000001",
   par: "c0600000-0000-4000-8000-000000000001",
+  recipe: "c0800000-0000-4000-8000-000000000001",
 };
 
 const platformBootstrap = `
@@ -301,6 +302,26 @@ try {
     "cross-location operational catalog command",
   );
 
+  const recipePayload = JSON.stringify([{
+    inventoryItemId: ids.item,
+    unitId: "70000000-0000-4000-8000-000000000002",
+    quantity: 0.25,
+    wasteFactor: 0.1,
+  }]);
+  const createRecipe = () => db.query(
+    `select public.save_manager_recipe(
+      $1::uuid, $2::uuid, null::uuid, 'Capability Carrot Plate',
+      1::numeric, '70000000-0000-4000-8000-000000000001'::uuid,
+      1500::bigint, true, $3::jsonb
+    ) as result`,
+    [ids.recipe, ids.location, recipePayload],
+  );
+  const createdRecipe = (await createRecipe()).rows[0].result;
+  const replayedRecipe = (await createRecipe()).rows[0].result;
+  if (createdRecipe.replayed !== false || replayedRecipe.replayed !== true) {
+    throw new Error("Chef recipe command did not preserve exact replay semantics");
+  }
+
   await assumeUser(ids.admin);
   await db.query(
     `select public.configure_user_capability_override(
@@ -308,6 +329,15 @@ try {
       'c1500000-0000-4000-8000-000000000001'::uuid, $2::uuid,
       'inventory.item.manage', $3::uuid, 'deny',
       'Focused test denial', date '2026-08-08', null::date, true
+    )`,
+    [ids.organization, ids.manager, ids.location],
+  );
+  await db.query(
+    `select public.configure_user_capability_override(
+      'c1400000-0000-4000-8000-000000000002'::uuid, $1::uuid,
+      'c1500000-0000-4000-8000-000000000002'::uuid, $2::uuid,
+      'recipe.manage', $3::uuid, 'deny',
+      'Focused recipe denial', date '2026-08-08', null::date, true
     )`,
     [ids.organization, ids.manager, ids.location],
   );
@@ -327,6 +357,19 @@ try {
     "42501",
     "denied catalog write",
   );
+  await expectDatabaseError(
+    () => db.query(
+      `select public.save_manager_recipe(
+        'c0800000-0000-4000-8000-000000000002'::uuid,
+        $1::uuid, null::uuid, 'Denied Recipe', 1::numeric,
+        '70000000-0000-4000-8000-000000000001'::uuid,
+        1000::bigint, true, $2::jsonb
+      )`,
+      [ids.location, recipePayload],
+    ),
+    "42501",
+    "denied recipe write",
+  );
 
   await db.exec("reset role; select set_config('request.jwt.claims', '{}', false)");
   const evidence = (await db.query(`
@@ -336,6 +379,8 @@ try {
       (select count(*)::integer from public.inventory_categories where id = '${ids.category}') as category_count,
       (select count(*)::integer from public.item_price_history where source_id = '${ids.vendorItem}') as price_versions,
       (select count(*)::integer from public.inventory_par_levels where id = '${ids.par}') as par_count,
+      (select count(*)::integer from public.recipes where id = '${ids.recipe}') as recipe_count,
+      (select count(*)::integer from public.inventory_recipe_versions where recipe_id = '${ids.recipe}') as recipe_versions,
       (select count(*)::integer from public.audit_events
         where table_name in ('job_role_capabilities', 'user_capability_overrides')) as capability_audit_events,
       has_function_privilege('authenticated',
@@ -348,6 +393,7 @@ try {
   if (
     evidence.item_count !== 1 || evidence.unit_count !== 1 || evidence.category_count !== 1
     || evidence.price_versions !== 1 || evidence.par_count !== 1
+    || evidence.recipe_count !== 1 || evidence.recipe_versions !== 1
     || evidence.capability_audit_events < 8 || !evidence.can_execute || !evidence.can_configure_foundation
     || evidence.direct_grant_write || evidence.anon_capability_read
   ) {

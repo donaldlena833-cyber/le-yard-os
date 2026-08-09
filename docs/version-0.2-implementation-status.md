@@ -16,13 +16,14 @@ Started: 2026-08-08
 - Preserve existing Supabase/PostgREST behavior while tightening function execution grants.
 - Use capability-based authorization layered over existing roles instead of one-off Manager/Chef exceptions.
 - Keep connected mode free of synthetic operational records.
-- Keep restaurant operating tables empty until the Owners populate real records. The 2026-08-08 remediation was explicitly authorized for the connected Le Yard polishing project and changes authorization metadata only.
+- Keep connected restaurant operating tables empty until an Owner explicitly supplies real records. On 2026-08-08, the Owner supplied and approved the photographed opening menu; only the required ingredient catalog, categories, measured recipes, menu prices, and immutable recipe versions were added. Vendors, packs, pars, price history, stock, and purchasing remain empty.
 - Normalize both supported PostgREST representations of the single-column effective-capability RPC at the authenticated session boundary. This prevents valid persisted grants from being lost because of a generated-type/runtime-shape mismatch.
 - Do not geofence authentication. Authorized users may sign in from any physical location. Browser geolocation is disabled by response policy; database location membership remains a tenant record-access scope and never represents device position.
 - Treat the authenticated user's optional profile as display data, not authorization evidence. A transient profile read error falls back to signed Auth claims while membership, organization, location, and capability checks continue to fail closed.
 
 ## Migrations
 
+- `20260809032415_fix_recipe_save_authorization_and_variable_scope.sql`: repairs the Manager/Chef recipe RPC's ambiguous organization variable and enforces `recipe.manage` inside the database command boundary.
 - `20260808194246_role_capability_templates_and_route_access.sql`: backfills safe operational capability defaults for recognized Chef/management job roles and applies the same templates to newly created recognized roles without creating restaurant operating data.
 
 - `20260808135755_capability_authorization_foundation.sql`: persisted capability catalog, job-role grants, user overrides, location/effective-date scope, audit-backed administration, effective-capability loading, and Chef catalog command foundation.
@@ -49,6 +50,10 @@ Initial tracked status document created:
 - `scripts/verify-capabilities-pglite.mjs`
 - `scripts/verify-service-control-pglite.mjs`
 - `tests/unit/permissions/action-permission.test.tsx`
+- `scripts/data/le-yard-opening-menu-v1.mjs`
+- `scripts/import-le-yard-opening-menu.mjs`
+- `tests/unit/data/le-yard-opening-menu.test.ts`
+- `supabase/migrations/20260809032415_fix_recipe_save_authorization_and_variable_scope.sql`
 
 ## Tests
 
@@ -61,7 +66,9 @@ Initial tracked status document created:
 - Added non-secret GitHub Actions jobs for lint, generated types, TypeScript, unit, integration, build, and desktop Chromium demo E2E.
 - Added role-prioritized mobile navigation and direct-route permission coverage for Executive Chef and Employee sessions.
 - Added focused capability-response normalization tests for both generated string arrays and PostgREST row objects, including malformed/unknown-value rejection.
-- `npm run verify` passed after the remediation: 74 unit-test files / 419 tests, all portable migration and security verifiers, generated database types, lint, typecheck, and the production build.
+- Added a deterministic 20-recipe opening-menu specification test covering unique dish names, exact gram portions, valid waste factors, declared ingredients, prices, and the absence of vendor/pack/par/stock assignments.
+- Extended the PGlite capability verifier to prove Chef recipe creation, exact replay, immutable version creation, and database-level `recipe.manage` denial.
+- `npm run verify` passed after the opening-menu import: 76 unit-test files / 425 tests, all portable migration and security verifiers, generated database types, lint, typecheck, and the production build.
 
 ## Completed Requirements
 
@@ -77,6 +84,7 @@ Initial tracked status document created:
 - Time Clock is restored in primary navigation for employees and management.
 - Service Control is persisted and realtime: authorized staff can record running-low/86/restored events, managers can add versioned handoffs and publish pre-shifts, and employees can acknowledge published pre-shifts.
 - Today shows current availability and published pre-shift context without inventing reservation figures.
+- The connected Le Yard Kitchen now contains 20 active menu recipes, 142 exact-weight ingredient lines, 79 ingredient items in eight categories, and 20 immutable recipe versions. Every import write is attributed to Mateo's authenticated Chef account. No vendor, vendor pack, vendor price, par, stock transaction, or purchase record was created.
 
 ## Incomplete Requirements
 
@@ -102,7 +110,10 @@ Initial tracked status document created:
 - `npm run test:capabilities:pglite` — PASS: grants/denials, tenant/location isolation, Chef catalog/foundation workflow, replay, audit, and direct-DML revocation.
 - `npm run test:inventory-catalog:pglite` — PASS.
 - `npm run test:service-control:pglite` — PASS.
+- Opening-menu specification tests — PASS: 3/3 menu structure, exact-weight ingredient, waste-factor, and no-vendor-assignment assertions.
 - Focused Vitest (`capability-navigation`, `live-inventory-ui`) — PASS: 6 tests.
-- `npm run verify` — PASS: lint, generated type check, TypeScript, 418/418 unit tests, all portable integration verifiers, and production build.
+- `npm run verify` — PASS: lint, generated type check, TypeScript, 425/425 unit tests, all portable integration verifiers, and production build.
+- Connected database verification — PASS: 8 categories, 79 inventory items, 20 recipes, 142 recipe ingredient lines, and 20 immutable recipe versions; vendor, vendor-item, price-history, par, and inventory-transaction counts remain zero.
+- Connected function-grant verification — PASS: `save_manager_recipe` has a fixed empty `search_path`, denies `PUBLIC`/`anon`, permits `authenticated`, and enforces `recipe.manage` in the function body. Supabase's corresponding `SECURITY DEFINER` warning is intentional for this actor-derived browser RPC; the advisor remediation reference is https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable.
 - `npm run test:e2e` — PASS: 50/50 desktop/mobile Chromium tests, including the 20-route axe matrix, Time Clock restoration, and Service Control.
 - `npm install --package-lock-only --ignore-scripts` — PASS; npm reported 0 vulnerabilities (Node 25 emitted the expected engine warning because the project supports Node 22/24).
