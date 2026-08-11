@@ -16,6 +16,9 @@ import type { ReservationHostPermissions } from "@/lib/reservations/model";
 
 const mocks = vi.hoisted(() => ({
   assignTables: vi.fn(),
+  cancelReservation: vi.fn(),
+  loadLifecycleHead: vi.fn(),
+  modifyReservation: vi.fn(),
   saveReservation: vi.fn(),
   saveWaitlist: vi.fn(),
   seatWaitlist: vi.fn(),
@@ -30,6 +33,9 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/app/actions/workflows/reservations", () => ({
   assignReservationTablesAction: mocks.assignTables,
+  cancelReservationAction: mocks.cancelReservation,
+  loadReservationLifecycleHeadAction: mocks.loadLifecycleHead,
+  modifyReservationAction: mocks.modifyReservation,
   saveReservationWithGuestAction: mocks.saveReservation,
   saveWaitlistEntryAction: mocks.saveWaitlist,
   seatWaitlistEntryAction: mocks.seatWaitlist,
@@ -91,9 +97,11 @@ function renderHost(
   permissions: ReservationHostPermissions,
   businessDate = currentDate,
   configurationReady = true,
+  customize?: (model: ReturnType<typeof createDemoReservationModel>) => void,
 ) {
   const model = createDemoReservationModel(businessDate, permissions);
   model.configuration.ready = configurationReady;
+  customize?.(model);
   return render(
     <ReservationsWorkspace
       workspace={{
@@ -144,6 +152,10 @@ describe("reservation host capability affordances", () => {
       "disabled",
       true,
     );
+    expect(
+      screen.queryByRole("button", { name: "Edit / reschedule" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
 
     fireEvent.click(screen.getByTitle(/^Table 1 ·/));
     expect(screen.getByRole("button", { name: "Needs reset" })).toHaveProperty(
@@ -190,6 +202,13 @@ describe("reservation host capability affordances", () => {
         .querySelector('[data-state="active"]')?.textContent,
     ).toContain("Service");
     expect(screen.getByRole("button", { name: "Arrive" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    expect(
+      screen.getByRole("button", { name: "Edit / reschedule" }),
+    ).toHaveProperty("disabled", false);
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveProperty(
       "disabled",
       false,
     );
@@ -242,7 +261,7 @@ describe("reservation host capability affordances", () => {
     expect(screen.queryByRole("button", { name: "Book" })).toBeNull();
   });
 
-  it("cannot change the current waitlist from a noncurrent selected date", () => {
+  it("keeps future reservation lifecycle actions separate from floor-now actions", () => {
     renderHost(
       {
         view: true,
@@ -284,8 +303,70 @@ describe("reservation host capability affordances", () => {
       "disabled",
       true,
     );
+    expect(
+      screen.getByRole("button", { name: "Edit / reschedule" }),
+    ).toHaveProperty("disabled", false);
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveProperty(
+      "disabled",
+      false,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit / reschedule" }));
+    expect(
+      screen.getByRole("dialog", { name: "Edit / reschedule" }),
+    ).toBeTruthy();
     expect(mocks.transitionWaitlist).not.toHaveBeenCalled();
     expect(mocks.transitionReservation).not.toHaveBeenCalled();
     expect(mocks.seatWaitlist).not.toHaveBeenCalled();
+  });
+
+  it("keeps external-source reservations read-only under the one-writer gate", () => {
+    renderHost(
+      {
+        view: true,
+        operate: true,
+        override: false,
+        configure: false,
+      },
+      currentDate,
+      true,
+      (model) => {
+        model.reservations[0]!.source = "resy";
+        model.reservations[0]!.bookingChannel = "partner";
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Nora Example/ }));
+    expect(
+      screen.getByText(
+        /read-only in Le Yard OS until source writer ownership is approved/i,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Edit / reschedule" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  });
+
+  it("omits edit and cancellation for seated and terminal reservations", () => {
+    renderHost(
+      {
+        view: true,
+        operate: true,
+        override: false,
+        configure: false,
+      },
+      currentDate,
+      true,
+      (model) => {
+        model.reservations[0]!.status = "seated";
+      },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Nora Example/ }));
+    expect(
+      screen.queryByRole("button", { name: "Edit / reschedule" }),
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Complete" })).toBeTruthy();
   });
 });

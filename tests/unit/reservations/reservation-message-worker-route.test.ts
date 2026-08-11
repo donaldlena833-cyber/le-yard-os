@@ -31,6 +31,7 @@ let claimedMessages: Array<ReturnType<typeof claimedMessage>> = [];
 let completionError: { code: string } | null = null;
 let completionThrows = false;
 let completionStatusOverride: string | null = null;
+let claimValidation: true | false | "error" = true;
 
 function claimedMessage(
   overrides: Partial<{
@@ -87,6 +88,7 @@ beforeEach(() => {
   completionError = null;
   completionThrows = false;
   completionStatusOverride = null;
+  claimValidation = true;
   process.env.RESERVATION_DELIVERY_SECRET = "d".repeat(48);
   mocks.channelBound.mockReset().mockReturnValue(true);
   mocks.send.mockReset().mockResolvedValue({
@@ -100,6 +102,10 @@ beforeEach(() => {
         return { data: null, error: null };
       if (name === "service_claim_reservation_message_outbox")
         return { data: claimedMessages, error: null };
+      if (name === "service_validate_reservation_message_claim")
+        return claimValidation === "error"
+          ? { data: null, error: { code: "database_unavailable" } }
+          : { data: claimValidation, error: null };
       if (name === "service_complete_reservation_message_outbox") {
         if (completionThrows) throw new Error("completion unavailable");
         return {
@@ -160,6 +166,43 @@ describe("reservation message worker completion accounting", () => {
       expect.objectContaining({
         p_claim_token: claimedMessages[0]!.claimToken,
         p_status: "sent",
+      }),
+    );
+  });
+
+  it("cancels a stale linked lifecycle before calling the provider", async () => {
+    claimedMessages = [claimedMessage()];
+    claimValidation = false;
+    const response = await runWorker();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: { sent: 0, failed: 0, skipped: 1, completionErrors: 0 },
+    });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "service_complete_reservation_message_outbox",
+      expect.objectContaining({
+        p_status: "cancelled",
+        p_error_code: "linked_lifecycle_stale",
+      }),
+    );
+  });
+
+  it("fails closed and schedules retry when lifecycle validation is unavailable", async () => {
+    claimedMessages = [claimedMessage()];
+    claimValidation = "error";
+    const response = await runWorker();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: { sent: 0, failed: 1, skipped: 0, completionErrors: 0 },
+    });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "service_complete_reservation_message_outbox",
+      expect.objectContaining({
+        p_status: "failed",
+        p_error_code: "claim_validation_unavailable",
+        p_next_attempt_at: expect.any(String),
       }),
     );
   });

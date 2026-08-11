@@ -5,8 +5,11 @@ import { executeWorkflowAction } from "@/data/execute";
 import {
   approveReservationDraftInputSchema,
   assignReservationTablesInputSchema,
+  cancelReservationInputSchema,
   configureServiceShiftExceptionInputSchema,
   installReservationDraftInputSchema,
+  modifyReservationInputSchema,
+  reservationLifecycleHeadInputSchema,
   saveReservationInputSchema,
   saveReservationWithGuestInputSchema,
   saveWaitlistEntryInputSchema,
@@ -19,8 +22,11 @@ import {
 import {
   approveReservationDraft,
   assignReservationTables,
+  cancelReservation,
   configureServiceShiftException,
   installReservationDraft,
+  loadReservationLifecycleHead,
+  modifyReservation,
   saveReservation,
   saveReservationWithGuest,
   saveWaitlistEntry,
@@ -114,6 +120,38 @@ export async function transitionReservationAction(input: unknown) {
   });
   refreshOnSuccess(result);
   return result;
+}
+
+export async function modifyReservationAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "reservation.modify",
+    schema: modifyReservationInputSchema,
+    input,
+    run: modifyReservation,
+  });
+  refreshOnSuccess(result);
+  return result;
+}
+
+export async function cancelReservationAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "reservation.cancel",
+    schema: cancelReservationInputSchema,
+    input,
+    run: cancelReservation,
+  });
+  refreshOnSuccess(result);
+  return result;
+}
+
+export async function loadReservationLifecycleHeadAction(input: unknown) {
+  return executeWorkflowAction({
+    operation: "reservation.lifecycle_head",
+    schema: reservationLifecycleHeadInputSchema,
+    input,
+    persists: false,
+    run: loadReservationLifecycleHead,
+  });
 }
 
 export async function assignReservationTablesAction(input: unknown) {

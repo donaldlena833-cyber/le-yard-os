@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  Ban,
   CalendarPlus,
   Check,
   ChevronLeft,
@@ -10,6 +11,7 @@ import {
   Clock3,
   MessageSquareText,
   Plus,
+  PencilLine,
   Share2,
   Settings2,
   Sparkles,
@@ -38,6 +40,10 @@ import {
   assignReservationTablesAction,
 } from "@/app/actions/workflows/reservations";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
+import {
+  ReservationCancelDialog,
+  ReservationEditDialog,
+} from "@/components/reservations/reservation-lifecycle-dialogs";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { InlineNotice } from "@/components/ui/inline-notice";
@@ -76,7 +82,10 @@ import type {
   ReservationStatus,
   ReservationSummary,
 } from "@/lib/reservations/model";
-import { canAccessReservationHost } from "@/lib/reservations/model";
+import {
+  canAccessReservationHost,
+  isReservationLifecycleOwnedByOs,
+} from "@/lib/reservations/model";
 import { createClient } from "@/lib/supabase/client";
 import { cn, formatMoney } from "@/lib/utils";
 
@@ -133,6 +142,16 @@ function availabilityAllocations(
 function timeLabel(value: string, timeZone: string) {
   return new Intl.DateTimeFormat("en-US", {
     timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function dateTimeLabel(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    month: "short",
+    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
@@ -309,6 +328,10 @@ export function ReservationsWorkspace({
   const [bookMode, setBookMode] = useState<BookMode | null>(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [noShowConfirmOpen, setNoShowConfirmOpen] = useState(false);
+  const [editReservationTarget, setEditReservationTarget] =
+    useState<ReservationSummary | null>(null);
+  const [cancelReservationTarget, setCancelReservationTarget] =
+    useState<ReservationSummary | null>(null);
   const [dialogTrigger, setDialogTrigger] = useState<HTMLElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -324,6 +347,17 @@ export function ReservationsWorkspace({
   const selectedTable =
     model?.floorNow.tables.find((table) => table.id === selectedTableId) ??
     null;
+  const editReservation =
+    model?.reservations.find(
+      (reservation) => reservation.id === editReservationTarget?.id,
+    ) ?? editReservationTarget;
+  const cancellationReservation =
+    model?.reservations.find(
+      (reservation) => reservation.id === cancelReservationTarget?.id,
+    ) ?? cancelReservationTarget;
+  const selectedLifecycleOwned = selected
+    ? isReservationLifecycleOwnedByOs(selected)
+    : false;
   const floorMatchesBook = model
     ? floorNowMatchesInventoryDate(
         model.floorNow.businessDateAtObservation,
@@ -1335,6 +1369,14 @@ export function ReservationsWorkspace({
                 busy={busy}
                 unauthorizedDescriptionId={operationPermissionId}
                 handlers={{
+                  ...(canOperate && selectedLifecycleOwned
+                    ? {
+                        "reservation.edit": () =>
+                          setEditReservationTarget(selected),
+                        "reservation.cancel": () =>
+                          setCancelReservationTarget(selected),
+                      }
+                    : {}),
                   "reservation.arrive": () => transition("arrived"),
                   "reservation.seat": () => transition("seated"),
                   "reservation.complete": () => transition("completed"),
@@ -1343,18 +1385,22 @@ export function ReservationsWorkspace({
                   "reservation.no_show": () => setNoShowConfirmOpen(true),
                 }}
                 icons={{
+                  "reservation.edit": <PencilLine className="size-4" />,
                   "reservation.arrive": <Check className="size-4" />,
                   "reservation.seat": <Utensils className="size-4" />,
                   "reservation.complete": <Check className="size-4" />,
                   "reservation.share": <Share2 className="size-4" />,
+                  "reservation.cancel": <Ban className="size-4" />,
                 }}
                 variants={{
+                  "reservation.edit": "secondary",
                   "reservation.arrive": "accent",
                   "reservation.seat": "accent",
                   "reservation.complete": "accent",
                   "reservation.suggest_table": "secondary",
                   "reservation.share": "quiet",
                   "reservation.no_show": "quiet",
+                  "reservation.cancel": "danger",
                 }}
                 disabled={{
                   "reservation.arrive": !isCurrentBook,
@@ -1369,6 +1415,34 @@ export function ReservationsWorkspace({
                   "reservation.no_show": currentBookDescription,
                 }}
               />
+              {!selectedLifecycleOwned ? (
+                <InlineNotice
+                  tone="info"
+                  title="Managed by an external reservation source"
+                  className="mt-4"
+                >
+                  This record is read-only in Le Yard OS until source writer
+                  ownership is approved. Edit or cancel it in the owning source
+                  and reconcile the change here.
+                </InlineNotice>
+              ) : null}
+              <div className="mt-4 rounded-xl border border-[var(--line)] bg-[var(--canvas)] p-3 text-xs leading-5 text-[var(--ink-faint)]">
+                <p className="font-semibold text-[var(--ink-soft)]">
+                  Current record · version {selected.version}
+                </p>
+                {selected.lastRevision ? (
+                  <p className="mt-1">
+                    Last staff {selected.lastRevision.kind === "staff_cancelled" ? "cancellation" : "edit"} recorded {dateTimeLabel(selected.lastRevision.changedAt, model.timeZone)}. Previous commitment: {dateTimeLabel(selected.lastRevision.previousReservedAt, model.timeZone)} for {selected.lastRevision.previousPartySize} guests.
+                  </p>
+                ) : (
+                  <p className="mt-1">No prior staff revision is attached to this record.</p>
+                )}
+                <p className="mt-1">
+                  {selected.policyEvidenceCaptured
+                    ? "Materialized service and policy evidence is attached to the latest revision."
+                    : "No staff policy evidence has been captured for this reservation yet."}
+                </p>
+              </div>
             </Surface>
           ) : (
             <Surface variant="inset" padding="lg" className="mt-4 text-center">
@@ -1684,6 +1758,34 @@ export function ReservationsWorkspace({
             </div>
           </form>
         </Dialog>
+      ) : null}
+      {editReservation &&
+      canOperate &&
+      isReservationLifecycleOwnedByOs(editReservation) ? (
+        <ReservationEditDialog
+          workspace={workspace}
+          model={model}
+          reservation={editReservation}
+          onClose={() => setEditReservationTarget(null)}
+          onCompleted={(nextMessage) => {
+            setMessage(nextMessage);
+            router.refresh();
+          }}
+        />
+      ) : null}
+      {cancellationReservation &&
+      canOperate &&
+      isReservationLifecycleOwnedByOs(cancellationReservation) ? (
+        <ReservationCancelDialog
+          workspace={workspace}
+          model={model}
+          reservation={cancellationReservation}
+          onClose={() => setCancelReservationTarget(null)}
+          onCompleted={(nextMessage) => {
+            setMessage(nextMessage);
+            router.refresh();
+          }}
+        />
       ) : null}
       <ConfirmActionDialog
         open={noShowConfirmOpen && Boolean(selected)}

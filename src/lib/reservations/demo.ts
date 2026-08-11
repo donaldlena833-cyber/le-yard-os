@@ -52,6 +52,7 @@ export function createDemoReservationModel(
   const isObservedBusinessDate = businessDate === businessDateAtObservation;
   const reservations = guests.map((guest, index) => ({
     id: `demo-reservation-${index + 1}`,
+    version: index === 0 ? 2 : 1,
     startsAt: timeAt(17 + Math.floor(index / 2), index % 2 ? 30 : 0),
     durationMinutes: guest[1] >= 5 ? 120 : 90,
     partySize: guest[1],
@@ -61,6 +62,18 @@ export function createDemoReservationModel(
     tableLabel: guest[3],
     tableIds: guest[3] ? [`demo-table-${guest[3]}`] : [],
     specialRequests: index === 1 ? "Anniversary dinner" : null,
+    policyEvidenceCaptured: index === 0,
+    lastRevision:
+      index === 0
+        ? {
+            id: "demo-reservation-revision-1",
+            kind: "staff_modified" as const,
+            version: 2,
+            changedAt: observedAt,
+            previousReservedAt: timeAt(16, 30),
+            previousPartySize: guest[1],
+          }
+        : null,
     guest: {
       id: `demo-guest-${index + 1}`,
       displayName: guest[0],

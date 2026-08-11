@@ -5250,6 +5250,91 @@ export type Database = {
           },
         ]
       };
+      "reservation_revisions": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "reservation_id": string
+          "request_id": string
+          "actor_id": string
+          "version": number
+          "mutation_kind": string
+          "reason": string
+          "payload_hash": string
+          "before_state": Json
+          "after_state": Json
+          "service_shift_id": string | null
+          "service_shift_evidence": Json
+          "policy_hash": string | null
+          "policy_evidence": Json
+          "allocation_evidence": Json
+          "result_evidence": Json
+          "created_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "reservation_id": string
+          "request_id": string
+          "actor_id": string
+          "version": number
+          "mutation_kind": string
+          "reason": string
+          "payload_hash": string
+          "before_state": Json
+          "after_state": Json
+          "service_shift_id"?: string | null
+          "service_shift_evidence"?: Json
+          "policy_hash"?: string | null
+          "policy_evidence"?: Json
+          "allocation_evidence"?: Json
+          "result_evidence": Json
+          "created_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "reservation_id"?: string
+          "request_id"?: string
+          "actor_id"?: string
+          "version"?: number
+          "mutation_kind"?: string
+          "reason"?: string
+          "payload_hash"?: string
+          "before_state"?: Json
+          "after_state"?: Json
+          "service_shift_id"?: string | null
+          "service_shift_evidence"?: Json
+          "policy_hash"?: string | null
+          "policy_evidence"?: Json
+          "allocation_evidence"?: Json
+          "result_evidence"?: Json
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_revisions_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "reservation_revisions_organization_id_location_id_reservat_fkey"
+            columns: ["organization_id","location_id","reservation_id"]
+            referencedRelation: "reservations"
+            referencedColumns: ["organization_id","location_id","id"]
+          },
+          {
+            foreignKeyName: "reservation_revisions_organization_id_location_id_service__fkey"
+            columns: ["organization_id","location_id","service_shift_id"]
+            referencedRelation: "service_shifts"
+            referencedColumns: ["organization_id","location_id","id"]
+          },
+        ]
+      };
       "reservation_service_periods": {
         Row: {
           "id": string
@@ -8395,6 +8480,16 @@ export type Database = {
         }
         Returns: boolean
       };
+      "cancel_reservation": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_reservation_id": string | null
+          "p_expected_version": number | null
+          "p_reason": string | null
+        }
+        Returns: Json
+      };
       "cancel_time_off_request": {
         Args: {
           "p_request_id": string | null
@@ -9073,6 +9168,21 @@ export type Database = {
           "p_reasons"?: Json | null
         }
         Returns: Database["public"]["Tables"]["guest_merge_events"]["Row"]
+      };
+      "modify_reservation": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_reservation_id": string | null
+          "p_expected_version": number | null
+          "p_reserved_at": string | null
+          "p_duration_minutes": number | null
+          "p_party_size": number | null
+          "p_special_requests": string | null
+          "p_table_ids": string[] | null
+          "p_reason": string | null
+        }
+        Returns: Json
       };
       "notification_type_is_supported": {
         Args: {
@@ -9926,7 +10036,14 @@ export type Database = {
           "p_from": string | null
           "p_to": string | null
         }
-        Returns: { "id": string | null; "guest_id": string | null; "reserved_at": string | null; "duration_minutes": number | null; "party_size": number | null; "status": string | null; "table_label": string | null; "special_requests": string | null; "source": string | null; "booking_channel": string | null }[]
+        Returns: { "id": string | null; "guest_id": string | null; "version": number | null; "reserved_at": string | null; "duration_minutes": number | null; "party_size": number | null; "status": string | null; "table_label": string | null; "special_requests": string | null; "source": string | null; "booking_channel": string | null; "policy_evidence_captured": boolean | null; "last_revision": Json | null }[]
+      };
+      "service_reservation_lifecycle_head": {
+        Args: {
+          "p_location_id": string | null
+          "p_reservation_id": string | null
+        }
+        Returns: Json
       };
       "service_reservation_pacing_snapshot": {
         Args: {
@@ -9963,6 +10080,14 @@ export type Database = {
           "p_notes": string | null
         }
         Returns: { "id": string | null; "display_name": string | null; "updated_at": string | null }[]
+      };
+      "service_validate_reservation_message_claim": {
+        Args: {
+          "p_id": string | null
+          "p_claim_token": string | null
+          "p_now": string | null
+        }
+        Returns: boolean
       };
       "set_chat_channel_archived": {
         Args: {
@@ -10372,6 +10497,7 @@ export const DatabaseObjectNames = {
       "reservation_events",
       "reservation_message_outbox",
       "reservation_push_deliveries",
+      "reservation_revisions",
       "reservation_service_periods",
       "reservation_settings",
       "reservation_table_allocations",
@@ -10463,6 +10589,7 @@ export const DatabaseObjectNames = {
       "can_read_management_org",
       "can_read_management_storage_scope",
       "can_read_report_scope",
+      "cancel_reservation",
       "cancel_time_off_request",
       "capture_audit_event",
       "claim_open_shift",
@@ -10558,6 +10685,7 @@ export const DatabaseObjectNames = {
       "manual_import_headers_are_valid",
       "mark_channel_read",
       "merge_guests",
+      "modify_reservation",
       "notification_type_is_supported",
       "offer_shift_swap",
       "org_role",
@@ -10642,9 +10770,11 @@ export const DatabaseObjectNames = {
       "service_record_guest_consent",
       "service_reservation_guest_summaries",
       "service_reservation_host_snapshot",
+      "service_reservation_lifecycle_head",
       "service_reservation_pacing_snapshot",
       "service_reservation_shift_snapshot",
       "service_save_guest",
+      "service_validate_reservation_message_claim",
       "set_chat_channel_archived",
       "set_delivery_receipt_link",
       "set_expense_category_active",

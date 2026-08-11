@@ -241,16 +241,24 @@ describe("permission-aware action registry", () => {
     );
 
     expect(booked.map(({ action }) => action.id)).toEqual([
+      "reservation.edit",
       "reservation.arrive",
       "reservation.suggest_table",
       "reservation.share",
       "reservation.no_show",
+      "reservation.cancel",
     ]);
     expect(
       booked.find(({ action }) => action.id === "reservation.share"),
     ).toEqual(expect.objectContaining({ authorized: true, available: true }));
     expect(
       booked.find(({ action }) => action.id === "reservation.arrive"),
+    ).toEqual(expect.objectContaining({ authorized: false, available: false }));
+    expect(
+      booked.find(({ action }) => action.id === "reservation.edit"),
+    ).toEqual(expect.objectContaining({ authorized: false, available: false }));
+    expect(
+      booked.find(({ action }) => action.id === "reservation.cancel"),
     ).toEqual(expect.objectContaining({ authorized: false, available: false }));
 
     const operator = getObjectActionResolutions("reservation", "arrived", {
@@ -262,6 +270,7 @@ describe("permission-aware action registry", () => {
       "reservation.suggest_table",
       "reservation.share",
       "reservation.no_show",
+      "reservation.cancel",
     ]);
     expect(operator.every(({ available }) => available)).toBe(true);
     expect(
@@ -269,6 +278,12 @@ describe("permission-aware action registry", () => {
         ({ action }) => action.id,
       ),
     ).toEqual(["reservation.share"]);
+    expect(
+      getObjectActionResolutions("reservation", "seated", {
+        ...viewerContext,
+        capabilities: ["reservations.view", "reservations.operate"],
+      }).map(({ action }) => action.id),
+    ).toEqual(["reservation.complete", "reservation.share"]);
   });
 
   it("resolves guest record actions from separate contact and sensitive capabilities", () => {

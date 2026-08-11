@@ -1,12 +1,15 @@
 import "server-only";
 
-import { assertFound, throwDatabaseError } from "../errors";
+import { assertFound, throwDatabaseError, WorkflowError } from "../errors";
 import type { WorkflowContext } from "../execute";
 import type {
   ApproveReservationDraftInput,
   AssignReservationTablesInput,
+  CancelReservationInput,
   ConfigureServiceShiftExceptionInput,
   InstallReservationDraftInput,
+  ModifyReservationInput,
+  ReservationLifecycleHeadInput,
   RevokeServiceShiftExceptionInput,
   SaveReservationInput,
   SaveReservationWithGuestInput,
@@ -16,6 +19,67 @@ import type {
   TransitionReservationInput,
   TransitionWaitlistEntryInput,
 } from "../reservation-schemas";
+import {
+  reservationLifecycleHeadSchema,
+  reservationLifecycleRpcResultSchema,
+} from "../reservation-schemas";
+
+type ReservationLifecycleRpc = {
+  (
+    name: "modify_reservation",
+    args: {
+      p_request_id: string;
+      p_location_id: string;
+      p_reservation_id: string;
+      p_expected_version: number;
+      p_reserved_at: string;
+      p_duration_minutes: number;
+      p_party_size: number;
+      p_special_requests: string | null;
+      p_table_ids: string[];
+      p_reason: string;
+    },
+  ): Promise<{ data: unknown | null; error: unknown | null }>;
+  (
+    name: "cancel_reservation",
+    args: {
+      p_request_id: string;
+      p_location_id: string;
+      p_reservation_id: string;
+      p_expected_version: number;
+      p_reason: string;
+    },
+  ): Promise<{ data: unknown | null; error: unknown | null }>;
+  (
+    name: "service_reservation_lifecycle_head",
+    args: {
+      p_location_id: string;
+      p_reservation_id: string;
+    },
+  ): Promise<{ data: unknown | null; error: unknown | null }>;
+};
+
+function parseReservationLifecycleResult(value: unknown) {
+  const parsed = reservationLifecycleRpcResultSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new WorkflowError(
+      "database",
+      "The reservation changed, but its revision evidence could not be verified. Refresh before taking another action.",
+    );
+  }
+  return parsed.data;
+}
+
+function parseReservationLifecycleHead(value: unknown) {
+  const parsed = reservationLifecycleHeadSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new WorkflowError(
+      "database",
+      "The latest reservation details could not be verified. Refresh before taking another action.",
+    );
+  }
+  return parsed.data;
+}
 
 export async function configureServiceShiftException(
   { supabase }: WorkflowContext,
@@ -151,6 +215,68 @@ export async function transitionReservation(
   if (error)
     throwDatabaseError(error, "The reservation status could not be changed.");
   return assertFound(data, "The reservation transition was not returned.");
+}
+
+export async function modifyReservation(
+  { supabase }: WorkflowContext,
+  input: ModifyReservationInput,
+) {
+  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const { data, error } = await lifecycleRpc("modify_reservation", {
+    p_request_id: input.requestId,
+    p_location_id: input.locationId,
+    p_reservation_id: input.reservationId,
+    p_expected_version: input.expectedVersion,
+    p_reserved_at: input.reservedAt,
+    p_duration_minutes: input.durationMinutes,
+    p_party_size: input.partySize,
+    p_special_requests: input.specialRequests,
+    p_table_ids: input.tableIds,
+    p_reason: input.reason,
+  });
+  if (error)
+    throwDatabaseError(error, "The reservation could not be changed.");
+  return parseReservationLifecycleResult(
+    assertFound(data, "The reservation revision was not returned."),
+  );
+}
+
+export async function cancelReservation(
+  { supabase }: WorkflowContext,
+  input: CancelReservationInput,
+) {
+  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const { data, error } = await lifecycleRpc("cancel_reservation", {
+    p_request_id: input.requestId,
+    p_location_id: input.locationId,
+    p_reservation_id: input.reservationId,
+    p_expected_version: input.expectedVersion,
+    p_reason: input.reason,
+  });
+  if (error)
+    throwDatabaseError(error, "The reservation could not be cancelled.");
+  return parseReservationLifecycleResult(
+    assertFound(data, "The cancellation revision was not returned."),
+  );
+}
+
+export async function loadReservationLifecycleHead(
+  { supabase }: WorkflowContext,
+  input: ReservationLifecycleHeadInput,
+) {
+  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const { data, error } = await lifecycleRpc(
+    "service_reservation_lifecycle_head",
+    {
+      p_location_id: input.locationId,
+      p_reservation_id: input.reservationId,
+    },
+  );
+  if (error)
+    throwDatabaseError(error, "The latest reservation details could not be loaded.");
+  return parseReservationLifecycleHead(
+    assertFound(data, "The latest reservation details were not returned."),
+  );
 }
 
 export async function assignReservationTables(

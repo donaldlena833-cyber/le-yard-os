@@ -205,6 +205,38 @@ async function deliverReservationMessages(request: Request) {
       continue;
     }
 
+    const validatedAt = new Date();
+    let validation: Awaited<ReturnType<ReservationRpc>>;
+    try {
+      validation = await rpc("service_validate_reservation_message_claim", {
+        p_id: message.id,
+        p_claim_token: message.claimToken,
+        p_now: validatedAt.toISOString(),
+      });
+    } catch {
+      validation = { data: null, error: { code: "validation_unavailable" } };
+    }
+    if (validation.error || validation.data !== true) {
+      const retryAt = validation.error
+        ? new Date(validatedAt.valueOf() + 5 * 60_000).toISOString()
+        : null;
+      const completed = await completeReservationMessage(rpc, {
+        p_id: message.id,
+        p_claim_token: message.claimToken,
+        p_status: validation.error ? "failed" : "cancelled",
+        p_error_code: validation.error
+          ? "claim_validation_unavailable"
+          : "linked_lifecycle_stale",
+        p_next_attempt_at: retryAt,
+        p_provider_message_id: null,
+      });
+      if (completed) {
+        if (validation.error) failed += 1;
+        else skipped += 1;
+      } else completionErrors += 1;
+      continue;
+    }
+
     if (!isReservationMessageChannelBound(message)) {
       const completed = await completeReservationMessage(rpc, {
         p_id: message.id,

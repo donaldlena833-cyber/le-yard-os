@@ -114,6 +114,15 @@ const ids = {
   expiringWaitlist: "d7000000-0000-4000-8000-000000000002",
   crossBoundaryStaleHold: "ea000000-0000-4000-8000-000000000001",
   crossBoundaryReservation: "ea000000-0000-4000-8000-000000000002",
+  lifecycleReservation: "eb000000-0000-4000-8000-000000000001",
+  lifecycleMissingReservation: "eb000000-0000-4000-8000-ffffffffffff",
+  lifecycleModifyRequest: "eb100000-0000-4000-8000-000000000001",
+  lifecycleCancelRequest: "eb100000-0000-4000-8000-000000000002",
+  lifecycleStaleRequest: "eb100000-0000-4000-8000-000000000003",
+  lifecycleUnauthorizedRequest: "eb100000-0000-4000-8000-000000000004",
+  lifecycleCrossLocationRequest: "eb100000-0000-4000-8000-000000000005",
+  lifecycleLegacyUpdateRequest: "eb100000-0000-4000-8000-000000000006",
+  lifecycleLegacyCancelRequest: "eb100000-0000-4000-8000-000000000007",
 };
 
 const platformBootstrap = `
@@ -545,6 +554,507 @@ try {
   ).rows[0]?.status;
   if (resetState !== "needs_reset")
     throw new Error("Completed table was not marked for reset");
+
+  // Staff edits and cancellations use their own expected-version commands.
+  // Keep this fixture inside an approved materialized service and away from the
+  // legacy staff reservation's table/time so later Host and pacing proofs stay
+  // independent.
+  const lifecycleTime = (
+    await db.query(
+      `select (
+        date_trunc('day', clock_timestamp() at time zone 'America/New_York')
+        + interval '2 days 19 hours'
+      ) at time zone 'America/New_York' as value`,
+    )
+  ).rows[0].value;
+  const lifecycleMovedTime = new Date(
+    new Date(lifecycleTime).valueOf() + 15 * 60_000,
+  ).toISOString();
+  const lifecycleCreated = (
+    await db.query(
+      `select public.save_reservation(
+        $1::uuid, $2::uuid, null::uuid, null::uuid, $3::timestamptz,
+        120, 2, 'Initial lifecycle request', 'phone', array[$4::uuid]
+      ) result`,
+      [
+        ids.lifecycleReservation,
+        ids.location,
+        lifecycleTime,
+        ids.otherTable,
+      ],
+    )
+  ).rows[0].result;
+  if (
+    lifecycleCreated.id !== ids.lifecycleReservation ||
+    lifecycleCreated.version !== 1 ||
+    lifecycleCreated.replayed
+  ) {
+    throw new Error(
+      `Lifecycle reservation fixture failed: ${JSON.stringify(lifecycleCreated)}`,
+    );
+  }
+
+  await assumeUser(ids.employee);
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.modify_reservation(
+          $1::uuid, $2::uuid, $3::uuid, 1, $4::timestamptz,
+          120, 3, 'Lifecycle moved', array[$5::uuid],
+          'Employee cannot change this reservation'
+        )`,
+        [
+          ids.lifecycleUnauthorizedRequest,
+          ids.location,
+          ids.lifecycleReservation,
+          lifecycleMovedTime,
+          ids.otherTable,
+        ],
+      ),
+    "42501",
+    "unauthorized staff reservation modification",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.service_reservation_lifecycle_head(
+          $1::uuid, $2::uuid
+        )`,
+        [ids.location, ids.lifecycleReservation],
+      ),
+    "42501",
+    "unauthorized exact reservation lifecycle head",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.service_reservation_lifecycle_head(
+          $1::uuid, $2::uuid
+        )`,
+        [ids.location, ids.lifecycleMissingReservation],
+      ),
+    "42501",
+    "unauthorized nonexistent reservation lifecycle head",
+  );
+  await assumeUser(ids.owner);
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.cancel_reservation(
+          $1::uuid, $2::uuid, $3::uuid, 1,
+          'Wrong-location cancellation attempt'
+        )`,
+        [
+          ids.lifecycleCrossLocationRequest,
+          ids.otherLocation,
+          ids.lifecycleReservation,
+        ],
+      ),
+    "P0002",
+    "cross-location staff reservation cancellation",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.service_reservation_lifecycle_head(
+          $1::uuid, $2::uuid
+        )`,
+        [ids.otherLocation, ids.lifecycleReservation],
+      ),
+    "42501",
+    "cross-location exact reservation lifecycle head",
+  );
+
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.save_reservation(
+          $1::uuid, $2::uuid, $3::uuid, null::uuid, $4::timestamptz,
+          120, 3, 'Legacy update bypass', 'phone', array[$5::uuid]
+        )`,
+        [
+          ids.lifecycleLegacyUpdateRequest,
+          ids.location,
+          ids.lifecycleReservation,
+          lifecycleMovedTime,
+          ids.otherTable,
+        ],
+      ),
+    "23514",
+    "legacy staff reservation update bypass",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.transition_reservation(
+          $1::uuid, $2::uuid, 'cancelled', 'Legacy cancellation bypass'
+        )`,
+        [ids.lifecycleLegacyCancelRequest, ids.lifecycleReservation],
+      ),
+    "23514",
+    "legacy staff reservation cancellation bypass",
+  );
+
+  const lifecycleResultKeys = [
+    "durationMinutes",
+    "guestNotificationQueued",
+    "id",
+    "partySize",
+    "policyEvidenceCaptured",
+    "replayed",
+    "reservedAt",
+    "revisionId",
+    "revisionKind",
+    "status",
+    "version",
+  ];
+  const lifecycleHeadKeys = [
+    "bookingChannel",
+    "durationMinutes",
+    "id",
+    "lastRevision",
+    "partySize",
+    "policyEvidenceCaptured",
+    "reservedAt",
+    "source",
+    "specialRequests",
+    "status",
+    "tableIds",
+    "version",
+  ];
+  const modifiedLifecycle = (
+    await db.query(
+      `select public.modify_reservation(
+        $1::uuid, $2::uuid, $3::uuid, 1, $4::timestamptz,
+        120, 3, 'Lifecycle moved', array[$5::uuid],
+        'Guest requested a later table'
+      ) result`,
+      [
+        ids.lifecycleModifyRequest,
+        ids.location,
+        ids.lifecycleReservation,
+        lifecycleMovedTime,
+        ids.otherTable,
+      ],
+    )
+  ).rows[0].result;
+  expectExactKeys(modifiedLifecycle, lifecycleResultKeys, "modify_reservation");
+  if (
+    modifiedLifecycle.id !== ids.lifecycleReservation ||
+    modifiedLifecycle.status !== "booked" ||
+    modifiedLifecycle.version !== 2 ||
+    modifiedLifecycle.partySize !== 3 ||
+    modifiedLifecycle.revisionKind !== "staff_modified" ||
+    !modifiedLifecycle.policyEvidenceCaptured ||
+    modifiedLifecycle.guestNotificationQueued !== false ||
+    modifiedLifecycle.replayed ||
+    new Date(modifiedLifecycle.reservedAt).valueOf() !==
+      new Date(lifecycleMovedTime).valueOf()
+  ) {
+    throw new Error(
+      `Staff reservation modification is incomplete: ${JSON.stringify(modifiedLifecycle)}`,
+    );
+  }
+
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.modify_reservation(
+          $1::uuid, $2::uuid, $3::uuid, 1, $4::timestamptz,
+          120, 2, 'Stale lifecycle request', array[$5::uuid],
+          'Stale browser state must fail'
+        )`,
+        [
+          ids.lifecycleStaleRequest,
+          ids.location,
+          ids.lifecycleReservation,
+          lifecycleTime,
+          ids.otherTable,
+        ],
+      ),
+    "40001",
+    "stale expected reservation version",
+  );
+  const lifecycleHeadAfterStale = (
+    await db.query(
+      `select public.service_reservation_lifecycle_head(
+        $1::uuid, $2::uuid
+      ) result`,
+      [ids.location, ids.lifecycleReservation],
+    )
+  ).rows[0].result;
+  expectExactKeys(
+    lifecycleHeadAfterStale,
+    lifecycleHeadKeys,
+    "service_reservation_lifecycle_head",
+  );
+  if (
+    lifecycleHeadAfterStale.id !== ids.lifecycleReservation ||
+    lifecycleHeadAfterStale.version !== 2 ||
+    lifecycleHeadAfterStale.status !== "booked" ||
+    lifecycleHeadAfterStale.partySize !== 3 ||
+    lifecycleHeadAfterStale.policyEvidenceCaptured !== true ||
+    JSON.stringify(lifecycleHeadAfterStale.tableIds) !==
+      JSON.stringify([ids.otherTable]) ||
+    lifecycleHeadAfterStale.lastRevision?.id !== modifiedLifecycle.revisionId ||
+    lifecycleHeadAfterStale.lastRevision?.kind !== "staff_modified" ||
+    lifecycleHeadAfterStale.lastRevision?.version !== 2 ||
+    lifecycleHeadAfterStale.lastRevision?.previousPartySize !== 2
+  ) {
+    throw new Error(
+      `Lifecycle head did not recover the current version after a stale write: ${JSON.stringify(lifecycleHeadAfterStale)}`,
+    );
+  }
+
+  const cancelledLifecycle = (
+    await db.query(
+      `select public.cancel_reservation(
+        $1::uuid, $2::uuid, $3::uuid, 2,
+        'Guest called to cancel dinner'
+      ) result`,
+      [
+        ids.lifecycleCancelRequest,
+        ids.location,
+        ids.lifecycleReservation,
+      ],
+    )
+  ).rows[0].result;
+  expectExactKeys(cancelledLifecycle, lifecycleResultKeys, "cancel_reservation");
+  if (
+    cancelledLifecycle.status !== "cancelled" ||
+    cancelledLifecycle.version !== 3 ||
+    cancelledLifecycle.revisionKind !== "staff_cancelled" ||
+    !cancelledLifecycle.policyEvidenceCaptured ||
+    cancelledLifecycle.guestNotificationQueued !== false ||
+    cancelledLifecycle.replayed
+  ) {
+    throw new Error(
+      `Staff reservation cancellation is incomplete: ${JSON.stringify(cancelledLifecycle)}`,
+    );
+  }
+
+  // The original modification response remains exact after a later mutation.
+  const modifyReplayAfterCancel = (
+    await db.query(
+      `select public.modify_reservation(
+        $1::uuid, $2::uuid, $3::uuid, 1, $4::timestamptz,
+        120, 3, 'Lifecycle moved', array[$5::uuid],
+        'Guest requested a later table'
+      ) result`,
+      [
+        ids.lifecycleModifyRequest,
+        ids.location,
+        ids.lifecycleReservation,
+        lifecycleMovedTime,
+        ids.otherTable,
+      ],
+    )
+  ).rows[0].result;
+  if (
+    !modifyReplayAfterCancel.replayed ||
+    modifyReplayAfterCancel.version !== 2 ||
+    modifyReplayAfterCancel.status !== "booked" ||
+    modifyReplayAfterCancel.revisionId !== modifiedLifecycle.revisionId
+  ) {
+    throw new Error(
+      `Modification did not replay its original revision after cancellation: ${JSON.stringify(modifyReplayAfterCancel)}`,
+    );
+  }
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.modify_reservation(
+          $1::uuid, $2::uuid, $3::uuid, 1, $4::timestamptz,
+          120, 3, 'Lifecycle moved', array[$5::uuid],
+          'Changed reason must not replay'
+        )`,
+        [
+          ids.lifecycleModifyRequest,
+          ids.location,
+          ids.lifecycleReservation,
+          lifecycleMovedTime,
+          ids.otherTable,
+        ],
+      ),
+    "23505",
+    "changed staff modification replay",
+  );
+  const cancelReplay = (
+    await db.query(
+      `select public.cancel_reservation(
+        $1::uuid, $2::uuid, $3::uuid, 2,
+        'Guest called to cancel dinner'
+      ) result`,
+      [
+        ids.lifecycleCancelRequest,
+        ids.location,
+        ids.lifecycleReservation,
+      ],
+    )
+  ).rows[0].result;
+  if (
+    !cancelReplay.replayed ||
+    cancelReplay.version !== 3 ||
+    cancelReplay.revisionId !== cancelledLifecycle.revisionId
+  ) {
+    throw new Error(
+      `Cancellation did not replay exactly: ${JSON.stringify(cancelReplay)}`,
+    );
+  }
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.cancel_reservation(
+          $1::uuid, $2::uuid, $3::uuid, 2,
+          'Changed cancellation reason'
+        )`,
+        [
+          ids.lifecycleCancelRequest,
+          ids.location,
+          ids.lifecycleReservation,
+        ],
+      ),
+    "23505",
+    "changed staff cancellation replay",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        "select * from public.reservation_revisions where reservation_id = $1::uuid",
+        [ids.lifecycleReservation],
+      ),
+    "42501",
+    "authenticated reservation revision read",
+  );
+
+  await db.exec("reset role");
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `update public.reservation_revisions
+          set reason = 'Tampered revision reason' where id = $1::uuid`,
+        [modifiedLifecycle.revisionId],
+      ),
+    "55000",
+    "reservation revision update",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query("delete from public.reservation_revisions where id = $1::uuid", [
+        modifiedLifecycle.revisionId,
+      ]),
+    "55000",
+    "reservation revision delete",
+  );
+  const lifecycleEvidence = (
+    await db.query(
+      `select
+        (select version from public.reservations where id = $1::uuid) version,
+        (select status from public.reservations where id = $1::uuid) status,
+        (select cancellation_reason from public.reservations
+          where id = $1::uuid) cancellation_reason,
+        (select count(*) from public.reservation_revisions
+          where reservation_id = $1::uuid) revision_count,
+        (select count(*) from private.operation_requests
+          where request_id in ($2::uuid, $3::uuid)
+            and completed_at is not null) completed_requests,
+        (select count(*) from private.operation_requests
+          where request_id = any($4::uuid[])) rejected_request_rows,
+        (select count(*) from public.reservation_table_allocations
+          where reservation_id = $1::uuid and is_active) active_allocations,
+        (select count(*) from public.reservation_events
+          where reservation_id = $1::uuid
+            and event_type in ('staff_modified', 'staff_cancelled')) lifecycle_events`,
+      [
+        ids.lifecycleReservation,
+        ids.lifecycleModifyRequest,
+        ids.lifecycleCancelRequest,
+        [
+          ids.lifecycleStaleRequest,
+          ids.lifecycleUnauthorizedRequest,
+          ids.lifecycleCrossLocationRequest,
+          ids.lifecycleLegacyUpdateRequest,
+          ids.lifecycleLegacyCancelRequest,
+        ],
+      ],
+    )
+  ).rows[0];
+  const lifecycleRevisions = (
+    await db.query(
+      `select mutation_kind, actor_id, version, reason, payload_hash,
+        before_state, after_state, service_shift_id, service_shift_evidence,
+        policy_hash, policy_evidence, allocation_evidence, result_evidence
+      from public.reservation_revisions
+      where reservation_id = $1::uuid order by version`,
+      [ids.lifecycleReservation],
+    )
+  ).rows;
+  if (
+    lifecycleEvidence.version !== 3 ||
+    lifecycleEvidence.status !== "cancelled" ||
+    lifecycleEvidence.cancellation_reason !== "Guest called to cancel dinner" ||
+    Number(lifecycleEvidence.revision_count) !== 2 ||
+    Number(lifecycleEvidence.completed_requests) !== 2 ||
+    Number(lifecycleEvidence.rejected_request_rows) !== 0 ||
+    Number(lifecycleEvidence.active_allocations) !== 0 ||
+    Number(lifecycleEvidence.lifecycle_events) !== 2 ||
+    lifecycleRevisions.length !== 2 ||
+    lifecycleRevisions[0].mutation_kind !== "staff_modified" ||
+    lifecycleRevisions[0].version !== 2 ||
+    lifecycleRevisions[0].actor_id !== ids.owner ||
+    lifecycleRevisions[0].before_state.version !== 1 ||
+    lifecycleRevisions[0].after_state.version !== 2 ||
+    lifecycleRevisions[1].mutation_kind !== "staff_cancelled" ||
+    lifecycleRevisions[1].version !== 3 ||
+    lifecycleRevisions[1].before_state.version !== 2 ||
+    lifecycleRevisions[1].after_state.version !== 3 ||
+    lifecycleRevisions.some(
+      (revision) =>
+        !/^[0-9a-f]{64}$/.test(revision.payload_hash) ||
+        !revision.service_shift_id ||
+        !/^[0-9a-f]{64}$/.test(revision.policy_hash) ||
+        Object.keys(revision.service_shift_evidence).length === 0 ||
+        Object.keys(revision.policy_evidence).length === 0 ||
+        Object.keys(revision.allocation_evidence).length === 0 ||
+        Object.keys(revision.result_evidence).length === 0,
+    )
+  ) {
+    throw new Error(
+      `Staff lifecycle evidence is incomplete: ${JSON.stringify({ lifecycleEvidence, lifecycleRevisions })}`,
+    );
+  }
+
+  await db.exec("set role authenticated");
+  await assumeUser(ids.owner);
+  const lifecycleHostRow = (
+    await db.query(
+      `select * from public.service_reservation_host_snapshot(
+        $1::uuid, $2::uuid,
+        $3::timestamptz - interval '1 hour',
+        $3::timestamptz + interval '1 hour'
+      ) where id = $4::uuid`,
+      [
+        ids.organization,
+        ids.location,
+        lifecycleMovedTime,
+        ids.lifecycleReservation,
+      ],
+    )
+  ).rows[0];
+  if (
+    !lifecycleHostRow ||
+    lifecycleHostRow.version !== 3 ||
+    lifecycleHostRow.status !== "cancelled" ||
+    !lifecycleHostRow.policy_evidence_captured ||
+    lifecycleHostRow.last_revision?.id !== cancelledLifecycle.revisionId ||
+    lifecycleHostRow.last_revision?.kind !== "staff_cancelled" ||
+    lifecycleHostRow.last_revision?.version !== 3 ||
+    lifecycleHostRow.last_revision?.previousPartySize !== 3
+  ) {
+    throw new Error(
+      `Host lifecycle projection is incomplete: ${JSON.stringify(lifecycleHostRow)}`,
+    );
+  }
 
   await db.query(
     "select public.set_reservation_table_status($1::uuid, $2::uuid, 'blocked', 'Maintenance check', null)",
@@ -2840,12 +3350,15 @@ try {
     "duration_minutes",
     "guest_id",
     "id",
+    "last_revision",
     "party_size",
+    "policy_evidence_captured",
     "reserved_at",
     "source",
     "special_requests",
     "status",
     "table_label",
+    "version",
   ];
   const operateHostReservation = operateHostSnapshot.find(
     (reservation) => reservation.id === ids.staffReservation,
@@ -5502,8 +6015,721 @@ try {
     );
   }
 
+  // Staff lifecycle writes preserve a verified web guest's custody contract:
+  // refresh the scoped management session, invalidate stale delivery work,
+  // and queue only version-bound lifecycle messages on the verified channel.
+  const staffWebIds = {
+    createRequest: "ec000000-0000-4000-8000-000000000001",
+    modifyRequest: "ec100000-0000-4000-8000-000000000001",
+    cancelRequest: "ec100000-0000-4000-8000-000000000002",
+    destinationDriftModifyRequest: "ec100000-0000-4000-8000-000000000003",
+    staleReminder24: "ec200000-0000-4000-8000-000000000001",
+    staleReminder2: "ec200000-0000-4000-8000-000000000002",
+    staleModified: "ec200000-0000-4000-8000-000000000003",
+    staleClaim: "ec300000-0000-4000-8000-000000000001",
+    modifiedClaim: "ec300000-0000-4000-8000-000000000002",
+    cancelledClaim: "ec300000-0000-4000-8000-000000000003",
+    nullableReservation: "ed000000-0000-4000-8000-000000000001",
+    nullableCancelRequest: "ed100000-0000-4000-8000-000000000001",
+  };
+  const staffWebTime = (
+    await db.query(
+      `select (
+        date_trunc('day', clock_timestamp() at time zone 'America/New_York')
+        + interval '24 days 19 hours'
+      ) at time zone 'America/New_York' value`,
+    )
+  ).rows[0].value;
+  const staffWebMovedTime = new Date(
+    new Date(staffWebTime).valueOf() + 86_400_000,
+  ).toISOString();
+  const staffWebDestinationDriftTime = new Date(
+    new Date(staffWebMovedTime).valueOf() + 15 * 60_000,
+  ).toISOString();
+  const webConfirmationFingerprint = "ac".repeat(32);
+  const webExchangeFingerprint = "bd".repeat(32);
+  const webManageHash = "ce".repeat(32);
+  const webBindingHash = "df".repeat(32);
+
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const staffWebHold = (
+    await db.query(
+      `select public.service_create_public_reservation(
+        $1::uuid, $2::uuid, $3::uuid, $4::timestamptz, 120, 2,
+        'Lifecycle', 'Web', 'staff.lifecycle.web@example.invalid',
+        '+12125550981', null, array[$5::uuid], array['email']::text[]
+      ) result`,
+      [
+        staffWebIds.createRequest,
+        ids.organization,
+        ids.location,
+        staffWebTime,
+        ids.otherTable,
+      ],
+    )
+  ).rows[0].result;
+  const staffWebConfirmed = (
+    await db.query(
+      `select public.service_confirm_public_reservation(
+        $1::uuid, $2::uuid, $3::uuid, $4::text,
+        'email', array['email']::text[]
+      ) result`,
+      [
+        ids.organization,
+        ids.location,
+        staffWebHold.holdId,
+        webConfirmationFingerprint,
+      ],
+    )
+  ).rows[0].result;
+  const staffWebReservationId = staffWebConfirmed.reservationId;
+  const staffWebExchange = (
+    await db.query(
+      `select public.service_exchange_reservation_management(
+        $1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::text
+      ) result`,
+      [
+        ids.organization,
+        ids.location,
+        staffWebReservationId,
+        webExchangeFingerprint,
+        webManageHash,
+        webBindingHash,
+      ],
+    )
+  ).rows[0].result;
+  if (
+    staffWebConfirmed.status !== "booked" ||
+    staffWebExchange.replayed ||
+    !staffWebExchange.manageExpiresAt
+  ) {
+    throw new Error(
+      `Verified staff-web lifecycle fixture failed: ${JSON.stringify({ staffWebConfirmed, staffWebExchange })}`,
+    );
+  }
+
+  await db.exec("reset role");
+  const staffWebInitialEvidence = (
+    await db.query(
+      `select reservation.guest_id,
+        (select token.expires_at from private.public_booking_tokens token
+          where token.reservation_id = reservation.id
+            and token.token_hash = $2::text
+            and token.revoked_at is null) token_expires_at,
+        (select exchange.manage_expires_at
+          from private.public_booking_management_exchanges exchange
+          where exchange.reservation_id = reservation.id
+            and exchange.exchange_fingerprint = $3::text) exchange_expires_at,
+        (select verification.verified_destination_hash
+          from private.public_booking_holds hold
+          join private.public_booking_verifications verification
+            on verification.organization_id = hold.organization_id
+           and verification.location_id = hold.location_id
+           and verification.booking_hold_id = hold.id
+          where hold.reservation_id = reservation.id
+          order by verification.consumed_at desc, verification.id
+          limit 1) verified_destination_hash
+      from public.reservations reservation where reservation.id = $1::uuid`,
+      [staffWebReservationId, webManageHash, webExchangeFingerprint],
+    )
+  ).rows[0];
+  if (!/^[0-9a-f]{64}$/.test(staffWebInitialEvidence.verified_destination_hash)) {
+    throw new Error(
+      `Verified staff-web hold omitted destination evidence: ${JSON.stringify(staffWebInitialEvidence)}`,
+    );
+  }
+  await db.query(
+    `insert into public.reservation_message_outbox (
+      id, organization_id, location_id, reservation_id, guest_id,
+      channel, template_key, template_data, status, dedupe_key, attempts,
+      next_attempt_at, claim_token, claimed_by, claimed_at, lease_expires_at
+    ) values
+      (
+        $1::uuid, $5::uuid, $6::uuid, $7::uuid, $8::uuid,
+        'email', 'reservation_reminder_24h',
+        jsonb_build_object('reservationVersion', 1, 'channel', 'email'), 'queued',
+        'reservation:' || $7::uuid::text || ':reminder:24h:email',
+        0, clock_timestamp(),
+        null, null, null, null
+      ),
+      (
+        $2::uuid, $5::uuid, $6::uuid, $7::uuid, $8::uuid,
+        'email', 'reservation_reminder_2h',
+        jsonb_build_object('reservationVersion', 1, 'channel', 'email'), 'failed',
+        'reservation:' || $7::uuid::text || ':reminder:2h:email',
+        1, clock_timestamp(),
+        null, null, null, null
+      ),
+      (
+        $3::uuid, $5::uuid, $6::uuid, $7::uuid, $8::uuid,
+        'email', 'reservation_modified',
+        jsonb_build_object('reservationVersion', 1, 'channel', 'email'), 'sending',
+        'staff-web-lifecycle:modified-stale', 1, clock_timestamp(),
+        $4::uuid, $9::uuid, clock_timestamp(), clock_timestamp() + interval '1 hour'
+      )`,
+    [
+      staffWebIds.staleReminder24,
+      staffWebIds.staleReminder2,
+      staffWebIds.staleModified,
+      staffWebIds.staleClaim,
+      ids.organization,
+      ids.location,
+      staffWebReservationId,
+      staffWebInitialEvidence.guest_id,
+      ids.owner,
+    ],
+  );
+
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const staleClaimInitiallyValid = (
+    await db.query(
+      `select public.service_validate_reservation_message_claim(
+        $1::uuid, $2::uuid, clock_timestamp()
+      ) valid`,
+      [staffWebIds.staleModified, staffWebIds.staleClaim],
+    )
+  ).rows[0].valid;
+  if (!staleClaimInitiallyValid)
+    throw new Error("Current staff lifecycle message claim was rejected");
+
+  await db.exec("reset role");
+  await db.exec("set role authenticated");
+  await assumeUser(ids.owner);
+  const staffWebModified = (
+    await db.query(
+      `select public.modify_reservation(
+        $1::uuid, $2::uuid, $3::uuid, 1, $4::timestamptz,
+        120, 2, 'Verified web lifecycle moved', array[$5::uuid],
+        'Host moved the verified public reservation'
+      ) result`,
+      [
+        staffWebIds.modifyRequest,
+        ids.location,
+        staffWebReservationId,
+        staffWebMovedTime,
+        ids.otherTable,
+      ],
+    )
+  ).rows[0].result;
+  expectExactKeys(staffWebModified, lifecycleResultKeys, "verified web staff modify");
+  if (
+    staffWebModified.version !== 2 ||
+    staffWebModified.replayed ||
+    !staffWebModified.guestNotificationQueued
+  ) {
+    throw new Error(
+      `Verified web staff modification omitted lifecycle delivery evidence: ${JSON.stringify(staffWebModified)}`,
+    );
+  }
+
+  const oldWindowCount = Number(
+    (
+      await db.query(
+        `select count(*) count from public.service_reservation_host_snapshot(
+          $1::uuid, $2::uuid,
+          $3::timestamptz - interval '1 hour',
+          $3::timestamptz + interval '1 hour'
+        ) snapshot where snapshot.id = $4::uuid`,
+        [
+          ids.organization,
+          ids.location,
+          staffWebTime,
+          staffWebReservationId,
+        ],
+      )
+    ).rows[0].count,
+  );
+  const staffWebHead = (
+    await db.query(
+      `select public.service_reservation_lifecycle_head(
+        $1::uuid, $2::uuid
+      ) result`,
+      [ids.location, staffWebReservationId],
+    )
+  ).rows[0].result;
+  expectExactKeys(staffWebHead, lifecycleHeadKeys, "out-of-window lifecycle head");
+  if (
+    oldWindowCount !== 0 ||
+    staffWebHead.version !== 2 ||
+    new Date(staffWebHead.reservedAt).valueOf() !==
+      new Date(staffWebMovedTime).valueOf() ||
+    staffWebHead.lastRevision?.id !== staffWebModified.revisionId
+  ) {
+    throw new Error(
+      `Exact lifecycle head did not recover an out-of-window move: ${JSON.stringify({ oldWindowCount, staffWebHead })}`,
+    );
+  }
+
+  await db.exec("reset role");
+  const expectedStaffWebExpiry =
+    new Date(staffWebMovedTime).valueOf() + (120 + 24 * 60) * 60_000;
+  const staffWebRefreshEvidence = (
+    await db.query(
+      `select
+        (select token.expires_at from private.public_booking_tokens token
+          where token.reservation_id = $1::uuid
+            and token.token_hash = $2::text
+            and token.revoked_at is null) token_expires_at,
+        (select exchange.manage_expires_at
+          from private.public_booking_management_exchanges exchange
+          where exchange.reservation_id = $1::uuid
+            and exchange.exchange_fingerprint = $3::text) exchange_expires_at`,
+      [staffWebReservationId, webManageHash, webExchangeFingerprint],
+    )
+  ).rows[0];
+  const staleLifecycleMessages = (
+    await db.query(
+      `select id, status, dedupe_key, claim_token
+      from public.reservation_message_outbox
+      where id = any($1::uuid[]) order by id`,
+      [[
+        staffWebIds.staleReminder24,
+        staffWebIds.staleReminder2,
+        staffWebIds.staleModified,
+      ]],
+    )
+  ).rows;
+  const staffWebModifiedMessage = (
+    await db.query(
+      `select id, guest_id, channel, status, template_data, dedupe_key
+      from public.reservation_message_outbox
+      where reservation_id = $1::uuid
+        and template_key = 'reservation_modified'
+        and dedupe_key = $2::text`,
+      [
+        staffWebReservationId,
+        `reservation:${staffWebReservationId}:modified:2:email`,
+      ],
+    )
+  ).rows[0];
+  const staleMessageById = new Map(
+    staleLifecycleMessages.map((message) => [message.id, message]),
+  );
+  if (
+    new Date(staffWebRefreshEvidence.token_expires_at).valueOf() !==
+      expectedStaffWebExpiry ||
+    new Date(staffWebRefreshEvidence.exchange_expires_at).valueOf() !==
+      expectedStaffWebExpiry ||
+    expectedStaffWebExpiry <=
+      new Date(staffWebInitialEvidence.token_expires_at).valueOf() ||
+    staleLifecycleMessages.length !== 3 ||
+    staleLifecycleMessages.some(
+      (message) => message.status !== "cancelled" || message.claim_token !== null,
+    ) ||
+    staleMessageById.get(staffWebIds.staleReminder24)?.dedupe_key !==
+      `reservation:${staffWebReservationId}:reminder:24h:email:v1` ||
+    staleMessageById.get(staffWebIds.staleReminder2)?.dedupe_key !==
+      `reservation:${staffWebReservationId}:reminder:2h:email:v1` ||
+    staffWebModifiedMessage?.status !== "queued" ||
+    staffWebModifiedMessage.channel !== "email" ||
+    staffWebModifiedMessage.guest_id !== staffWebInitialEvidence.guest_id ||
+    staffWebModifiedMessage.template_data.reservationVersion !== 2 ||
+    new Date(staffWebModifiedMessage.template_data.reservedAt).valueOf() !==
+      new Date(staffWebMovedTime).valueOf()
+  ) {
+    throw new Error(
+      `Staff modification did not refresh custody and invalidate stale delivery: ${JSON.stringify({ staffWebRefreshEvidence, staleLifecycleMessages, staffWebModifiedMessage })}`,
+    );
+  }
+
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  await db.query(
+    "select public.service_enqueue_reservation_reminders($1::timestamptz)",
+    [
+      new Date(
+        new Date(staffWebMovedTime).valueOf() - 23 * 60 * 60_000,
+      ).toISOString(),
+    ],
+  );
+  await db.exec("reset role");
+  const staffWebVersionedReminder = (
+    await db.query(
+      `select status, channel, template_key, template_data, dedupe_key
+      from public.reservation_message_outbox
+      where organization_id = $1::uuid
+        and reservation_id = $2::uuid
+        and dedupe_key = $3::text`,
+      [
+        ids.organization,
+        staffWebReservationId,
+        `reservation:${staffWebReservationId}:reminder:24h:v2:email`,
+      ],
+    )
+  ).rows[0];
+  if (
+    staffWebVersionedReminder?.status !== "queued" ||
+    staffWebVersionedReminder.channel !== "email" ||
+    staffWebVersionedReminder.template_key !== "reservation_reminder_24h" ||
+    staffWebVersionedReminder.template_data.reservationVersion !== 2 ||
+    staffWebVersionedReminder.template_data.channel !== "email"
+  ) {
+    throw new Error(
+      `Staff move did not permit an exact version-bound reminder: ${JSON.stringify(staffWebVersionedReminder)}`,
+    );
+  }
+
+  await db.query(
+    `update public.reservation_message_outbox
+    set status = 'sending', claim_token = $2::uuid, claimed_by = $3::uuid,
+      claimed_at = clock_timestamp(), lease_expires_at = clock_timestamp() + interval '1 hour'
+    where id = $1::uuid`,
+    [staffWebModifiedMessage.id, staffWebIds.modifiedClaim, ids.owner],
+  );
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const staffWebExchangeReplay = (
+    await db.query(
+      `select public.service_exchange_reservation_management(
+        $1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::text
+      ) result`,
+      [
+        ids.organization,
+        ids.location,
+        staffWebReservationId,
+        webExchangeFingerprint,
+        webManageHash,
+        webBindingHash,
+      ],
+    )
+  ).rows[0].result;
+  const postModifyClaimValidity = (
+    await db.query(
+      `select
+        public.service_validate_reservation_message_claim(
+          $1::uuid, $2::uuid, clock_timestamp()
+        ) stale_valid,
+        public.service_validate_reservation_message_claim(
+          $3::uuid, $4::uuid, clock_timestamp()
+        ) current_valid`,
+      [
+        staffWebIds.staleModified,
+        staffWebIds.staleClaim,
+        staffWebModifiedMessage.id,
+        staffWebIds.modifiedClaim,
+      ],
+    )
+  ).rows[0];
+  if (
+    !staffWebExchangeReplay.replayed ||
+    new Date(staffWebExchangeReplay.manageExpiresAt).valueOf() !==
+      expectedStaffWebExpiry ||
+    postModifyClaimValidity.stale_valid ||
+    !postModifyClaimValidity.current_valid
+  ) {
+    throw new Error(
+      `Staff modification claim validation is incomplete: ${JSON.stringify({ staffWebExchangeReplay, postModifyClaimValidity })}`,
+    );
+  }
+
+  await db.exec("reset role");
+  await db.query(
+    "update public.guests set email = 'changed.staff.lifecycle@example.invalid' where organization_id = $1::uuid and id = $2::uuid",
+    [ids.organization, staffWebInitialEvidence.guest_id],
+  );
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const changedDestinationClaimValid = (
+    await db.query(
+      `select public.service_validate_reservation_message_claim(
+        $1::uuid, $2::uuid, clock_timestamp()
+      ) valid`,
+      [staffWebModifiedMessage.id, staffWebIds.modifiedClaim],
+    )
+  ).rows[0].valid;
+  if (changedDestinationClaimValid) {
+    throw new Error("A lifecycle message claim survived CRM destination drift");
+  }
+
+  await db.exec("reset role");
+  await db.exec("set role authenticated");
+  await assumeUser(ids.owner);
+  const staffWebDestinationDriftModified = (
+    await db.query(
+      `select public.modify_reservation(
+        $1::uuid, $2::uuid, $3::uuid, 2, $4::timestamptz,
+        120, 2, 'Verified web destination drift', array[$5::uuid],
+        'Host moved after the verified CRM destination changed'
+      ) result`,
+      [
+        staffWebIds.destinationDriftModifyRequest,
+        ids.location,
+        staffWebReservationId,
+        staffWebDestinationDriftTime,
+        ids.otherTable,
+      ],
+    )
+  ).rows[0].result;
+  expectExactKeys(
+    staffWebDestinationDriftModified,
+    lifecycleResultKeys,
+    "changed-destination staff modify",
+  );
+  if (
+    staffWebDestinationDriftModified.version !== 3 ||
+    staffWebDestinationDriftModified.replayed ||
+    staffWebDestinationDriftModified.guestNotificationQueued
+  ) {
+    throw new Error(
+      `Changed CRM destination still queued a lifecycle notification: ${JSON.stringify(staffWebDestinationDriftModified)}`,
+    );
+  }
+
+  await db.exec("reset role");
+  const changedDestinationMessageEvidence = (
+    await db.query(
+      `select
+        (select count(*) from public.reservation_message_outbox message
+          where message.organization_id = $1::uuid
+            and message.reservation_id = $2::uuid
+            and message.dedupe_key = $3::text) new_modified_messages,
+        (select status from public.reservation_message_outbox message
+          where message.id = $4::uuid) previous_modified_status,
+        (select status from public.reservation_message_outbox message
+          where message.organization_id = $1::uuid
+            and message.reservation_id = $2::uuid
+            and message.dedupe_key = $5::text) previous_reminder_status`,
+      [
+        ids.organization,
+        staffWebReservationId,
+        `reservation:${staffWebReservationId}:modified:3:email`,
+        staffWebModifiedMessage.id,
+        `reservation:${staffWebReservationId}:reminder:24h:v2:email`,
+      ],
+    )
+  ).rows[0];
+  if (
+    Number(changedDestinationMessageEvidence.new_modified_messages) !== 0 ||
+    changedDestinationMessageEvidence.previous_modified_status !== "cancelled" ||
+    changedDestinationMessageEvidence.previous_reminder_status !== "cancelled"
+  ) {
+    throw new Error(
+      `Changed-destination lifecycle invalidation is incomplete: ${JSON.stringify(changedDestinationMessageEvidence)}`,
+    );
+  }
+  await db.query(
+    "update public.guests set email = 'staff.lifecycle.web@example.invalid' where organization_id = $1::uuid and id = $2::uuid",
+    [ids.organization, staffWebInitialEvidence.guest_id],
+  );
+
+  await db.exec("reset role");
+  await db.exec("set role authenticated");
+  await assumeUser(ids.owner);
+  const staffWebCancelled = (
+    await db.query(
+      `select public.cancel_reservation(
+        $1::uuid, $2::uuid, $3::uuid, 3,
+        'Host cancelled the verified public reservation'
+      ) result`,
+      [staffWebIds.cancelRequest, ids.location, staffWebReservationId],
+    )
+  ).rows[0].result;
+  expectExactKeys(staffWebCancelled, lifecycleResultKeys, "verified web staff cancel");
+  if (
+    staffWebCancelled.status !== "cancelled" ||
+    staffWebCancelled.version !== 4 ||
+    staffWebCancelled.replayed ||
+    !staffWebCancelled.guestNotificationQueued
+  ) {
+    throw new Error(
+      `Verified web staff cancellation omitted lifecycle delivery evidence: ${JSON.stringify(staffWebCancelled)}`,
+    );
+  }
+
+  await db.exec("reset role");
+  const staffWebCancellationEvidence = (
+    await db.query(
+      `select
+        (select count(*) from private.public_booking_tokens token
+          where token.reservation_id = $1::uuid
+            and token.token_hash = $2::text
+            and token.revoked_at is not null) revoked_tokens,
+        (select count(*) from public.reservation_message_outbox message
+          where message.reservation_id = $1::uuid
+            and message.template_key <> 'reservation_cancelled'
+            and message.status in ('queued', 'failed', 'sending')) live_stale_messages,
+        (select count(*) from public.reservation_message_outbox message
+          where message.id = $3::uuid and message.status = 'cancelled'
+            and message.claim_token is null) cancelled_modified_claims`,
+      [staffWebReservationId, webManageHash, staffWebModifiedMessage.id],
+    )
+  ).rows[0];
+  const staffWebCancelledMessage = (
+    await db.query(
+      `select id, guest_id, channel, status, template_data, dedupe_key
+      from public.reservation_message_outbox
+      where reservation_id = $1::uuid
+        and template_key = 'reservation_cancelled'`,
+      [staffWebReservationId],
+    )
+  ).rows[0];
+  if (
+    Number(staffWebCancellationEvidence.revoked_tokens) !== 1 ||
+    Number(staffWebCancellationEvidence.live_stale_messages) !== 0 ||
+    Number(staffWebCancellationEvidence.cancelled_modified_claims) !== 1 ||
+    staffWebCancelledMessage?.status !== "queued" ||
+    staffWebCancelledMessage.channel !== "email" ||
+    staffWebCancelledMessage.guest_id !== staffWebInitialEvidence.guest_id ||
+    staffWebCancelledMessage.template_data.reservationVersion !== 4 ||
+    staffWebCancelledMessage.dedupe_key !==
+      `reservation:${staffWebReservationId}:cancelled:4:email`
+  ) {
+    throw new Error(
+      `Staff cancellation did not revoke custody and queue verified delivery: ${JSON.stringify({ staffWebCancellationEvidence, staffWebCancelledMessage })}`,
+    );
+  }
+
+  await db.query(
+    `update public.reservation_message_outbox
+    set status = 'sending', claim_token = $2::uuid, claimed_by = $3::uuid,
+      claimed_at = clock_timestamp(), lease_expires_at = clock_timestamp() + interval '1 hour'
+    where id = $1::uuid`,
+    [staffWebCancelledMessage.id, staffWebIds.cancelledClaim, ids.owner],
+  );
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const postCancelClaimValidity = (
+    await db.query(
+      `select
+        public.service_validate_reservation_message_claim(
+          $1::uuid, $2::uuid, clock_timestamp()
+        ) modified_valid,
+        public.service_validate_reservation_message_claim(
+          $3::uuid, $4::uuid, clock_timestamp()
+        ) cancelled_valid`,
+      [
+        staffWebModifiedMessage.id,
+        staffWebIds.modifiedClaim,
+        staffWebCancelledMessage.id,
+        staffWebIds.cancelledClaim,
+      ],
+    )
+  ).rows[0];
+  if (postCancelClaimValidity.modified_valid || !postCancelClaimValidity.cancelled_valid) {
+    throw new Error(
+      `Staff cancellation claim validation is incomplete: ${JSON.stringify(postCancelClaimValidity)}`,
+    );
+  }
+
+  await db.exec("reset role");
+  await db.exec("set role authenticated");
+  await assumeUser(ids.owner);
+  const staffWebCancelledHead = (
+    await db.query(
+      `select public.service_reservation_lifecycle_head(
+        $1::uuid, $2::uuid
+      ) result`,
+      [ids.location, staffWebReservationId],
+    )
+  ).rows[0].result;
+  expectExactKeys(
+    staffWebCancelledHead,
+    lifecycleHeadKeys,
+    "cancelled exact lifecycle head",
+  );
+  if (
+    staffWebCancelledHead.version !== 4 ||
+    staffWebCancelledHead.status !== "cancelled" ||
+    staffWebCancelledHead.tableIds.length !== 0 ||
+    staffWebCancelledHead.lastRevision?.id !== staffWebCancelled.revisionId
+  ) {
+    throw new Error(
+      `Cancelled lifecycle head is incomplete: ${JSON.stringify(staffWebCancelledHead)}`,
+    );
+  }
+
+  // Historical reservation rows can predate duration capture. Cancellation
+  // must still append evidence and return the nullable duration safely.
+  await db.exec("reset role");
+  const nullableDurationTime = new Date(
+    new Date(staffWebMovedTime).valueOf() + 86_400_000,
+  ).toISOString();
+  await db.query(
+    `select private.ensure_service_shifts(
+      $1::uuid, $2::uuid,
+      array[($3::timestamptz at time zone 'America/New_York')::date]
+    )`,
+    [ids.organization, ids.location, nullableDurationTime],
+  );
+  await db.query(
+    `insert into public.reservations (
+      id, organization_id, location_id, reserved_at, duration_minutes,
+      party_size, status, source, booking_channel, version
+    ) values (
+      $1::uuid, $2::uuid, $3::uuid, $4::timestamptz, null,
+      2, 'booked', 'manual', 'staff', 1
+    )`,
+    [
+      staffWebIds.nullableReservation,
+      ids.organization,
+      ids.location,
+      nullableDurationTime,
+    ],
+  );
+  await db.exec("set role authenticated");
+  await assumeUser(ids.owner);
+  const nullableDurationCancellation = (
+    await db.query(
+      `select public.cancel_reservation(
+        $1::uuid, $2::uuid, $3::uuid, 1,
+        'Cancelled legacy reservation without captured duration'
+      ) result`,
+      [
+        staffWebIds.nullableCancelRequest,
+        ids.location,
+        staffWebIds.nullableReservation,
+      ],
+    )
+  ).rows[0].result;
+  expectExactKeys(
+    nullableDurationCancellation,
+    lifecycleResultKeys,
+    "nullable-duration staff cancellation",
+  );
+  if (
+    nullableDurationCancellation.status !== "cancelled" ||
+    nullableDurationCancellation.version !== 2 ||
+    nullableDurationCancellation.durationMinutes !== null ||
+    !nullableDurationCancellation.policyEvidenceCaptured ||
+    nullableDurationCancellation.guestNotificationQueued
+  ) {
+    throw new Error(
+      `Nullable-duration cancellation is incomplete: ${JSON.stringify(nullableDurationCancellation)}`,
+    );
+  }
+  await db.exec("reset role");
+  const nullableDurationRevision = (
+    await db.query(
+      `select before_state, after_state from public.reservation_revisions
+      where request_id = $1::uuid`,
+      [staffWebIds.nullableCancelRequest],
+    )
+  ).rows[0];
+  if (
+    nullableDurationRevision?.before_state.durationMinutes !== null ||
+    nullableDurationRevision.after_state.durationMinutes !== null
+  ) {
+    throw new Error(
+      `Nullable duration was not preserved in cancellation evidence: ${JSON.stringify(nullableDurationRevision)}`,
+    );
+  }
+
   process.stdout.write(
-    "PASS reservation configuration, atomic staff commands, table states, rate limits, reminders, public verification/modification/cancellation, exact cross-boundary expiry, waitlist seating, and messaging evidence\n",
+    "PASS reservation configuration, atomic staff lifecycle revisions, table states, rate limits, reminders, public verification/modification/cancellation, exact cross-boundary expiry, waitlist seating, and messaging evidence\n",
   );
 } finally {
   await db.close();

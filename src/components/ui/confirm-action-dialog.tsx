@@ -14,8 +14,10 @@ export interface ConfirmActionDialogProps {
   onConfirm: () => void | Promise<void>;
   children?: ReactNode;
   busy?: boolean;
+  confirmDisabled?: boolean;
   cancelLabel?: string;
   confirmVariant?: ButtonProps["variant"];
+  noValidate?: boolean;
 }
 
 /**
@@ -33,12 +35,14 @@ export function ConfirmActionDialog({
   onConfirm,
   children,
   busy = false,
+  confirmDisabled = false,
   cancelLabel = "Cancel",
   confirmVariant = "danger",
+  noValidate = false,
 }: ConfirmActionDialogProps) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!busy) void onConfirm();
+    if (!busy && !confirmDisabled) void onConfirm();
   }
 
   return (
@@ -51,7 +55,7 @@ export function ConfirmActionDialog({
       position="responsive-sheet"
       className="max-w-lg rounded-b-none sm:rounded-[22px]"
     >
-      <form onSubmit={submit}>
+      <form onSubmit={submit} aria-busy={busy} noValidate={noValidate}>
         <div className="border-b border-[var(--line)] px-5 py-5 sm:px-6">
           <h2 id={labelledBy} className="text-lg font-semibold tracking-tight">
             {title}
@@ -71,7 +75,11 @@ export function ConfirmActionDialog({
           >
             {cancelLabel}
           </Button>
-          <Button type="submit" variant={confirmVariant} disabled={busy}>
+          <Button
+            type="submit"
+            variant={confirmVariant}
+            disabled={busy || confirmDisabled}
+          >
             {busy ? "Saving…" : confirmLabel}
           </Button>
         </div>

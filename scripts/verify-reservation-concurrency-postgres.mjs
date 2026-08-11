@@ -336,6 +336,78 @@ async function exchangeManagement(
   ).rows[0].result;
 }
 
+async function createStaffReservation(
+  client,
+  { requestId, startsAt, durationMinutes = 90, partySize = 2, tableId },
+) {
+  return (
+    await client.query(
+      `select public.save_reservation(
+        $1::uuid, $2::uuid, null::uuid, null::uuid, $3::timestamptz,
+        $4::integer, $5::integer, 'Lifecycle concurrency', 'manual',
+        array[$6::uuid]
+      ) result`,
+      [
+        requestId,
+        ids.location,
+        startsAt,
+        durationMinutes,
+        partySize,
+        tableId,
+      ],
+    )
+  ).rows[0].result;
+}
+
+async function modifyStaffReservation(
+  client,
+  {
+    requestId,
+    reservationId,
+    expectedVersion,
+    startsAt,
+    durationMinutes = 90,
+    partySize,
+    tableId,
+    reason,
+  },
+) {
+  return (
+    await client.query(
+      `select public.modify_reservation(
+        $1::uuid, $2::uuid, $3::uuid, $4::integer, $5::timestamptz,
+        $6::integer, $7::integer, 'Lifecycle concurrency', array[$8::uuid],
+        $9::text
+      ) result`,
+      [
+        requestId,
+        ids.location,
+        reservationId,
+        expectedVersion,
+        startsAt,
+        durationMinutes,
+        partySize,
+        tableId,
+        reason,
+      ],
+    )
+  ).rows[0].result;
+}
+
+async function cancelStaffReservation(
+  client,
+  { requestId, reservationId, expectedVersion, reason },
+) {
+  return (
+    await client.query(
+      `select public.cancel_reservation(
+        $1::uuid, $2::uuid, $3::uuid, $4::integer, $5::text
+      ) result`,
+      [requestId, ids.location, reservationId, expectedVersion, reason],
+    )
+  ).rows[0].result;
+}
+
 let setup;
 let first;
 let second;
@@ -977,6 +1049,252 @@ try {
   requireCode(staffPublicError, "23P01", "staff/public inventory conflict");
   await rollbackQuietly(second);
 
+  // Staff lifecycle commands serialize on the canonical inventory lock. A
+  // second writer must observe the committed version and roll its request
+  // claim back instead of appending a competing revision.
+  await assumeRole(first, "authenticated", ids.owner);
+  await assumeRole(second, "authenticated", ids.owner);
+  const staffLifecycleCreated = await createStaffReservation(first, {
+    requestId: randomUUID(),
+    startsAt: times.t9,
+    partySize: 2,
+    tableId: ids.tableA,
+  });
+  if (
+    !staffLifecycleCreated?.id ||
+    staffLifecycleCreated.version !== 1 ||
+    staffLifecycleCreated.replayed
+  ) {
+    throw new Error(
+      `Staff lifecycle concurrency fixture failed: ${JSON.stringify(staffLifecycleCreated)}`,
+    );
+  }
+  const staffLifecycleReservationId = staffLifecycleCreated.id;
+  const staffLifecycleMovedAt = new Date(
+    new Date(times.t9).valueOf() + 15 * 60_000,
+  ).toISOString();
+  const staffLifecycleCompetingAt = new Date(
+    new Date(times.t9).valueOf() + 30 * 60_000,
+  ).toISOString();
+  const staffModifyWinnerRequestId = randomUUID();
+  const staffModifyLoserRequestId = randomUUID();
+  const staffCancelWinnerRequestId = randomUUID();
+  const staffCancelLoserRequestId = randomUUID();
+  const staffModifyWinnerInput = {
+    requestId: staffModifyWinnerRequestId,
+    reservationId: staffLifecycleReservationId,
+    expectedVersion: 1,
+    startsAt: staffLifecycleMovedAt,
+    partySize: 3,
+    tableId: ids.tableA,
+    reason: "First staff writer moved the reservation",
+  };
+
+  await first.query("begin");
+  await second.query("begin");
+  const staffModifyWinner = await modifyStaffReservation(
+    first,
+    staffModifyWinnerInput,
+  );
+  if (
+    staffModifyWinner.version !== 2 ||
+    staffModifyWinner.replayed ||
+    staffModifyWinner.revisionKind !== "staff_modified" ||
+    !staffModifyWinner.policyEvidenceCaptured ||
+    staffModifyWinner.guestNotificationQueued !== false
+  ) {
+    throw new Error(
+      `Staff modify winner returned incomplete evidence: ${JSON.stringify(staffModifyWinner)}`,
+    );
+  }
+  const staffModifyLoser = modifyStaffReservation(second, {
+    requestId: staffModifyLoserRequestId,
+    reservationId: staffLifecycleReservationId,
+    expectedVersion: 1,
+    startsAt: staffLifecycleCompetingAt,
+    partySize: 4,
+    tableId: ids.tableA,
+    reason: "Second staff writer must become stale",
+  });
+  await proveBlocked(
+    setup,
+    staffModifyLoser,
+    second.processID,
+    "staff modify/modify version serialization",
+  );
+  await first.query("commit");
+  let staffModifyLoserError;
+  try {
+    await settleWithin(
+      staffModifyLoser,
+      "staff modify/modify version serialization",
+    );
+  } catch (error) {
+    staffModifyLoserError = error;
+  }
+  requireCode(
+    staffModifyLoserError,
+    "40001",
+    "staff modify/modify version serialization",
+  );
+  await rollbackQuietly(second);
+
+  await first.query("begin");
+  await second.query("begin");
+  const staffCancelWinner = await cancelStaffReservation(first, {
+    requestId: staffCancelWinnerRequestId,
+    reservationId: staffLifecycleReservationId,
+    expectedVersion: 2,
+    reason: "First staff writer cancelled the reservation",
+  });
+  if (
+    staffCancelWinner.status !== "cancelled" ||
+    staffCancelWinner.version !== 3 ||
+    staffCancelWinner.replayed ||
+    staffCancelWinner.revisionKind !== "staff_cancelled" ||
+    !staffCancelWinner.policyEvidenceCaptured ||
+    staffCancelWinner.guestNotificationQueued !== false
+  ) {
+    throw new Error(
+      `Staff cancellation winner returned incomplete evidence: ${JSON.stringify(staffCancelWinner)}`,
+    );
+  }
+  const staffModifyBehindCancel = modifyStaffReservation(second, {
+    requestId: staffCancelLoserRequestId,
+    reservationId: staffLifecycleReservationId,
+    expectedVersion: 2,
+    startsAt: staffLifecycleCompetingAt,
+    partySize: 4,
+    tableId: ids.tableA,
+    reason: "Staff modification behind cancellation must become stale",
+  });
+  await proveBlocked(
+    setup,
+    staffModifyBehindCancel,
+    second.processID,
+    "staff cancel/modify version serialization",
+  );
+  await first.query("commit");
+  let staffModifyBehindCancelError;
+  try {
+    await settleWithin(
+      staffModifyBehindCancel,
+      "staff cancel/modify version serialization",
+    );
+  } catch (error) {
+    staffModifyBehindCancelError = error;
+  }
+  requireCode(
+    staffModifyBehindCancelError,
+    "40001",
+    "staff cancel/modify version serialization",
+  );
+  await rollbackQuietly(second);
+
+  // A request replay remains tied to its original immutable revision even
+  // after a later cancellation changes the live reservation.
+  const staffModifyReplay = await modifyStaffReservation(
+    first,
+    staffModifyWinnerInput,
+  );
+  if (
+    !staffModifyReplay.replayed ||
+    staffModifyReplay.status !== "booked" ||
+    staffModifyReplay.version !== 2 ||
+    staffModifyReplay.revisionId !== staffModifyWinner.revisionId
+  ) {
+    throw new Error(
+      `Staff modification replay drifted after cancellation: ${JSON.stringify(staffModifyReplay)}`,
+    );
+  }
+
+  await setup.query("reset role");
+  const staffLifecycleEvidence = (
+    await setup.query(
+      `select reservation.status, reservation.version,
+        (select count(*) from public.reservation_revisions revision
+          where revision.reservation_id = reservation.id) revision_count,
+        (select array_agg(revision.mutation_kind order by revision.version)
+          from public.reservation_revisions revision
+          where revision.reservation_id = reservation.id) revision_kinds,
+        (select array_agg(revision.version order by revision.version)
+          from public.reservation_revisions revision
+          where revision.reservation_id = reservation.id) revision_versions,
+        (select coalesce(bool_and(
+            revision.actor_id = $4::uuid
+            and revision.payload_hash ~ '^[0-9a-f]{64}$'
+            and revision.before_state is distinct from revision.after_state
+            and jsonb_typeof(revision.service_shift_evidence) = 'object'
+            and revision.service_shift_evidence <> '{}'::jsonb
+            and coalesce(revision.policy_hash ~ '^[0-9a-f]{64}$', false)
+            and jsonb_typeof(revision.policy_evidence) = 'object'
+            and revision.policy_evidence <> '{}'::jsonb
+            and jsonb_typeof(revision.allocation_evidence) = 'object'
+            and revision.allocation_evidence <> '{}'::jsonb
+            and revision.result_evidence ->> 'revisionId' = revision.id::text
+            and (revision.result_evidence ->> 'version')::integer = revision.version
+          ), false)
+          from public.reservation_revisions revision
+          where revision.reservation_id = reservation.id) revision_evidence_complete,
+        (select count(*) from private.operation_requests request
+          where request.request_id = any($2::uuid[])
+            and request.completed_at is not null) completed_winner_requests,
+        (select count(*) from private.operation_requests request
+          where request.request_id = any($3::uuid[])) losing_request_rows,
+        (select count(*) from public.reservation_table_allocations allocation
+          where allocation.reservation_id = reservation.id
+            and allocation.is_active) active_allocations,
+        (select count(*) from public.reservation_events event
+          where event.reservation_id = reservation.id
+            and event.event_type in ('staff_modified', 'staff_cancelled')) lifecycle_events
+      from public.reservations reservation
+      where reservation.id = $1::uuid`,
+      [
+        staffLifecycleReservationId,
+        [staffModifyWinnerRequestId, staffCancelWinnerRequestId],
+        [staffModifyLoserRequestId, staffCancelLoserRequestId],
+        ids.owner,
+      ],
+    )
+  ).rows[0];
+  if (
+    staffLifecycleEvidence?.status !== "cancelled" ||
+    staffLifecycleEvidence.version !== 3 ||
+    Number(staffLifecycleEvidence.revision_count) !== 2 ||
+    JSON.stringify(staffLifecycleEvidence.revision_kinds) !==
+      JSON.stringify(["staff_modified", "staff_cancelled"]) ||
+    JSON.stringify(staffLifecycleEvidence.revision_versions) !==
+      JSON.stringify([2, 3]) ||
+    !staffLifecycleEvidence.revision_evidence_complete ||
+    Number(staffLifecycleEvidence.completed_winner_requests) !== 2 ||
+    Number(staffLifecycleEvidence.losing_request_rows) !== 0 ||
+    Number(staffLifecycleEvidence.active_allocations) !== 0 ||
+    Number(staffLifecycleEvidence.lifecycle_events) !== 2
+  ) {
+    throw new Error(
+      `Staff lifecycle concurrency evidence is incomplete: ${JSON.stringify(staffLifecycleEvidence)}`,
+    );
+  }
+
+  for (const [statement, label] of [
+    [
+      "update public.reservation_revisions set reason = reason where request_id = $1::uuid",
+      "staff revision update immutability",
+    ],
+    [
+      "delete from public.reservation_revisions where request_id = $1::uuid",
+      "staff revision delete immutability",
+    ],
+  ]) {
+    let immutabilityError;
+    try {
+      await setup.query(statement, [staffModifyWinnerRequestId]);
+    } catch (error) {
+      immutabilityError = error;
+    }
+    requireCode(immutabilityError, "55000", label);
+  }
+
   // Adjacent operating dates can still share one rolling pacing window. Use
   // separate late/early services and different tables to prove the canonical
   // location lock makes the second writer observe the committed covers.
@@ -1356,7 +1674,7 @@ try {
   await setup.query("reset role");
   await setup.query(`drop schema ${quoteIdentifier(markerSchema)} cascade`);
   process.stdout.write(
-    "PASS actual migrated PostgreSQL two-connection gate: service-period/timezone configuration, GiST, public/public table conflict with rollback evidence, same-day and adjacent-day pacing, cross-boundary stale expiry, confirm/create, canonical opposite-date swaps, modify/modify, cancel/rebook, staff/public, guest-identity post-lock recheck, and waitlist/public\n",
+    "PASS actual migrated PostgreSQL two-connection gate: service-period/timezone configuration, GiST, public/public table conflict with rollback evidence, same-day and adjacent-day pacing, cross-boundary stale expiry, confirm/create, canonical opposite-date swaps, public modify/modify, cancel/rebook, staff/public, staff modify/modify and cancel/modify lifecycle revisions, guest-identity post-lock recheck, and waitlist/public\n",
   );
 } finally {
   await rollbackQuietly(first);

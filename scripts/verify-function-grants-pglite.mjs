@@ -45,6 +45,7 @@ const approvedAuthenticatedFunctions = new Set([
   "can_read_management_org",
   "can_read_management_storage_scope",
   "can_read_report_scope",
+  "cancel_reservation",
   "cancel_time_off_request",
   "claim_open_shift",
   "complete_checklist_run",
@@ -87,6 +88,7 @@ const approvedAuthenticatedFunctions = new Set([
   "is_self_employee",
   "jwt_aal",
   "mark_channel_read",
+  "modify_reservation",
   "install_le_yard_reservation_draft",
   "income_operating_snapshot",
   "offer_shift_swap",
@@ -98,6 +100,7 @@ const approvedAuthenticatedFunctions = new Set([
   "publish_sop_version",
   "reservation_capacity_snapshot",
   "service_reservation_host_snapshot",
+  "service_reservation_lifecycle_head",
   "service_reservation_shift_snapshot",
   "receive_inventory_delivery",
   "record_checklist_response",
@@ -202,6 +205,7 @@ const requiredServiceFunctions = new Set([
   "service_complete_reservation_message_outbox",
   "service_modify_public_reservation",
   "service_reservation_pacing_snapshot",
+  "service_validate_reservation_message_claim",
 ]);
 
 const platformBootstrap = `

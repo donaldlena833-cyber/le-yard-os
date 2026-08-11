@@ -40,8 +40,21 @@ export interface ReservationGuestSummary {
   lifetimeSpendCents: number;
 }
 
+export type ReservationRevisionKind = "staff_modified" | "staff_cancelled";
+
+/** Bounded, provider-free evidence exposed by the Host read projection. */
+export interface ReservationLastRevisionSummary {
+  id: string;
+  kind: ReservationRevisionKind;
+  version: number;
+  changedAt: string;
+  previousReservedAt: string;
+  previousPartySize: number;
+}
+
 export interface ReservationSummary {
   id: string;
+  version: number;
   startsAt: string;
   durationMinutes: number;
   partySize: number;
@@ -51,7 +64,22 @@ export interface ReservationSummary {
   tableLabel: string | null;
   tableIds: string[];
   specialRequests: string | null;
+  policyEvidenceCaptured: boolean;
+  lastRevision: ReservationLastRevisionSummary | null;
   guest: ReservationGuestSummary;
+}
+
+const externallyOwnedReservationSources = new Set(["resy", "import", "other"]);
+const externallyOwnedBookingChannels = new Set(["import", "partner"]);
+
+/** Mirrors the database one-writer gate for staff lifecycle commands. */
+export function isReservationLifecycleOwnedByOs(
+  reservation: Pick<ReservationSummary, "source" | "bookingChannel">,
+): boolean {
+  return (
+    !externallyOwnedReservationSources.has(reservation.source) &&
+    !externallyOwnedBookingChannels.has(reservation.bookingChannel)
+  );
 }
 
 export interface ReservationFloorTableSummary {

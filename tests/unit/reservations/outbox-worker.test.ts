@@ -64,11 +64,14 @@ describe("reservation maintenance worker", () => {
     );
     expect(source).toContain("p_limit: reservationMessageClaimLimit");
     expect(source).toContain("service_complete_reservation_message_outbox");
+    expect(source).toContain("service_validate_reservation_message_claim");
     expect(source).toContain("p_claim_token: message.claimToken");
     expect(source).toContain(
       "p_provider_message_id: delivered.providerMessageId",
     );
     expect(source).not.toContain('.from("reservation_message_outbox")');
+    expect(source.indexOf("service_validate_reservation_message_claim"))
+      .toBeLessThan(source.indexOf("sendReservationOutboxMessage({"));
   });
 
   it("keeps the sequential provider batch inside the lease safety budget", () => {

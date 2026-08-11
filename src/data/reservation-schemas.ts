@@ -3,11 +3,24 @@ import { z } from "zod";
 const uuid = z.string().uuid();
 const nullableUuid = uuid.nullable();
 const shortText = z.string().trim().max(2_000).nullable();
+const lifecycleReason = z.string().trim().min(4).max(1_000);
+const reservationStatus = z.enum([
+  "pending_verification",
+  "booked",
+  "confirmed",
+  "arrived",
+  "seated",
+  "completed",
+  "cancelled",
+  "no_show",
+]);
 
 export const saveReservationInputSchema = z.object({
   requestId: uuid,
   locationId: uuid,
-  reservationId: nullableUuid,
+  // Staff revisions use modifyReservationInputSchema so expected-version and
+  // immutable policy evidence cannot be bypassed through the legacy save RPC.
+  reservationId: z.null(),
   guestId: nullableUuid,
   reservedAt: z.iso.datetime({ offset: true }),
   durationMinutes: z.number().int().min(15).max(720),
@@ -40,11 +53,74 @@ export const transitionReservationInputSchema = z.object({
     "arrived",
     "seated",
     "completed",
-    "cancelled",
     "no_show",
   ]),
   note: z.string().trim().max(2_000).nullable(),
 });
+
+export const modifyReservationInputSchema = z.object({
+  requestId: uuid,
+  locationId: uuid,
+  reservationId: uuid,
+  expectedVersion: z.number().int().positive(),
+  reservedAt: z.iso.datetime({ offset: true }),
+  durationMinutes: z.number().int().min(15).max(720),
+  partySize: z.number().int().min(1).max(100),
+  specialRequests: shortText,
+  tableIds: z.array(uuid).max(8),
+  reason: lifecycleReason,
+});
+
+export const cancelReservationInputSchema = z.object({
+  requestId: uuid,
+  locationId: uuid,
+  reservationId: uuid,
+  expectedVersion: z.number().int().positive(),
+  reason: lifecycleReason,
+});
+
+export const reservationLifecycleRpcResultSchema = z.object({
+  id: uuid,
+  status: reservationStatus,
+  version: z.number().int().positive(),
+  reservedAt: z.iso.datetime({ offset: true }),
+  durationMinutes: z.number().int().min(15).max(720).nullable(),
+  partySize: z.number().int().min(1).max(100),
+  revisionId: uuid,
+  revisionKind: z.enum(["staff_modified", "staff_cancelled"]),
+  policyEvidenceCaptured: z.boolean(),
+  guestNotificationQueued: z.boolean(),
+  replayed: z.boolean(),
+}).strict();
+
+const reservationLastRevisionSchema = z.object({
+  id: uuid,
+  kind: z.enum(["staff_modified", "staff_cancelled"]),
+  version: z.number().int().positive(),
+  changedAt: z.iso.datetime({ offset: true }),
+  previousReservedAt: z.iso.datetime({ offset: true }),
+  previousPartySize: z.number().int().min(1).max(100),
+}).strict();
+
+export const reservationLifecycleHeadInputSchema = z.object({
+  locationId: uuid,
+  reservationId: uuid,
+});
+
+export const reservationLifecycleHeadSchema = z.object({
+  id: uuid,
+  version: z.number().int().positive(),
+  reservedAt: z.iso.datetime({ offset: true }),
+  durationMinutes: z.number().int().min(15).max(720).nullable(),
+  partySize: z.number().int().min(1).max(100),
+  status: reservationStatus,
+  tableIds: z.array(uuid).max(8),
+  specialRequests: shortText,
+  source: z.string().trim().min(1).max(100),
+  bookingChannel: z.string().trim().min(1).max(100),
+  policyEvidenceCaptured: z.boolean(),
+  lastRevision: reservationLastRevisionSchema.nullable(),
+}).strict();
 
 export const assignReservationTablesInputSchema = z.object({
   requestId: uuid,
@@ -180,6 +256,21 @@ export type SaveReservationWithGuestInput = z.infer<
 >;
 export type TransitionReservationInput = z.infer<
   typeof transitionReservationInputSchema
+>;
+export type ModifyReservationInput = z.infer<
+  typeof modifyReservationInputSchema
+>;
+export type CancelReservationInput = z.infer<
+  typeof cancelReservationInputSchema
+>;
+export type ReservationLifecycleResult = z.infer<
+  typeof reservationLifecycleRpcResultSchema
+>;
+export type ReservationLifecycleHeadInput = z.infer<
+  typeof reservationLifecycleHeadInputSchema
+>;
+export type ReservationLifecycleHead = z.infer<
+  typeof reservationLifecycleHeadSchema
 >;
 export type AssignReservationTablesInput = z.infer<
   typeof assignReservationTablesInputSchema

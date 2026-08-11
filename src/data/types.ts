@@ -24,6 +24,7 @@ export type WorkflowErrorCode =
   | "unauthenticated"
   | "forbidden"
   | "not_found"
+  | "stale"
   | "conflict"
   | "database";
 

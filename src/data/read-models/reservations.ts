@@ -6,6 +6,7 @@ import type {
   ReservationHostPermissions,
   ReservationInventoryAllocationState,
   ReservationInventoryAllocationSummary,
+  ReservationLastRevisionSummary,
   ReservationPhysicalTableState,
   ReservationStatus,
   ReservationTableStatusEventState,
@@ -74,6 +75,7 @@ type ReservationCapacityRow = {
 type ReservationHostSnapshotRow = {
   id: string;
   guest_id: string | null;
+  version: number;
   reserved_at: string;
   duration_minutes: number | null;
   party_size: number;
@@ -82,6 +84,8 @@ type ReservationHostSnapshotRow = {
   special_requests: string | null;
   source: string;
   booking_channel: string;
+  policy_evidence_captured: boolean;
+  last_revision: unknown | null;
 };
 
 type ReservationRpc = {
@@ -128,6 +132,32 @@ const physicalTableStates = [
   "needs_reset",
   "blocked",
 ] as const satisfies readonly ReservationPhysicalTableState[];
+
+function projectLastRevision(
+  value: unknown,
+): ReservationLastRevisionSummary | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const revision = value as Record<string, unknown>;
+  if (
+    typeof revision.id !== "string" ||
+    (revision.kind !== "staff_modified" &&
+      revision.kind !== "staff_cancelled") ||
+    typeof revision.version !== "number" ||
+    typeof revision.changedAt !== "string" ||
+    typeof revision.previousReservedAt !== "string" ||
+    typeof revision.previousPartySize !== "number"
+  ) {
+    return null;
+  }
+  return {
+    id: revision.id,
+    kind: revision.kind,
+    version: revision.version,
+    changedAt: revision.changedAt,
+    previousReservedAt: revision.previousReservedAt,
+    previousPartySize: revision.previousPartySize,
+  };
+}
 
 function inventoryAllocationState(
   allocationKind: string,
@@ -533,8 +563,10 @@ export async function loadLiveReservations(
         allocation.reservation_id === reservation.id &&
         allocation.allocation_kind === "assignment",
     );
+    const lastRevision = projectLastRevision(reservation.last_revision);
     return {
       id: reservation.id,
+      version: reservation.version,
       startsAt: reservation.reserved_at,
       durationMinutes: reservation.duration_minutes ?? 90,
       partySize: reservation.party_size,
@@ -550,6 +582,8 @@ export async function loadLiveReservations(
           null),
       tableIds: assigned.map((allocation) => allocation.table_id),
       specialRequests: reservation.special_requests,
+      policyEvidenceCaptured: reservation.policy_evidence_captured,
+      lastRevision,
       guest: {
         id: guest?.id ?? null,
         displayName:

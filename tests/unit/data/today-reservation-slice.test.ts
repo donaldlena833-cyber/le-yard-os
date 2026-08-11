@@ -20,6 +20,7 @@ const model: ReservationHostModel = {
   reservations: [
     {
       id: "pending",
+      version: 1,
       startsAt: "2026-08-09T22:00:00.000Z",
       durationMinutes: 90,
       partySize: 2,
@@ -29,6 +30,8 @@ const model: ReservationHostModel = {
       tableLabel: null,
       tableIds: [],
       specialRequests: null,
+      policyEvidenceCaptured: false,
+      lastRevision: null,
       guest: {
         id: null,
         displayName: "Pending guest",
@@ -43,6 +46,7 @@ const model: ReservationHostModel = {
     },
     {
       id: "arrived",
+      version: 1,
       startsAt: "2026-08-09T22:15:00.000Z",
       durationMinutes: 90,
       partySize: 4,
@@ -52,6 +56,8 @@ const model: ReservationHostModel = {
       tableLabel: null,
       tableIds: [],
       specialRequests: null,
+      policyEvidenceCaptured: false,
+      lastRevision: null,
       guest: {
         id: "guest-1",
         displayName: "Arrived guest",

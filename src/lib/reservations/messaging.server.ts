@@ -113,7 +113,8 @@ export async function sendReservationOutboxMessage(input: {
   let action: { label: string; url: string } | null = null;
   if (
     (input.templateKey === "reservation_verify" ||
-      input.templateKey === "reservation_confirmed") &&
+      input.templateKey === "reservation_confirmed" ||
+      input.templateKey === "reservation_modified") &&
     (!siteUrl ||
       (input.templateKey === "reservation_verify"
         ? !input.bookingHoldId
@@ -142,7 +143,8 @@ export async function sendReservationOutboxMessage(input: {
     };
   }
   if (
-    input.templateKey === "reservation_confirmed" &&
+    (input.templateKey === "reservation_confirmed" ||
+      input.templateKey === "reservation_modified") &&
     siteUrl &&
     input.reservationId
   ) {
@@ -202,8 +204,8 @@ export async function sendReservationOutboxMessage(input: {
           ? {
               subject: "Your Le Yard reservation was updated",
               headline: "Your reservation was updated.",
-              body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is now set for ${scheduled}` : " has new details"}.`,
-              sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"}${scheduled ? ` is now set for ${scheduled}` : " was updated"}.`,
+              body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is now set for ${scheduled}` : " has new details"}. Use the secure link to review or manage it.`,
+              sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"}${scheduled ? ` is now set for ${scheduled}` : " was updated"}${action ? `. Manage it securely: ${action.url}` : "."}`,
             }
           : {
               subject: "Your Le Yard reservation was cancelled",

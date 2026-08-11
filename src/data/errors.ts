@@ -38,6 +38,20 @@ export function throwDatabaseError(
       throw new WorkflowError("conflict", "This request conflicts with an existing record.");
     }
 
+    if (error.code === "40001") {
+      throw new WorkflowError(
+        "stale",
+        "This record changed while you were working. Review the latest details before trying again.",
+      );
+    }
+
+    if (error.code === "23P01") {
+      throw new WorkflowError(
+        "conflict",
+        "This request conflicts with another active commitment. Review the latest details before trying again.",
+      );
+    }
+
     if (error.code === "23514" || error.code === "22023") {
       throw new WorkflowError("conflict", error.message || fallbackMessage);
     }
@@ -62,4 +76,3 @@ export function assertCondition(
 function isSupabaseError(error: unknown): error is SupabaseErrorLike {
   return typeof error === "object" && error !== null;
 }
-
