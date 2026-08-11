@@ -24,9 +24,11 @@ jobs:
           cache: npm
       - name: Initialize isolated runner paths
         run: |
-          echo "RESTORE_DRILL_DIRECTORY=$RUNNER_TEMP/le-yard-backup-restore-drill" >> "$GITHUB_ENV"
-          echo "RESTORE_DRILL_PGDATA=$RUNNER_TEMP/le-yard-backup-restore-pg17" >> "$GITHUB_ENV"
-          echo "BACKUP_RESTORE_PGDATA=$RUNNER_TEMP/le-yard-backup-restore-pg17" >> "$GITHUB_ENV"
+          {
+            echo "RESTORE_DRILL_DIRECTORY=$RUNNER_TEMP/le-yard-backup-restore-drill"
+            echo "RESTORE_DRILL_PGDATA=$RUNNER_TEMP/le-yard-backup-restore-pg17"
+            echo "BACKUP_RESTORE_PGDATA=$RUNNER_TEMP/le-yard-backup-restore-pg17"
+          } >> "$GITHUB_ENV"
       - name: Install PostgreSQL 17 from the signed upstream repository
         run: |
           sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
@@ -46,7 +48,7 @@ jobs:
           initdb -D "$RESTORE_DRILL_PGDATA" -A trust -U postgres --no-locale
           pg_ctl -D "$RESTORE_DRILL_PGDATA" \
             -l "$RESTORE_DRILL_DIRECTORY-postgres.log" \
-            -o "-p 55439 -h 127.0.0.1" start
+            -o "-p 55439 -h 127.0.0.1 -k $RUNNER_TEMP" start
           pg_isready -h 127.0.0.1 -p 55439 -U postgres -d postgres
       - run: npm ci
       - name: Create one-run archive provenance key
