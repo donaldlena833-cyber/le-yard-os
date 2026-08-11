@@ -57,6 +57,7 @@ const chatAttachmentTypes = [
   "image/webp",
   "application/pdf",
 ] as const;
+const chatEvidenceRetryDelaysMs = [250, 1_000, 3_000] as const;
 type ChatMessageRow = Database["public"]["Tables"]["chat_messages"]["Row"];
 type ChatReactionRow = Database["public"]["Tables"]["chat_reactions"]["Row"];
 type ChatAttachmentRow = Database["public"]["Tables"]["chat_attachments"]["Row"];
@@ -281,9 +282,13 @@ function ChannelManagementPanel({
 }
 
 function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextValue; data: LiveMessagesModel }) {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const evidenceFallbackRequestedRef = useRef(false);
   const [selectedChannelId, setSelectedChannelId] = useState(data.channels[0]?.id ?? "");
   const [messages, setMessages] = useState(data.messages);
+  const dataMessagesRef = useRef(data.messages);
+  const messagesRef = useRef(messages);
   const [unread, setUnread] = useState<Record<string, number>>(() => Object.fromEntries(data.channels.map((channel) => [channel.id, channel.unreadCount])));
   const [draft, setDraft] = useState("");
   const [announcement, setAnnouncement] = useState(false);
@@ -299,6 +304,25 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
   const channelMessages = useMemo(() => messages.filter((message) => message.channelId === selectedChannelId), [messages, selectedChannelId]);
   const profilesById = useMemo(() => new Map(data.profiles.map((profile) => [profile.id, profile])), [data.profiles]);
   const latestMessageId = channelMessages.at(-1)?.id ?? null;
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    if (dataMessagesRef.current === data.messages) return;
+    dataMessagesRef.current = data.messages;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      messagesRef.current = data.messages;
+      setMessages(data.messages);
+      evidenceFallbackRequestedRef.current = false;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.messages]);
 
   useEffect(() => {
     if (!selectedChannel) return;
@@ -320,6 +344,182 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
     let stopped = false;
     let realtimeChannel: RealtimeChannel | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
+    type EvidenceRefreshControl = {
+      failures: number;
+      generation: number;
+      retryTimer: ReturnType<typeof setTimeout> | null;
+      rerun: boolean;
+      running: boolean;
+    };
+    const evidenceRefreshControls = new Map<string, EvidenceRefreshControl>();
+
+    const evidenceRefreshControl = (messageId: string) => {
+      const existing = evidenceRefreshControls.get(messageId);
+      if (existing) return existing;
+      const created: EvidenceRefreshControl = {
+        failures: 0,
+        generation: 0,
+        retryTimer: null,
+        rerun: false,
+        running: false,
+      };
+      evidenceRefreshControls.set(messageId, created);
+      return created;
+    };
+
+    const readMessageEvidence = async (messageId: string) =>
+      Promise.all([
+          supabase
+            .from("chat_reactions")
+            .select("message_id, user_id, emoji, created_at")
+            .eq("organization_id", workspace.organization.id)
+            .eq("message_id", messageId)
+            .order("created_at", { ascending: true })
+            .limit(5_000),
+          supabase
+            .from("chat_attachments")
+            .select("id, message_id, file_name, mime_type, size_bytes, storage_path, created_at")
+            .eq("organization_id", workspace.organization.id)
+            .eq("message_id", messageId)
+            .order("created_at", { ascending: true })
+            .limit(500),
+          supabase
+            .from("announcement_acknowledgements")
+            .select("message_id, user_id, acknowledged_at")
+            .eq("organization_id", workspace.organization.id)
+            .eq("message_id", messageId)
+            .order("acknowledged_at", { ascending: true })
+            .limit(5_000),
+        ]);
+
+    const applyMessageEvidence = (
+      messageId: string,
+      reactionRows: Awaited<ReturnType<typeof readMessageEvidence>>[0]["data"],
+      attachmentRows: Awaited<ReturnType<typeof readMessageEvidence>>[1]["data"],
+      acknowledgementRows: Awaited<ReturnType<typeof readMessageEvidence>>[2]["data"],
+    ) => {
+      const groupedReactions = new Map<string, string[]>();
+      for (const reaction of reactionRows ?? []) {
+        groupedReactions.set(reaction.emoji, [
+          ...(groupedReactions.get(reaction.emoji) ?? []),
+          reaction.user_id,
+        ]);
+      }
+      const acknowledgedUserIds = (acknowledgementRows ?? []).map(
+        (acknowledgement) => acknowledgement.user_id,
+      );
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                reactions: [...groupedReactions.entries()].map(
+                  ([emoji, userIds]) => ({ emoji, userIds }),
+                ),
+                attachments: (attachmentRows ?? []).map((attachment) => ({
+                  id: attachment.id,
+                  fileName: attachment.file_name,
+                  mimeType: attachment.mime_type,
+                  sizeBytes:
+                    attachment.size_bytes == null
+                      ? null
+                      : Number(attachment.size_bytes),
+                  storagePath: attachment.storage_path,
+                })),
+                acknowledgedByMe: acknowledgedUserIds.includes(
+                  workspace.identity.userId,
+                ),
+                acknowledgementCount: acknowledgedUserIds.length,
+              }
+            : message,
+        ),
+      );
+    };
+
+    const runEvidenceRefresh = async (
+      messageId: string,
+      control: EvidenceRefreshControl,
+    ) => {
+      if (stopped || control.running) return;
+      control.running = true;
+      try {
+        while (!stopped && control.rerun) {
+          control.rerun = false;
+          const generation = control.generation;
+          let results: Awaited<ReturnType<typeof readMessageEvidence>> | null = null;
+          try {
+            results = await readMessageEvidence(messageId);
+          } catch {
+            results = null;
+          }
+          if (stopped) return;
+          const failed =
+            !results ||
+            results[0].error ||
+            results[1].error ||
+            results[2].error;
+          if (failed) {
+            control.failures += 1;
+            control.rerun = true;
+            const delay = chatEvidenceRetryDelaysMs[control.failures - 1];
+            if (delay != null) {
+              control.retryTimer = setTimeout(() => {
+                control.retryTimer = null;
+                void runEvidenceRefresh(messageId, control);
+              }, delay);
+            } else {
+              control.rerun = false;
+              setNotice("Live message details could not catch up. Refreshing authoritative message data.");
+              if (!evidenceFallbackRequestedRef.current) {
+                evidenceFallbackRequestedRef.current = true;
+                router.refresh();
+              }
+            }
+            return;
+          }
+          if (!results) return;
+          control.failures = 0;
+          evidenceFallbackRequestedRef.current = false;
+          if (control.generation !== generation) {
+            control.rerun = true;
+            continue;
+          }
+          applyMessageEvidence(
+            messageId,
+            results[0].data,
+            results[1].data,
+            results[2].data,
+          );
+        }
+      } finally {
+        control.running = false;
+      }
+    };
+
+    const requestEvidenceRefresh = (messageId: string) => {
+      const control = evidenceRefreshControl(messageId);
+      control.generation += 1;
+      control.rerun = true;
+      if (control.retryTimer) {
+        clearTimeout(control.retryTimer);
+        control.retryTimer = null;
+      }
+      void runEvidenceRefresh(messageId, control);
+    };
+
+    const recordEvidenceInsert = (messageId: string) => {
+      const control = evidenceRefreshControl(messageId);
+      control.generation += 1;
+      if (control.running) control.rerun = true;
+    };
+
+    const refreshSelectedChannelEvidence = () => {
+      for (const message of messagesRef.current) {
+        if (message.channelId === selectedChannel.id) {
+          requestEvidenceRefresh(message.id);
+        }
+      }
+    };
 
     const connect = () => {
       if (stopped) return;
@@ -334,57 +534,30 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
           } else if (payload.eventType === "UPDATE") {
             const row = payload.new as ChatMessageRow;
             setMessages((current) => row.deleted_at ? current.filter((message) => message.id !== row.id) : current.map((message) => message.id === row.id ? { ...message, body: row.body, editedAt: row.edited_at, isAnnouncement: row.is_announcement } : message));
+            if (!row.deleted_at) requestEvidenceRefresh(row.id);
           } else {
             const row = payload.old as Partial<ChatMessageRow>;
             if (row.id) setMessages((current) => current.filter((message) => message.id !== row.id));
           }
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "chat_reactions", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
-          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as Partial<ChatReactionRow>;
-          if (!row.message_id || !row.user_id || !row.emoji) {
-            if (payload.eventType === "DELETE") {
-              void supabase.from("chat_reactions").select("message_id, user_id, emoji").eq("organization_id", workspace.organization.id).limit(5_000).then(({ data: reactionRows }) => {
-                if (!reactionRows) return;
-                setMessages((current) => current.map((message) => {
-                  const grouped = new Map<string, string[]>();
-                  for (const reaction of reactionRows) {
-                    if (reaction.message_id !== message.id) continue;
-                    grouped.set(reaction.emoji, [...(grouped.get(reaction.emoji) ?? []), reaction.user_id]);
-                  }
-                  return { ...message, reactions: [...grouped.entries()].map(([emoji, userIds]) => ({ emoji, userIds })) };
-                }));
-              });
-            }
-            return;
-          }
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_reactions", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
+          const row = payload.new as Partial<ChatReactionRow>;
+          if (!row.message_id || !row.user_id || !row.emoji) return;
+          recordEvidenceInsert(row.message_id);
           setMessages((current) => current.map((message) => {
             if (message.id !== row.message_id) return message;
             const existing = message.reactions.find((reaction) => reaction.emoji === row.emoji);
-            if (payload.eventType === "DELETE") {
-              if (!existing) return message;
-              const userIds = existing.userIds.filter((id) => id !== row.user_id);
-              return { ...message, reactions: userIds.length ? message.reactions.map((reaction) => reaction.emoji === row.emoji ? { ...reaction, userIds } : reaction) : message.reactions.filter((reaction) => reaction.emoji !== row.emoji) };
-            }
             if (existing?.userIds.includes(row.user_id!)) return message;
             return { ...message, reactions: existing ? message.reactions.map((reaction) => reaction.emoji === row.emoji ? { ...reaction, userIds: [...reaction.userIds, row.user_id!] } : reaction) : [...message.reactions, { emoji: row.emoji!, userIds: [row.user_id!] }] };
           }));
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "chat_attachments", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
-          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as Partial<ChatAttachmentRow>;
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_attachments", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
+          const row = payload.new as Partial<ChatAttachmentRow>;
           if (!row.id) return;
-          if (payload.eventType === "DELETE" && !row.message_id) {
-            setMessages((current) => current.map((message) => ({
-              ...message,
-              attachments: message.attachments.filter((attachment) => attachment.id !== row.id),
-            })));
-            return;
-          }
           if (!row.message_id) return;
+          recordEvidenceInsert(row.message_id);
           setMessages((current) => current.map((message) => {
             if (message.id !== row.message_id) return message;
-            if (payload.eventType === "DELETE") {
-              return { ...message, attachments: message.attachments.filter((attachment) => attachment.id !== row.id) };
-            }
             if (!row.file_name || !row.storage_path) return message;
             const attachment = {
               id: row.id!,
@@ -401,16 +574,19 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
             };
           }));
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "announcement_acknowledgements", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
-          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as Partial<ChatAcknowledgementRow>;
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcement_acknowledgements", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
+          const row = payload.new as Partial<ChatAcknowledgementRow>;
           if (!row.message_id) return;
+          recordEvidenceInsert(row.message_id);
           setMessages((current) => current.map((message) => {
             if (message.id !== row.message_id) return message;
+            const ownAcknowledgementAlreadyApplied =
+              row.user_id === workspace.identity.userId && message.acknowledgedByMe;
             const acknowledgedByMe = row.user_id === workspace.identity.userId
-              ? payload.eventType !== "DELETE"
+              ? true
               : message.acknowledgedByMe;
-            const acknowledgementCount = payload.eventType === "DELETE"
-              ? Math.max(0, message.acknowledgementCount - 1)
+            const acknowledgementCount = ownAcknowledgementAlreadyApplied
+              ? message.acknowledgementCount
               : message.acknowledgementCount + 1;
             return { ...message, acknowledgedByMe, acknowledgementCount };
           }));
@@ -431,7 +607,10 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
         })
         .subscribe((status) => {
           if (stopped) return;
-          if (status === "SUBSCRIBED") setRealtimeState("live");
+          if (status === "SUBSCRIBED") {
+            setRealtimeState("live");
+            refreshSelectedChannelEvidence();
+          }
           else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
             setRealtimeState("reconnecting");
             if (retry) clearTimeout(retry);
@@ -452,9 +631,12 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
     return () => {
       stopped = true;
       if (retry) clearTimeout(retry);
+      for (const control of evidenceRefreshControls.values()) {
+        if (control.retryTimer) clearTimeout(control.retryTimer);
+      }
       if (realtimeChannel) void supabase.removeChannel(realtimeChannel);
     };
-  }, [profilesById, selectedChannel, selectedChannelId, workspace.identity.userId, workspace.organization.id]);
+  }, [profilesById, router, selectedChannel, selectedChannelId, workspace.identity.userId, workspace.organization.id]);
 
   function selectChannel(channel: LiveChatChannel) {
     if (channel.id !== selectedChannelId) setRealtimeState("connecting");

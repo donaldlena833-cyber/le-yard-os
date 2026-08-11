@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { lstat, readFile, realpath } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { Pool } from "pg";
 import { requireLocalPostgresControlUrl } from "./require-local-postgres-control-url.mjs";
@@ -162,7 +163,7 @@ export async function runPostgresCommand(
 }
 
 export async function assertPostgres17Tools(controlUrl) {
-  for (const command of ["pg_dump", "pg_restore"]) {
+  for (const command of ["pg_controldata", "pg_dump", "pg_restore"]) {
     const { stdout } = await runPostgresCommand(
       command,
       ["--version"],
@@ -174,6 +175,103 @@ export async function assertPostgres17Tools(controlUrl) {
       throw new Error(`${command} major version 17 is required.`);
     }
   }
+}
+
+export async function attestLocalPostgresDataDirectory(
+  adminClient,
+  controlUrl,
+  pathValue,
+) {
+  if (typeof pathValue !== "string" || !isAbsolute(pathValue)) {
+    throw new Error("BACKUP_RESTORE_PGDATA must be an absolute local PGDATA path.");
+  }
+  const requestedPath = resolve(pathValue);
+  const directoryStat = await lstat(requestedPath);
+  if (
+    directoryStat.isSymbolicLink() ||
+    !directoryStat.isDirectory() ||
+    (directoryStat.mode & 0o022) !== 0 ||
+    (typeof process.getuid === "function" && directoryStat.uid !== process.getuid())
+  ) {
+    throw new Error("BACKUP_RESTORE_PGDATA must be a process-owned, non-shared real directory.");
+  }
+  const canonicalPath = await realpath(requestedPath);
+  const versionPath = join(canonicalPath, "PG_VERSION");
+  const pidPath = join(canonicalPath, "postmaster.pid");
+  const controlPath = join(canonicalPath, "global", "pg_control");
+  for (const [path, label] of [
+    [versionPath, "PG_VERSION"],
+    [pidPath, "postmaster.pid"],
+    [controlPath, "pg_control"],
+  ]) {
+    const stat = await lstat(path);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new Error(`Local PostgreSQL ${label} must be a regular file.`);
+    }
+  }
+  if ((await readFile(versionPath, "utf8")).trim() !== "17") {
+    throw new Error("BACKUP_RESTORE_PGDATA is not a PostgreSQL 17 data directory.");
+  }
+  const postmasterLines = (await readFile(pidPath, "utf8")).split("\n");
+  const postmasterPid = Number(postmasterLines[0]);
+  const postmasterStartedAt = Number(postmasterLines[2]);
+  const postmasterPort = Number(postmasterLines[3]);
+  const listenAddresses = (postmasterLines[5] ?? "")
+    .split(",")
+    .map((address) => address.trim())
+    .filter(Boolean);
+  if (
+    !Number.isSafeInteger(postmasterPid) ||
+    postmasterPid <= 1 ||
+    !Number.isSafeInteger(postmasterStartedAt) ||
+    postmasterPort !== Number(controlUrl.port || "5432") ||
+    !listenAddresses.length ||
+    listenAddresses.some((address) => !isLoopbackAddress(address)) ||
+    (await realpath(postmasterLines[1])) !== canonicalPath
+  ) {
+    throw new Error("Local PostgreSQL postmaster metadata does not match the control URL.");
+  }
+  try {
+    process.kill(postmasterPid, 0);
+  } catch (error) {
+    throw new Error("The attested PostgreSQL postmaster is not a local live process.", {
+      cause: error,
+    });
+  }
+  const { stdout: controlOutput } = await execFileAsync(
+    "pg_controldata",
+    [canonicalPath],
+    {
+      encoding: "utf8",
+      env: { ...postgresCommandEnvironment(controlUrl), LC_ALL: "C" },
+      maxBuffer: 1024 * 1024,
+    },
+  );
+  const localSystemIdentifier = controlOutput.match(
+    /^Database system identifier:\s+(\d+)$/m,
+  )?.[1];
+  const serverControl = (
+    await adminClient.query(`
+      select
+        system_identifier::text,
+        floor(extract(epoch from pg_postmaster_start_time()))::bigint::text
+          as postmaster_started_at
+      from pg_control_system()
+    `)
+  ).rows[0];
+  if (
+    !localSystemIdentifier ||
+    serverControl?.system_identifier !== localSystemIdentifier ||
+    Number(serverControl?.postmaster_started_at) !== postmasterStartedAt
+  ) {
+    throw new Error("Local PGDATA control state does not match the connected postmaster.");
+  }
+  return {
+    localPostmasterProcess: true,
+    pgdataPathSha256: sha256Bytes(canonicalPath),
+    port: postmasterPort,
+    systemIdentifierSha256: sha256Bytes(localSystemIdentifier),
+  };
 }
 
 function isLoopbackAddress(value) {
@@ -351,9 +449,9 @@ export async function attestFreshDisposableDatabase(pool) {
           where namespace.nspname not like 'pg\\_%'
             and namespace.nspname <> 'information_schema') as user_object_count,
         (select count(*)::integer from pg_event_trigger) as event_trigger_count,
-        (select array_agg(extname order by extname) from pg_extension)
+        (select array_agg(extname::text order by extname) from pg_extension)
           as extensions,
-        (select array_agg(nspname order by nspname)
+        (select array_agg(nspname::text order by nspname)
           from pg_namespace
           where nspname not like 'pg\\_%'
             and nspname <> 'information_schema') as schemas
@@ -369,13 +467,31 @@ export async function attestFreshDisposableDatabase(pool) {
   }
 }
 
+export async function attestTemplateOne(controlUrl) {
+  const pool = createDatabasePool(
+    controlUrl,
+    "template1",
+    "le-yard-backup-restore-template1-attestation",
+  );
+  try {
+    await attestFreshDisposableDatabase(pool);
+  } finally {
+    await pool.end();
+  }
+}
+
 export function databaseUrl(controlUrl, databaseName) {
   const url = new URL(controlUrl);
   url.pathname = `/${databaseName}`;
   return url;
 }
 
-export async function applyReferenceDatabase(pool, migrationContract, root, seed) {
+export async function applyReferenceDatabase(
+  pool,
+  migrationContract,
+  root,
+  seedContract,
+) {
   const client = await pool.connect();
   try {
     await client.query(RESTORE_DRILL_PLATFORM_BOOTSTRAP);
@@ -399,8 +515,12 @@ export async function applyReferenceDatabase(pool, migrationContract, root, seed
         });
       }
     }
-    if (seed) {
-      await client.query(await readFile(`${root}/supabase/seed.sql`, "utf8"));
+    if (seedContract) {
+      const seedSql = await readFile(`${root}/supabase/seed.sql`, "utf8");
+      if (sha256Bytes(seedSql) !== seedContract.sha256) {
+        throw new Error("Synthetic seed changed after it was fingerprinted.");
+      }
+      await client.query(seedSql);
     }
   } finally {
     client.release();
@@ -585,17 +705,66 @@ export async function collectDatabaseContract(pool, expectedVersions) {
     );
   }
 
-  const anonymousTableGrants = Number(
-    (
-      await pool.query(`
-        select count(*)::integer as count
-        from information_schema.role_table_grants
-        where grantee = 'anon' and table_schema = 'public'
-      `)
-    ).rows[0].count,
+  const relationAccessRows = (
+    await pool.query(`
+      select
+        class.relname as relation_name,
+        class.relkind as relation_kind,
+        has_table_privilege('anon', class.oid, 'SELECT') as anon_select,
+        has_table_privilege('anon', class.oid, 'INSERT') as anon_insert,
+        has_table_privilege('anon', class.oid, 'UPDATE') as anon_update,
+        has_table_privilege('anon', class.oid, 'DELETE') as anon_delete,
+        has_table_privilege('anon', class.oid, 'TRUNCATE') as anon_truncate,
+        has_table_privilege('anon', class.oid, 'REFERENCES') as anon_references,
+        has_table_privilege('anon', class.oid, 'TRIGGER') as anon_trigger,
+        case
+          when class.relkind = 'v'
+            then coalesce('security_invoker=true' = any(class.reloptions), false)
+          else null
+        end as security_invoker
+      from pg_class class
+      where class.relnamespace = 'public'::regnamespace
+        and class.relkind in ('r', 'p', 'v', 'm', 'f')
+      order by class.relname
+    `)
+  ).rows;
+  const unsafeRelationAccess = relationAccessRows.filter((row) =>
+    row.anon_select ||
+    row.anon_insert ||
+    row.anon_update ||
+    row.anon_delete ||
+    row.anon_truncate ||
+    row.anon_references ||
+    row.anon_trigger ||
+    row.relation_kind === "m" ||
+    (row.relation_kind === "v" && !row.security_invoker)
   );
-  if (anonymousTableGrants !== 0) {
-    throw new Error("Restored public tables grant privileges to anon.");
+  if (unsafeRelationAccess.length) {
+    throw new Error(
+      `Restored public relations expose unsafe anonymous or view privileges: ${JSON.stringify(unsafeRelationAccess)}.`,
+    );
+  }
+
+  const sequenceAccessRows = (
+    await pool.query(`
+      select
+        class.relname as sequence_name,
+        has_sequence_privilege('anon', class.oid, 'USAGE') as anon_usage,
+        has_sequence_privilege('anon', class.oid, 'SELECT') as anon_select,
+        has_sequence_privilege('anon', class.oid, 'UPDATE') as anon_update
+      from pg_class class
+      where class.relnamespace = 'public'::regnamespace
+        and class.relkind = 'S'
+      order by class.relname
+    `)
+  ).rows;
+  const unsafeSequenceAccess = sequenceAccessRows.filter(
+    (row) => row.anon_usage || row.anon_select || row.anon_update,
+  );
+  if (unsafeSequenceAccess.length) {
+    throw new Error(
+      `Restored public sequences expose unsafe anonymous privileges: ${JSON.stringify(unsafeSequenceAccess)}.`,
+    );
   }
 
   const functionRows = (
@@ -654,8 +823,15 @@ export async function collectDatabaseContract(pool, expectedVersions) {
     },
     migrations: migrationVersions,
     rls: {
-      anonymousTableGrantCount: anonymousTableGrants,
-      fingerprintSha256: sha256Bytes(JSON.stringify(rlsRows)),
+      anonymousRelationPrivilegeCount: unsafeRelationAccess.length,
+      anonymousSequencePrivilegeCount: unsafeSequenceAccess.length,
+      fingerprintSha256: sha256Bytes(JSON.stringify({
+        relationAccessRows,
+        rlsRows,
+        sequenceAccessRows,
+      })),
+      relationAccessRows,
+      sequenceAccessRows,
       tableCount: rlsRows.length,
       rows: rlsRows,
     },
@@ -672,6 +848,12 @@ export async function collectSyntheticInvariants(pool) {
         (select array_agg(id::text order by id) from public.locations)
           as location_ids,
         (select count(*)::integer from auth.users) as auth_user_count,
+        (select count(*)::integer from auth.identities) as auth_identity_count,
+        (select count(*)::integer from auth.users
+          where encrypted_password is null
+            or encrypted_password is distinct from
+              extensions.crypt('DemoOnly-change-me!', encrypted_password))
+          as invalid_demo_password_hash_count,
         (select count(*)::integer from auth.users
           where email is null or email !~ '^[^@]+@([A-Za-z0-9-]+\\.)*example\\.invalid$')
           as non_synthetic_auth_email_count,
@@ -681,6 +863,28 @@ export async function collectSyntheticInvariants(pool) {
         (select count(*)::integer from public.guests
           where email is not null and email !~ '^[^@]+@([A-Za-z0-9-]+\\.)*example\\.invalid$')
           as non_synthetic_guest_email_count,
+        (select count(*)::integer from public.guests) as guest_count,
+        (select count(*)::integer from public.guests where phone is not null)
+          as guest_phone_count,
+        (select count(*)::integer from public.guest_contacts) as guest_contact_count,
+        (select count(*)::integer from private.public_booking_holds)
+          as public_booking_hold_count,
+        (select count(*)::integer from public.waitlist_entries) as waitlist_entry_count,
+        (select count(*)::integer from public.tasks
+          where id = '81000000-0000-4000-8000-000000000001'
+            and due_at - created_at <> interval '1 day')
+          as invalid_demo_task_due_offset_count,
+        (select count(*)::integer from public.notifications notification
+          where notification.evidence_key like 'shift.assigned:%'
+            and not exists (
+              select 1 from public.shifts shift_row
+              where notification.evidence_key = format(
+                'shift.assigned:%s:%s:%s',
+                shift_row.id,
+                shift_row.employee_id,
+                extract(epoch from shift_row.updated_at)::bigint
+              )
+            )) as invalid_shift_notification_evidence_count,
         (select count(*)::integer from public.organization_memberships)
           as organization_membership_count,
         (select count(*)::integer from public.integration_connections)
@@ -713,6 +917,15 @@ export async function collectSyntheticInvariants(pool) {
     JSON.stringify(result.organization_ids) !== JSON.stringify(expectedOrganizationIds) ||
     JSON.stringify(result.location_ids) !== JSON.stringify(expectedLocationIds) ||
     result.auth_user_count !== 6 ||
+    result.auth_identity_count !== 6 ||
+    result.invalid_demo_password_hash_count !== 0 ||
+    result.guest_count !== 1 ||
+    result.guest_phone_count !== 0 ||
+    result.guest_contact_count !== 0 ||
+    result.public_booking_hold_count !== 0 ||
+    result.waitlist_entry_count !== 0 ||
+    result.invalid_demo_task_due_offset_count !== 0 ||
+    result.invalid_shift_notification_evidence_count !== 0 ||
     result.organization_membership_count !== 6 ||
     result.non_synthetic_auth_email_count !== 0 ||
     result.non_synthetic_employee_email_count !== 0 ||
@@ -732,12 +945,273 @@ export async function collectSyntheticInvariants(pool) {
   return result;
 }
 
+const SYNTHETIC_TIME_NORMALIZATIONS = new Map([
+  ["auth.identities", ["created_at", "last_sign_in_at", "updated_at"]],
+  ["auth.users", ["created_at", "email_confirmed_at", "updated_at"]],
+  ["private.organization_owner_counts", ["updated_at"]],
+  ["public.audit_events", ["occurred_at"]],
+  ["public.capability_definitions", ["created_at", "updated_at"]],
+  ["public.chat_channels", ["created_at", "updated_at"]],
+  ["public.chat_messages", ["created_at", "updated_at"]],
+  ["public.employee_job_roles", ["created_at"]],
+  ["public.employees", ["created_at", "updated_at"]],
+  ["public.guests", ["created_at", "updated_at"]],
+  ["public.inventory_categories", ["created_at", "updated_at"]],
+  ["public.inventory_items", ["created_at", "updated_at"]],
+  ["public.inventory_par_levels", ["created_at", "updated_at"]],
+  ["public.job_roles", ["created_at", "updated_at"]],
+  ["public.location_memberships", ["created_at"]],
+  ["public.locations", ["created_at", "updated_at"]],
+  ["public.measurement_units", ["created_at", "updated_at"]],
+  ["public.notifications", ["created_at"]],
+  [
+    "public.organization_memberships",
+    ["created_at", "invited_at", "joined_at", "updated_at"],
+  ],
+  ["public.organization_settings", ["updated_at"]],
+  ["public.organizations", ["created_at", "updated_at"]],
+  ["public.profiles", ["created_at", "updated_at"]],
+  ["public.schedules", ["created_at", "published_at", "updated_at"]],
+  ["public.shifts", ["created_at", "updated_at"]],
+  ["public.tasks", ["created_at", "due_at", "updated_at"]],
+  ["public.tip_pool_policies", ["created_at", "updated_at"]],
+  ["public.vendors", ["created_at", "updated_at"]],
+]);
+
+function timestampToEpochMicroseconds(value) {
+  if (typeof value !== "string") return null;
+  const match = value.match(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/,
+  );
+  if (!match) return null;
+  const epochMilliseconds = Date.parse(`${match[1]}T${match[2]}${match[4]}`);
+  if (!Number.isFinite(epochMilliseconds)) return null;
+  const fractionalMicroseconds = BigInt((match[3] ?? "").padEnd(6, "0"));
+  return BigInt(epochMilliseconds) * 1_000n + fractionalMicroseconds;
+}
+
+function replaceSeedTimeFields(qualifiedName, row, anchors) {
+  const anchor =
+    qualifiedName === "public.capability_definitions" ||
+    qualifiedName === "public.audit_events" ||
+    qualifiedName === "public.notifications" ||
+    qualifiedName === "private.organization_owner_counts"
+        ? null
+        : anchors.seed;
+  for (const column of SYNTHETIC_TIME_NORMALIZATIONS.get(qualifiedName) ?? []) {
+    if (row[column] !== null && row[column] !== undefined) {
+      const timestamp = timestampToEpochMicroseconds(row[column]);
+      const anchorTimestamp = timestampToEpochMicroseconds(anchor);
+      row[column] =
+        timestamp !== null && anchorTimestamp !== null
+          ? `<synthetic-time-offset:${column}:${timestamp - anchorTimestamp}us>`
+          : `<synthetic-volatile-time:${column}>`;
+    }
+  }
+}
+
+function canonicalNotificationEvidenceKey(value) {
+  if (typeof value !== "string") return value;
+  return value.replace(
+    /^(shift\.assigned:[^:]+:[^:]+):\d+$/,
+    "$1:<synthetic-seed-epoch>",
+  );
+}
+
+function buildCanonicalIdMap(rows, stableRow) {
+  const ordered = rows
+    .map((row) => ({ id: row.id, stable: JSON.stringify(stableRow(row)) }))
+    .sort((left, right) => left.stable.localeCompare(right.stable));
+  if (ordered.some((entry, index) => index > 0 && entry.stable === ordered[index - 1].stable)) {
+    throw new Error("Synthetic generated identifiers lack unique stable row evidence.");
+  }
+  return new Map(
+    ordered.map((entry, index) => [entry.id, `<synthetic-generated-id:${index + 1}>`]),
+  );
+}
+
+function normalizeSyntheticRow(qualifiedName, source, idMaps, anchors) {
+  const row = structuredClone(source);
+  replaceSeedTimeFields(qualifiedName, row, anchors);
+  if (qualifiedName === "auth.users" && row.encrypted_password !== null) {
+    row.encrypted_password =
+      typeof row.encrypted_password === "string" &&
+      /^\$2[aby]\$\d{2}\$/.test(row.encrypted_password)
+        ? "<synthetic-demo-bcrypt>"
+        : row.encrypted_password;
+  }
+  if (qualifiedName === "auth.identities" && idMaps.identities.has(row.id)) {
+    row.id = idMaps.identities.get(row.id);
+  }
+  if (qualifiedName === "public.notifications") {
+    if (idMaps.notifications.has(row.id)) {
+      row.id = idMaps.notifications.get(row.id);
+    }
+    row.evidence_key = canonicalNotificationEvidenceKey(row.evidence_key);
+  }
+  if (qualifiedName === "public.audit_events") {
+    const auditedRelation = `public.${row.table_name}`;
+    for (const field of ["old_record", "new_record"]) {
+      if (row[field] && typeof row[field] === "object" && !Array.isArray(row[field])) {
+        row[field] = normalizeSyntheticRow(
+          auditedRelation,
+          row[field],
+          idMaps,
+          anchors,
+        );
+      }
+    }
+    if (row.table_name === "notifications" && idMaps.notifications.has(row.record_id)) {
+      row.record_id = idMaps.notifications.get(row.record_id);
+    }
+  }
+  return row;
+}
+
+export async function collectSyntheticDataFingerprint(pool) {
+  const invalidPasswordCount = Number(
+    (
+      await pool.query(`
+        select count(*)::integer as count
+        from auth.users
+        where encrypted_password is null
+          or encrypted_password is distinct from
+            extensions.crypt('DemoOnly-change-me!', encrypted_password)
+      `)
+    ).rows[0].count,
+  );
+  if (invalidPasswordCount !== 0) {
+    throw new Error("Synthetic Auth users do not use the approved demo password hash.");
+  }
+  const tables = (
+    await pool.query(`
+      select namespace.nspname as schema_name, class.relname as table_name
+      from pg_class class
+      join pg_namespace namespace on namespace.oid = class.relnamespace
+      where namespace.nspname in (
+        'auth', 'private', 'public', 'storage', 'supabase_migrations'
+      )
+        and class.relkind in ('r', 'p')
+        and not class.relispartition
+      order by namespace.nspname, class.relname
+    `)
+  ).rows;
+  const tableData = [];
+  let totalRowCount = 0;
+
+  for (const table of tables) {
+    const qualifiedName = `${table.schema_name}.${table.table_name}`;
+    const relation = `${quoteIdentifier(table.schema_name)}.${quoteIdentifier(table.table_name)}`;
+    const count = Number(
+      (await pool.query(`select count(*)::integer as count from ${relation}`)).rows[0]
+        .count,
+    );
+    if (!Number.isSafeInteger(count) || count < 0 || count > 10_000) {
+      throw new Error(`Synthetic data table ${qualifiedName} exceeds the safe row limit.`);
+    }
+    totalRowCount += count;
+    if (totalRowCount > 25_000) {
+      throw new Error("Synthetic data exceeds the safe total row limit.");
+    }
+    const rawRows = (
+      await pool.query(`select to_jsonb(source_row) as row_data from ${relation} source_row`)
+    ).rows.map((row) => row.row_data);
+    tableData.push({
+      name: qualifiedName,
+      rawRows,
+      rowCount: count,
+    });
+  }
+
+  const identityRows = tableData.find((table) => table.name === "auth.identities")?.rawRows ?? [];
+  const notificationRows = tableData.find((table) => table.name === "public.notifications")?.rawRows ?? [];
+  const anchors = {
+    seed:
+      tableData
+        .find((table) => table.name === "public.organizations")
+        ?.rawRows.find(
+          (row) => row.id === "20000000-0000-4000-8000-000000000001",
+        )?.created_at ?? null,
+  };
+  if (!anchors.seed) {
+    throw new Error("Synthetic timestamp anchors are missing.");
+  }
+  const idMaps = {
+    identities: buildCanonicalIdMap(identityRows, (source) => {
+      const row = structuredClone(source);
+      delete row.id;
+      replaceSeedTimeFields("auth.identities", row, anchors);
+      return row;
+    }),
+    notifications: buildCanonicalIdMap(notificationRows, (source) => {
+      const row = structuredClone(source);
+      delete row.id;
+      replaceSeedTimeFields("public.notifications", row, anchors);
+      row.evidence_key = canonicalNotificationEvidenceKey(row.evidence_key);
+      return row;
+    }),
+  };
+  const tableFingerprints = tableData.map((table) => {
+    const rowStrings = table.rawRows
+      .map((row) =>
+        JSON.stringify(normalizeSyntheticRow(table.name, row, idMaps, anchors)),
+      )
+      .sort();
+    return {
+      name: table.name,
+      normalizedFields: [
+        ...(SYNTHETIC_TIME_NORMALIZATIONS.get(table.name) ?? []),
+        ...(table.name === "auth.users" ? ["encrypted_password:bcrypt"] : []),
+        ...(table.name === "auth.identities" ? ["id:stable-map"] : []),
+        ...(table.name === "public.notifications"
+          ? ["id:stable-map", "evidence_key:seed-epoch"]
+          : []),
+        ...(table.name === "public.audit_events"
+          ? ["nested-records:relation-normalization", "notification-record-id:stable-map"]
+          : []),
+      ].sort(),
+      rowCount: table.rowCount,
+      sha256: sha256Bytes(JSON.stringify(rowStrings)),
+    };
+  });
+
+  const sequenceFingerprints = [];
+  const sequences = (
+    await pool.query(`
+      select namespace.nspname as schema_name, class.relname as sequence_name
+      from pg_class class
+      join pg_namespace namespace on namespace.oid = class.relnamespace
+      where namespace.nspname in (
+        'auth', 'private', 'public', 'storage', 'supabase_migrations'
+      )
+        and class.relkind = 'S'
+      order by namespace.nspname, class.relname
+    `)
+  ).rows;
+  for (const sequence of sequences) {
+    const qualifiedName = `${sequence.schema_name}.${sequence.sequence_name}`;
+    const relation = `${quoteIdentifier(sequence.schema_name)}.${quoteIdentifier(sequence.sequence_name)}`;
+    const state = (await pool.query(
+      `select last_value::text as last_value, is_called from ${relation}`,
+    )).rows[0];
+    sequenceFingerprints.push({ name: qualifiedName, ...state });
+  }
+
+  const catalog = { sequences: sequenceFingerprints, tables: tableFingerprints };
+  return {
+    catalog,
+    sha256: sha256Bytes(JSON.stringify(catalog)),
+    tableCount: tableFingerprints.length,
+    totalRowCount,
+  };
+}
+
 export function createAdminPool(controlUrl, applicationName) {
   return new Pool({
     application_name: applicationName,
     connectionTimeoutMillis: 5_000,
     connectionString: controlUrl.toString(),
-    max: 2,
+    max: 1,
     ssl: false,
   });
 }

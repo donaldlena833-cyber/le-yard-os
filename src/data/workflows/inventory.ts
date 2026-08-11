@@ -25,6 +25,32 @@ function normalizedNote(value: string | null | undefined) {
   return value?.trim() || null;
 }
 
+async function requireInventoryCapability(
+  context: WorkflowContext,
+  locationId: string,
+  capability: OperationalCapability,
+) {
+  const location = await requireAccessibleLocation(
+    context.supabase,
+    context.actor,
+    locationId,
+  );
+  const { data, error } = await context.supabase.rpc("has_capability", {
+    p_organization_id: location.organizationId,
+    p_location_id: location.id,
+    p_capability_key: capability,
+  });
+  if (error) {
+    throwDatabaseError(error, "Your inventory capability could not be verified.");
+  }
+  assertCondition(
+    data === true,
+    "forbidden",
+    "This inventory action is not assigned to your job role at this location.",
+  );
+  return location;
+}
+
 export async function configureInventoryCatalog(
   context: WorkflowContext,
   input: ConfigureInventoryCatalogInput,
@@ -342,10 +368,10 @@ export async function submitInventoryCount(
   context: WorkflowContext,
   input: SubmitInventoryCountInput,
 ) {
-  const location = await requireManagedLocation(
-    context.supabase,
-    context.actor,
+  const location = await requireInventoryCapability(
+    context,
     input.locationId,
+    "inventory.count.create",
   );
   const replay = await replayExistingInventoryCount(
     context,
@@ -391,7 +417,11 @@ export async function approveInventoryCount(
     .maybeSingle();
   if (countError) throwDatabaseError(countError, "The inventory count could not be verified.");
   const existing = assertFound(countRecord, "The inventory count was not found.");
-  await requireManagedLocation(context.supabase, context.actor, existing.location_id);
+  await requireInventoryCapability(
+    context,
+    existing.location_id,
+    "inventory.count.approve",
+  );
   assertCondition(
     existing.counted_by !== context.actor.userId,
     "conflict",
@@ -417,7 +447,11 @@ export async function createPurchaseOrder(
   context: WorkflowContext,
   input: CreatePurchaseOrderInput,
 ) {
-  await requireManagedLocation(context.supabase, context.actor, input.locationId);
+  await requireInventoryCapability(
+    context,
+    input.locationId,
+    "inventory.purchase.create",
+  );
   const { data, error } = await context.supabase.rpc("create_purchase_order", {
       p_request_id: input.requestId,
       p_location_id: input.locationId,
@@ -449,7 +483,11 @@ export async function receiveInventoryDelivery(
   context: WorkflowContext,
   input: ReceiveInventoryDeliveryInput,
 ) {
-  await requireManagedLocation(context.supabase, context.actor, input.locationId);
+  await requireInventoryCapability(
+    context,
+    input.locationId,
+    "inventory.receive",
+  );
   const { data, error } = await context.supabase.rpc("receive_inventory_delivery", {
       p_request_id: input.requestId,
       p_location_id: input.locationId,
@@ -481,7 +519,11 @@ export async function submitWasteRecord(
   context: WorkflowContext,
   input: SubmitWasteRecordInput,
 ) {
-  await requireManagedLocation(context.supabase, context.actor, input.locationId);
+  await requireInventoryCapability(
+    context,
+    input.locationId,
+    "inventory.waste.create",
+  );
   const { data, error } = await context.supabase.rpc("submit_waste_record", {
       p_request_id: input.requestId,
       p_location_id: input.locationId,
@@ -514,7 +556,11 @@ export async function reviewWasteRecord(
     .maybeSingle();
   if (error) throwDatabaseError(error, "The waste record could not be verified.");
   const existing = assertFound(record, "The waste record was not found.");
-  await requireManagedLocation(context.supabase, context.actor, existing.location_id);
+  await requireInventoryCapability(
+    context,
+    existing.location_id,
+    "inventory.waste.approve",
+  );
   assertCondition(
     existing.recorded_by !== context.actor.userId,
     "conflict",
@@ -539,7 +585,11 @@ export async function createInventoryTransfer(
   context: WorkflowContext,
   input: CreateInventoryTransferInput,
 ) {
-  await requireManagedLocation(context.supabase, context.actor, input.fromLocationId);
+  await requireInventoryCapability(
+    context,
+    input.fromLocationId,
+    "inventory.transfer.create",
+  );
   const { data, error } = await context.supabase.rpc("create_inventory_transfer", {
       p_request_id: input.requestId,
       p_from_location_id: input.fromLocationId,
@@ -567,7 +617,11 @@ export async function reviewInventoryTransfer(
     .maybeSingle();
   if (error) throwDatabaseError(error, "The transfer could not be verified.");
   const existing = assertFound(record, "The inventory transfer was not found.");
-  await requireManagedLocation(context.supabase, context.actor, existing.to_location_id);
+  await requireInventoryCapability(
+    context,
+    existing.to_location_id,
+    "inventory.transfer.approve",
+  );
   assertCondition(
     existing.created_by !== context.actor.userId,
     "conflict",

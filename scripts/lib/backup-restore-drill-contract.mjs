@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { lstat, open, readFile, readdir, realpath } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-export const RESTORE_DRILL_MANIFEST_VERSION = 1;
+export const RESTORE_DRILL_MANIFEST_VERSION = 2;
 export const RESTORE_DRILL_MANIFEST_KIND =
   "le-yard-os-synthetic-postgres-backup";
 export const RESTORE_DRILL_FIXTURE_CONTRACT = "le-yard-demo-seed-v1";
@@ -51,10 +51,105 @@ export function sha256Bytes(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => canonicalJson(entry)).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function requireRestoreDrillProvenanceKey(value) {
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) {
+    throw new Error(
+      "BACKUP_RESTORE_PROVENANCE_KEY must be a lowercase 32-byte hexadecimal secret.",
+    );
+  }
+  return value;
+}
+
+export function createRestoreDrillProvenance(unsignedManifest, keyValue) {
+  const key = Buffer.from(requireRestoreDrillProvenanceKey(keyValue), "hex");
+  return {
+    algorithm: "hmac-sha256",
+    keyId: sha256Bytes(key),
+    signature: createHmac("sha256", key)
+      .update(canonicalJson(unsignedManifest))
+      .digest("hex"),
+  };
+}
+
 export async function sha256File(path) {
   const hash = createHash("sha256");
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest("hex");
+}
+
+export async function fingerprintUntrackedFiles(root, paths) {
+  const canonicalRoot = await realpath(root);
+  const uniquePaths = [...new Set(paths)].sort();
+  if (uniquePaths.length > 10_000) {
+    throw new Error("The repository has too many untracked files to attest safely.");
+  }
+  const hash = createHash("sha256");
+  let totalBytes = 0;
+  for (const path of uniquePaths) {
+    if (typeof path !== "string" || !path || path.includes("\0") || isAbsolute(path)) {
+      throw new Error("Git returned an unsafe untracked path.");
+    }
+    const absolutePath = resolve(canonicalRoot, path);
+    const relativePath = relative(canonicalRoot, absolutePath);
+    if (
+      relativePath === "" ||
+      relativePath === ".." ||
+      relativePath.startsWith(`..${sep}`) ||
+      isAbsolute(relativePath)
+    ) {
+      throw new Error("An untracked path escaped the repository.");
+    }
+    const before = await lstat(absolutePath);
+    if (before.isSymbolicLink() || !before.isFile()) {
+      throw new Error("Untracked repository entries must be regular files.");
+    }
+    const canonicalFile = await realpath(absolutePath);
+    if (canonicalFile !== absolutePath) {
+      throw new Error("Untracked repository files cannot traverse symbolic links.");
+    }
+    totalBytes += before.size;
+    if (totalBytes > 100 * 1024 * 1024) {
+      throw new Error("Untracked repository bytes exceed the attestation limit.");
+    }
+    const fileSha256 = await sha256File(absolutePath);
+    const after = await lstat(absolutePath);
+    if (
+      !after.isFile() ||
+      before.dev !== after.dev ||
+      before.ino !== after.ino ||
+      before.mode !== after.mode ||
+      before.size !== after.size ||
+      before.mtimeMs !== after.mtimeMs
+    ) {
+      throw new Error("An untracked file changed while it was being fingerprinted.");
+    }
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(String(after.mode & 0o7777));
+    hash.update("\0");
+    hash.update(String(after.size));
+    hash.update("\0");
+    hash.update(fileSha256);
+    hash.update("\0");
+  }
+  return {
+    fileCount: uniquePaths.length,
+    sha256: hash.digest("hex"),
+    totalBytes,
+  };
 }
 
 export async function readMigrationContract(root) {
@@ -94,6 +189,17 @@ export async function readMigrationContract(root) {
   };
 }
 
+export async function readSeedContract(root) {
+  const path = join(root, "supabase", "seed.sql");
+  const bytes = await readFile(path);
+  if (bytes.byteLength === 0) throw new Error("The synthetic seed is empty.");
+  return {
+    bytes: bytes.byteLength,
+    path,
+    sha256: sha256Bytes(bytes),
+  };
+}
+
 export function validateRestoreDrillManifest(manifestValue, expected) {
   const manifest = requireRecord(manifestValue, "Restore manifest");
   requireExactKeys(
@@ -104,6 +210,7 @@ export function validateRestoreDrillManifest(manifestValue, expected) {
       "database",
       "kind",
       "manifestVersion",
+      "provenance",
       "repository",
       "source",
     ],
@@ -117,6 +224,25 @@ export function validateRestoreDrillManifest(manifestValue, expected) {
     throw new Error("Restore manifest kind is not approved for this drill.");
   }
   requireString(manifest.createdAt, ISO_TIMESTAMP_PATTERN, "Restore manifest createdAt");
+
+  const provenance = requireRecord(
+    manifest.provenance,
+    "Restore manifest provenance",
+  );
+  requireExactKeys(
+    provenance,
+    ["algorithm", "keyId", "signature"],
+    "Restore manifest provenance",
+  );
+  if (provenance.algorithm !== "hmac-sha256") {
+    throw new Error("Restore manifest provenance algorithm is not supported.");
+  }
+  requireString(provenance.keyId, SHA256_PATTERN, "Restore manifest provenance keyId");
+  requireString(
+    provenance.signature,
+    SHA256_PATTERN,
+    "Restore manifest provenance signature",
+  );
 
   const artifact = requireRecord(manifest.artifact, "Restore manifest artifact");
   requireExactKeys(
@@ -170,8 +296,10 @@ export function validateRestoreDrillManifest(manifestValue, expected) {
     source,
     [
       "classification",
+      "dataFingerprintSha256",
       "fixtureContract",
       "providersDisabled",
+      "seedSha256",
       "storagePayloadIncluded",
     ],
     "Restore manifest source",
@@ -182,6 +310,16 @@ export function validateRestoreDrillManifest(manifestValue, expected) {
   if (source.fixtureContract !== RESTORE_DRILL_FIXTURE_CONTRACT) {
     throw new Error("Restore manifest does not identify the approved synthetic fixture.");
   }
+  requireString(
+    source.seedSha256,
+    SHA256_PATTERN,
+    "Restore manifest source seedSha256",
+  );
+  requireString(
+    source.dataFingerprintSha256,
+    SHA256_PATTERN,
+    "Restore manifest source dataFingerprintSha256",
+  );
   if (source.providersDisabled !== true) {
     throw new Error("Restore manifest must attest that every provider is disabled.");
   }
@@ -200,6 +338,9 @@ export function validateRestoreDrillManifest(manifestValue, expected) {
   if (repository.migrationBundleSha256 !== expected.migrationBundleSha256) {
     throw new Error("Restore manifest migration bundle hash does not match the repository.");
   }
+  if (source.seedSha256 !== expected.seedSha256) {
+    throw new Error("Restore manifest seed hash does not match the repository.");
+  }
   if (artifact.fileName !== expected.artifactFileName) {
     throw new Error("Restore manifest is bound to a different artifact filename.");
   }
@@ -208,6 +349,22 @@ export function validateRestoreDrillManifest(manifestValue, expected) {
   }
   if (artifact.sha256 !== expected.artifactSha256) {
     throw new Error("Restore manifest artifact hash does not match the supplied file.");
+  }
+
+  const unsignedManifest = { ...manifest };
+  delete unsignedManifest.provenance;
+  const expectedProvenance = createRestoreDrillProvenance(
+    unsignedManifest,
+    expected.provenanceKey,
+  );
+  if (
+    provenance.keyId !== expectedProvenance.keyId ||
+    !timingSafeEqual(
+      Buffer.from(provenance.signature, "hex"),
+      Buffer.from(expectedProvenance.signature, "hex"),
+    )
+  ) {
+    throw new Error("Restore manifest provenance authentication failed.");
   }
 
   return manifest;

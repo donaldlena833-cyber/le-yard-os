@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowContext } from "@/data/execute";
 import {
+  approveInventoryCount,
   configureInventoryCatalog,
   createInventoryTransfer,
   createPurchaseOrder,
@@ -8,6 +9,7 @@ import {
   recordInventoryItemCost,
   reviewInventoryTransfer,
   reviewWasteRecord,
+  submitInventoryCount,
   submitWasteRecord,
 } from "@/data/workflows/inventory";
 
@@ -26,25 +28,47 @@ const ids = {
   otherActor: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 };
 
-function query(row: unknown) {
+function query(
+  row: unknown | ((filters: Record<string, unknown>) => unknown),
+) {
+  const filters: Record<string, unknown> = {};
   const builder = {
     select: vi.fn(),
     eq: vi.fn(),
-    maybeSingle: vi.fn(async () => ({ data: row, error: null })),
+    maybeSingle: vi.fn(async () => ({
+      data: typeof row === "function" ? row(filters) : row,
+      error: null,
+    })),
   };
   builder.select.mockReturnValue(builder);
-  builder.eq.mockReturnValue(builder);
+  builder.eq.mockImplementation((column: string, value: unknown) => {
+    filters[column] = value;
+    return builder;
+  });
   return builder;
 }
 
-function context(role: "owner" | "admin" | "manager" | "employee" = "manager") {
+function context(
+  role: "owner" | "admin" | "manager" | "employee" = "manager",
+  allowedCapabilities: readonly string[] | null = null,
+) {
   const rows: Record<string, unknown> = {
-    locations: { id: ids.location, organization_id: ids.organization, is_active: true },
+    locations: (filters: Record<string, unknown>) => ({
+      id: String(filters.id ?? ids.location),
+      organization_id: ids.organization,
+      is_active: true,
+    }),
+    inventory_counts: { id: ids.record, location_id: ids.location, counted_by: ids.otherActor },
     waste_records: { id: ids.record, location_id: ids.location, recorded_by: ids.otherActor },
     inventory_transfers: { id: ids.record, to_location_id: ids.destination, created_by: ids.otherActor },
   };
   const rpc = vi.fn(async (name: string, args: Record<string, unknown>) => {
-    void args;
+    if (name === "has_capability") {
+      return {
+        data: allowedCapabilities === null || allowedCapabilities.includes(String(args.p_capability_key)),
+        error: null,
+      };
+    }
     if (name === "configure_inventory_catalog") {
       return { data: { id: ids.record, command: "unit.save", replayed: false }, error: null };
     }
@@ -138,7 +162,8 @@ describe("extended inventory workflow RPC contracts", () => {
       lines: [{ inventoryItemId: ids.item, unitId: ids.unit, receivedQuantity: 2.75 }],
     });
 
-    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+    const commandCalls = rpc.mock.calls.filter(([name]) => name !== "has_capability");
+    expect(commandCalls.map(([name]) => name)).toEqual([
       "create_purchase_order",
       "receive_inventory_delivery",
       "submit_waste_record",
@@ -146,7 +171,7 @@ describe("extended inventory workflow RPC contracts", () => {
       "create_inventory_transfer",
       "review_inventory_transfer",
     ]);
-    expect(rpc.mock.calls.map(([, args]) => Object.keys(args).sort())).toEqual([
+    expect(commandCalls.map(([, args]) => Object.keys(args).sort())).toEqual([
       ["p_expected_on", "p_lines", "p_location_id", "p_notes", "p_ordered_on", "p_po_number", "p_request_id", "p_shipping_cents", "p_tax_cents", "p_vendor_id"],
       ["p_delivered_at", "p_invoice_number", "p_lines", "p_location_id", "p_notes", "p_purchase_order_id", "p_request_id", "p_vendor_id"],
       ["p_inventory_item_id", "p_location_id", "p_notes", "p_occurred_at", "p_quantity", "p_reason_code", "p_request_id", "p_unit_id"],
@@ -154,23 +179,55 @@ describe("extended inventory workflow RPC contracts", () => {
       ["p_from_location_id", "p_lines", "p_notes", "p_request_id", "p_to_location_id"],
       ["p_approve", "p_lines", "p_note", "p_request_id", "p_transfer_id"],
     ]);
-    expect(rpc.mock.calls[0][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, quantity: 2, unit_price_cents: 375, notes: null }]);
-    expect(rpc.mock.calls[1][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, quantity: 2, accepted_quantity: 1.75, unit_price_cents: 375, lot_code: "LOT-1", expires_on: "2026-08-09" }]);
-    expect(rpc.mock.calls[5][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, received_quantity: 2.75 }]);
-    for (const [, args] of rpc.mock.calls) {
+    expect(commandCalls[0][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, quantity: 2, unit_price_cents: 375, notes: null }]);
+    expect(commandCalls[1][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, quantity: 2, accepted_quantity: 1.75, unit_price_cents: 375, lot_code: "LOT-1", expires_on: "2026-08-09" }]);
+    expect(commandCalls[5][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, received_quantity: 2.75 }]);
+    for (const [, args] of commandCalls) {
       expect(args).not.toHaveProperty("organization_id");
       expect(args).not.toHaveProperty("actor_id");
       expect(args).not.toHaveProperty("approved_by");
     }
+    expect(
+      rpc.mock.calls
+        .filter(([name]) => name === "has_capability")
+        .map(([, args]) => [args.p_capability_key, args.p_location_id]),
+    ).toEqual([
+      ["inventory.purchase.create", ids.location],
+      ["inventory.receive", ids.location],
+      ["inventory.waste.create", ids.location],
+      ["inventory.waste.approve", ids.location],
+      ["inventory.transfer.create", ids.location],
+      ["inventory.transfer.approve", ids.destination],
+    ]);
   });
 
-  it("blocks an employee before any critical command RPC is called", async () => {
-    const { workflow, rpc } = context("employee");
+  it("allows an employee with the exact location capability", async () => {
+    const { workflow, rpc } = context("employee", ["inventory.purchase.create"]);
+    await createPurchaseOrder(workflow, {
+      requestId: ids.request,
+      locationId: ids.location,
+      vendorId: ids.vendor,
+      poNumber: "PO-CAPABLE",
+      orderedOn: null,
+      expectedOn: null,
+      taxCents: 0,
+      shippingCents: 0,
+      notes: null,
+      lines: [{ inventoryItemId: ids.item, unitId: ids.unit, quantity: 1, unitPriceCents: 100, notes: null }],
+    });
+    expect(rpc.mock.calls.map(([name]) => name)).toEqual([
+      "has_capability",
+      "create_purchase_order",
+    ]);
+  });
+
+  it("blocks a Manager when the exact capability is absent", async () => {
+    const { workflow, rpc } = context("manager", []);
     await expect(createPurchaseOrder(workflow, {
       requestId: ids.request,
       locationId: ids.location,
       vendorId: ids.vendor,
-      poNumber: "PO-BLOCKED",
+      poNumber: "PO-DENIED",
       orderedOn: null,
       expectedOn: null,
       taxCents: 0,
@@ -178,7 +235,48 @@ describe("extended inventory workflow RPC contracts", () => {
       notes: null,
       lines: [{ inventoryItemId: ids.item, unitId: ids.unit, quantity: 1, unitPriceCents: 100, notes: null }],
     })).rejects.toMatchObject({ code: "forbidden" });
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledWith("has_capability", {
+      p_capability_key: "inventory.purchase.create",
+      p_location_id: ids.location,
+      p_organization_id: ids.organization,
+    });
+    expect(rpc).not.toHaveBeenCalledWith("create_purchase_order", expect.anything());
+  });
+
+  it("uses separate count create and approval capabilities", async () => {
+    const deniedCreate = context("employee", []);
+    await expect(submitInventoryCount(deniedCreate.workflow, {
+      submissionId: ids.request,
+      locationId: ids.location,
+      countType: "spot",
+      notes: null,
+      lines: [{
+        inventoryItemId: ids.item,
+        unitId: ids.unit,
+        countedQuantity: 1,
+        notes: null,
+      }],
+    })).rejects.toMatchObject({ code: "forbidden" });
+    expect(deniedCreate.rpc).toHaveBeenCalledWith("has_capability", {
+      p_capability_key: "inventory.count.create",
+      p_location_id: ids.location,
+      p_organization_id: ids.organization,
+    });
+
+    const reviewer = context("employee", ["inventory.count.approve"]);
+    await approveInventoryCount(reviewer.workflow, {
+      requestId: ids.request,
+      countId: ids.record,
+      approve: true,
+      note: "Verified",
+    });
+    expect(reviewer.rpc).toHaveBeenCalledWith("has_capability", {
+      p_capability_key: "inventory.count.approve",
+      p_location_id: ids.location,
+      p_organization_id: ids.organization,
+    });
+    expect(reviewer.rpc).toHaveBeenCalledWith("approve_inventory_count", expect.anything());
   });
 
   it("records a vendor-neutral unit cost with actor-derived tenant scope", async () => {
@@ -211,14 +309,19 @@ describe("extended inventory workflow RPC contracts", () => {
     const from = workflow.supabase.from as unknown as ReturnType<typeof vi.fn>;
     from.mockImplementation((table: string) => query(
       table === "locations"
-        ? { id: ids.location, organization_id: ids.organization, is_active: true }
+        ? (filters: Record<string, unknown>) => ({
+            id: String(filters.id ?? ids.location),
+            organization_id: ids.organization,
+            is_active: true,
+          })
         : table === "waste_records"
           ? { id: ids.record, location_id: ids.location, recorded_by: ids.actor }
           : { id: ids.record, to_location_id: ids.destination, created_by: ids.actor },
     ));
     await expect(reviewWasteRecord(workflow, { requestId: ids.request, wasteRecordId: ids.record, approve: true, note: null })).rejects.toMatchObject({ code: "conflict" });
     await expect(reviewInventoryTransfer(workflow, { requestId: ids.request, transferId: ids.record, approve: true, note: null, lines: [{ inventoryItemId: ids.item, unitId: ids.unit, receivedQuantity: 1 }] })).rejects.toMatchObject({ code: "conflict" });
-    expect(rpc).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalledWith("review_waste_record", expect.anything());
+    expect(rpc).not.toHaveBeenCalledWith("review_inventory_transfer", expect.anything());
   });
 
   it("derives catalog tenant scope and requires the precise Manager capability", async () => {
@@ -248,7 +351,7 @@ describe("extended inventory workflow RPC contracts", () => {
       },
     });
 
-    const manager = context("manager");
+    const manager = context("manager", []);
     await expect(configureInventoryCatalog(manager.workflow, {
       requestId: ids.request,
       workspaceLocationId: ids.location,

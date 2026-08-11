@@ -681,6 +681,70 @@ try {
       'Canonical negative on-hand regression fixture',
       '10000000-0000-4000-8000-000000000003'
     );
+    insert into public.user_capability_overrides (
+      id, organization_id, user_id, capability_key, location_id,
+      effect, reason, effective_from, created_by, updated_by
+    ) values
+      (
+        'a4a00000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000001',
+        '10000000-0000-4000-8000-000000000004',
+        'inventory.count.create',
+        '30000000-0000-4000-8000-000000000001',
+        'grant', 'Portable count-integrity fixture', date '2026-01-01',
+        '10000000-0000-4000-8000-000000000003',
+        '10000000-0000-4000-8000-000000000003'
+      ),
+      (
+        'a4a00000-0000-4000-8000-000000000002',
+        '20000000-0000-4000-8000-000000000001',
+        '10000000-0000-4000-8000-000000000004',
+        'inventory.count.approve',
+        '30000000-0000-4000-8000-000000000001',
+        'grant', 'Portable self-review fixture', date '2026-01-01',
+        '10000000-0000-4000-8000-000000000003',
+        '10000000-0000-4000-8000-000000000003'
+      ),
+      (
+        'a4a00000-0000-4000-8000-000000000003',
+        '20000000-0000-4000-8000-000000000001',
+        '10000000-0000-4000-8000-000000000004',
+        'inventory.purchase.create',
+        '30000000-0000-4000-8000-000000000001',
+        'grant', 'Portable purchase-order fixture', date '2026-01-01',
+        '10000000-0000-4000-8000-000000000003',
+        '10000000-0000-4000-8000-000000000003'
+      ),
+      (
+        'a4a00000-0000-4000-8000-000000000004',
+        '20000000-0000-4000-8000-000000000001',
+        '10000000-0000-4000-8000-000000000004',
+        'inventory.receive',
+        '30000000-0000-4000-8000-000000000001',
+        'grant', 'Portable receiving fixture', date '2026-01-01',
+        '10000000-0000-4000-8000-000000000003',
+        '10000000-0000-4000-8000-000000000003'
+      ),
+      (
+        'a4a00000-0000-4000-8000-000000000005',
+        '20000000-0000-4000-8000-000000000001',
+        '10000000-0000-4000-8000-000000000004',
+        'inventory.waste.create',
+        '30000000-0000-4000-8000-000000000001',
+        'grant', 'Portable waste fixture', date '2026-01-01',
+        '10000000-0000-4000-8000-000000000003',
+        '10000000-0000-4000-8000-000000000003'
+      ),
+      (
+        'a4a00000-0000-4000-8000-000000000006',
+        '20000000-0000-4000-8000-000000000001',
+        '10000000-0000-4000-8000-000000000004',
+        'inventory.transfer.create',
+        '30000000-0000-4000-8000-000000000001',
+        'grant', 'Portable transfer fixture', date '2026-01-01',
+        '10000000-0000-4000-8000-000000000003',
+        '10000000-0000-4000-8000-000000000003'
+      );
     set role authenticated;
     select set_config(
       'request.jwt.claims',
@@ -3638,6 +3702,77 @@ try {
     reset role;
     select set_config('request.jwt.claims', '{}', false);
   `);
+
+  const chatMessageId = "63000000-0000-4000-8000-000000000001";
+  const chatChildDeleteCases = [
+    {
+      insert: `insert into public.chat_reactions (
+        id, organization_id, message_id, user_id, emoji
+      ) values (
+        'd7800000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000001',
+        '${chatMessageId}',
+        '10000000-0000-4000-8000-000000000004',
+        '✅'
+      )`,
+      remove: `delete from public.chat_reactions
+        where id = 'd7800000-0000-4000-8000-000000000001'`,
+      label: "reaction",
+    },
+    {
+      insert: `insert into public.chat_attachments (
+        id, organization_id, message_id, storage_path, file_name,
+        mime_type, size_bytes, uploaded_by
+      ) values (
+        'd7800000-0000-4000-8000-000000000002',
+        '20000000-0000-4000-8000-000000000001',
+        '${chatMessageId}',
+        '20000000-0000-4000-8000-000000000001/${chatMessageId}/d7800000-0000-4000-8000-000000000002.pdf',
+        'service-note.pdf', 'application/pdf', 100,
+        '10000000-0000-4000-8000-000000000004'
+      )`,
+      remove: `delete from public.chat_attachments
+        where id = 'd7800000-0000-4000-8000-000000000002'`,
+      label: "attachment",
+    },
+    {
+      insert: `insert into public.announcement_acknowledgements (
+        id, organization_id, message_id, user_id
+      ) values (
+        'd7800000-0000-4000-8000-000000000003',
+        '20000000-0000-4000-8000-000000000001',
+        '${chatMessageId}',
+        '10000000-0000-4000-8000-000000000004'
+      )`,
+      remove: `delete from public.announcement_acknowledgements
+        where id = 'd7800000-0000-4000-8000-000000000003'`,
+      label: "acknowledgement",
+    },
+  ];
+  for (const childCase of chatChildDeleteCases) {
+    await db.exec(childCase.insert);
+    const beforeDelete = await db.query(
+      `select updated_at from public.chat_messages where id = $1`,
+      [chatMessageId],
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await db.exec(childCase.remove);
+    const afterDelete = await db.query(
+      `select updated_at from public.chat_messages where id = $1`,
+      [chatMessageId],
+    );
+    if (
+      !beforeDelete.rows[0]?.updated_at ||
+      !afterDelete.rows[0]?.updated_at ||
+      new Date(afterDelete.rows[0].updated_at).getTime() <=
+        new Date(beforeDelete.rows[0].updated_at).getTime()
+    ) {
+      throw new Error(
+        `Chat ${childCase.label} deletion did not advance the parent invalidation timestamp`,
+      );
+    }
+  }
+
   const finalSecurityContractsQuery = await db.query(`
     select
       to_regprocedure(
@@ -3701,7 +3836,18 @@ try {
       (select not pubtruncate from pg_publication
        where pubname = 'supabase_realtime') as realtime_truncate_disabled,
       (select pubinsert and pubupdate from pg_publication
-       where pubname = 'supabase_realtime') as realtime_safe_changes_enabled
+       where pubname = 'supabase_realtime') as realtime_safe_changes_enabled,
+      (select count(*)::integer from pg_trigger
+       where tgname in (
+         'chat_reaction_delete_invalidate_message',
+         'chat_attachment_delete_invalidate_message',
+         'chat_acknowledgement_delete_invalidate_message'
+       ) and not tgisinternal) as chat_delete_invalidation_triggers,
+      has_function_privilege(
+        'authenticated',
+        'private.touch_chat_message_after_child_delete()',
+        'EXECUTE'
+      ) as browser_can_execute_chat_delete_invalidation
   `);
   const finalSecurityContracts = finalSecurityContractsQuery.rows[0];
   if (
@@ -3723,7 +3869,9 @@ try {
     finalSecurityContracts.notification_triggers !== 5 ||
     !finalSecurityContracts.realtime_delete_disabled ||
     !finalSecurityContracts.realtime_truncate_disabled ||
-    !finalSecurityContracts.realtime_safe_changes_enabled
+    !finalSecurityContracts.realtime_safe_changes_enabled ||
+    finalSecurityContracts.chat_delete_invalidation_triggers !== 3 ||
+    finalSecurityContracts.browser_can_execute_chat_delete_invalidation
   ) {
     throw new Error(`Final security contract catalog failed: ${JSON.stringify(finalSecurityContracts)}`);
   }

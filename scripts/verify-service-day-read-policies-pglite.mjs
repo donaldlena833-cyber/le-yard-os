@@ -477,9 +477,15 @@ try {
     const permissiveSelectPolicies = tablePolicies.filter(
       (policy) => policy.cmd === "SELECT" && policy.permissive === "PERMISSIVE",
     );
+    const authoritativeReadPolicy =
+      table === "inventory_counts"
+        ? "inventory_count_capability_read"
+        : permissiveSelectPolicies[0]?.policyname;
     if (
       permissiveSelectPolicies.length !== 1 ||
-      !permissiveSelectPolicies[0].policyname.startsWith("service_day_") ||
+      authoritativeReadPolicy !== permissiveSelectPolicies[0]?.policyname ||
+      (table !== "inventory_counts" &&
+        !permissiveSelectPolicies[0].policyname.startsWith("service_day_")) ||
       (table !== "manager_log_entries" &&
         table !== "manager_log_versions" &&
         (!tablePolicies.some((policy) => policy.cmd === "INSERT") ||

@@ -1,16 +1,21 @@
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   RESTORE_DRILL_FIXTURE_CONTRACT,
   RESTORE_DRILL_MANIFEST_KIND,
+  RESTORE_DRILL_MANIFEST_VERSION,
   RESTORE_DRILL_SOURCE_CLASSIFICATION,
+  createRestoreDrillProvenance,
+  fingerprintUntrackedFiles,
   parseRestoreDrillArguments,
   readMigrationContract,
   validateRestoreDrillManifest,
 } from "../../../scripts/lib/backup-restore-drill-contract.mjs";
 import {
   attestControlDatabase,
+  attestLocalPostgresDataDirectory,
   createRestoreDrillDatabaseName,
   postgresCommandEnvironment,
   requireRestoreDrillControlUrl,
@@ -23,11 +28,13 @@ const expected = {
   commit: "b".repeat(40),
   migrationBundleSha256: "c".repeat(64),
   migrationHead: "20260811092658",
+  provenanceKey: "1".repeat(64),
+  seedSha256: "d".repeat(64),
 };
 
 function manifest() {
-  return {
-    manifestVersion: 1,
+  const unsignedManifest = {
+    manifestVersion: RESTORE_DRILL_MANIFEST_VERSION,
     kind: RESTORE_DRILL_MANIFEST_KIND,
     createdAt: "2026-08-11T12:00:00.000Z",
     artifact: {
@@ -44,10 +51,19 @@ function manifest() {
     },
     source: {
       classification: RESTORE_DRILL_SOURCE_CLASSIFICATION,
+      dataFingerprintSha256: "e".repeat(64),
       fixtureContract: RESTORE_DRILL_FIXTURE_CONTRACT,
       providersDisabled: true,
+      seedSha256: expected.seedSha256,
       storagePayloadIncluded: false,
     },
+  };
+  return {
+    ...unsignedManifest,
+    provenance: createRestoreDrillProvenance(
+      unsignedManifest,
+      expected.provenanceKey,
+    ),
   };
 }
 
@@ -69,6 +85,28 @@ describe("disposable backup/restore drill safety contract", () => {
     expect(contract.fileSha256.every((hash) => /^[0-9a-f]{64}$/.test(hash))).toBe(true);
   });
 
+  it("binds repository evidence to untracked bytes and rejects symlinks", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "le-yard-untracked-proof-"));
+    try {
+      await writeFile(join(directory, "fixture.sql"), "beta", "utf8");
+      const first = await fingerprintUntrackedFiles(directory, ["fixture.sql"]);
+      const repeated = await fingerprintUntrackedFiles(directory, ["fixture.sql"]);
+      expect(repeated).toEqual(first);
+      await writeFile(join(directory, "fixture.sql"), "zeta", "utf8");
+      const mutated = await fingerprintUntrackedFiles(directory, ["fixture.sql"]);
+      expect(mutated.sha256).not.toBe(first.sha256);
+      expect(mutated.fileCount).toBe(1);
+      expect(mutated.totalBytes).toBe(4);
+
+      await symlink("fixture.sql", join(directory, "fixture-link.sql"));
+      await expect(
+        fingerprintUntrackedFiles(directory, ["fixture-link.sql"]),
+      ).rejects.toThrow(/regular files/);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it.each([
     ["production source", (value: ReturnType<typeof manifest>) => {
       value.source.classification = "production";
@@ -88,6 +126,9 @@ describe("disposable backup/restore drill safety contract", () => {
     ["wrong artifact hash", (value: ReturnType<typeof manifest>) => {
       value.artifact.sha256 = "d".repeat(64);
     }, /artifact hash does not match/],
+    ["wrong seed hash", (value: ReturnType<typeof manifest>) => {
+      value.source.seedSha256 = "f".repeat(64);
+    }, /seed hash does not match/],
   ])("rejects %s", (_label, mutate, pattern) => {
     const value = manifest();
     mutate(value);
@@ -101,6 +142,20 @@ describe("disposable backup/restore drill safety contract", () => {
         expected,
       ),
     ).toThrow(/must contain exactly/);
+  });
+
+  it("authenticates the complete manifest before restore", () => {
+    const value = manifest();
+    value.source.dataFingerprintSha256 = "f".repeat(64);
+    expect(() => validateRestoreDrillManifest(value, expected)).toThrow(
+      /provenance authentication failed/,
+    );
+    expect(() =>
+      validateRestoreDrillManifest(manifest(), {
+        ...expected,
+        provenanceKey: "2".repeat(64),
+      }),
+    ).toThrow(/provenance authentication failed/);
   });
 
   it.each([
@@ -131,6 +186,18 @@ describe("disposable backup/restore drill safety contract", () => {
     expect(commandEnvironment).not.toHaveProperty("HOME");
     expect(commandEnvironment).not.toHaveProperty("PGOPTIONS");
     expect(commandEnvironment).not.toHaveProperty("SUPABASE_SERVICE_ROLE_KEY");
+  });
+
+  it("requires an absolute local PGDATA ownership proof", async () => {
+    const controlUrl = requireRestoreDrillControlUrl(
+      "postgres://postgres:postgres@127.0.0.1:5432/postgres",
+    );
+    await expect(
+      attestLocalPostgresDataDirectory({} as never, controlUrl, undefined),
+    ).rejects.toThrow(/BACKUP_RESTORE_PGDATA must be an absolute/);
+    await expect(
+      attestLocalPostgresDataDirectory({} as never, controlUrl, "relative/pgdata"),
+    ).rejects.toThrow(/BACKUP_RESTORE_PGDATA must be an absolute/);
   });
 
   it("attests an empty dedicated PG17 cluster and rejects shared catalog state", async () => {
@@ -215,17 +282,46 @@ describe("disposable backup/restore drill safety contract", () => {
       "utf8",
     );
     const uploadStep = workflow.slice(workflow.indexOf("actions/upload-artifact"));
+    const jobHeader = workflow.slice(0, workflow.indexOf("steps:"));
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain('/usr/lib/postgresql/17/bin');
     expect(workflow).toContain("https://apt.postgresql.org/pub/repos/apt");
     expect(workflow).toContain("postgresql-client-17");
     expect(workflow).toContain('initdb -D "$RESTORE_DRILL_PGDATA"');
+    expect(workflow).toContain("RESTORE_DRILL_DIRECTORY=$RUNNER_TEMP/");
+    expect(workflow).toContain("BACKUP_RESTORE_PGDATA=$RUNNER_TEMP/");
+    expect(workflow).toContain("BACKUP_RESTORE_PROVENANCE_KEY=");
+    expect(workflow).toContain("::add-mask::");
+    expect(jobHeader).not.toContain("runner.temp");
     expect(workflow).toContain('-h 127.0.0.1');
     expect(workflow).toContain("BACKUP_RESTORE_CONTROL_DATABASE_URL");
     expect(workflow).not.toMatch(/supabase\s+(?:db|projects|backups)/i);
     expect(uploadStep).toContain("evidence/*.json");
     expect(uploadStep).toContain("synthetic.manifest.json");
     expect(uploadStep).not.toMatch(/\.dump\b/);
+  });
+
+  it("pins verifier inputs and publishes generated artifacts without clobbering", async () => {
+    const [generator, verifier, postgresLibrary] = await Promise.all([
+      readFile(join(process.cwd(), "scripts", "create-synthetic-restore-drill-artifact.mjs"), "utf8"),
+      readFile(join(process.cwd(), "scripts", "verify-backup-restore-postgres.mjs"), "utf8"),
+      readFile(join(process.cwd(), "scripts", "lib", "restore-drill-postgres.mjs"), "utf8"),
+    ]);
+    expect(generator).toContain("constants.COPYFILE_EXCL");
+    expect(generator).toContain("le-yard-synthetic-restore-source-");
+    expect(verifier).toContain("le-yard-restore-input-");
+    expect(verifier).toContain("Pinned backup input changed");
+    expect(postgresLibrary).toMatch(/create database[^\n]+template template0/i);
+    expect(postgresLibrary).toContain("pg_try_advisory_lock");
+    expect(postgresLibrary).toContain("has_table_privilege('anon'");
+    expect(postgresLibrary).toContain("has_sequence_privilege('anon'");
+    expect(postgresLibrary).toContain("security_invoker=true");
+    expect(postgresLibrary).toContain("pg_control_system()");
+    expect(postgresLibrary).toContain("postmaster.pid");
+    expect(postgresLibrary).toContain("template1");
+    expect(verifier).toContain("Evidence inside the repository must use an ignored");
+    expect(verifier).toContain("task due-at mutation");
+    expect(verifier).toContain("wrong demo password hash");
   });
 
   it("revokes every private helper and future private function by default", async () => {
