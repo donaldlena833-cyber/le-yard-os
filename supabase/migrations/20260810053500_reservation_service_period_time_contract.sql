@@ -3,6 +3,45 @@
 -- times and chooses one side of an autumn fold; neither behavior is safe for
 -- an advertised or signed booking slot.
 
+-- Earlier connected previews recorded the atomic-schedule migration before
+-- this shared helper was added to that draft. Reassert it here so this
+-- forward migration is self-contained on both histories.
+create or replace function private.local_timestamp_is_unique(
+  p_local timestamp,
+  p_timezone text
+)
+returns boolean
+language sql stable
+set search_path = ''
+as $$
+  with chosen as (
+    select p_local at time zone p_timezone as instant
+  ), nearby_offsets as (
+    select distinct
+      ((chosen.instant + probe.delta) at time zone p_timezone)
+        - ((chosen.instant + probe.delta) at time zone 'UTC') as utc_offset
+    from chosen
+    cross join unnest(array[
+      interval '-2 days', interval '-1 day', interval '0 days',
+      interval '1 day', interval '2 days'
+    ]) probe(delta)
+  ), possible_instants as (
+    select distinct (p_local - nearby_offsets.utc_offset) at time zone 'UTC' as instant
+    from nearby_offsets
+  )
+  select p_local is not null
+    and p_timezone is not null
+    and (select instant at time zone p_timezone from chosen) = p_local
+    and (
+      select count(*)
+      from possible_instants possible
+      where possible.instant at time zone p_timezone = p_local
+    ) = 1
+$$;
+
+revoke all on function private.local_timestamp_is_unique(timestamp, text)
+from public, anon, authenticated;
+
 create function private.local_wall_timestamp_is_unambiguous(
   p_local timestamp without time zone,
   p_timezone text
