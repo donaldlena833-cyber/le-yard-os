@@ -1061,16 +1061,35 @@ try {
   );
 } finally {
   await Promise.all([rollbackQuietly(first), rollbackQuietly(second)]);
-  first?.release();
-  second?.release();
-  setup?.release();
+  first?.release(true);
+  second?.release(true);
+  setup?.release(true);
   if (testPool) await testPool.end();
 
   if (databaseCreated) {
     const admin = await adminPool.connect();
     try {
+      const deadline = Date.now() + 5_000;
+      let activeConnections = 0;
+      do {
+        activeConnections = Number(
+          (
+            await admin.query(
+              "select count(*) connection_count from pg_stat_activity where datname = $1",
+              [databaseName],
+            )
+          ).rows[0].connection_count,
+        );
+        if (activeConnections === 0) break;
+        await pause(20);
+      } while (Date.now() < deadline);
+      if (activeConnections !== 0) {
+        throw new Error(
+          `Disposable schedule database still has ${activeConnections} active connection(s) after pool shutdown.`,
+        );
+      }
       await admin.query(
-        `drop database if exists ${quoteIdentifier(databaseName)} with (force)`,
+        `drop database if exists ${quoteIdentifier(databaseName)}`,
       );
     } finally {
       admin.release();
