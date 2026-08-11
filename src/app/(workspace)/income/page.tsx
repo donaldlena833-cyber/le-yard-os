@@ -41,6 +41,10 @@ export default async function IncomePage({
     <IncomeWorkspace
       result={await loadLiveIncome(resolution.context, days)}
       locationName={resolution.context.activeLocation.name}
+      realtimeScope={{
+        organizationId: resolution.context.organization.id,
+        locationId: resolution.context.activeLocation.id,
+      }}
     />
   );
 }

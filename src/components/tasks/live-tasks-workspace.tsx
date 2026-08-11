@@ -30,7 +30,6 @@ import { useRouter } from "next/navigation";
 import {
   type FormEvent,
   type ReactNode,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -57,6 +56,7 @@ import {
 } from "@/app/actions/workflows/operations";
 import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/files";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { ReadState } from "@/components/ui/read-state";
@@ -85,6 +85,10 @@ import {
 import { useModalDialog } from "@/lib/accessibility/use-modal-dialog";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import { createClient } from "@/lib/supabase/client";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { validatePrivateFile } from "@/lib/storage/private-files";
 import { cn, formatMoney } from "@/lib/utils";
 
@@ -112,6 +116,17 @@ type DialogState =
   | { kind: "maintenance-transition"; request: LiveMaintenanceRequest }
   | { kind: "incident-create" }
   | { kind: "incident-transition"; incident: LiveIncident };
+
+const operationsRealtimeBindings = [
+  { table: "tasks", scope: "organization" },
+  { table: "checklist_runs", scope: "location" },
+  { table: "checklist_responses", scope: "organization" },
+  { table: "sop_documents", scope: "organization" },
+  { table: "sop_versions", scope: "organization" },
+  { table: "sop_acknowledgements", scope: "organization" },
+  { table: "maintenance_requests", scope: "location" },
+  { table: "incidents", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "tasks", label: "Tasks" },
@@ -2842,93 +2857,13 @@ export function LiveTasksWorkspace({
   const model = result.ok ? result.data : null;
   const canManage = managementReady(workspace);
 
-  useEffect(() => {
-    if (!model) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel(
-        `operations-${workspace.organization.id}-${workspace.activeLocation.id}`,
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "tasks",
-          filter: `organization_id=eq.${workspace.organization.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "checklist_runs",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "checklist_responses" },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "sop_documents",
-          filter: `organization_id=eq.${workspace.organization.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "sop_versions",
-          filter: `organization_id=eq.${workspace.organization.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "sop_acknowledgements",
-          filter: `organization_id=eq.${workspace.organization.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "maintenance_requests",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "incidents",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [model, router, workspace.activeLocation.id, workspace.organization.id]);
+  const realtime = useRealtimeInvalidation({
+    enabled: Boolean(model),
+    channelName: `operations-${workspace.organization.id}-${workspace.activeLocation.id}`,
+    bindings: operationsRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
 
   function run(
     successMessage: string,
@@ -2999,9 +2934,7 @@ export function LiveTasksWorkspace({
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill tone="positive" dot>
-              Connected
-            </StatusPill>
+            <StatusPill tone="neutral">Server-backed</StatusPill>
             <StatusPill tone={canManage ? "positive" : "neutral"}>
               {canManage ? "Management controls" : "Staff controls"}
             </StatusPill>
@@ -3028,6 +2961,7 @@ export function LiveTasksWorkspace({
           </Button>
         ) : null}
       </div>
+      <RealtimeSyncStatus {...realtime} />
       {notice ? (
         <div
           role="status"

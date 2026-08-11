@@ -25,6 +25,7 @@ import {
   finalizeManualCsvImportAction,
   retryIntegrationSyncAction,
 } from "@/app/actions/workflows/integrations";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
@@ -52,11 +53,22 @@ import {
   retryDelayMinutes,
 } from "@/lib/integrations/adapters";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { IntegrationProvider } from "@/types";
 
 type ActivityTab = "syncs" | "imports" | "events" | "audit";
+
+const integrationRealtimeBindings = [
+  { table: "integration_connections", scope: "organization" },
+  { table: "integration_sync_jobs", scope: "organization" },
+  { table: "import_jobs", scope: "organization" },
+  { table: "integration_events", events: ["INSERT"], scope: "organization" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 const catalogProviders: readonly IntegrationProvider[] = [
   "toast",
@@ -643,21 +655,13 @@ export function LiveIntegrationsWorkspace({
     };
   }, [busy, importOpen, overlayOpen]);
 
-  useEffect(() => {
-    if (!model) return;
-    const supabase = createClient();
-    const refresh = () => router.refresh();
-    const channel = supabase
-      .channel(`integrations-${workspace.organization.id}-${workspace.activeLocation.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "integration_connections", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "integration_sync_jobs", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "import_jobs", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "integration_events", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [model, router, workspace.activeLocation.id, workspace.organization.id]);
+  const realtime = useRealtimeInvalidation({
+    enabled: Boolean(model),
+    channelName: `integrations-${workspace.organization.id}-${workspace.activeLocation.id}`,
+    bindings: integrationRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
 
   const connectionGroups = useMemo(() => {
     const groups = new Map<string, LiveIntegrationConnection[]>();
@@ -848,7 +852,7 @@ export function LiveIntegrationsWorkspace({
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill tone="positive" dot>Tenant scoped</StatusPill>
+            <StatusPill tone="neutral">Tenant scoped</StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">{model.locationName}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Integrations</h2>
@@ -864,6 +868,8 @@ export function LiveIntegrationsWorkspace({
           <StatusPill tone="neutral">View only</StatusPill>
         )}
       </div>
+
+      <RealtimeSyncStatus {...realtime} />
 
       {message ? (
         <div role="status" className="mt-5 flex items-start gap-3 rounded-[16px] bg-[var(--accent-soft)]/45 px-4 py-3 text-xs leading-4 text-[var(--accent-strong)]">

@@ -83,7 +83,8 @@ describe("connected Inventory UI", () => {
       />,
     );
 
-    expect(markup).toContain("Connected");
+    expect(markup).toContain("Server-backed");
+    expect(markup).toContain("Connecting live updates");
     expect(markup).toContain("Main Dining Room");
     expect(markup).toContain("No tracked inventory yet");
     expect(markup).toContain("No approved count yet");

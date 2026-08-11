@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, BookOpenCheck, Check, ClipboardPenLine, LoaderCircle, Plus, Radio } from "lucide-react";
 import { acknowledgePreshiftAction, recordServiceAvailabilityAction, saveManagerLogAction, savePreshiftAction } from "@/app/actions/workflows/service-control";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
 import { ConversationLog } from "@/components/ui/conversation-log";
 import { PageFrame, SectionHeading } from "@/components/ui/page-frame";
@@ -11,29 +12,35 @@ import { StatusPill } from "@/components/ui/status-pill";
 import type { LiveServiceControlModel } from "@/data/read-models/service-control";
 import type { LiveReadResult } from "@/data/read-models/shared";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
-import { createClient } from "@/lib/supabase/client";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 
 const field = "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs outline-none focus:border-[var(--accent)]";
 const area = `${field} min-h-24 py-3`;
 const optional = (value: FormDataEntryValue | null) => String(value ?? "").trim() || null;
 const numberOrNull = (value: FormDataEntryValue | null) => String(value ?? "").trim() ? Number(value) : null;
 const sentence = (value: string) => value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+const serviceControlRealtimeBindings = [
+  { table: "service_availability_events", scope: "location" },
+  { table: "manager_log_entries", scope: "location" },
+  { table: "preshifts", scope: "location" },
+  { table: "preshift_acknowledgements", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 export function LiveServiceControlWorkspace({ workspace, result }: { workspace: WorkspaceContextValue; result: LiveReadResult<LiveServiceControlModel> }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    if (workspace.mode !== "live") return;
-    const supabase = createClient();
-    const channel = supabase.channel(`service-control:${workspace.activeLocation.id}`);
-    for (const table of ["service_availability_events", "manager_log_entries", "preshifts", "preshift_acknowledgements"] as const) {
-      channel.on("postgres_changes", { event: "*", schema: "public", table, filter: `location_id=eq.${workspace.activeLocation.id}` }, () => router.refresh());
-    }
-    channel.subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [router, workspace.activeLocation.id, workspace.mode]);
+  const realtime = useRealtimeInvalidation({
+    enabled: workspace.mode === "live" && result.ok,
+    channelName: `service-control:${workspace.activeLocation.id}`,
+    bindings: serviceControlRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
 
   if (!result.ok) return <PageFrame><p role="alert" className="rounded-2xl bg-[var(--danger-soft)] p-5 text-sm text-[var(--danger)]">{result.message}</p></PageFrame>;
   const model = result.data;
@@ -56,7 +63,8 @@ export function LiveServiceControlWorkspace({ workspace, result }: { workspace: 
   }
 
   return <PageFrame>
-    <section className="rounded-[26px] bg-[var(--graphite)] p-6 text-white sm:p-8"><div className="flex flex-wrap items-center gap-2"><StatusPill tone="positive" dot className="bg-white/[0.08] text-white">Realtime</StatusPill><span className="text-xs text-white/50">{workspace.activeLocation.name}</span></div><h2 className="mt-4 text-3xl font-medium tracking-[-0.05em]">Service control</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Availability, shift handoff, and the published pre-shift—one shared operating picture without invented reservation data.</p></section>
+    <section className="rounded-[26px] bg-[var(--graphite)] p-6 text-white sm:p-8"><div className="flex flex-wrap items-center gap-2"><StatusPill tone="neutral" className="bg-white/[0.08] text-white">Server snapshot</StatusPill><span className="text-xs text-white/50">{workspace.activeLocation.name}</span></div><h2 className="mt-4 text-3xl font-medium tracking-[-0.05em]">Service control</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Availability, shift handoff, and the published pre-shift—one shared operating picture without invented reservation data.</p></section>
+    <RealtimeSyncStatus {...realtime} />
     {notice ? <p role="status" className="mt-4 rounded-xl bg-[var(--accent-soft)] px-4 py-3 text-xs text-[var(--accent-strong)]">{notice}</p> : null}
     <section className="mt-8"><SectionHeading eyebrow="Live availability" title="Running low & 86" detail="Internal status only; Toast is not changed." />
       {model.canManageAvailability ? <form onSubmit={availabilitySubmit} className="grid gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 md:grid-cols-6"><select aria-label="Availability item type" name="subjectType" className={field}><option value="menu_item">Menu item</option><option value="component">Component</option></select><input required name="subjectLabel" placeholder="Item or component" className={`${field} md:col-span-2`} /><select aria-label="Availability status" name="status" className={field}><option value="running_low">Running low</option><option value="eighty_sixed">86</option><option value="restored">Restored</option><option value="available">Available</option></select><input name="estimatedPortions" type="number" min="0" step="0.001" placeholder="Portions" className={field} /><Button type="submit" variant="accent" disabled={busy}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <Radio className="size-4" />}Update</Button><input name="reason" placeholder="Reason (optional)" className={`${field} md:col-span-3`} /><input name="notes" placeholder="Team note (optional)" className={`${field} md:col-span-3`} /></form> : null}

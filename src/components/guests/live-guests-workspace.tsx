@@ -27,7 +27,6 @@ import { useRouter } from "next/navigation";
 import {
   type FormEvent,
   type ReactNode,
-  useEffect,
   useId,
   useMemo,
   useState,
@@ -39,6 +38,7 @@ import {
   saveGuestAction,
 } from "@/app/actions/workflows/guests";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ConversationLog } from "@/components/ui/conversation-log";
@@ -59,10 +59,18 @@ import {
 } from "@/lib/actions/action-registry";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
-import { createClient } from "@/lib/supabase/client";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { cn, formatMoney } from "@/lib/utils";
 
 type Filter = "all" | "vip" | "allergies" | "recent";
+
+const guestRealtimeBindings = [
+  { table: "guests", scope: "organization" },
+  { table: "reservations", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 interface PendingGuestMerge {
   source: LiveGuestDuplicateProfile;
@@ -294,38 +302,13 @@ export function LiveGuestsWorkspace({
     });
   }, [canReadSensitiveGuestContext, filter, model, recentCutoff]);
 
-  useEffect(() => {
-    if (!model) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel(
-        `guest-crm-${workspace.organization.id}-${workspace.activeLocation.id}`,
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "guests",
-          filter: `organization_id=eq.${workspace.organization.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "reservations",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [model, router, workspace.activeLocation.id, workspace.organization.id]);
+  const realtime = useRealtimeInvalidation({
+    enabled: Boolean(model),
+    channelName: `guest-crm-${workspace.organization.id}-${workspace.activeLocation.id}`,
+    bindings: guestRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
 
   if (!result.ok || !model) {
     return (
@@ -542,9 +525,7 @@ export function LiveGuestsWorkspace({
       <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
           <div className="flex items-center gap-2">
-            <StatusPill tone="positive" dot>
-              Connected
-            </StatusPill>
+            <StatusPill tone="neutral">Server-backed</StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">
               Tenant-wide CRM · human-controlled changes
             </span>
@@ -579,6 +560,7 @@ export function LiveGuestsWorkspace({
           ) : null}
         </div>
       </header>
+      <RealtimeSyncStatus {...realtime} />
 
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric

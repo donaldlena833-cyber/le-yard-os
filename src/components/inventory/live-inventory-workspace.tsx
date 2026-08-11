@@ -24,13 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-  type FormEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import {
   approveInventoryCountAction,
   configureInventoryCatalogAction,
@@ -43,6 +37,7 @@ import {
   submitWasteRecordAction,
 } from "@/app/actions/workflows/inventory";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
 import {
   InventoryCatalogWorkspace,
@@ -78,7 +73,10 @@ import {
   resolveWorkMode,
   type ActionResolutionContext,
 } from "@/lib/actions/action-registry";
-import { createClient } from "@/lib/supabase/client";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { hasCapability } from "@/lib/permissions/capabilities";
 import {
   parseInventoryMoneyToCents,
@@ -106,6 +104,15 @@ const tabs: Array<{ id: Tab; label: string }> = [
   { id: "waste", label: "Waste" },
   { id: "catalog", label: "Setup" },
 ];
+
+const inventoryRealtimeBindings = [
+  { table: "inventory_counts", scope: "location" },
+  { table: "inventory_transactions", scope: "location" },
+  { table: "purchase_orders", scope: "location" },
+  { table: "deliveries", scope: "location" },
+  { table: "waste_records", scope: "location" },
+  { table: "inventory_transfers", scope: "organization" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 const statusTone: Record<
   string,
@@ -1863,71 +1870,13 @@ export function LiveInventoryWorkspace({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    if (!model) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`inventory-${workspace.activeLocation.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "inventory_counts",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "inventory_transactions",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "purchase_orders",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "deliveries",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "waste_records",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "inventory_transfers" },
-        () => router.refresh(),
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [model, router, workspace.activeLocation.id]);
+  const realtime = useRealtimeInvalidation({
+    enabled: Boolean(model),
+    channelName: `inventory-${workspace.activeLocation.id}`,
+    bindings: inventoryRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
 
   const visibleItems = useMemo(() => {
     if (!model) return [];
@@ -2155,9 +2104,7 @@ export function LiveInventoryWorkspace({
         }
         status={
           <>
-            <StatusPill tone="positive" dot>
-              Connected
-            </StatusPill>
+            <StatusPill tone="neutral">Server-backed</StatusPill>
             <span>Ledger-backed · tenant scoped</span>
           </>
         }
@@ -2191,6 +2138,7 @@ export function LiveInventoryWorkspace({
           </>
         }
       />
+      <RealtimeSyncStatus {...realtime} />
 
       {notice ? (
         <div

@@ -27,6 +27,7 @@ import {
   requestTimeCorrectionAction,
   startBreakAction,
 } from "@/app/actions/workflows/time";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
@@ -39,8 +40,16 @@ import type {
 import type { LiveReadResult } from "@/data/read-models/shared";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
-import { createClient } from "@/lib/supabase/client";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { cn } from "@/lib/utils";
+
+const timeClockRealtimeBindings = [
+  { table: "time_entries", scope: "location" },
+  { table: "time_entry_corrections", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 function useCurrentTime() {
   const [now, setNow] = useState<Date | null>(null);
@@ -322,36 +331,13 @@ export function LiveTimeClockWorkspace({
   const [decisionNote, setDecisionNote] = useState("");
   const { requestIdFor, rotateRequestId } = useStableRequestIds();
 
-  useEffect(() => {
-    if (!model) return;
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`time-clock-${workspace.activeLocation.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "time_entries",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "time_entry_corrections",
-          filter: `location_id=eq.${workspace.activeLocation.id}`,
-        },
-        () => router.refresh(),
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [model, router, workspace.activeLocation.id]);
+  const realtime = useRealtimeInvalidation({
+    enabled: Boolean(model),
+    channelName: `time-clock-${workspace.activeLocation.id}`,
+    bindings: timeClockRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
 
   const correctionEntry = model?.recentEntries.find((entry) => entry.id === correctionEntryId) ?? null;
   const missedRow = model?.roster.find((row) => row.employeeId === missedEmployeeId) ?? null;
@@ -487,9 +473,10 @@ export function LiveTimeClockWorkspace({
   return (
     <PageFrame width="wide">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div><div className="flex items-center gap-2"><StatusPill tone="positive" dot>Connected</StatusPill><span className="text-xs text-[var(--ink-faint)]">Server-timestamped · auditable</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Time clock</h2><p className="mt-1 text-[13px] text-[var(--ink-faint)]">Punches, breaks, exceptions, and approvals for {workspace.activeLocation.name}.</p></div>
+        <div><div className="flex items-center gap-2"><StatusPill tone="neutral">Server-backed</StatusPill><span className="text-xs text-[var(--ink-faint)]">Server-timestamped · auditable</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Time clock</h2><p className="mt-1 text-[13px] text-[var(--ink-faint)]">Punches, breaks, exceptions, and approvals for {workspace.activeLocation.name}.</p></div>
         <span className="flex items-center gap-2 text-xs text-[var(--ink-faint)]"><MapPin className="size-3.5" />{model.timeZone}</span>
       </div>
+      <RealtimeSyncStatus {...realtime} />
 
       <section className="relative mt-5 overflow-hidden rounded-[26px] bg-[var(--graphite)] p-5 text-white sm:p-7 lg:p-8" aria-label="Your live time clock">
         <div className="absolute inset-0 workspace-grid opacity-20" />

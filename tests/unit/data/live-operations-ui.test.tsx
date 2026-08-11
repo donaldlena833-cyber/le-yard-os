@@ -91,7 +91,8 @@ describe("connected Operations UI", () => {
       />,
     );
 
-    expect(markup).toContain("Connected");
+    expect(markup).toContain("Server-backed");
+    expect(markup).toContain("Connecting live updates");
     expect(markup).toContain("Management controls");
     expect(markup).toContain("Main Dining Room");
     expect(markup).toContain("No tasks in this location scope");

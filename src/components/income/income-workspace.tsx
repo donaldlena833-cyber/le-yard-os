@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { InlineNotice } from "@/components/ui/inline-notice";
@@ -25,7 +26,22 @@ import type {
   IncomeHourlyBucket,
   IncomeOperatingModel,
 } from "@/lib/income/model";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { cn } from "@/lib/utils";
+
+const incomeRealtimeBindings = [
+  { table: "service_shifts", scope: "location" },
+  { table: "time_entries", scope: "location" },
+  { table: "time_breaks", scope: "organization" },
+  { table: "shift_closeouts", scope: "location" },
+  { table: "expenses", scope: "location" },
+  { table: "deliveries", scope: "location" },
+  { table: "waste_records", scope: "location" },
+  { table: "reservations", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 function currency(cents: number | null, code: string): string {
   if (cents === null) return "—";
@@ -314,16 +330,29 @@ function SlowBusySummary({ model }: { model: IncomeOperatingModel }) {
 export function IncomeWorkspace({
   result,
   locationName,
+  realtimeScope,
   demo = false,
 }: {
   result: LiveReadResult<IncomeOperatingModel>;
   locationName: string;
+  realtimeScope?: { organizationId: string; locationId: string };
   demo?: boolean;
 }) {
   const router = useRouter();
+  const realtime = useRealtimeInvalidation({
+    enabled: !demo && Boolean(realtimeScope) && result.ok,
+    channelName: `income-${realtimeScope?.organizationId ?? "disabled"}-${realtimeScope?.locationId ?? "disabled"}`,
+    bindings: incomeRealtimeBindings,
+    organizationId: realtimeScope?.organizationId ?? "",
+    locationId: realtimeScope?.locationId ?? "",
+  });
   useEffect(() => {
     if (demo) return;
-    const timer = window.setInterval(() => router.refresh(), 60_000);
+    // Service-role sales evidence cannot be exposed through browser Realtime.
+    // Keep a low-frequency authoritative refresh as the safe provider fallback.
+    const timer = window.setInterval(() => {
+      if (navigator.onLine) router.refresh();
+    }, 60_000);
     return () => window.clearInterval(timer);
   }, [demo, router]);
 
@@ -413,6 +442,7 @@ export function IncomeWorkspace({
           ))}
         </nav>
       </header>
+      <RealtimeSyncStatus {...realtime} />
 
       {liveUnavailable ? (
         <InlineNotice
