@@ -65,6 +65,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "44444444-4444-4444-8444-444444444444",
   role: "manager",
   organizationWide: false,
+  capabilities: [],
 };
 
 const model: LiveMessagesModel = {
@@ -116,7 +117,9 @@ describe("connected Messages channel configuration", () => {
     });
     fireEvent.click(within(panel).getByRole("button", { name: "Create" }));
     expect(await within(panel).findByText("Temporary database error.")).toBeTruthy();
-    fireEvent.click(within(panel).getByRole("button", { name: "Create" }));
+    const retryButton = within(panel).getByRole("button", { name: "Create" }) as HTMLButtonElement;
+    await waitFor(() => expect(retryButton.disabled).toBe(false));
+    fireEvent.click(retryButton);
     expect(await within(panel).findByText("Channel created with server-validated access.")).toBeTruthy();
 
     await waitFor(() => expect(createChatChannelAction).toHaveBeenCalledTimes(2));

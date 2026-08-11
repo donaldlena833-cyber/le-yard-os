@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 
 const root = process.cwd();
 const migrationsDirectory = join(root, "supabase", "migrations");
@@ -13,7 +14,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
     return sequence <= 18 || sequence === 21;
   })
   .sort();
-const db = new PGlite({ extensions: { pgcrypto, pg_trgm } });
+const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
 
 const bootstrap = `
   create schema if not exists extensions;

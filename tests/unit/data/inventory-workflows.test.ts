@@ -5,6 +5,7 @@ import {
   createInventoryTransfer,
   createPurchaseOrder,
   receiveInventoryDelivery,
+  recordInventoryItemCost,
   reviewInventoryTransfer,
   reviewWasteRecord,
   submitWasteRecord,
@@ -180,6 +181,31 @@ describe("extended inventory workflow RPC contracts", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it("records a vendor-neutral unit cost with actor-derived tenant scope", async () => {
+    const { workflow, rpc } = context("owner");
+    await recordInventoryItemCost(workflow, {
+      requestId: ids.request,
+      locationId: ids.location,
+      inventoryItemId: ids.item,
+      unitId: ids.unit,
+      priceQuantity: 1000,
+      unitPriceCents: 7,
+      effectiveAt: "2026-08-09T12:00:00.000Z",
+      notes: "Opening gram cost",
+    });
+    expect(rpc).toHaveBeenCalledWith("record_inventory_item_cost", {
+      p_request_id: ids.request,
+      p_organization_id: ids.organization,
+      p_location_id: ids.location,
+      p_inventory_item_id: ids.item,
+      p_unit_id: ids.unit,
+      p_price_quantity: 1000,
+      p_unit_price_cents: 7,
+      p_effective_at: "2026-08-09T12:00:00.000Z",
+      p_notes: "Opening gram cost",
+    });
+  });
+
   it("blocks self-review before waste or transfer decision RPCs", async () => {
     const { workflow, rpc } = context();
     const from = workflow.supabase.from as unknown as ReturnType<typeof vi.fn>;
@@ -195,7 +221,7 @@ describe("extended inventory workflow RPC contracts", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it("derives catalog tenant scope and allows only an Owner/Admin command", async () => {
+  it("derives catalog tenant scope and requires the precise Manager capability", async () => {
     const { workflow, rpc } = context("admin");
     await configureInventoryCatalog(workflow, {
       requestId: ids.request,
@@ -234,6 +260,12 @@ describe("extended inventory workflow RPC contracts", () => {
       isBase: true,
       isActive: true,
     })).rejects.toMatchObject({ code: "forbidden" });
-    expect(manager.rpc).not.toHaveBeenCalled();
+    expect(manager.rpc).toHaveBeenCalledTimes(1);
+    expect(manager.rpc).toHaveBeenCalledWith("has_capability", {
+      p_capability_key: "inventory.unit.manage",
+      p_location_id: ids.location,
+      p_organization_id: ids.organization,
+    });
+    expect(manager.rpc).not.toHaveBeenCalledWith("configure_kitchen_foundation", expect.anything());
   });
 });

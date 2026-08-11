@@ -120,7 +120,7 @@ export const ownerDraftOperatingAssumptions = {
   },
 } as const satisfies OwnerDraftOperatingAssumptions;
 
-export const demoWorkspace: DemoWorkspace = {
+const demoWorkspaceBase: DemoWorkspace = {
   asOf: "2026-08-01T14:30:00-04:00",
   ownerDraftOperatingAssumptions,
   organizations: [
@@ -395,5 +395,81 @@ export const demoWorkspace: DemoWorkspace = {
     { id: "audit-ai-proposal", organizationId: orgId, locationId: gardenId, actorId: null, actorType: "system", action: "ai.proposed_inventory_adjustment", entityType: "ai_insight", entityId: "ai-insight-produce", occurredAt: "2026-07-31T10:42:00-04:00", ipAddressMasked: null, metadata: { confidence: 0.91, automaticallyExecuted: false, humanApprovalRequired: true }, immutable: true },
   ],
 };
+
+export const saturdayServiceSimulation = {
+  id: "saturday-service",
+  label: "Saturday service simulation",
+  businessDate: "2026-04-18",
+  observedAt: "2026-04-18T20:00:00-04:00",
+  openedOn: "2025-11-18",
+  monthsInService: 5,
+  synthetic: true,
+} as const;
+
+const SATURDAY_SERVICE_DATE_SHIFT_DAYS = -105;
+
+function shiftSimulationDate(value: string): string {
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    const shifted = new Date(`${value}T12:00:00.000Z`);
+    shifted.setUTCDate(shifted.getUTCDate() + SATURDAY_SERVICE_DATE_SHIFT_DAYS);
+    return shifted.toISOString().slice(0, 10);
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
+    const shifted = new Date(value);
+    if (Number.isNaN(shifted.valueOf())) return value;
+    shifted.setUTCDate(shifted.getUTCDate() + SATURDAY_SERVICE_DATE_SHIFT_DAYS);
+    return shifted.toISOString();
+  }
+
+  return value;
+}
+
+function shiftSimulationDates<T>(value: T): T {
+  if (typeof value === "string") return shiftSimulationDate(value) as T;
+  if (Array.isArray(value)) return value.map(shiftSimulationDates) as T;
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [key, shiftSimulationDates(entry)]),
+  ) as T;
+}
+
+export function createSaturdayServiceWorkspace(): DemoWorkspace {
+  const shifted = shiftSimulationDates(demoWorkspaceBase);
+  return {
+    ...shifted,
+    asOf: saturdayServiceSimulation.observedAt,
+    ownerDraftOperatingAssumptions: {
+      ...shifted.ownerDraftOperatingAssumptions,
+      updatedAt: "2026-04-16T12:00:00-04:00",
+    },
+    organizations: shifted.organizations.map((organization) => ({
+      ...organization,
+      name: "Le Yard — Saturday Service Preview",
+      slug: "le-yard-saturday-preview",
+      createdAt: `${saturdayServiceSimulation.openedOn}T10:00:00-05:00`,
+      updatedAt: saturdayServiceSimulation.observedAt,
+    })),
+    locations: shifted.locations.map((location, index) =>
+      index === 0
+        ? {
+            ...location,
+            name: "Le Yard",
+            slug: "le-yard",
+            updatedAt: saturdayServiceSimulation.observedAt,
+          }
+        : location,
+    ),
+  };
+}
+
+export const isSaturdayServicePreview =
+  process.env.NEXT_PUBLIC_SERVICE_SIMULATION === saturdayServiceSimulation.id;
+
+export const demoWorkspace: DemoWorkspace = isSaturdayServicePreview
+  ? createSaturdayServiceWorkspace()
+  : demoWorkspaceBase;
 
 export type DemoWorkspaceData = DemoWorkspace;

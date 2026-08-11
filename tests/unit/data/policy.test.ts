@@ -62,12 +62,9 @@ describe("server actor scope policy", () => {
     expect(requireLocationManagement(actor("admin"), orgA, locB).role).toBe("admin");
   });
 
-  it("requires AAL2 for owner write operations", () => {
-    expectForbidden(() => requireOrganizationOperations(actor("owner"), orgA));
-    expectForbidden(() => requireLocationManagement(actor("owner"), orgA, locB));
-    expect(requireOrganizationOperations(actor("owner", { aal: "aal2" }), orgA).role).toBe(
-      "owner",
-    );
+  it("allows password-authenticated owners to perform scoped writes", () => {
+    expect(requireOrganizationOperations(actor("owner"), orgA).role).toBe("owner");
+    expect(requireLocationManagement(actor("owner"), orgA, locB).role).toBe("owner");
   });
 
   it("allows assigned managers to operate but never employees", () => {
@@ -81,4 +78,3 @@ describe("server actor scope policy", () => {
     expect(canRequestOrganizationWideReport(actor("manager").memberships[0])).toBe(false);
   });
 });
-

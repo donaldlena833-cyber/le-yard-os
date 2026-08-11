@@ -14,6 +14,9 @@ import {
 import { useMemo, useState } from "react";
 
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
+import { ReadState } from "@/components/ui/read-state";
+import { ResponsiveDataView } from "@/components/ui/responsive-data-view";
+import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { StatusPill } from "@/components/ui/status-pill";
 import { demoWorkspace } from "@/lib/demo";
@@ -144,6 +147,14 @@ export function ReportsWorkspace() {
 
   const invalidRange = filters.startsOn > filters.endsOn;
   const visibleLocations = workspace.locations;
+  const primaryColumn = report.columns[0];
+  const supportingColumns = report.columns.slice(1);
+  const responsiveColumns = report.columns.map((column) => ({
+    key: column.key,
+    label: column.label,
+    align: column.align,
+    render: (row: (typeof report.rows)[number]) => row.cells[column.key] || "—",
+  }));
 
   return (
     <PageFrame width="full" className="max-w-[1700px]">
@@ -151,10 +162,10 @@ export function ReportsWorkspace() {
         <div>
           <div className="flex items-center gap-2">
             <StatusPill tone="positive" dot>Source-backed</StatusPill>
-            <span className="text-[10px] text-[var(--ink-faint)]">Synthetic workspace · {demoWorkspace.asOf.slice(0, 10)}</span>
+            <span className="text-xs text-[var(--ink-faint)]">Synthetic workspace · {demoWorkspace.asOf.slice(0, 10)}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Reports</h2>
-          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">Operational evidence, freshness, and exports in one working surface.</p>
+          <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Operational evidence, freshness, and exports in one working surface.</p>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_170px_170px]">
@@ -164,7 +175,7 @@ export function ReportsWorkspace() {
             <select
               value={filters.locationId}
               onChange={(event) => updateFilter("locationId", event.target.value)}
-              className="h-10 w-full appearance-none rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-7 pl-9 text-[11px] font-semibold outline-none"
+              className="h-10 w-full appearance-none rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-7 pl-9 text-[13px] font-semibold outline-none"
             >
               <option value="all">Le Yard</option>
               {visibleLocations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
@@ -177,7 +188,7 @@ export function ReportsWorkspace() {
               type="date"
               value={filters.startsOn}
               onChange={(event) => updateFilter("startsOn", event.target.value)}
-              className="h-10 min-w-0 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-2 pl-9 text-[11px] font-semibold outline-none"
+              className="h-10 min-w-0 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-2 pl-9 text-[13px] font-semibold outline-none"
             />
           </label>
           <label className="relative">
@@ -188,7 +199,7 @@ export function ReportsWorkspace() {
               value={filters.endsOn}
               onChange={(event) => updateFilter("endsOn", event.target.value)}
               className={cn(
-                "h-10 min-w-0 w-full rounded-xl border bg-[var(--paper-strong)] pr-2 pl-9 text-[11px] font-semibold outline-none",
+                "h-10 min-w-0 w-full rounded-xl border bg-[var(--paper-strong)] pr-2 pl-9 text-[13px] font-semibold outline-none",
                 invalidRange ? "border-[var(--danger)]" : "border-[var(--line)]",
               )}
             />
@@ -198,7 +209,7 @@ export function ReportsWorkspace() {
 
       <div className="mt-6 lg:hidden">
         <label>
-          <span className="mb-1.5 block text-[10px] font-semibold text-[var(--ink-faint)]">Report view</span>
+          <span className="mb-1.5 block text-xs font-semibold text-[var(--ink-faint)]">Report view</span>
           <select
             value={kind}
             onChange={(event) => setKind(event.target.value as ReportKind)}
@@ -209,28 +220,21 @@ export function ReportsWorkspace() {
         </label>
       </div>
 
-      <nav aria-label="Report views" className="mt-6 hidden overflow-x-auto border-y border-[var(--line)] lg:block">
-        <div role="tablist" className="flex min-w-max items-center">
-          {REPORT_CATALOG.map((item) => (
-            <button
-              key={item.kind}
-              role="tab"
-              aria-selected={kind === item.kind}
-              onClick={() => setKind(item.kind)}
-              className={cn(
-                "relative min-h-12 px-3.5 text-[10px] font-semibold text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]",
-                kind === item.kind && "text-[var(--ink)]",
-              )}
-            >
-              {item.label}
-              {kind === item.kind ? <motion.span layoutId="report-tab" className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-[var(--accent)]" /> : null}
-            </button>
-          ))}
-        </div>
-      </nav>
+      <Tabs
+        id="demo-report-views"
+        label="Report views"
+        className="mt-6 hidden border-y lg:flex"
+        size="large"
+        items={REPORT_CATALOG.map((item) => ({
+          value: item.kind,
+          label: item.label,
+        }))}
+        value={kind}
+        onValueChange={setKind}
+      />
 
       {invalidRange ? (
-        <div role="alert" className="mt-4 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-[11px] text-[var(--danger)]">The start date must be on or before the end date.</div>
+        <div role="alert" className="mt-4 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-[13px] text-[var(--danger)]">The start date must be on or before the end date.</div>
       ) : null}
 
       <AnimatePresence mode="wait">
@@ -241,11 +245,12 @@ export function ReportsWorkspace() {
           exit={{ opacity: 0, y: -5 }}
           transition={{ duration: 0.2 }}
         >
+          <TabPanel id="demo-report-views" value={kind}>
           <div className="mt-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
               <p className="eyebrow">{REPORT_CATALOG.find((item) => item.kind === kind)?.group}</p>
               <h3 className="mt-2 text-xl font-medium tracking-[-0.04em]">{report.title}</h3>
-              <p className="mt-1 max-w-2xl text-[11px] leading-5 text-[var(--ink-faint)]">{report.description}</p>
+              <p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">{report.description}</p>
             </div>
             <div className="flex gap-2">
               <ExportLink href={exportHref("csv", kind, filters)} format="CSV" />
@@ -270,15 +275,15 @@ export function ReportsWorkspace() {
               <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
                 <div className="flex gap-3 py-4">
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[var(--positive)]" />
-                  <div><p className="text-[11px] font-semibold">{report.sourceLabel}</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Primary records for this view</p></div>
+                  <div><p className="text-[13px] font-semibold">{report.sourceLabel}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Primary records for this view</p></div>
                 </div>
                 <div className="flex gap-3 py-4">
                   <Clock3 className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" />
-                  <div><p className="text-[11px] font-semibold">Fresh {formatFreshness(report.freshnessAt)}</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Newest included source update</p></div>
+                  <div><p className="text-[13px] font-semibold">Fresh {formatFreshness(report.freshnessAt)}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Newest included source update</p></div>
                 </div>
                 <div className="flex gap-3 py-4">
                   <Info className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" />
-                  <p className="text-[10px] leading-4 text-[var(--ink-soft)]">{report.coverageNote}</p>
+                  <p className="text-xs leading-4 text-[var(--ink-soft)]">{report.coverageNote}</p>
                 </div>
               </div>
             </aside>
@@ -289,30 +294,32 @@ export function ReportsWorkspace() {
               eyebrow="Source rows"
               title={`${report.rows.length} matching record${report.rows.length === 1 ? "" : "s"}`}
               detail={`${filters.startsOn} through ${filters.endsOn}`}
-              action={<span className="flex items-center gap-1.5 text-[9px] text-[var(--ink-faint)]"><BarChart3 className="size-3" /> Values preserve source precision</span>}
+              action={<span className="flex items-center gap-1.5 text-xs text-[var(--ink-faint)]"><BarChart3 className="size-3" /> Values preserve source precision</span>}
             />
-            <div role="region" aria-label={`${report.title} source records`} tabIndex={0} className="overflow-x-auto border-y border-[var(--line)]">
-              <table className="w-full min-w-[760px] border-collapse text-left">
-                <thead className="bg-[var(--canvas-strong)]">
-                  <tr>
-                    {report.columns.map((column) => (
-                      <th key={column.key} scope="col" className={cn("px-4 py-2.5 text-[9px] font-semibold tracking-[0.1em] text-[var(--ink-faint)] uppercase", column.align === "right" && "text-right")}>{column.label}</th>
+            <ResponsiveDataView
+              items={report.rows}
+              columns={responsiveColumns}
+              getItemKey={(row) => row.id}
+              label={`${report.title} source records`}
+              empty={<ReadState compact state="empty" title="No matching source records" description="Adjust the report, location, or date filters to broaden the evidence window." />}
+              renderCard={(row) => (
+                <div>
+                  <p className="text-sm font-semibold text-[var(--ink)]">
+                    {primaryColumn ? row.cells[primaryColumn.key] || "—" : "Source record"}
+                  </p>
+                  <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+                    {supportingColumns.map((column) => (
+                      <div key={column.key} className={column.align === "right" ? "text-right" : undefined}>
+                        <dt className="text-[11px] font-semibold tracking-[0.08em] text-[var(--ink-faint)] uppercase">{column.label}</dt>
+                        <dd className={cn("mt-1 text-xs capitalize text-[var(--ink-soft)]", column.align === "right" && "numeric font-semibold text-[var(--ink)]")}>{row.cells[column.key] || "—"}</dd>
+                      </div>
                     ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--line)]">
-                  {report.rows.map((row) => (
-                    <tr key={row.id} className="transition-colors hover:bg-[var(--paper)]">
-                      {report.columns.map((column) => (
-                        <td key={column.key} className={cn("px-4 py-3.5 text-[10px] capitalize text-[var(--ink-soft)]", column.align === "right" && "numeric text-right font-semibold text-[var(--ink)]")}>{row.cells[column.key] || "—"}</td>
-                      ))}
-                    </tr>
-                  ))}
-                  {!report.rows.length ? <tr><td colSpan={report.columns.length} className="px-5 py-12 text-center text-[11px] text-[var(--ink-faint)]">No source records match these filters.</td></tr> : null}
-                </tbody>
-              </table>
-            </div>
+                  </dl>
+                </div>
+              )}
+            />
           </section>
+          </TabPanel>
         </motion.div>
       </AnimatePresence>
     </PageFrame>

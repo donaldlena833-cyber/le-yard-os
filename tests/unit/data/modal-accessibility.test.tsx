@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { useRef, useState } from "react";
+import { Modal } from "@/components/ui/modal";
 import { useModalDialog } from "@/lib/accessibility/use-modal-dialog";
 
 function TestDialog({ onClose }: { onClose: () => void }) {
@@ -26,6 +27,24 @@ function Harness() {
     <main>
       <button type="button" onClick={() => setOpen(true)}>Open dialog</button>
       {open ? <TestDialog onClose={() => setOpen(false)} /> : null}
+    </main>
+  );
+}
+
+function SharedModalHarness() {
+  const [open, setOpen] = useState(false);
+  return (
+    <main>
+      <button type="button" onClick={() => setOpen(true)}>Open shared modal</button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        labelledBy="shared-modal-title"
+        initialFocusSelector="[data-modal-initial]"
+      >
+        <h2 id="shared-modal-title">Shared modal</h2>
+        <button data-modal-initial type="button">First action</button>
+      </Modal>
     </main>
   );
 }
@@ -58,6 +77,24 @@ describe("modal accessibility contract", () => {
     expect(trigger.inert).toBe(false);
     expect(trigger.hasAttribute("aria-hidden")).toBe(false);
     expect(document.body.style.overflow).toBe("");
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("gives the shared modal an accessible name and restores trigger focus", async () => {
+    render(<SharedModalHarness />);
+    const trigger = screen.getByRole("button", { name: "Open shared modal" });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    expect(screen.getByRole("dialog", { name: "Shared modal" })).toBeTruthy();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "First action" }),
+      ),
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.activeElement).toBe(trigger);
   });
 });

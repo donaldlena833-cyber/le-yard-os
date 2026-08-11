@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 
 const root = process.cwd();
 const migrationsDirectory = join(root, "supabase", "migrations");
@@ -10,7 +11,7 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 
-const db = new PGlite({ extensions: { pgcrypto, pg_trgm } });
+const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
 
 async function expectDatabaseError(sql, expectedCode, label) {
   try {
@@ -405,14 +406,12 @@ try {
       false
     );
   `);
-  await expectDatabaseError(
+  await db.exec(
     `insert into storage.objects (id, bucket_id, name, owner_id) values (
       '90000000-0000-4000-8000-000000000033', 'receipts',
       '20000000-0000-4000-8000-000000000001/global/owner-aal1-global.pdf',
       '10000000-0000-4000-8000-000000000001'
     )`,
-    "42501",
-    "owner AAL1 global storage insert",
   );
   await db.exec(`
     select set_config(
@@ -427,7 +426,47 @@ try {
     );
     reset role;
   `);
-  process.stdout.write("PASS strict storage path, tenant/location, role, and AAL policies\n");
+  process.stdout.write("PASS strict storage path, tenant/location, role, and password-authenticated Owner policies\n");
+
+  // The synthetic seed is a fixed business snapshot, while the clock-in RPC
+  // intentionally validates against the database clock. Add an isolated,
+  // currently active published shift so the verifier stays portable over time
+  // without mutating immutable seed evidence or weakening the production guard.
+  await db.exec(`
+    reset role;
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
+      false
+    );
+    insert into public.schedules (
+      id, organization_id, location_id, week_start, status, version, created_by
+    ) values (
+      '6f000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      date_trunc('week', current_date)::date,
+      'draft', 99,
+      '10000000-0000-4000-8000-000000000001'
+    );
+    insert into public.shifts (
+      id, organization_id, location_id, schedule_id, employee_id, job_role_id,
+      starts_at, ends_at, status, is_open
+    ) values (
+      '6f100000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      '6f000000-0000-4000-8000-000000000001',
+      '50000000-0000-4000-8000-000000000005',
+      '40000000-0000-4000-8000-000000000001',
+      clock_timestamp() - interval '1 hour',
+      clock_timestamp() + interval '5 hours',
+      'scheduled', false
+    );
+    set role authenticated;
+    select public.publish_schedule('6f000000-0000-4000-8000-000000000001', 'Portable clock verifier');
+    reset role;
+  `);
 
   await db.exec(`
     set role authenticated;
@@ -452,13 +491,13 @@ try {
       'a0000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
       '40000000-0000-4000-8000-000000000001',
-      '61000000-0000-4000-8000-000000000001'
+      '6f100000-0000-4000-8000-000000000001'
     );
     select public.record_clock_in(
       'a0000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
       '40000000-0000-4000-8000-000000000001',
-      '61000000-0000-4000-8000-000000000001'
+      '6f100000-0000-4000-8000-000000000001'
     );
     select public.start_time_break(
       'a2000000-0000-4000-8000-000000000001',
@@ -519,11 +558,16 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.publish_schedule('60000000-0000-4000-8000-000000000001', null);
     select public.publish_schedule('60000000-0000-4000-8000-000000000001', null);
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}',
+      false
+    );
   `);
   await expectDatabaseError(
     `update public.schedules
@@ -540,6 +584,11 @@ try {
     "chat message immutable timestamp guard",
   );
   await db.exec(`
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
+      false
+    );
     insert into public.shift_closeouts (
       id, organization_id, location_id, business_date, shift_label, submitted_by
     ) values (
@@ -547,7 +596,7 @@ try {
       '20000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
       date '2026-08-01', 'guard-test',
-      '10000000-0000-4000-8000-000000000004'
+      '10000000-0000-4000-8000-000000000001'
     );
     insert into public.closeout_attachments (
       id, organization_id, closeout_id, storage_path, file_name, uploaded_by
@@ -557,12 +606,12 @@ try {
       'a3000000-0000-4000-8000-000000000001',
       '20000000-0000-4000-8000-000000000001/30000000-0000-4000-8000-000000000001/terminal-closeout.pdf',
       'terminal-closeout.pdf',
-      '10000000-0000-4000-8000-000000000004'
+      '10000000-0000-4000-8000-000000000001'
     );
     insert into storage.objects (id, bucket_id, name, owner_id) values (
       '90000000-0000-4000-8000-000000000041', 'closeouts',
       '20000000-0000-4000-8000-000000000001/30000000-0000-4000-8000-000000000001/terminal-closeout.pdf',
-      '10000000-0000-4000-8000-000000000004'
+      '10000000-0000-4000-8000-000000000001'
     );
     select set_config(
       'request.jwt.claims',
@@ -712,6 +761,10 @@ try {
   ) {
     throw new Error(`Terminal storage evidence guard failed: ${JSON.stringify(terminalStorage)}`);
   }
+  await db.query(
+    "select set_config('request.jwt.claims', $1, false)",
+    ['{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}'],
+  );
   const workflowCounts = await db.query(`
     select
       (select count(*)::integer from public.inventory_counts where id = 'a5000000-0000-4000-8000-000000000001') as inventory_headers,
@@ -728,6 +781,10 @@ try {
   ) {
     throw new Error(`Workflow retry verification failed: ${JSON.stringify(workflow)}`);
   }
+  await db.query(
+    "select set_config('request.jwt.claims', $1, false)",
+    ['{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}'],
+  );
   await expectDatabaseError(
     `select public.approve_inventory_count(
        'a5200000-0000-4000-8000-000000000099',
@@ -853,7 +910,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
       false
     );
   `);
@@ -990,7 +1047,7 @@ try {
   }
   process.stdout.write("PASS canonical shift claim/reopen and actor-bound swap workflows\n");
 
-  // 009: Owner AAL1 receives only the minimal workspace/MFA context.
+  // 032: password-authenticated Owner receives the normal tenant workspace.
   await db.exec(`
     reset role;
     set role authenticated;
@@ -1017,16 +1074,14 @@ try {
   if (
     ownerAal1.organizations !== 1 ||
     ownerAal1.locations !== 2 ||
-    ownerAal1.organization_memberships !== 1 ||
-    ownerAal1.profiles !== 1 ||
-    ownerAal1.employees !== 0 ||
-    ownerAal1.receipts !== 0 ||
-    ownerAal1.tasks !== 0 ||
-    ownerAal1.audit_events !== 0 ||
-    ownerAal1.invitations !== 0 ||
-    ownerAal1.storage_objects !== 0
+    ownerAal1.organization_memberships < 1 ||
+    ownerAal1.profiles < 5 ||
+    ownerAal1.employees < 6 ||
+    ownerAal1.tasks < 1 ||
+    ownerAal1.audit_events < 1 ||
+    ownerAal1.storage_objects < 1
   ) {
-    throw new Error(`Owner AAL1 read boundary failed: ${JSON.stringify(ownerAal1)}`);
+    throw new Error(`Password-authenticated Owner read boundary failed: ${JSON.stringify(ownerAal1)}`);
   }
   await db.exec(`
     select set_config(
@@ -1043,7 +1098,7 @@ try {
   `);
   const ownerAal2 = ownerAal2Query.rows[0];
   if (ownerAal2.employees < 6 || ownerAal2.audit_events < 1 || ownerAal2.storage_objects < 1) {
-    throw new Error(`Owner AAL2 access restoration failed: ${JSON.stringify(ownerAal2)}`);
+    throw new Error(`Optional MFA Owner access failed: ${JSON.stringify(ownerAal2)}`);
   }
   await db.exec(`
     select public.administer_organization_member(
@@ -1602,13 +1657,17 @@ try {
        '20000000-0000-4000-8000-000000000001',
        '30000000-0000-4000-8000-000000000001',
        'b5000000-0000-4000-8000-000000000001',
-       current_date, 'forged', 'approved', 100, 100,
+       (clock_timestamp() at time zone 'America/New_York')::date,
+       'forged', 'approved', 100, 100,
        '10000000-0000-4000-8000-000000000003', now(), now(),
        '10000000-0000-4000-8000-000000000004'
      )`,
     "42501",
     "forged approved tip run insert",
   );
+  // The CI database session runs in UTC while the synthetic restaurant is in
+  // America/New_York. Derive closeout business dates in the location timezone
+  // so late-evening labor is not incorrectly assigned to the next UTC day.
   await db.exec(`
     select set_config(
       'request.jwt.claims',
@@ -1623,7 +1682,8 @@ try {
       'b5050000-0000-4000-8000-000000000001',
       '20000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
-      current_date, 'security-follow-up-tip-run',
+      (clock_timestamp() at time zone 'America/New_York')::date,
+      'security-follow-up-tip-run',
       100000, 90000, 9000, 1000, 0,
       '10000000-0000-4000-8000-000000000004'
     );
@@ -1803,7 +1863,8 @@ try {
       'b5200000-0000-4000-8000-000000000001',
       '20000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
-      current_date, 'maker-checker-closeout',
+      (clock_timestamp() at time zone 'America/New_York')::date,
+      'maker-checker-closeout',
       100000, 90000, 0,
       '10000000-0000-4000-8000-000000000004'
     );
@@ -2146,24 +2207,28 @@ try {
       '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
       false
     );
-    select public.save_guest(
+    select public.service_save_guest(
       'c2000000-0000-4000-8000-000000000001',
-      '20000000-0000-4000-8000-000000000001', null,
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001', null,
       'Source', 'Guest', 'Source Guest', 'source@example.invalid', null,
       date '1990-01-01', false, 'Window', null, 'Source profile'
     );
-    select public.save_guest(
+    select public.service_save_guest(
       'c2000000-0000-4000-8000-000000000001',
-      '20000000-0000-4000-8000-000000000001', null,
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001', null,
       'Source', 'Guest', 'Source Guest', 'source@example.invalid', null,
       date '1990-01-01', false, 'Window', null, 'Source profile'
     );
-    select public.save_guest(
+    select public.service_save_guest(
       'c2010000-0000-4000-8000-000000000001',
-      '20000000-0000-4000-8000-000000000001', null,
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001', null,
       'Target', 'Guest', 'Target Guest', 'target@example.invalid', null,
       date '1988-02-02', true, null, 'Shellfish', null
     );
+    set role service_role;
     select public.save_guest_contact(
       'c2100000-0000-4000-8000-000000000001',
       'c2000000-0000-4000-8000-000000000001', null,
@@ -2174,17 +2239,21 @@ try {
       'c2010000-0000-4000-8000-000000000001', null,
       'email', 'Primary', 'target@example.invalid', true
     );
-    select public.add_guest_note(
+    set role authenticated;
+    select public.service_add_guest_note(
       'c2200000-0000-4000-8000-000000000001',
       'c2000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
       'Prefers a quiet corner.', false
     );
-    select public.record_guest_consent(
+    select public.service_record_guest_consent(
       'c2210000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
       'c2000000-0000-4000-8000-000000000001',
       'email', 'granted', 'Recorded in person.'
     );
+    set role service_role;
     select public.assign_guest_tag(
       'c2310000-0000-4000-8000-000000000001',
       'c2000000-0000-4000-8000-000000000001',
@@ -2219,7 +2288,13 @@ try {
         '30000000-0000-4000-8000-000000000001', false,
         clock_timestamp() - interval '20 days', clock_timestamp() - interval '1 day',
         3, 2000
-      );
+      )
+    on conflict (guest_id, location_id) do update set
+      is_home_location = excluded.is_home_location,
+      first_visit_at = excluded.first_visit_at,
+      last_visit_at = excluded.last_visit_at,
+      visit_count = excluded.visit_count,
+      spend_cents = excluded.spend_cents;
     insert into public.incidents (
       id, organization_id, location_id, incident_type, occurred_at,
       description, severity, status, reported_by, involved_employee_ids,
@@ -2240,29 +2315,36 @@ try {
       '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
       false
     );
+    set role service_role;
     select public.save_guest_contact(
       'c2130000-0000-4000-8000-000000000001',
       'c2000000-0000-4000-8000-000000000001',
       'c2100000-0000-4000-8000-000000000001',
       'email', 'Updated', 'source-updated@example.invalid', true
     );
-    select public.merge_guests(
+    set role authenticated;
+    select public.service_merge_guests(
       'c2400000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
       'c2000000-0000-4000-8000-000000000001',
       'c2010000-0000-4000-8000-000000000001',
       0.98, '["same-party-confirmation"]'::jsonb
     );
-    select public.merge_guests(
+    select public.service_merge_guests(
       'c2400000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
       'c2000000-0000-4000-8000-000000000001',
       'c2010000-0000-4000-8000-000000000001',
       0.98, '["same-party-confirmation"]'::jsonb
     );
   `);
   await expectDatabaseError(
-    `select public.save_guest(
+    `select public.service_save_guest(
        'c2020000-0000-4000-8000-000000000001',
-       '20000000-0000-4000-8000-000000000001', null,
+       '20000000-0000-4000-8000-000000000001',
+       '30000000-0000-4000-8000-000000000001', null,
        null, null, 'Future Guest', null, null,
        current_date + 1, false, null, null, null
      )`,
@@ -2313,15 +2395,20 @@ try {
     "direct reservation evidence insert",
   );
   await expectDatabaseError(
-    `select public.save_guest(
+    `select public.service_save_guest(
        'c2020000-0000-4000-8000-000000000002',
-       '20000000-0000-4000-8000-000000000002', null,
+       '20000000-0000-4000-8000-000000000002',
+       '30000000-0000-4000-8000-000000000003', null,
        null, null, 'Cross tenant guest', null, null,
        null, false, null, null, null
      )`,
     "42501",
     "cross-tenant guest command",
   );
+  await db.exec(`
+    reset role;
+    select set_config('request.jwt.claims', '{}', false);
+  `);
   const crmEvidenceQuery = await db.query(`
     select
       (select merged_into_id from public.guests
@@ -2696,7 +2783,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.publish_schedule(

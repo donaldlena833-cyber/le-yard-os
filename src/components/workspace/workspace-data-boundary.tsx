@@ -41,14 +41,14 @@ export function WorkspaceDataBoundary({
           <div className="rounded-2xl bg-[var(--canvas)] p-4">
             <ShieldCheck className="size-4 text-[var(--positive)]" />
             <p className="mt-3 text-xs font-semibold">Safety preserved</p>
-            <p className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">
+            <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
               Tenant RLS, workflow RPCs, and audit guards remain active. No restaurant record was changed.
             </p>
           </div>
           <div className="rounded-2xl bg-[var(--canvas)] p-4">
             <Cable className="size-4 text-[var(--accent-strong)]" />
             <p className="mt-3 text-xs font-semibold">Next launch step</p>
-            <p className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">
+            <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
               Connect the approved preview project, run the live acceptance suite, then enable this surface.
             </p>
           </div>

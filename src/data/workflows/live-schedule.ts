@@ -6,8 +6,6 @@ import {
   throwDatabaseError,
   WorkflowError,
 } from "../errors";
-import { requireLocationManagement } from "../policy";
-import { requireManagedLocation } from "../resources";
 import type { WorkflowContext } from "../execute";
 import {
   addIsoDays,
@@ -76,7 +74,7 @@ export interface DecideSwapInput {
 }
 
 async function loadManagedDraft(
-  { supabase, actor }: WorkflowContext,
+  { supabase }: WorkflowContext,
   scheduleId: string,
 ) {
   const { data, error } = await supabase
@@ -86,7 +84,6 @@ async function loadManagedDraft(
     .maybeSingle();
   if (error) throwDatabaseError(error, "The schedule could not be loaded.");
   const schedule = assertFound(data, "The schedule was not found.");
-  requireLocationManagement(actor, schedule.organization_id, schedule.location_id);
   assertCondition(schedule.status === "draft", "conflict", "Only draft schedules can be edited.");
   return schedule;
 }
@@ -128,206 +125,57 @@ export async function createLiveSchedule(
   context: WorkflowContext,
   input: CreateScheduleInput,
 ) {
-  const { supabase, actor } = context;
-  const location = await requireManagedLocation(supabase, actor, input.locationId);
-  const { data: settings, error: settingsError } = await supabase
-    .from("organization_settings")
-    .select("week_starts_on")
-    .eq("organization_id", location.organizationId)
-    .maybeSingle();
-  if (settingsError) throwDatabaseError(settingsError, "The scheduling settings could not be loaded.");
-  const configuredWeekday = settings?.week_starts_on ?? 1;
+  const { data, error } = await context.supabase.rpc("create_schedule_draft", {
+    p_request_id: input.requestId,
+    p_location_id: input.locationId,
+    p_week_start: input.weekStart,
+    p_template_id: input.templateId ?? null,
+  });
+  if (error) throwDatabaseError(error, "The schedule could not be created atomically.");
+  const result = assertFound(data, "The created schedule was not returned.");
   assertCondition(
-    new Date(`${input.weekStart}T00:00:00Z`).getUTCDay() === configuredWeekday,
-    "validation",
-    "The schedule date must match the organization’s configured week start.",
+    typeof result === "object" && !Array.isArray(result),
+    "database",
+    "The created schedule result was malformed.",
   );
-  const { data: existingById, error: existingError } = await supabase
-    .from("schedules")
-    .select("id, organization_id, location_id, week_start, template_id, status, version")
-    .eq("id", input.requestId)
-    .maybeSingle();
-  if (existingError) throwDatabaseError(existingError);
-  if (existingById) {
-    assertCondition(
-      existingById.organization_id === location.organizationId &&
-        existingById.location_id === location.id &&
-        existingById.week_start === input.weekStart &&
-        existingById.template_id === (input.templateId ?? null),
-      "conflict",
-      "This request ID was already used for another schedule.",
-    );
-    return { id: existingById.id, status: existingById.status, version: existingById.version, alreadyApplied: true };
-  }
-
-  let templateShifts: {
-    weekday: number;
-    starts_at: string;
-    ends_at: string;
-    job_role_id: string;
-    employee_id: string | null;
-    break_minutes: number;
-    notes: string | null;
-  }[] = [];
-  if (input.templateId) {
-    const { data: template, error: templateError } = await supabase
-      .from("schedule_templates")
-      .select("id, organization_id, location_id, is_active")
-      .eq("id", input.templateId)
-      .maybeSingle();
-    if (templateError) throwDatabaseError(templateError, "The schedule template could not be loaded.");
-    const templateRow = assertFound(template, "The schedule template was not found.");
-    assertCondition(
-      templateRow.organization_id === location.organizationId &&
-        templateRow.location_id === location.id &&
-        templateRow.is_active,
-      "forbidden",
-      "The template is not available for this location.",
-    );
-    const { data, error } = await supabase
-      .from("schedule_template_shifts")
-      .select("weekday, starts_at, ends_at, job_role_id, employee_id, break_minutes, notes")
-      .eq("organization_id", location.organizationId)
-      .eq("template_id", templateRow.id);
-    if (error) throwDatabaseError(error, "Template shifts could not be loaded.");
-    templateShifts = data ?? [];
-  }
-
-  const { data: versions, error: versionError } = await supabase
-    .from("schedules")
-    .select("version")
-    .eq("organization_id", location.organizationId)
-    .eq("location_id", location.id)
-    .eq("week_start", input.weekStart)
-    .order("version", { ascending: false })
-    .limit(1);
-  if (versionError) throwDatabaseError(versionError);
-  const version = (versions?.[0]?.version ?? 0) + 1;
-  const { data: inserted, error: insertError } = await supabase
-    .from("schedules")
-    .insert({
-      id: input.requestId,
-      organization_id: location.organizationId,
-      location_id: location.id,
-      week_start: input.weekStart,
-      version,
-      template_id: input.templateId ?? null,
-      created_by: actor.userId,
-      status: "draft",
-    })
-    .select("id, status, version")
-    .single();
-  if (insertError) throwDatabaseError(insertError, "The schedule could not be created.");
-
-  if (templateShifts.length) {
-    try {
-      const timeZone = await locationTimeZone(context, location.organizationId, location.id);
-      const scheduleWeekday = new Date(`${input.weekStart}T00:00:00Z`).getUTCDay();
-      const rows = templateShifts.map((shift) => {
-        const date = addIsoDays(input.weekStart, (shift.weekday - scheduleWeekday + 7) % 7);
-        const { start, end } = concreteTimes(
-          date,
-          shift.starts_at.slice(0, 5),
-          shift.ends_at.slice(0, 5),
-          timeZone,
-        );
-        return {
-          organization_id: location.organizationId,
-          location_id: location.id,
-          schedule_id: inserted.id,
-          employee_id: shift.employee_id,
-          job_role_id: shift.job_role_id,
-          starts_at: start,
-          ends_at: end,
-          break_minutes: shift.break_minutes,
-          status: shift.employee_id ? ("scheduled" as const) : ("open" as const),
-          is_open: !shift.employee_id,
-          notes: shift.notes,
-        };
-      });
-      const { error } = await supabase.from("shifts").insert(rows);
-      if (error) throw error;
-    } catch (error) {
-      await supabase.from("schedules").delete().eq("id", inserted.id).eq("status", "draft");
-      throwDatabaseError(error, "The template could not be applied safely; the empty draft was removed.");
-    }
-  }
-
-  return { id: inserted.id, status: inserted.status, version: inserted.version, alreadyApplied: false };
+  assertCondition(
+    typeof result.id === "string" &&
+      typeof result.status === "string" &&
+      typeof result.version === "number" &&
+      typeof result.replayed === "boolean",
+    "database",
+    "The created schedule result was incomplete.",
+  );
+  return {
+    id: result.id,
+    status: result.status,
+    version: result.version,
+    alreadyApplied: result.replayed,
+  };
 }
 
 export async function saveLiveScheduleTemplate(
   context: WorkflowContext,
   input: SaveScheduleTemplateInput,
 ) {
-  const { supabase, actor } = context;
-  const schedule = await loadManagedDraft(context, input.scheduleId);
-  const { data: existing, error: existingError } = await supabase
-    .from("schedule_templates")
-    .select("id, organization_id, location_id, name")
-    .eq("id", input.requestId)
-    .maybeSingle();
-  if (existingError) throwDatabaseError(existingError);
-  if (existing) {
-    assertCondition(
-      existing.organization_id === schedule.organization_id &&
-        existing.location_id === schedule.location_id &&
-        existing.name === input.name,
-      "conflict",
-      "This request ID was already used for another template.",
-    );
-    return { id: existing.id, alreadyApplied: true };
-  }
-
-  const { data: shifts, error: shiftError } = await supabase
-    .from("shifts")
-    .select("employee_id, job_role_id, starts_at, ends_at, break_minutes, notes")
-    .eq("organization_id", schedule.organization_id)
-    .eq("schedule_id", schedule.id)
-    .neq("status", "cancelled")
-    .order("starts_at");
-  if (shiftError) throwDatabaseError(shiftError, "The schedule shifts could not be loaded.");
-  assertCondition(Boolean(shifts?.length), "conflict", "Add at least one shift before saving a template.");
-
-  const { data: template, error: templateError } = await supabase
-    .from("schedule_templates")
-    .insert({
-      id: input.requestId,
-      organization_id: schedule.organization_id,
-      location_id: schedule.location_id,
-      name: input.name,
-      description: `Saved from schedule week ${schedule.week_start}`,
-      created_by: actor.userId,
-      is_active: true,
-    })
-    .select("id")
-    .single();
-  if (templateError) throwDatabaseError(templateError, "The schedule template could not be created.");
-
-  try {
-    const timeZone = await locationTimeZone(context, schedule.organization_id, schedule.location_id);
-    const rows = shifts!.map((shift) => {
-      const start = localDateTimeParts(shift.starts_at, timeZone);
-      const end = localDateTimeParts(shift.ends_at, timeZone);
-      return {
-        organization_id: schedule.organization_id,
-        template_id: template.id,
-        weekday: new Date(`${start.date}T00:00:00Z`).getUTCDay(),
-        starts_at: start.time,
-        ends_at: end.time,
-        job_role_id: shift.job_role_id,
-        employee_id: shift.employee_id,
-        break_minutes: shift.break_minutes,
-        notes: shift.notes,
-      };
-    });
-    const { error } = await supabase.from("schedule_template_shifts").insert(rows);
-    if (error) throw error;
-  } catch (error) {
-    await supabase.from("schedule_templates").delete().eq("id", template.id);
-    throwDatabaseError(error, "The reusable template could not be saved.");
-  }
-  return { id: template.id, alreadyApplied: false };
+  const { data, error } = await context.supabase.rpc("save_schedule_template", {
+    p_request_id: input.requestId,
+    p_schedule_id: input.scheduleId,
+    p_name: input.name,
+  });
+  if (error) throwDatabaseError(error, "The reusable template could not be saved atomically.");
+  const result = assertFound(data, "The saved schedule template was not returned.");
+  assertCondition(
+    typeof result === "object" && !Array.isArray(result),
+    "database",
+    "The saved schedule template result was malformed.",
+  );
+  assertCondition(
+    typeof result.id === "string" && typeof result.replayed === "boolean",
+    "database",
+    "The saved schedule template result was incomplete.",
+  );
+  return { id: result.id, alreadyApplied: result.replayed };
 }
 
 export async function createLiveShift(context: WorkflowContext, input: ShiftWriteInput) {

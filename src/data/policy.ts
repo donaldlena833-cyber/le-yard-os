@@ -38,18 +38,12 @@ export function requireManagementRead(
   return membership;
 }
 
-/** Mirrors can_operate_org: managers/admins, plus owners with an AAL2 session. */
+/** Mirrors can_operate_org: active management roles; MFA is currently optional. */
 export function requireOrganizationOperations(
   actor: AuthenticatedActor,
   organizationId: string,
 ): ActorMembership {
   const membership = requireManagementRead(actor, organizationId);
-  if (membership.role === "owner" && actor.aal !== "aal2") {
-    throw new WorkflowError(
-      "forbidden",
-      "Owner write actions require multi-factor authentication.",
-    );
-  }
   return membership;
 }
 
@@ -68,7 +62,7 @@ export function requireLocationAccess(
   return membership;
 }
 
-/** Mirrors can_manage_location, including the owner's AAL2 requirement. */
+/** Mirrors can_manage_location; MFA is currently optional for Owners. */
 export function requireLocationManagement(
   actor: AuthenticatedActor,
   organizationId: string,
@@ -77,12 +71,6 @@ export function requireLocationManagement(
   const membership = requireLocationAccess(actor, organizationId, locationId);
   if (membership.role === "employee") {
     throw new WorkflowError("forbidden", "Location management access is required.");
-  }
-  if (membership.role === "owner" && actor.aal !== "aal2") {
-    throw new WorkflowError(
-      "forbidden",
-      "Owner write actions require multi-factor authentication.",
-    );
   }
   return membership;
 }

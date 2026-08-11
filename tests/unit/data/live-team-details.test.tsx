@@ -85,6 +85,7 @@ function workspace(role: WorkspaceContextValue["role"] = "owner"): WorkspaceCont
     membershipId: "40000000-0000-4000-8000-000000000001",
     role,
     organizationWide: role === "owner" || role === "admin",
+    capabilities: [],
   };
 }
 

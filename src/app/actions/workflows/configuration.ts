@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import {
   createChatChannelInputSchema,
+  configureJobRoleCapabilityInputSchema,
   saveExpenseCategoryInputSchema,
   setChatChannelArchivedInputSchema,
   setExpenseCategoryActiveInputSchema,
@@ -11,11 +12,23 @@ import {
 import { executeWorkflowAction } from "@/data/execute";
 import {
   createChatChannel,
+  configureJobRoleCapability,
   saveExpenseCategory,
   setChatChannelArchived,
   setExpenseCategoryActive,
   setPrivateChatChannelMembers,
 } from "@/data/workflows/configuration";
+
+export async function configureJobRoleCapabilityAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "capability.job-role.configure",
+    schema: configureJobRoleCapabilityInputSchema,
+    input,
+    run: configureJobRoleCapability,
+  });
+  if (result.ok && result.persisted) revalidateConfiguration(["/settings"]);
+  return result;
+}
 
 function revalidateConfiguration(paths: readonly string[]) {
   for (const path of paths) revalidatePath(path);

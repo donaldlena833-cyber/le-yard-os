@@ -63,14 +63,14 @@ describe("TOTP factor selection", () => {
 });
 
 describe("Owner workspace MFA gate", () => {
-  it("blocks only live Owners below AAL2", () => {
+  it("keeps MFA optional for every workspace session", () => {
     expect(
       requiresOwnerMfaGate({
         mode: "live",
         role: "owner",
         identity: { aal: "aal1" },
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       requiresOwnerMfaGate({
         mode: "live",

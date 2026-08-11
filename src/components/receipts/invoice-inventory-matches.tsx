@@ -38,7 +38,7 @@ export function InvoiceInventoryMatches({
     return (
       <section className="mt-7 border-t border-[var(--line)] pt-6">
         <SectionHeading title="Inventory assignment" detail="No line items were recognized yet." />
-        <div className="mt-3 flex items-start gap-3 rounded-xl bg-[var(--accent-soft)]/45 p-4 text-[10px] leading-4 text-[var(--accent-strong)]">
+        <div className="mt-3 flex items-start gap-3 rounded-xl bg-[var(--accent-soft)]/45 p-4 text-xs leading-4 text-[var(--accent-strong)]">
           <Sparkles className="mt-0.5 size-4 shrink-0" />
           <span>OCR or an intelligence provider can populate line items later. The review surface is ready and will never post an inventory adjustment without manager confirmation.</span>
         </div>
@@ -60,10 +60,10 @@ export function InvoiceInventoryMatches({
           return (
             <div key={key} className="rounded-xl bg-[var(--canvas)] p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="min-w-0 flex-1 truncate text-[10px] font-semibold">{line.description}</p>
+                <p className="min-w-0 flex-1 truncate text-xs font-semibold">{line.description}</p>
                 {confident ? <StatusPill tone="positive">{Math.round(line.confidence * 100)}%</StatusPill> : <StatusPill tone="warning"><TriangleAlert className="size-3" /> Review</StatusPill>}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[9px] text-[var(--ink-faint)]">
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-faint)]">
                 <span className="flex-1">{line.inventoryItemName ? `→ ${line.inventoryItemName} · ${line.reason}` : line.reason}</span>
                 <Button
                   variant={isAssigned ? "quiet" : "secondary"}
@@ -92,7 +92,7 @@ export function InvoiceInventoryMatches({
           );
         })}
       </div>
-      {!compact ? <p className="mt-3 text-[9px] leading-4 text-[var(--ink-faint)]">Assignments are staged for review in this release. Posting delivery lines and price history remains a separate manager-approved action.</p> : null}
+      {!compact ? <p className="mt-3 text-xs leading-4 text-[var(--ink-faint)]">Assignments are staged for review in this release. Posting delivery lines and price history remains a separate manager-approved action.</p> : null}
     </section>
   );
 }

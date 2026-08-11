@@ -23,8 +23,8 @@ See [Known limitations](docs/known-limitations.md) for the precise boundary betw
 
 - The displayed physical address is the owner-supplied `858 9th Ave, New York, NY 10019`.
 - All staff, job codes, schedules, conversations, receipts, inventory, guest, financial, and report content is synthetic. Playground edits reset and are not shared or persisted as restaurant records.
-- The two temporary identities are playground-only Owner principals, not Supabase production accounts. Passwords are represented only by server-side salted scrypt hashes; plaintext passwords must never enter source control, Vercel variables, logs, or support messages.
-- An eight-hour signed, `HttpOnly`, `Secure` cookie carries the playground session. This convenience gate is not a substitute for Supabase Auth, MFA, production invitations, RLS, or the production Owner bootstrap.
+- The temporary identities are playground-only principals, not Supabase production accounts. Passwords are represented only by server-side salted scrypt hashes; plaintext passwords must never enter source control, Vercel variables, logs, or support messages.
+- A signed, `HttpOnly`, `Secure` cookie carries the playground session for eight hours by default or 30 days when explicitly selected on a private device. This convenience gate is not a substitute for Supabase Auth, MFA, production invitations, RLS, or the production Owner bootstrap.
 - The Vercel Production URL is public and must be treated as discoverable. Workspace content still requires the application-level two-Owner login, and unauthenticated requests fail closed. Do not rely on URL secrecy as a security control.
 - Login throttling is best-effort and per compute instance. The playground remains limited to the two owners; broader testing requires Vercel Deployment Protection or an approved durable shared rate limiter.
 - Hosted mode must match the Vercel target exactly: `preview` only with `VERCEL_ENV=preview`, or `production-playground` only with `VERCEL_ENV=production`. Any mismatch or incomplete server-only configuration must fail closed.
@@ -39,21 +39,23 @@ See [Known limitations](docs/known-limitations.md) for the precise boundary betw
 - Messages: all-staff, location, and management channels with unread state, reactions, attachments, announcements, and read state
 - Vendors & purchasing: vendor contacts, current food prices, open orders, and price context for kitchen planning
 - Closeout and tips: sales/cash reconciliation, attachments, approval lock, versioned tip rules, cent-safe distribution, explanations, and payroll CSV
+- Income: permission-aware live revenue, accrued labor, recorded operating costs, source freshness, and 7/28/56-day hourly busy/slow planning profiles
 - Receipts: private upload/review surface, paginated search, stored extraction evidence, duplicate decisions, and approved expense/delivery links
 - Inventory: catalog, units, vendors, counts, purchasing, transfers, waste, price history, recipe costing, and variance signals
 - Guests: unified CRM, visits, spend, preferences, allergies, VIP, consent, reservations, deduplication, and export
+- Reservations: realtime day book, floor/table control, pacing, waitlist/walk-ins, secure public booking and management API, guest delivery, push, and PWA shortcuts
 - Tasks and SOPs: assignments, versioned checklist/SOP authoring and publishing, photo evidence, acknowledgement, maintenance, and incident records
 - Reports: 14 operational report types with location/date filters plus real CSV and PDF output
 - Integrations: adapter registry, manual CSV import, sync attempts, retry state, and server-only credential boundary
 - Ask Le Yard: deterministic tenant-record search in connected mode, with citations, confidence, and mandatory human approval boundaries; external model calls are not part of this release
-- Settings: live organization, locations, role boundaries, MFA assurance, notification preferences, encrypted push-subscription custody, audit, export history, retention, backup evidence, and monitoring state
+- Settings: live organization, locations, role boundaries, optional MFA, notification preferences, encrypted push-subscription custody, audit, export history, retention, backup evidence, and monitoring state
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   Browser["Responsive PWA"] --> Next["Next.js App Router"]
-  Next --> Auth["Supabase Auth + MFA"]
+  Next --> Auth["Supabase Auth · password access · optional MFA"]
   Next --> Data["User-scoped Supabase client"]
   Data --> RLS["Postgres + forced RLS"]
   RLS --> Storage["Private Storage + signed URLs"]
@@ -107,6 +109,8 @@ Never run `supabase db reset`, the synthetic seed, or an unreviewed migration ag
 
 ## Verification
 
+Version 0.2 adds capability-backed operational authoring and service control. In connected mode, an effective Executive Chef job-role grant can author the kitchen catalog without receiving organization-security access. `/service` provides the internal realtime 86/running-low board, versioned Manager Log, and structured pre-shift acknowledgement flow. `/time-clock` is again a real connected route. These workflows remain tenant/location scoped and never substitute demo rows in connected mode.
+
 ```bash
 npm run lint
 npm run types:database:check
@@ -138,8 +142,8 @@ The tip engine uses integer cents and minutes, deterministic largest-remainder a
 - Every storage bucket is private; files use short-lived signed access.
 - Audit events and approved financial ledgers are immutable.
 - AI output must cite records, display confidence, and cannot silently mutate payroll, tips, punches, inventory, or guests.
-- Playground passwords are never stored in plaintext. The registry and session secret remain server-only and scoped to their Vercel target, and the signed session expires after eight hours.
-- Playground Owner identities are not Supabase Auth identities and do not satisfy the live-production MFA requirement.
+- Playground passwords are never stored in plaintext. The registry and session secret remain server-only and scoped to their Vercel target; the signed session expires after eight hours by default or 30 days only when explicitly selected.
+- Playground Owner identities are not Supabase Auth identities. Connected Owners currently use password-only access; enrolled Supabase MFA factors remain optional and are not removed by the application.
 - Authentication return paths accept only normalized origin-relative paths; absolute, scheme-relative, backslash, encoded-control, and off-origin redirects are rejected.
 - Connected CSV/PDF report exports use the authenticated tenant read model, refuse truncated evidence, and never substitute demo records. Raw whole-tenant/guest exports remain locked until an owner approves their destination and retention rule.
 - Owner-supplied operating assumptions remain visibly draft until their timing, eligibility, accounting, payroll, and compliance details are approved. Retention is unset, so the app performs no policy-driven automatic deletion.
@@ -167,6 +171,7 @@ docs/                     Operational and technical handoff
 - [Database and relationship model](docs/database.md)
 - [Permission matrix](docs/permission-matrix.md)
 - [Environment variables](docs/environment.md)
+- [Reservation platform and launch runbook](docs/reservations.md)
 - [Owner runbook](docs/owner-runbook.md)
 - [Backup and restore process](docs/backups.md)
 - [Integration framework](docs/integrations.md)
@@ -176,4 +181,4 @@ docs/                     Operational and technical handoff
 
 ## Deployment boundary
 
-The application is designed for Vercel and Supabase. The owners authorized a new, isolated, publicly reachable Vercel Production playground; they did not authorize changes to the existing public restaurant website or launch of a live back office. The playground remains login-gated, synthetic, resettable, and nonpersistent because a third free Supabase project is currently unavailable. Follow the live-production gate in the [owner runbook](docs/owner-runbook.md) only after the missing inputs, an isolated Supabase project, connected acceptance, and separate explicit live-production approval are present.
+The application is designed for Vercel and Supabase. The public restaurant website now contains the server-side reservation client and guest flow, but neither repository has been deployed by this work. The existing playground remains login-gated, synthetic, resettable, and nonpersistent because a third free Supabase project is currently unavailable. Follow the [reservation runbook](docs/reservations.md) and the live-production gate in the [owner runbook](docs/owner-runbook.md) only after the missing inputs, an isolated Supabase project, connected acceptance, and separate explicit live-production approval are present.

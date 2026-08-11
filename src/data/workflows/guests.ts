@@ -4,7 +4,6 @@ import {
   assertCondition,
   assertFound,
   throwDatabaseError,
-  WorkflowError,
 } from "../errors";
 import type {
   AddGuestNoteInput,
@@ -12,8 +11,11 @@ import type {
   RecordGuestConsentInput,
   SaveGuestInput,
 } from "../guest-schemas";
-import { requireManagementRead, requireOrganizationOperations } from "../policy";
-import { requireManagedLocation } from "../resources";
+import {
+  requireLocationAccess,
+  requireManagementRead,
+  requireOrganizationAccess,
+} from "../policy";
 import type { WorkflowContext } from "../execute";
 import type { SearchGuestsInput } from "../schemas";
 
@@ -67,7 +69,7 @@ async function requireGuest(
   organizationId: string,
   guestId: string,
 ) {
-  requireOrganizationOperations(context.actor, organizationId);
+  requireOrganizationAccess(context.actor, organizationId);
   const { data, error } = await context.supabase
     .from("guests")
     .select("id, organization_id, merged_into_id")
@@ -77,6 +79,29 @@ async function requireGuest(
   if (error) throwDatabaseError(error, "The guest could not be verified.");
   const guest = assertFound(data, "The guest was not found.");
   assertCondition(!guest.merged_into_id, "conflict", "This profile has already been merged.");
+  return guest;
+}
+
+async function requireMergeGuest(
+  context: WorkflowContext,
+  organizationId: string,
+  guestId: string,
+  allowedMergedIntoId: string | null,
+) {
+  requireOrganizationAccess(context.actor, organizationId);
+  const { data, error } = await context.supabase
+    .from("guests")
+    .select("id, organization_id, merged_into_id")
+    .eq("organization_id", organizationId)
+    .eq("id", guestId)
+    .maybeSingle();
+  if (error) throwDatabaseError(error, "The guest could not be verified.");
+  const guest = assertFound(data, "The guest was not found.");
+  assertCondition(
+    !guest.merged_into_id || guest.merged_into_id === allowedMergedIntoId,
+    "conflict",
+    "This profile has already been merged.",
+  );
   return guest;
 }
 
@@ -99,35 +124,19 @@ export async function saveGuest(
   context: WorkflowContext,
   input: SaveGuestInput,
 ) {
-  requireOrganizationOperations(context.actor, input.organizationId);
+  requireLocationAccess(
+    context.actor,
+    input.organizationId,
+    input.locationId,
+  );
   const values = guestValues(input);
-
-  if (values.email) {
-    const { data: duplicate, error: duplicateError } = await context.supabase
-      .from("guests")
-      .select("id")
-      .eq("organization_id", input.organizationId)
-      .is("merged_into_id", null)
-      .ilike("email", values.email)
-      .neq("id", input.guestId ?? input.requestId)
-      .limit(1)
-      .maybeSingle();
-    if (duplicateError) {
-      throwDatabaseError(duplicateError, "The guest contact could not be checked.");
-    }
-    if (duplicate) {
-      throw new WorkflowError(
-        "conflict",
-        "Another active guest already uses this email. Review the existing profile instead.",
-      );
-    }
-  }
 
   if (input.guestId) {
     await requireGuest(context, input.organizationId, input.guestId);
-    const { data, error } = await context.supabase.rpc("save_guest", {
+    const { data, error } = await context.supabase.rpc("service_save_guest", {
       p_request_id: input.requestId,
       p_organization_id: input.organizationId,
+      p_location_id: input.locationId,
       p_guest_id: input.guestId,
       p_first_name: values.first_name,
       p_last_name: values.last_name,
@@ -141,7 +150,12 @@ export async function saveGuest(
       p_notes: values.notes,
     });
     if (error) throwDatabaseError(error, "The guest profile could not be updated.");
-    const guest = assertFound(data, "The updated guest profile was not returned.");
+    const guest = assertFound(data?.[0], "The updated guest profile was not returned.");
+    assertCondition(
+      guest.id && guest.display_name && guest.updated_at,
+      "database",
+      "The updated guest result was incomplete.",
+    );
     return {
       id: guest.id,
       displayName: guest.display_name,
@@ -152,13 +166,14 @@ export async function saveGuest(
 
   const { data: existing, error: existingError } = await context.supabase
     .from("guests")
-    .select("id, organization_id, display_name, email")
+    .select("id, organization_id, display_name")
     .eq("id", input.requestId)
     .maybeSingle();
   if (existingError) throwDatabaseError(existingError, "The guest request could not be checked.");
-  const { data, error } = await context.supabase.rpc("save_guest", {
+  const { data, error } = await context.supabase.rpc("service_save_guest", {
     p_request_id: input.requestId,
     p_organization_id: input.organizationId,
+    p_location_id: input.locationId,
     p_guest_id: null,
     p_first_name: values.first_name,
     p_last_name: values.last_name,
@@ -172,7 +187,12 @@ export async function saveGuest(
     p_notes: values.notes,
   });
   if (error) throwDatabaseError(error, "The guest profile could not be created.");
-  const guest = assertFound(data, "The created guest profile was not returned.");
+  const guest = assertFound(data?.[0], "The created guest profile was not returned.");
+  assertCondition(
+    guest.id && guest.display_name && guest.updated_at,
+    "database",
+    "The created guest result was incomplete.",
+  );
   return {
     id: guest.id,
     displayName: guest.display_name,
@@ -186,34 +206,28 @@ export async function addGuestNote(
   input: AddGuestNoteInput,
 ) {
   await requireGuest(context, input.organizationId, input.guestId);
-  if (input.locationId) {
-    const location = await requireManagedLocation(
-      context.supabase,
-      context.actor,
-      input.locationId,
-    );
-    assertCondition(
-      location.organizationId === input.organizationId,
-      "forbidden",
-      "The note location is outside this organization.",
-    );
-  }
+  requireLocationAccess(
+    context.actor,
+    input.organizationId,
+    input.locationId,
+  );
 
   const { data: existing, error: existingError } = await context.supabase
     .from("guest_notes")
-    .select("id, organization_id, guest_id, note, is_sensitive")
+    .select("id, organization_id, guest_id")
     .eq("id", input.requestId)
     .maybeSingle();
   if (existingError) throwDatabaseError(existingError, "The note request could not be checked.");
-  const { data, error } = await context.supabase.rpc("add_guest_note", {
+  const { data, error } = await context.supabase.rpc("service_add_guest_note", {
     p_request_id: input.requestId,
     p_guest_id: input.guestId,
-    p_location_id: input.locationId ?? null,
+    p_location_id: input.locationId,
     p_note: input.note,
     p_is_sensitive: input.sensitive,
   });
   if (error) throwDatabaseError(error, "The hospitality note could not be added.");
-  const note = assertFound(data, "The hospitality note was not returned.");
+  const note = assertFound(data?.[0], "The hospitality note was not returned.");
+  assertCondition(note.id, "database", "The hospitality note result was incomplete.");
   return { id: note.id, created: existing === null };
 }
 
@@ -230,15 +244,25 @@ export async function recordGuestConsent(
   if (existingError) {
     throwDatabaseError(existingError, "The consent event could not be checked.");
   }
-  const { data, error } = await context.supabase.rpc("record_guest_consent", {
-    p_request_id: input.requestId,
-    p_guest_id: input.guestId,
-    p_channel: input.channel,
-    p_status: input.status,
-    p_evidence_note: input.evidenceNote ?? null,
-  });
+  const { data, error } = await context.supabase.rpc(
+    "service_record_guest_consent",
+    {
+      p_request_id: input.requestId,
+      p_organization_id: input.organizationId,
+      p_location_id: input.locationId,
+      p_guest_id: input.guestId,
+      p_channel: input.channel,
+      p_status: input.status,
+      p_evidence_note: input.evidenceNote ?? null,
+    },
+  );
   if (error) throwDatabaseError(error, "The consent event could not be recorded.");
-  const consent = assertFound(data, "The consent event was not returned.");
+  const consent = assertFound(data?.[0], "The consent event was not returned.");
+  assertCondition(
+    consent.id && consent.captured_at,
+    "database",
+    "The consent result was incomplete.",
+  );
   return { id: consent.id, created: existing === null };
 }
 
@@ -251,15 +275,31 @@ export async function mergeGuest(
   context: WorkflowContext,
   input: MergeGuestInput,
 ) {
-  const [sourceGuest, targetGuest] = await Promise.all([
-    requireGuest(context, input.organizationId, input.sourceGuestId),
-    requireGuest(context, input.organizationId, input.targetGuestId),
-  ]);
+  requireLocationAccess(
+    context.actor,
+    input.organizationId,
+    input.locationId,
+  );
   assertCondition(
-    sourceGuest.id !== targetGuest.id,
+    input.sourceGuestId !== input.targetGuestId,
     "validation",
     "Choose two different guest profiles.",
   );
+
+  await Promise.all([
+    requireMergeGuest(
+      context,
+      input.organizationId,
+      input.sourceGuestId,
+      input.targetGuestId,
+    ),
+    requireMergeGuest(
+      context,
+      input.organizationId,
+      input.targetGuestId,
+      null,
+    ),
+  ]);
 
   const { data: existing, error: existingError } = await context.supabase
     .from("guest_merge_events")
@@ -271,15 +311,25 @@ export async function mergeGuest(
     throwDatabaseError(existingError, "The guest merge request could not be checked.");
   }
 
-  const { data, error } = await context.supabase.rpc("merge_guests", {
+  const { data, error } = await context.supabase.rpc("service_merge_guests", {
     p_request_id: input.requestId,
-    p_source_guest_id: sourceGuest.id,
-    p_target_guest_id: targetGuest.id,
+    p_organization_id: input.organizationId,
+    p_location_id: input.locationId,
+    p_source_guest_id: input.sourceGuestId,
+    p_target_guest_id: input.targetGuestId,
     p_match_score: input.matchScore ?? null,
     p_reasons: input.reasons,
   });
   if (error) throwDatabaseError(error, "The guest profiles could not be merged.");
-  const event = assertFound(data, "The guest merge evidence was not returned.");
+  const event = assertFound(data?.[0], "The guest merge evidence was not returned.");
+  assertCondition(
+    event.id &&
+      event.source_guest_id &&
+      event.target_guest_id &&
+      event.merged_at,
+    "database",
+    "The guest merge result was incomplete.",
+  );
   return {
     id: event.id,
     sourceGuestId: event.source_guest_id,

@@ -197,11 +197,6 @@ export async function exportTipPayroll(
     "Only Owners or Admins may create a payroll export.",
   );
   assertCondition(
-    membership.role !== "owner" || context.actor.aal === "aal2",
-    "forbidden",
-    "Owner payroll exports require multi-factor authentication.",
-  );
-  assertCondition(
     run.status === "approved" &&
       Number(run.distributable_cents) === Number(run.allocated_cents),
     "conflict",

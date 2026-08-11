@@ -94,7 +94,6 @@ export function zonedLocalToIso(
     Number(timeMatch[2]),
     Number(timeMatch[3] ?? 0),
   );
-  let candidate = desired;
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -106,11 +105,13 @@ export function zonedLocalToIso(
     hourCycle: "h23",
   });
 
-  for (let iteration = 0; iteration < 3; iteration += 1) {
+  const representedLocalTime = (instant: number) => {
     const parts = Object.fromEntries(
-      formatter.formatToParts(new Date(candidate)).map((part) => [part.type, part.value]),
+      formatter
+        .formatToParts(new Date(instant))
+        .map((part) => [part.type, part.value]),
     );
-    const represented = Date.UTC(
+    return Date.UTC(
       Number(parts.year),
       Number(parts.month) - 1,
       Number(parts.day),
@@ -118,17 +119,26 @@ export function zonedLocalToIso(
       Number(parts.minute),
       Number(parts.second),
     );
-    candidate += desired - represented;
+  };
+
+  // Offsets immediately before and after a transition are both possible
+  // interpretations of a local wall time. A gap maps to no exact candidate;
+  // a fold maps to two. Only a single exact candidate is safe to persist or
+  // place in a signed reservation-slot token.
+  const probeHours = [-48, -24, 0, 24, 48];
+  const offsets = new Set(
+    probeHours.map((hours) => {
+      const probe = desired + hours * 60 * 60_000;
+      return representedLocalTime(probe) - probe;
+    }),
+  );
+  const candidates = new Set<number>();
+  for (const offset of offsets) {
+    const candidate = desired - offset;
+    if (representedLocalTime(candidate) === desired) candidates.add(candidate);
   }
 
-  const finalParts = Object.fromEntries(
-    formatter.formatToParts(new Date(candidate)).map((part) => [part.type, part.value]),
-  );
-  const matches =
-    finalParts.year === dateMatch[1] &&
-    finalParts.month === dateMatch[2] &&
-    finalParts.day === dateMatch[3] &&
-    finalParts.hour === timeMatch[1] &&
-    finalParts.minute === timeMatch[2];
-  return matches ? new Date(candidate).toISOString() : null;
+  return candidates.size === 1
+    ? new Date([...candidates][0]).toISOString()
+    : null;
 }

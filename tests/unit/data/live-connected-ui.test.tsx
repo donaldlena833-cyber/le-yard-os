@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LiveTodayWorkspace } from "@/components/today/live-today-workspace";
+import type { ServiceDaySnapshot } from "@/data/read-models/service-day-snapshot";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 
 const workspace: WorkspaceContextValue = {
@@ -33,6 +34,87 @@ const workspace: WorkspaceContextValue = {
   membershipId: "40000000-0000-4000-8000-000000000001",
   role: "owner",
   organizationWide: true,
+  capabilities: [],
+};
+
+const emptySnapshot: ServiceDaySnapshot = {
+  scope: {
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+    membershipId: workspace.membershipId,
+    role: workspace.role,
+    workMode: "owner_operator",
+    businessDate: "2026-08-01",
+  },
+  observedAt: "2026-08-01T16:00:00.000Z",
+  activeJob: null,
+  today: {
+    date: "2026-08-01",
+    timeZone: "America/New_York",
+    currencyCode: "USD",
+    shifts: [],
+    scheduledCount: 0,
+    openShiftCount: 0,
+    clockedInCount: 0,
+    openPunchCount: 0,
+    tasks: [],
+    openTaskCount: 0,
+    announcements: [],
+    closeout: null,
+    pendingInventoryCounts: 0,
+    configuredParLevels: 0,
+  },
+  serviceControl: { ok: false, message: "Service control unavailable." },
+  nowAction: null,
+  orderedExceptions: [
+    {
+      id: "service_control:unavailable",
+      order: 1,
+      source: "service_control",
+      label: "Service control unavailable",
+      detail: "Availability and pre-shift state could not be refreshed.",
+      count: 1,
+      urgency: "attention",
+      destination: "/service",
+    },
+  ],
+  sourceFreshness: [
+    {
+      source: "today",
+      state: "fresh",
+      observedAt: "2026-08-01T16:00:00.000Z",
+      staleAt: "2026-08-01T16:01:00.000Z",
+      maxAgeSeconds: 60,
+    },
+    {
+      source: "service_control",
+      state: "unavailable",
+      observedAt: null,
+      staleAt: null,
+      maxAgeSeconds: null,
+    },
+    {
+      source: "reservations",
+      state: "restricted",
+      observedAt: null,
+      staleAt: null,
+      maxAgeSeconds: null,
+    },
+    {
+      source: "providers",
+      state: "restricted",
+      observedAt: null,
+      staleAt: null,
+      maxAgeSeconds: null,
+    },
+  ],
+  realtime: {
+    state: "snapshot_only",
+    transport: "server_request",
+    lastEventAt: null,
+    detail: "Fresh server reads; Today does not claim an active realtime subscription.",
+  },
+  providerHealth: { state: "restricted", providers: [] },
 };
 
 describe("connected Today UI", () => {
@@ -40,29 +122,13 @@ describe("connected Today UI", () => {
     const markup = renderToStaticMarkup(
       <LiveTodayWorkspace
         workspace={workspace}
-        model={{
-          ok: true,
-          data: {
-            date: "2026-08-01",
-            timeZone: "America/New_York",
-            currencyCode: "USD",
-            shifts: [],
-            scheduledCount: 0,
-            openShiftCount: 0,
-            clockedInCount: 0,
-            openPunchCount: 0,
-            tasks: [],
-            openTaskCount: 0,
-            announcements: [],
-            closeout: null,
-            pendingInventoryCounts: 0,
-            configuredParLevels: 0,
-          },
-        }}
+        snapshot={{ ok: true, data: emptySnapshot }}
       />,
     );
 
-    expect(markup).toContain("Live · Main Dining Room");
+    expect(markup).toContain("Connected · Main Dining Room");
+    expect(markup).toContain("Realtime: snapshot only");
+    expect(markup).toContain("Provider sync evidence: restricted");
     expect(markup).toContain("No visible shifts today");
     expect(markup).toContain("No live announcements yet");
     expect(markup).toContain("No closeout has been filed");
@@ -74,7 +140,7 @@ describe("connected Today UI", () => {
     const markup = renderToStaticMarkup(
       <LiveTodayWorkspace
         workspace={workspace}
-        model={{ ok: false, message: "Live records could not be loaded." }}
+        snapshot={{ ok: false, message: "Live records could not be loaded." }}
       />,
     );
 

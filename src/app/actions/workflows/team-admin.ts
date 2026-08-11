@@ -39,10 +39,6 @@ export async function administerTeamMemberAction(
   if (workspace.role !== "owner" && workspace.role !== "admin") {
     return { status: "error", message: "Only owners and admins can manage account access." };
   }
-  if (workspace.role === "owner" && workspace.identity.aal !== "aal2") {
-    return { status: "error", message: "Complete MFA before managing account access." };
-  }
-
   const supabase = await createClient();
   const { data: target, error: targetError } = await supabase
     .from("organization_memberships")

@@ -5,19 +5,21 @@ import {
   assertFound,
   throwDatabaseError,
 } from "../errors";
-import { requireManagedLocation } from "../resources";
+import { requireAccessibleLocation, requireManagedLocation } from "../resources";
 import type { WorkflowContext } from "../execute";
 import type {
   ApproveInventoryCountInput,
   CreateInventoryTransferInput,
   CreatePurchaseOrderInput,
   ConfigureInventoryCatalogInput,
+  RecordInventoryItemCostInput,
   ReceiveInventoryDeliveryInput,
   ReviewInventoryTransferInput,
   ReviewWasteRecordInput,
   SubmitInventoryCountInput,
   SubmitWasteRecordInput,
 } from "../schemas";
+import type { OperationalCapability } from "@/lib/permissions/capabilities";
 
 function normalizedNote(value: string | null | undefined) {
   return value?.trim() || null;
@@ -35,14 +37,51 @@ export async function configureInventoryCatalog(
   const membership = context.actor.memberships.find(
     (candidate) => candidate.organizationId === location.organizationId,
   );
-  const managerRecipeEdit = membership?.role === "manager" && input.command === "recipe.save";
-  assertCondition(
-    membership?.role === "owner" || membership?.role === "admin" || managerRecipeEdit,
-    "forbidden",
-    managerRecipeEdit
-      ? "Manager recipe access is required for this change."
-      : "Owner or admin access is required to configure inventory.",
+  const elevatedRole = membership?.role === "owner" || membership?.role === "admin";
+  const operationalRole = membership?.role === "manager" || membership?.role === "employee";
+  const managerRecipeEdit = operationalRole && input.command === "recipe.save";
+  const operationalCapabilityByCommand = {
+    "unit.save": "inventory.unit.manage",
+    "category.save": "inventory.category.manage",
+    "item.save": "inventory.item.manage",
+    "vendor.save": "inventory.vendor.manage",
+    "par.set": "inventory.par.manage",
+  } as const satisfies Partial<Record<ConfigureInventoryCatalogInput["command"], OperationalCapability>>;
+  const operationalCapability = operationalCapabilityByCommand[
+    input.command as keyof typeof operationalCapabilityByCommand
+  ];
+  const managerOperationalEdit = operationalRole && (
+    operationalCapability !== undefined || input.command === "vendor_item.save"
   );
+  assertCondition(
+    elevatedRole || managerRecipeEdit || managerOperationalEdit,
+    "forbidden",
+    "This inventory setup action is not available for your role.",
+  );
+
+  if (managerRecipeEdit || managerOperationalEdit) {
+    const requiredCapabilities: OperationalCapability[] = input.command === "recipe.save"
+      ? ["recipe.manage"]
+      : input.command === "vendor_item.save"
+        ? ["inventory.vendor.manage", "inventory.price.manage"]
+        : [operationalCapability!];
+    const capabilityResults = await Promise.all(requiredCapabilities.map((capability) =>
+      context.supabase.rpc("has_capability", {
+        p_organization_id: location.organizationId,
+        p_location_id: location.id,
+        p_capability_key: capability,
+      })
+    ));
+    const capabilityError = capabilityResults.find((result) => result.error)?.error;
+    if (capabilityError) {
+      throwDatabaseError(capabilityError, "Your inventory capability could not be verified.");
+    }
+    assertCondition(
+      capabilityResults.every((result) => result.data === true),
+      "forbidden",
+      "This inventory action is not assigned to your job role at this location.",
+    );
+  }
 
   if (managerRecipeEdit) {
     const result = await context.supabase.rpc("save_manager_recipe", {
@@ -76,12 +115,31 @@ export async function configureInventoryCatalog(
       ([key]) => key !== "requestId" && key !== "workspaceLocationId" && key !== "command",
     ),
   );
-  const { data, error } = await context.supabase.rpc("configure_inventory_catalog", {
-    p_request_id: requestId,
-    p_organization_id: location.organizationId,
-    p_command: command,
-    p_payload: payload,
-  });
+  const kitchenFoundationEdit = managerOperationalEdit && (
+    input.command === "unit.save" || input.command === "category.save"
+  );
+  const { data, error } = kitchenFoundationEdit
+    ? await context.supabase.rpc("configure_kitchen_foundation", {
+        p_request_id: requestId,
+        p_organization_id: location.organizationId,
+        p_location_id: location.id,
+        p_command: command,
+        p_payload: payload,
+      })
+    : managerOperationalEdit
+      ? await context.supabase.rpc("configure_operational_inventory_catalog", {
+        p_request_id: requestId,
+        p_organization_id: location.organizationId,
+        p_location_id: location.id,
+        p_command: command,
+        p_payload: payload,
+      })
+      : await context.supabase.rpc("configure_inventory_catalog", {
+        p_request_id: requestId,
+        p_organization_id: location.organizationId,
+        p_command: command,
+        p_payload: payload,
+      });
   if (error) throwDatabaseError(error, "The inventory setup change could not be saved.");
   assertCondition(
     typeof data === "object" && data !== null && "id" in data && "command" in data,
@@ -94,6 +152,49 @@ export async function configureInventoryCatalog(
     command: String(result.command),
     replayed: result.replayed === true,
   };
+}
+
+export async function recordInventoryItemCost(
+  context: WorkflowContext,
+  input: RecordInventoryItemCostInput,
+) {
+  const location = await requireAccessibleLocation(
+    context.supabase,
+    context.actor,
+    input.locationId,
+  );
+  const membership = context.actor.memberships.find(
+    (candidate) => candidate.organizationId === location.organizationId,
+  );
+  const elevated = membership?.role === "owner" || membership?.role === "admin";
+  if (!elevated) {
+    const { data, error } = await context.supabase.rpc("has_capability", {
+      p_organization_id: location.organizationId,
+      p_location_id: location.id,
+      p_capability_key: "inventory.price.manage",
+    });
+    if (error) throwDatabaseError(error, "Your inventory pricing capability could not be verified.");
+    assertCondition(data === true, "forbidden", "Inventory price management is not assigned at this location.");
+  }
+  const { data, error } = await context.supabase.rpc("record_inventory_item_cost", {
+    p_request_id: input.requestId,
+    p_organization_id: location.organizationId,
+    p_location_id: location.id,
+    p_inventory_item_id: input.inventoryItemId,
+    p_unit_id: input.unitId,
+    p_price_quantity: input.priceQuantity,
+    p_unit_price_cents: input.unitPriceCents,
+    p_effective_at: input.effectiveAt,
+    p_notes: normalizedNote(input.notes),
+  });
+  if (error) throwDatabaseError(error, "The inventory unit cost could not be saved.");
+  assertCondition(
+    typeof data === "object" && data !== null && "id" in data,
+    "database",
+    "The inventory unit cost was not returned.",
+  );
+  const result = data as { id: unknown; replayed?: unknown };
+  return { id: String(result.id), replayed: result.replayed === true };
 }
 
 async function replayExistingInventoryCount(
@@ -201,7 +302,7 @@ async function buildAuthoritativeCountLines(
         .in("inventory_item_id", itemIds),
       context.supabase
         .from("item_price_history")
-        .select("inventory_item_id, unit_id, unit_price_cents, effective_at")
+        .select("inventory_item_id, unit_id, price_quantity, unit_price_cents, effective_at")
         .eq("organization_id", organizationId)
         .in("inventory_item_id", itemIds)
         .order("effective_at", { ascending: false })
@@ -216,7 +317,12 @@ async function buildAuthoritativeCountLines(
   const latestPrice = new Map<string, number>();
   for (const price of priceRows ?? []) {
     const key = `${price.inventory_item_id}:${price.unit_id}`;
-    if (!latestPrice.has(key)) latestPrice.set(key, Number(price.unit_price_cents));
+    if (!latestPrice.has(key)) {
+      latestPrice.set(
+        key,
+        Math.round(Number(price.unit_price_cents) / Number(price.price_quantity)),
+      );
+    }
   }
 
   return items.map((item) => {

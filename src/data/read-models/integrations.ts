@@ -225,7 +225,7 @@ export async function loadLiveIntegrations(
       locationName: workspace.activeLocation.name,
       role: workspace.role,
       canManageSettings: workspace.role === "owner" || workspace.role === "admin",
-      ownerNeedsMfa: workspace.role === "owner" && workspace.identity.aal !== "aal2",
+      ownerNeedsMfa: false,
       connections: connections.map((connection) => ({
         id: connection.id,
         provider: connection.provider,

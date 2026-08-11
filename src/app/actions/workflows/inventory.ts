@@ -8,6 +8,7 @@ import {
   createInventoryTransferInputSchema,
   createPurchaseOrderInputSchema,
   receiveInventoryDeliveryInputSchema,
+  recordInventoryItemCostInputSchema,
   reviewInventoryTransferInputSchema,
   reviewWasteRecordInputSchema,
   submitInventoryCountInputSchema,
@@ -19,6 +20,7 @@ import {
   createInventoryTransfer,
   createPurchaseOrder,
   receiveInventoryDelivery,
+  recordInventoryItemCost,
   reviewInventoryTransfer,
   reviewWasteRecord,
   submitInventoryCount,
@@ -31,6 +33,17 @@ export async function configureInventoryCatalogAction(input: unknown) {
     schema: configureInventoryCatalogInputSchema,
     input,
     run: configureInventoryCatalog,
+  });
+  if (result.ok && result.persisted) revalidatePath("/inventory");
+  return result;
+}
+
+export async function recordInventoryItemCostAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "inventory.item_cost_record",
+    schema: recordInventoryItemCostInputSchema,
+    input,
+    run: recordInventoryItemCost,
   });
   if (result.ok && result.persisted) revalidatePath("/inventory");
   return result;

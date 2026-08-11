@@ -6,40 +6,53 @@ There are no implicit runtime-mode or application-origin defaults. Missing or in
 
 ## Variable matrix
 
-| Variable | Exposure | Required | Purpose |
-| --- | --- | --- | --- |
-| `NEXT_PUBLIC_APP_URL` | Browser-safe | Yes | Canonical application origin and authentication callback base |
-| `NEXT_PUBLIC_DEMO_MODE` | Browser-safe | Yes | Explicit `true` uses synthetic data locally or inside a guarded hosted playground; a connected live deployment must use `false` |
-| `LE_YARD_PLAYGROUND_MODE` | Server-only | Hosted playground | Must be `preview` only with `VERCEL_ENV=preview`, or `production-playground` only with `VERCEL_ENV=production` |
-| `LE_YARD_PLAYGROUND_SESSION_SECRET` | Server-only secret | Hosted playground | High-entropy signing secret for the eight-hour playground session cookie; scope it only to the intended Vercel target |
-| `LE_YARD_PLAYGROUND_USERS_JSON` | Server-only secret | Hosted playground | Exactly two Owner principals containing identifiers and salted scrypt password hashes; never plaintext passwords |
-| `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Connected mode | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Connected mode | Supabase publishable/anon credential; all access remains subject to RLS |
-| `SUPABASE_SECRET_KEY` | Server-only | Connected mode | Supabase secret/service credential for invitation and tightly scoped system operations |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | Browser-safe | Push notifications | Browser push subscription key |
-| `VAPID_PRIVATE_KEY` | Server-only | Push notifications | Signs push messages |
-| `VAPID_SUBJECT` | Server-only | Push notifications | Contact URI, normally an approved operations email |
-| `PUSH_SUBSCRIPTION_ENCRYPTION_KEY` | Server-only | Push subscription storage | Base64-encoded 32-byte AES key; generate independently from the VAPID signing key |
-| `TOAST_CLIENT_ID` | Server-only | Optional | Approved Toast adapter client ID |
-| `TOAST_CLIENT_SECRET` | Server-only | Optional | Approved Toast adapter secret |
-| `TOAST_RESTAURANT_GUID` | Server-only | Optional | Restaurant identifier supplied through approved Toast access |
-| `RESY_INTEGRATION_TOKEN` | Server-only | Optional | Token supplied through an approved Resy integration arrangement |
-| `OWNER_DONALD_EMAIL` | Server-only bootstrap | Production bootstrap | Verified owner email; never seeded with a guessed address |
-| `OWNER_MARIS_EMAIL` | Server-only bootstrap | Production bootstrap | Verified owner email; never seeded with a guessed address |
-| `LE_YARD_BOOTSTRAP_CONFIRM` | Server-only, one run | Production bootstrap execution | Exact plan-bound confirmation emitted by the dry run; remove immediately afterward |
-| `E2E_CONNECTED_APP_URL` | Test runner only | Connected acceptance | Canonical preview origin exercised by the connected Playwright project |
-| `E2E_CONNECTED_OWNER_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Owner fixture; the suite proves the AAL2 gate appears after password sign-in |
-| `E2E_CONNECTED_ADMIN_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Admin fixture |
-| `E2E_CONNECTED_MANAGER_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Manager fixture with explicit location membership |
-| `E2E_CONNECTED_EMPLOYEE_EMAIL` / `PASSWORD` | Test runner secret | Connected acceptance | Nonproduction Employee fixture with explicit location membership |
-| `E2E_CONNECTED_EXPECTED_ORGANIZATION_NAME` | Test runner only | Connected core matrix | Exact synthetic tenant name; prevents accepting the wrong tenant |
-| `E2E_CONNECTED_EXPECTED_LOCATION_NAME` | Test runner only | Connected core matrix | Exact synthetic location name; prevents accepting the wrong location |
-| `E2E_CONNECTED_ALLOW_LOCAL` | Test runner only | Local connected acceptance | Explicitly permits HTTP only for a local Supabase/application acceptance environment |
-| `E2E_CONNECTED_ENABLE_MUTATIONS` | Test runner only | Optional chat probe | Must equal `true`; read-only route coverage does not set it |
-| `E2E_CONNECTED_ENVIRONMENT` | Test runner only | Optional chat probe | Must equal `nonproduction` before any connected write |
-| `E2E_CONNECTED_MUTATION_HOST` | Test runner only | Optional chat probe | Must exactly match the hostname in `E2E_CONNECTED_APP_URL` |
-| `E2E_CONNECTED_RUN_ID` | Test runner only | Optional chat probe | Unique 1–80 character marker attached to the synthetic write |
-| `E2E_CONNECTED_CHAT_CHANNEL_NAME` | Test runner only | Optional chat probe | Dedicated Employee-visible nonproduction channel used by the write probe |
+| Variable                                    | Exposure              | Required                         | Purpose                                                                                                                         |
+| ------------------------------------------- | --------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_APP_URL`                       | Browser-safe          | Yes                              | Canonical application origin and authentication callback base                                                                   |
+| `NEXT_PUBLIC_DEMO_MODE`                     | Browser-safe          | Yes                              | Explicit `true` uses synthetic data locally or inside a guarded hosted playground; a connected live deployment must use `false` |
+| `LE_YARD_PLAYGROUND_MODE`                   | Server-only           | Hosted playground                | Must be `preview` only with `VERCEL_ENV=preview`, or `production-playground` only with `VERCEL_ENV=production`                  |
+| `LE_YARD_PLAYGROUND_SESSION_SECRET`         | Server-only secret    | Hosted playground                | High-entropy signing secret for the 8-hour default / optional 30-day playground session; scope it only to the intended target   |
+| `LE_YARD_PLAYGROUND_USERS_JSON`             | Server-only secret    | Hosted playground                | Exactly four required principals containing identifiers and salted scrypt password hashes; never plaintext passwords            |
+| `LE_YARD_PLAYGROUND_DONALD_PASSWORD_HASH`   | Server-only secret    | Optional hosted-playground alias | Salted scrypt hash for the `donaldlena` Donald-owner alias; never store the plaintext password                                  |
+| `NEXT_PUBLIC_SUPABASE_URL`                  | Browser-safe          | Connected mode                   | Supabase project URL                                                                                                            |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`      | Browser-safe          | Connected mode                   | Supabase publishable/anon credential; all access remains subject to RLS                                                         |
+| `SUPABASE_SECRET_KEY`                       | Server-only           | Connected mode                   | Supabase secret/service credential for invitation and tightly scoped system operations                                          |
+| `BOOKING_SLOT_SIGNING_SECRET`               | Server-only           | Public reservations              | Dedicated high-entropy secret for short-lived signed availability slots                                                         |
+| `RESERVATION_LINK_SIGNING_SECRET`           | Server-only           | Guest verification               | Independent high-entropy secret for channel-bound verification links, management exchanges, and derived management sessions      |
+| `BOOKING_GLOBAL_RATE_LIMIT_MULTIPLIER`       | Server-only config    | Public reservations              | Valid integer 2–20; defaults to twice each route's per-identity ceiling; platform/WAF controls remain a separate launch gate       |
+| `BOOKING_CONTACT_RATE_LIMIT_PER_HOUR`        | Server-only config    | Public reservations              | Valid integer 1–50; defaults to four create attempts per normalized contact fingerprint per hour                                  |
+| `RESERVATION_PUBLIC_SITE_URL`               | Server-only           | Guest messaging                  | Canonical public Le Yard origin used in confirmation and management links                                                       |
+| `RESEND_API_KEY`                            | Server-only           | Reservation email                | Resend credential for guest transactional email                                                                                 |
+| `RESERVATION_EMAIL_FROM`                    | Server-only           | Reservation email                | Verified sender identity for reservation email                                                                                  |
+| `RESERVATION_SMS_DELIVERY_ENABLED`          | Server-only config    | Reservation SMS                  | Hard kill switch; only the exact value `true` permits SMS discovery or delivery. Defaults to `false`; credentials alone are inert |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN`  | Server-only           | Reservation SMS                  | Twilio account credentials for guest transactional SMS                                                                          |
+| `TWILIO_FROM_NUMBER`                        | Server-only           | Reservation SMS                  | Approved Twilio sender number                                                                                                   |
+| `RESERVATION_DELIVERY_SECRET`               | Server-only           | Reservation delivery             | At least 32 characters; authorizes scheduled email/SMS/reminder and push workers                                                |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`              | Browser-safe          | Push notifications               | Browser push subscription key                                                                                                   |
+| `VAPID_PRIVATE_KEY`                         | Server-only           | Push notifications               | Signs push messages                                                                                                             |
+| `VAPID_SUBJECT`                             | Server-only           | Push notifications               | Contact URI, normally an approved operations email                                                                              |
+| `PUSH_SUBSCRIPTION_ENCRYPTION_KEY`          | Server-only           | Push subscription storage        | Base64-encoded 32-byte AES key; generate independently from the VAPID signing key                                               |
+| `TOAST_CLIENT_ID`                           | Server-only           | Optional                         | Approved Toast adapter client ID                                                                                                |
+| `TOAST_CLIENT_SECRET`                       | Server-only           | Optional                         | Approved Toast adapter secret                                                                                                   |
+| `TOAST_RESTAURANT_GUID`                     | Server-only           | Optional                         | Restaurant identifier supplied through approved Toast access                                                                    |
+| `RESY_INTEGRATION_TOKEN`                    | Server-only           | Optional                         | Token supplied through an approved Resy integration arrangement                                                                 |
+| `OWNER_DONALD_EMAIL`                        | Server-only bootstrap | Production bootstrap             | Verified owner email; never seeded with a guessed address                                                                       |
+| `OWNER_MARIS_EMAIL`                         | Server-only bootstrap | Production bootstrap             | Verified owner email; never seeded with a guessed address                                                                       |
+| `LE_YARD_BOOTSTRAP_CONFIRM`                 | Server-only, one run  | Production bootstrap execution   | Exact plan-bound confirmation emitted by the dry run; remove immediately afterward                                              |
+| `RESERVATION_TEST_DATABASE_URL`             | Test runner secret    | Concurrency acceptance            | Administrative URL for an isolated disposable PostgreSQL server; the suite creates and force-drops only its random test database. Never point it at a shared cluster |
+| `E2E_CONNECTED_APP_URL`                     | Test runner only      | Connected acceptance             | Canonical preview origin exercised by the connected Playwright project                                                          |
+| `E2E_CONNECTED_OWNER_EMAIL` / `PASSWORD`    | Test runner secret    | Connected acceptance             | Nonproduction Owner fixture; the suite proves password sign-in reaches the scoped workspace without an MFA gate                 |
+| `E2E_CONNECTED_ADMIN_EMAIL` / `PASSWORD`    | Test runner secret    | Connected acceptance             | Nonproduction Admin fixture                                                                                                     |
+| `E2E_CONNECTED_MANAGER_EMAIL` / `PASSWORD`  | Test runner secret    | Connected acceptance             | Nonproduction Manager fixture with explicit location membership                                                                 |
+| `E2E_CONNECTED_EMPLOYEE_EMAIL` / `PASSWORD` | Test runner secret    | Connected acceptance             | Nonproduction Employee fixture with explicit location membership                                                                |
+| `E2E_CONNECTED_EXPECTED_ORGANIZATION_NAME`  | Test runner only      | Connected core matrix            | Exact synthetic tenant name; prevents accepting the wrong tenant                                                                |
+| `E2E_CONNECTED_EXPECTED_LOCATION_NAME`      | Test runner only      | Connected core matrix            | Exact synthetic location name; prevents accepting the wrong location                                                            |
+| `E2E_CONNECTED_ALLOW_LOCAL`                 | Test runner only      | Local connected acceptance       | Explicitly permits HTTP only for a local Supabase/application acceptance environment                                            |
+| `E2E_CONNECTED_ENABLE_MUTATIONS`            | Test runner only      | Optional chat probe              | Must equal `true`; read-only route coverage does not set it                                                                     |
+| `E2E_CONNECTED_ENVIRONMENT`                 | Test runner only      | Optional chat probe              | Must equal `nonproduction` before any connected write                                                                           |
+| `E2E_CONNECTED_MUTATION_HOST`               | Test runner only      | Optional chat probe              | Must exactly match the hostname in `E2E_CONNECTED_APP_URL`                                                                      |
+| `E2E_CONNECTED_RUN_ID`                      | Test runner only      | Optional chat probe              | Unique 1–80 character marker attached to the synthetic write                                                                    |
+| `E2E_CONNECTED_CHAT_CHANNEL_NAME`           | Test runner only      | Optional chat probe              | Dedicated Employee-visible nonproduction channel used by the write probe                                                        |
 
 ## Rules
 
@@ -59,6 +72,8 @@ There are no implicit runtime-mode or application-origin defaults. Missing or in
 14. Never store a plaintext playground password in an environment variable, tracked file, shell command history, deployment log, ticket, or chat. Only salted scrypt hashes belong in the server-only registry.
 15. Match playground mode and Vercel scope exactly. Use `preview` only in Preview and `production-playground` only in Production; use separately generated secrets for each scope and rotate/remove them when evaluation ends.
 16. `VERCEL_ENV` is platform-supplied. Never create or override it as a project environment variable.
+17. Keep the public website booking API key and API URL only in that site's server runtime. Never expose the key to the browser or reuse it as a slot, link, delivery, or encryption secret. Keep the slot-signing and reservation-link secrets independent.
+18. Schedule both reservation delivery endpoints only after their provider credentials, sender identities, and Owner channel switches are approved. Keep `RESERVATION_SMS_DELIVERY_ENABLED=false`; changing it to the exact value `true` requires separately clearing the documented SMS duplicate-risk release gate.
 
 ## Vercel hosted playground
 
@@ -66,12 +81,12 @@ The playground is a disposable product-evaluation surface, not an interim produc
 
 1. Create a new Vercel project rooted at `le-yard-os`. Do not link or modify the existing public restaurant website project.
 2. In Vercel Production scope, set `NEXT_PUBLIC_APP_URL` to the project's canonical public HTTPS Production origin, set `NEXT_PUBLIC_DEMO_MODE=true`, and set `LE_YARD_PLAYGROUND_MODE=production-playground`.
-3. Add a newly generated `LE_YARD_PLAYGROUND_SESSION_SECRET` and exactly two salted-scrypt Owner principals in `LE_YARD_PLAYGROUND_USERS_JSON`, both as sensitive Production values.
+3. Add a newly generated `LE_YARD_PLAYGROUND_SESSION_SECRET` and the four required salted-scrypt principals in `LE_YARD_PLAYGROUND_USERS_JSON`, both as sensitive Production values.
 4. Generate each salted scrypt hash offline or through the approved no-echo helper. Pass secret values through protected standard input or the Vercel dashboard; do not place a password or secret on a command line that will be recorded in shell history.
 5. Confirm the registry contains no plaintext password. Usernames are identifiers; the password representation must be a versioned salted scrypt hash.
 6. Leave `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, SMTP, VAPID/push, Toast, Resy, AI, and OCR provider values unset for this playground. Any Supabase value must make playground readiness fail closed.
 7. Do not set `VERCEL_ENV`; Vercel supplies `production`. The runtime must reject any mode/target mismatch, non-HTTPS/local application origin, invalid signing secret, invalid two-principal registry, or connected Supabase configuration.
-8. Treat the signed `HttpOnly`, `Secure`, `SameSite=Lax` cookie as temporary. It expires after eight hours and does not provide Supabase MFA, RLS, or persistent shared data.
+8. Treat the signed `HttpOnly`, `Secure`, `SameSite=Lax` cookie as temporary. It expires after eight hours by default or 30 days when the user explicitly selects the private-device option; it does not provide Supabase MFA, RLS, or persistent shared data.
 9. Treat the canonical Production URL as public and discoverable. App-level login remains mandatory, unauthenticated workspace/API access fails closed, and robots directives do not replace authentication. Before broader testing, add Vercel Deployment Protection or an approved durable limiter; the in-process guard is intentionally only a first layer.
 10. When evaluation ends, remove the Production playground values, rotate the session secret, and delete, disable, or protect the public playground deployment.
 

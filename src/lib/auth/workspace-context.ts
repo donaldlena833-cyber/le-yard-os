@@ -1,5 +1,6 @@
 import type { AppRole } from "@/types";
 import type { TableRow } from "@/types/database.generated";
+import type { OperationalCapability } from "@/lib/permissions/capabilities";
 
 export type AssuranceLevel = "aal1" | "aal2";
 
@@ -20,6 +21,14 @@ export interface WorkspaceLocation {
   organizationId: string;
   name: string;
   isPrimary: boolean;
+  /** Present for every live session; optional only for legacy synthetic contexts. */
+  timeZone?: string;
+}
+
+export interface WorkspaceActiveJobAssignment {
+  name: string;
+  code: string;
+  department: string | null;
 }
 
 export interface WorkspaceChoice {
@@ -45,6 +54,8 @@ export interface WorkspaceContextValue {
   membershipId: string;
   role: AppRole;
   organizationWide: boolean;
+  capabilities: readonly OperationalCapability[];
+  activeJob?: WorkspaceActiveJobAssignment;
   persona?: "chef";
 }
 
@@ -61,7 +72,7 @@ export type WorkspaceOrganizationRow = Pick<
 export type WorkspaceLocationRow = Pick<
   TableRow<"locations">,
   "id" | "organization_id" | "name" | "is_active"
->;
+> & Partial<Pick<TableRow<"locations">, "timezone">>;
 
 export type WorkspaceLocationMembershipRow = Pick<
   TableRow<"location_memberships">,
@@ -163,6 +174,7 @@ export function deriveWorkspaceScopes({
         organizationId: location.organization_id,
         name: location.name,
         isPrimary: assignedLocations.get(location.id)?.is_primary ?? false,
+        ...(location.timezone ? { timeZone: location.timezone } : {}),
       }))
       .sort(
         (left, right) =>
@@ -277,7 +289,8 @@ export function invitableRolesForActor(role: AppRole): readonly AppRole[] {
 
 export function canInviteFromWorkspace(
   role: AppRole,
-  aal: AssuranceLevel,
+  _aal: AssuranceLevel,
 ): boolean {
-  return role === "admin" || (role === "owner" && aal === "aal2");
+  void _aal;
+  return role === "admin" || role === "owner";
 }

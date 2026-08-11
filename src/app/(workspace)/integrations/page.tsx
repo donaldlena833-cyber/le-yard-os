@@ -4,6 +4,7 @@ import { IntegrationsWorkspace } from "@/components/integrations/integrations-wo
 import { loadLiveIntegrations } from "@/data/read-models/integrations";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { isDemoMode } from "@/lib/env";
+import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Integrations" };
 
@@ -11,6 +12,7 @@ export default async function IntegrationsPage() {
   if (isDemoMode) return <IntegrationsWorkspace />;
   const resolution = await resolveWorkspaceSession();
   if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  requireWorkspaceRouteAccess("/integrations", resolution.context);
   return (
     <LiveIntegrationsWorkspace
       key={resolution.context.activeLocation.id}

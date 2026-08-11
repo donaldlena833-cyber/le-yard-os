@@ -7,7 +7,6 @@ import {
   FilePenLine,
   LoaderCircle,
   Plus,
-  ShieldCheck,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -66,9 +65,7 @@ export function RetentionPolicyConfiguration({
   const [busy, setBusy] = useState(false);
   const [dialogNotice, setDialogNotice] = useState("");
   const [pageNotice, setPageNotice] = useState("");
-  const mayWrite =
-    canManage &&
-    (workspace.role !== "owner" || workspace.identity.aal === "aal2");
+  const mayWrite = canManage;
 
   useEffect(() => {
     const element = dialogRef.current;
@@ -173,13 +170,8 @@ export function RetentionPolicyConfiguration({
         ) : null}
       </div>
 
-      {workspace.role === "owner" && workspace.identity.aal !== "aal2" ? (
-        <p className="mt-4 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-[10px] leading-4 text-[var(--warning)]">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0" />Complete MFA verification before changing retention decisions.
-        </p>
-      ) : null}
       {pageNotice ? (
-        <p role="status" className="mt-4 rounded-xl bg-[var(--canvas)] px-4 py-3 text-[10px]">
+        <p role="status" className="mt-4 rounded-xl bg-[var(--canvas)] px-4 py-3 text-xs">
           {pageNotice}
         </p>
       ) : null}
@@ -194,10 +186,10 @@ export function RetentionPolicyConfiguration({
               <Archive className="size-4 text-[var(--ink-faint)]" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[10px] font-semibold capitalize">
+              <p className="truncate text-xs font-semibold capitalize">
                 {labelForDataClass(policy.dataClass)}
               </p>
-              <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+              <p className="mt-1 text-xs text-[var(--ink-faint)]">
                 {policy.configuredAt
                   ? `Recorded ${new Intl.DateTimeFormat("en-US", {
                       month: "short",
@@ -237,7 +229,7 @@ export function RetentionPolicyConfiguration({
           <div className="py-10 text-center">
             <CircleAlert className="mx-auto size-5 text-[var(--warning)]" />
             <p className="mt-3 text-xs font-semibold">Owner decision required</p>
-            <p className="mx-auto mt-2 max-w-md text-[10px] leading-4 text-[var(--ink-faint)]">
+            <p className="mx-auto mt-2 max-w-md text-xs leading-4 text-[var(--ink-faint)]">
               Retention windows, legal holds, and deletion procedures remain unset until the restaurant records them.
             </p>
           </div>
@@ -269,7 +261,7 @@ export function RetentionPolicyConfiguration({
                 <h2 id={titleId} className="mt-2 text-xl font-medium tracking-[-0.035em]">
                   {dialog.policy ? "Edit retention decision" : "Record retention decision"}
                 </h2>
-                <p id={descriptionId} className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">
+                <p id={descriptionId} className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
                   This records policy evidence only. Automated deletion is not enabled by this form.
                 </p>
               </div>
@@ -289,7 +281,7 @@ export function RetentionPolicyConfiguration({
               onSubmit={(event) => void submit(event)}
             >
               <label>
-                <span className="mb-1.5 block text-[10px] font-semibold">Data class</span>
+                <span className="mb-1.5 block text-xs font-semibold">Data class</span>
                 <select
                   data-initial-focus
                   required
@@ -321,9 +313,9 @@ export function RetentionPolicyConfiguration({
               </label>
 
               <fieldset className="mt-5">
-                <legend className="text-[10px] font-semibold">Retention mode</legend>
+                <legend className="text-xs font-semibold">Retention mode</legend>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <label className="flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 text-[10px]">
+                  <label className="flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 text-xs">
                     <input
                       type="radio"
                       name="mode"
@@ -332,9 +324,9 @@ export function RetentionPolicyConfiguration({
                       onChange={() => setMode("window")}
                       className="mt-0.5 size-4 accent-[var(--accent)]"
                     />
-                    <span><span className="block font-semibold">Timed window</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Record a number of days.</span></span>
+                    <span><span className="block font-semibold">Timed window</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">Record a number of days.</span></span>
                   </label>
-                  <label className="flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 text-[10px]">
+                  <label className="flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 text-xs">
                     <input
                       type="radio"
                       name="mode"
@@ -343,14 +335,14 @@ export function RetentionPolicyConfiguration({
                       onChange={() => setMode("indefinite")}
                       className="mt-0.5 size-4 accent-[var(--accent)]"
                     />
-                    <span><span className="block font-semibold">No automatic deletion</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">No day-based window is recorded.</span></span>
+                    <span><span className="block font-semibold">No automatic deletion</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">No day-based window is recorded.</span></span>
                   </label>
                 </div>
               </fieldset>
 
               {mode === "window" ? (
                 <label className="mt-5 block">
-                  <span className="mb-1.5 block text-[10px] font-semibold">Retention days</span>
+                  <span className="mb-1.5 block text-xs font-semibold">Retention days</span>
                   <input
                     required
                     name="retentionDays"
@@ -365,18 +357,18 @@ export function RetentionPolicyConfiguration({
                 </label>
               ) : null}
 
-              <label className="mt-5 flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 text-[10px]">
+              <label className="mt-5 flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 text-xs">
                 <input
                   name="legalHold"
                   type="checkbox"
                   defaultChecked={dialog.policy?.legalHold ?? false}
                   className="mt-0.5 size-4 accent-[var(--accent)]"
                 />
-                <span><span className="block font-semibold">Legal hold</span><span className="mt-1 block text-[9px] leading-4 text-[var(--ink-faint)]">Record that deletion must remain paused. Confirm legal requirements with qualified counsel.</span></span>
+                <span><span className="block font-semibold">Legal hold</span><span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">Record that deletion must remain paused. Confirm legal requirements with qualified counsel.</span></span>
               </label>
 
               <label className="mt-5 block">
-                <span className="mb-1.5 block text-[10px] font-semibold">Decision notes <span className="font-normal text-[var(--ink-faint)]">optional</span></span>
+                <span className="mb-1.5 block text-xs font-semibold">Decision notes <span className="font-normal text-[var(--ink-faint)]">optional</span></span>
                 <textarea
                   name="notes"
                   rows={4}
@@ -387,7 +379,7 @@ export function RetentionPolicyConfiguration({
               </label>
 
               {dialogNotice ? (
-                <p role="alert" className="mt-5 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-[10px] text-[var(--danger)]">
+                <p role="alert" className="mt-5 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-xs text-[var(--danger)]">
                   {dialogNotice}
                 </p>
               ) : null}

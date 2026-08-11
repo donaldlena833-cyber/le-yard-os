@@ -4,8 +4,9 @@ import { ChefHat, Plus, Save, Scale, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Button } from "@/components/ui/button";
-import { PageFrame, SectionHeading } from "@/components/ui/page-frame";
+import { PageFrame, PageHeader, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
+import { Surface } from "@/components/ui/surface";
 
 type Ingredient = { name: string; quantity: number; unit: "g" | "ml" | "each"; costPerUnit: number };
 type Recipe = { id: string; name: string; yield: number; yieldUnit: string; active: boolean; ingredients: Ingredient[] };
@@ -62,12 +63,66 @@ export function KitchenWorkspace() {
 
   return (
     <PageFrame width="full" className="max-w-[1400px]">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><StatusPill tone="positive" dot>{canEdit ? "Manager kitchen access" : "Kitchen read-only"}</StatusPill><span className="text-[10px] text-[var(--ink-faint)]">Le Yard · Back of house</span></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Recipes & portion cost</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Define the measurable components of every plate so purchasing and inventory have a reliable cost basis.</p></div><Button variant="accent" size="sm" onClick={addRecipe} disabled={!canEdit}><Plus className="size-3.5" /> New recipe</Button></div>
-      {notice ? <p role="status" className="mt-4 rounded-xl bg-[var(--positive-soft)] px-3.5 py-3 text-[10px] text-[var(--positive)]">{notice}</p> : null}
-      <section className="mt-7 grid gap-8 xl:grid-cols-[.72fr_1.28fr]"><div><SectionHeading eyebrow="Active menu specs" title={`${activeRecipes.length} recipes`} detail="Archived recipes remain available to managers for history." /><div className="border-y border-[var(--line)]">{recipes.map((recipe) => <button key={recipe.id} type="button" onClick={() => setSelectedId(recipe.id)} className={`flex w-full items-center gap-3 border-t border-[var(--line)] px-3 py-4 text-left first:border-0 ${recipe.id === selected.id ? "bg-[var(--paper)]" : "hover:bg-[var(--paper)]"}`}><span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><ChefHat className="size-4" /></span><span className="min-w-0 flex-1"><span className="block truncate text-xs font-semibold">{recipe.name}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">Yields {recipe.yield} {recipe.yieldUnit} · {recipe.ingredients.length} measured components</span></span><span className="text-right"><span className="numeric block text-xs font-semibold">${recipeCost(recipe).toFixed(2)}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">portion cost</span></span></button>)}</div></div>
-        <article className="rounded-[22px] bg-[var(--paper)] p-5 sm:p-7"><div className="flex flex-wrap items-start justify-between gap-4"><div><p className="eyebrow">Recipe specification</p><input disabled={!canEdit} aria-label="Recipe name" value={selected.name} onChange={(event) => setRecipes((current) => current.map((recipe) => recipe.id === selected.id ? { ...recipe, name: event.target.value } : recipe))} className="mt-3 h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-2xl font-medium tracking-[-0.05em] outline-none focus:border-[var(--accent)] disabled:opacity-60" /><p className="mt-2 text-[10px] text-[var(--ink-faint)]">{canEdit ? "Edit each component name and measured amount. Add as many components as the plate needs." : "Managers and the chef can edit recipe components and measured amounts."}</p></div><Scale className="size-5 text-[var(--accent)]" /></div><div className="mt-7 overflow-hidden border-y border-[var(--line)]"><div className="grid grid-cols-[1fr_100px_55px_32px] gap-3 bg-[var(--canvas-strong)] px-3 py-2.5 text-[9px] font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase"><span>Component</span><span>Quantity</span><span>Unit</span><span /></div>{selected.ingredients.map((ingredient, index) => <div key={`${ingredient.name}-${index}`} className="grid grid-cols-[1fr_100px_55px_32px] items-center gap-3 border-t border-[var(--line)] px-3 py-3"><div><input disabled={!canEdit} aria-label={`${ingredient.name} ingredient name`} value={ingredient.name} onChange={(event) => updateIngredientName(index, event.target.value)} className="h-9 w-full rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-[11px] font-semibold outline-none focus:border-[var(--accent)] disabled:opacity-60" /><p className="mt-1 text-[9px] text-[var(--ink-faint)]">${(ingredient.quantity * ingredient.costPerUnit).toFixed(2)} current cost</p></div><input disabled={!canEdit} aria-label={`${ingredient.name} quantity`} type="number" min="0" step="1" value={ingredient.quantity} onChange={(event) => updateIngredient(index, event.target.value)} className="h-9 w-full rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-right text-xs disabled:opacity-60" /><span className="text-[10px] text-[var(--ink-faint)]">{ingredient.unit}</span><button disabled={!canEdit} type="button" aria-label={`Remove ${ingredient.name}`} onClick={() => removeIngredient(index)} className="focus-ring flex size-8 items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] disabled:opacity-40"><X className="size-3.5" /></button></div>)}</div><Button disabled={!canEdit} variant="secondary" size="sm" className="mt-4" onClick={addIngredient}><Plus className="size-3.5" /> Add ingredient</Button><div className="mt-6 flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] text-[var(--ink-faint)]">Estimated portion cost</p><p className="numeric mt-1 text-2xl font-semibold">${recipeCost(selected).toFixed(2)}</p></div><div className="flex gap-2"><Button variant="quiet" size="sm" onClick={archiveRecipe} disabled={!canEdit || !selected.active}><X className="size-3.5" /> Archive</Button><Button disabled={!canEdit} variant="accent" size="sm" onClick={() => setNotice(`${selected.name} saved. Inventory cost will recalculate from the latest item prices.`)}><Save className="size-3.5" /> Save recipe</Button></div></div></article>
+      <PageHeader
+        eyebrow="Kitchen · Main dining room"
+        status={<StatusPill tone="positive" dot>Kitchen</StatusPill>}
+        title="Recipes & portion cost"
+        detail="Define every measurable plate component so purchasing, inventory, and menu costing share one reliable source."
+        actions={<Button variant="accent" onClick={addRecipe} disabled={!canEdit}><Plus className="size-4" /> New recipe</Button>}
+      />
+      {notice ? <p role="status" className="mt-5 rounded-2xl border border-[var(--positive)]/15 bg-[var(--positive-soft)] px-4 py-3 text-sm text-[var(--positive)]">{notice}</p> : null}
+      <section className="mt-8 grid gap-8 xl:grid-cols-[.72fr_1.28fr]">
+        <div>
+          <SectionHeading eyebrow="Active menu specs" title={`${activeRecipes.length} recipes`} detail="Archived recipes remain available to managers for history." />
+          <Surface variant="outlined" padding="none" className="overflow-hidden">
+            {recipes.map((recipe) => (
+              <button
+                key={recipe.id}
+                type="button"
+                onClick={() => setSelectedId(recipe.id)}
+                aria-pressed={recipe.id === selected.id}
+                className={`focus-ring flex min-h-[72px] w-full items-center gap-3 border-t border-[var(--line)] px-4 py-4 text-left transition-colors first:border-0 ${recipe.id === selected.id ? "bg-[var(--accent-soft)]/35" : "hover:bg-[var(--paper)]"}`}
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><ChefHat className="size-4" /></span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{recipe.name}</span><span className="mt-1 block truncate text-xs text-[var(--ink-faint)]">Yields {recipe.yield} {recipe.yieldUnit} · {recipe.ingredients.length} measured components</span></span>
+                <span className="text-right"><span className="numeric block text-sm font-semibold">${recipeCost(recipe).toFixed(2)}</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">portion cost</span></span>
+              </button>
+            ))}
+          </Surface>
+        </div>
+
+        <Surface as="article" variant="raised" padding="lg">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="eyebrow">Recipe specification</p>
+              <input disabled={!canEdit} aria-label="Recipe name" value={selected.name} onChange={(event) => setRecipes((current) => current.map((recipe) => recipe.id === selected.id ? { ...recipe, name: event.target.value } : recipe))} className="mt-3 h-12 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xl font-semibold tracking-[-0.04em] outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-60 sm:text-2xl" />
+              <p className="mt-2 text-sm leading-6 text-[var(--ink-faint)]">Measured components, portions, and current cost for one finished yield.</p>
+            </div>
+            <span className="flex size-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Scale className="size-5" /></span>
+          </div>
+
+          <div className="mt-7 overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)]">
+            <div className="hidden grid-cols-[minmax(0,1fr)_110px_60px_40px] gap-3 bg-[var(--canvas-strong)] px-4 py-3 text-xs font-semibold tracking-[0.1em] text-[var(--ink-faint)] uppercase sm:grid"><span>Component</span><span>Quantity</span><span>Unit</span><span /></div>
+            {selected.ingredients.map((ingredient, index) => (
+              <div key={`${ingredient.name}-${index}`} className="grid grid-cols-[minmax(0,1fr)_48px_44px] items-center gap-3 border-t border-[var(--line)] px-4 py-4 first:border-0 sm:grid-cols-[minmax(0,1fr)_110px_60px_40px] sm:py-3">
+                <div className="col-span-3 min-w-0 sm:col-span-1">
+                  <input disabled={!canEdit} aria-label={`${ingredient.name} ingredient name`} value={ingredient.name} onChange={(event) => updateIngredientName(index, event.target.value)} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-sm font-semibold outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-60" />
+                  <p className="mt-1.5 text-xs text-[var(--ink-faint)]">${(ingredient.quantity * ingredient.costPerUnit).toFixed(2)} current cost</p>
+                </div>
+                <input disabled={!canEdit} aria-label={`${ingredient.name} quantity`} type="number" min="0" step="1" value={ingredient.quantity} onChange={(event) => updateIngredient(index, event.target.value)} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-right text-sm font-semibold outline-none focus:border-[var(--accent)] disabled:opacity-60" />
+                <span className="text-sm text-[var(--ink-faint)]">{ingredient.unit}</span>
+                <button disabled={!canEdit} type="button" aria-label={`Remove ${ingredient.name}`} onClick={() => removeIngredient(index)} className="focus-ring flex size-11 items-center justify-center rounded-xl text-[var(--ink-faint)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] disabled:opacity-40"><X className="size-4" /></button>
+              </div>
+            ))}
+          </div>
+
+          <Button disabled={!canEdit} variant="secondary" className="mt-4" onClick={addIngredient}><Plus className="size-4" /> Add ingredient</Button>
+          <div className="mt-7 flex flex-col gap-4 border-t border-[var(--line)] pt-6 sm:flex-row sm:items-end sm:justify-between">
+            <div><p className="text-xs text-[var(--ink-faint)]">Estimated portion cost</p><p className="numeric mt-1 text-3xl font-semibold tracking-[-0.05em]">${recipeCost(selected).toFixed(2)}</p></div>
+            <div className="flex flex-wrap gap-2"><Button variant="quiet" onClick={archiveRecipe} disabled={!canEdit || !selected.active}><X className="size-4" /> Archive</Button><Button disabled={!canEdit} variant="accent" onClick={() => setNotice(`${selected.name} saved. Inventory cost will recalculate from the latest item prices.`)}><Save className="size-4" /> Save recipe</Button></div>
+          </div>
+        </Surface>
       </section>
-      <div className="mt-8 flex items-start gap-3 rounded-[16px] bg-[var(--accent-soft)]/50 px-4 py-3 text-[10px] leading-4 text-[var(--accent-strong)]"><Scale className="mt-0.5 size-4 shrink-0" /><span>Chef access is limited to Le Yard’s BOH schedule, recipe specs, and inventory context. Payroll, earnings, CRM, receipts, reports, and owner approvals stay outside this workspace.</span></div>
     </PageFrame>
   );
 }

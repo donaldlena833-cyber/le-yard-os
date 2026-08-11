@@ -26,6 +26,16 @@ describe("restaurant-local scheduling helpers", () => {
     expect(zonedLocalToIso("2026-03-08", "02:30", "America/New_York")).toBeNull();
   });
 
+  it("rejects a wall time that occurs twice during the DST fold", () => {
+    expect(zonedLocalToIso("2026-11-01", "01:30", "America/New_York")).toBeNull();
+    expect(zonedLocalToIso("2026-11-01", "00:30", "America/New_York")).toBe(
+      "2026-11-01T04:30:00.000Z",
+    );
+    expect(zonedLocalToIso("2026-11-01", "02:30", "America/New_York")).toBe(
+      "2026-11-01T07:30:00.000Z",
+    );
+  });
+
   it("handles calendar-day operations without runtime locale drift", () => {
     expect(isIsoCalendarDate("2026-02-28")).toBe(true);
     expect(isIsoCalendarDate("2026-02-30")).toBe(false);

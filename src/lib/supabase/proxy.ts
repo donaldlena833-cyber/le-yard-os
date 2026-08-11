@@ -8,6 +8,17 @@ import {
   PLAYGROUND_SESSION_COOKIE,
   readPlaygroundSessionToken,
 } from "@/lib/auth/playground-auth.server";
+import {
+  CONNECTED_SESSION_DEADLINE_COOKIE,
+  STANDARD_SESSION_TTL_SECONDS,
+  connectedSessionCookieOptions,
+  sessionSecondsRemaining,
+} from "@/lib/auth/session-duration";
+import { isSupabaseAuthCookieName } from "@/lib/auth/session-cookies";
+import {
+  defaultWorkspacePath,
+  isRequestPathAllowedForAppSurface,
+} from "@/lib/app-surface";
 
 interface PendingCookie {
   name: string;
@@ -71,6 +82,55 @@ function securePlaygroundResponse(
     });
   }
   return response;
+}
+
+function expireConnectedSession(
+  request: NextRequest,
+  response: NextResponse,
+): NextResponse {
+  request.cookies.getAll().forEach((cookie) => {
+    if (!isSupabaseAuthCookieName(cookie.name)) return;
+    response.cookies.set(cookie.name, "", {
+      path: "/",
+      sameSite: "lax",
+      secure: true,
+      maxAge: 0,
+      expires: new Date(0),
+    });
+  });
+  response.cookies.set(CONNECTED_SESSION_DEADLINE_COOKIE, "", {
+    ...connectedSessionCookieOptions(0),
+    expires: new Date(0),
+  });
+  return response;
+}
+
+function expiredConnectedSessionResponse(
+  request: NextRequest,
+  appUrl: string,
+): NextResponse {
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return expireConnectedSession(
+      request,
+      NextResponse.json(
+        { error: "Your session expired. Sign in again." },
+        { status: 401 },
+      ),
+    );
+  }
+  const signInUrl = new URL("/sign-in", appUrl);
+  signInUrl.searchParams.set("notice", "session_expired");
+  signInUrl.searchParams.set(
+    "next",
+    safeInternalRedirect(
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      defaultWorkspacePath,
+    ),
+  );
+  return expireConnectedSession(
+    request,
+    NextResponse.redirect(signInUrl),
+  );
 }
 
 function updatePlaygroundSession(
@@ -166,6 +226,10 @@ export async function updateSession(
     return configurationUnavailable(request);
   }
 
+  if (!isRequestPathAllowedForAppSurface(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL(defaultWorkspacePath, runtime.appUrl!));
+  }
+
   if (runtime.mode === "demo") {
     if (runtime.playground) {
       return updatePlaygroundSession(
@@ -178,6 +242,15 @@ export async function updateSession(
   }
 
   const { url, publishableKey } = requireSupabasePublicEnv();
+  const authCookiesPresent = request.cookies
+    .getAll()
+    .some((cookie) => isSupabaseAuthCookieName(cookie.name));
+  const sessionRemaining = sessionSecondsRemaining(
+    request.cookies.get(CONNECTED_SESSION_DEADLINE_COOKIE)?.value,
+  );
+  if (authCookiesPresent && sessionRemaining === null) {
+    return expiredConnectedSessionResponse(request, runtime.appUrl!);
+  }
   const pendingCookies = new Map<string, PendingCookie>();
   const pendingHeaders = new Map<string, string>();
 
@@ -193,6 +266,9 @@ export async function updateSession(
 
   let response = forwardRequest(request, additionalRequestHeaders);
   const supabase = createServerClient(url, publishableKey, {
+    cookieOptions: {
+      maxAge: sessionRemaining ?? STANDARD_SESSION_TTL_SECONDS,
+    },
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -215,6 +291,10 @@ export async function updateSession(
 
   const { data } = await supabase.auth.getClaims();
   const isPublicPath = isPublicRequestPath(request.nextUrl.pathname);
+
+  if (data?.claims && sessionRemaining === null) {
+    return expiredConnectedSessionResponse(request, runtime.appUrl!);
+  }
 
   if (!data?.claims && !isPublicPath) {
     const signInUrl = new URL("/sign-in", runtime.appUrl!);
