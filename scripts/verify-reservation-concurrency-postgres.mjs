@@ -158,8 +158,8 @@ async function proveBlocked(observer, promise, backendPid, label) {
     ).rows[0];
     lastActivity = activity;
     if (
-      activity?.state === "active" &&
-      (activity.wait_event_type === "Lock" || activity.blocking_pids?.length)
+      activity?.wait_event_type === "Lock" ||
+      activity?.blocking_pids?.length
     ) {
       return activity.wait_event ?? "blocking_pid";
     }
