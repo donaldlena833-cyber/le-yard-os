@@ -5,9 +5,11 @@ import {
   ChartNoAxesCombined,
   CheckSquare2,
   ChefHat,
+  CircleDollarSign,
   ContactRound,
   Gauge,
   HandCoins,
+  LayoutDashboard,
   MessageCircleMore,
   PlugZap,
   ReceiptText,
@@ -20,12 +22,18 @@ import {
   WalletCards,
 } from "lucide-react";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { getStableMobileDestinationActions } from "@/lib/actions/action-registry";
 import {
   hasAnyCapability,
   KITCHEN_CAPABILITIES,
   type OperationalCapability,
 } from "@/lib/permissions/capabilities";
 import type { AppRole } from "@/types";
+import {
+  type AppSurface,
+  appSurface,
+  isDestinationAllowedForAppSurface,
+} from "@/lib/app-surface";
 
 export type NavItem = {
   href: string;
@@ -37,6 +45,7 @@ export type NavItem = {
   anyCapabilities?: readonly OperationalCapability[];
   personas?: readonly "chef"[];
   hiddenPersonas?: readonly "chef"[];
+  surfaces?: readonly AppSurface[];
 };
 
 export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
@@ -47,6 +56,8 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Service",
     items: [
+      { href: "/reservations", label: "Reservations", icon: LayoutDashboard, mobile: true, roles: ["owner", "admin"], anyCapabilities: ["reservations.view", "reservations.operate", "reservations.override", "reservations.configure"], surfaces: ["operations", "host"] },
+      { href: "/reservations/setup", label: "Reservation controls", icon: Settings2, roles: ["owner", "admin"], anyCapabilities: ["reservations.configure", "reservations.override"], surfaces: ["operations", "host"] },
       { href: "/schedule", label: "Schedule", icon: CalendarDays, mobile: true },
       { href: "/service", label: "Service Control", icon: RadioTower },
       { href: "/time-clock", label: "Time Clock", icon: Timer, mobile: true },
@@ -71,12 +82,13 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Guests",
     items: [
-      { href: "/guests", label: "Guests", icon: ContactRound, roles: ["owner", "admin"], anyCapabilities: ["guest.manage", "guest.sensitive_notes.view", "guest_recovery.manage"] },
+      { href: "/guests", label: "Guests", icon: ContactRound, roles: ["owner", "admin"], anyCapabilities: ["guest.manage", "guest.sensitive_notes.view", "guest_recovery.manage"], surfaces: ["operations", "host"] },
     ],
   },
   {
     label: "Money",
     items: [
+      { href: "/income", label: "Income", icon: CircleDollarSign, roles: ["owner", "admin"], anyCapabilities: ["reports.financial.view"], hiddenPersonas: ["chef"] },
       { href: "/closeout", label: "Closeout & tips", icon: HandCoins, roles: ["owner", "admin"], anyCapabilities: ["closeout.create", "closeout.approve", "cash.manage", "tip.calculate", "tip.approve"], hiddenPersonas: ["chef"] },
       { href: "/receipts", label: "Invoices", icon: ReceiptText, roles: ["owner", "admin", "manager"], hiddenPersonas: ["chef"] },
     ],
@@ -108,6 +120,7 @@ export const allNavItems = [
 ];
 
 export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue): boolean {
+  if (!(item.surfaces ?? ["operations"]).includes(appSurface)) return false;
   if (item.personas && (!workspace.persona || !item.personas.includes(workspace.persona))) return false;
   if (item.hiddenPersonas?.includes(workspace.persona as "chef")) return false;
   if (!item.roles && !item.anyCapabilities) return true;
@@ -117,16 +130,10 @@ export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue
   );
 }
 
-const defaultMobileRoutes = ["/today", "/schedule", "/service", "/messages"] as const;
-const employeeMobileRoutes = ["/today", "/schedule", "/messages", "/earnings"] as const;
-const chefMobileRoutes = ["/today", "/schedule", "/kitchen", "/messages"] as const;
-
 export function getMobileNavItems(workspace: WorkspaceContextValue): NavItem[] {
-  const preferredRoutes = workspace.persona === "chef"
-    ? chefMobileRoutes
-    : workspace.role === "employee"
-      ? employeeMobileRoutes
-      : defaultMobileRoutes;
+  const preferredRoutes = getStableMobileDestinationActions(workspace, workspace.activeJob).map(
+    (action) => action.destination,
+  );
   const visibleByHref = new Map(
     allNavItems
       .filter((item) => isNavItemVisible(item, workspace))
@@ -141,12 +148,15 @@ export function isWorkspaceRouteAccessible(
   pathname: string,
   workspace: WorkspaceContextValue,
 ): boolean {
+  if (!isDestinationAllowedForAppSurface(pathname)) return false;
   const item = allNavItems.find((candidate) => candidate.href === pathname);
   return item ? isNavItemVisible(item, workspace) : true;
 }
 
 export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/today": { title: "Today", detail: "Current service" },
+  "/reservations": { title: "Reservations", detail: "Book, seat, pace, and know every guest" },
+  "/reservations/setup": { title: "Reservation controls", detail: "Floor, service rules, exceptions, and public booking approval" },
   "/schedule": { title: "Service", detail: "Schedule and availability" },
   "/service": { title: "Service Control", detail: "Availability, pre-shift, and handoff" },
   "/time-clock": { title: "Time Clock", detail: "Punches, breaks, and corrections" },
@@ -156,6 +166,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/earnings": { title: "Earnings", detail: "Pay periods, tips, and hourly pay" },
   "/messages": { title: "Messages", detail: "Internal channels" },
   "/closeout": { title: "Money", detail: "Closeout, cash, and tips" },
+  "/income": { title: "Income", detail: "Live revenue, costs, labor, and hourly demand" },
   "/receipts": { title: "Invoices", detail: "Document intake and review" },
   "/inventory": { title: "Inventory", detail: "Stock, counts, and purchasing" },
   "/guests": { title: "Guests", detail: "Hospitality CRM" },

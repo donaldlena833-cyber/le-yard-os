@@ -5,6 +5,11 @@ import { BrandMark } from "@/components/ui/brand-mark";
 import { safeInternalRedirect } from "@/lib/auth/safe-redirect";
 import { isDemoMode } from "@/lib/env";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
+import {
+  defaultWorkspacePath,
+  isHostSurface,
+  surfaceProductName,
+} from "@/lib/app-surface";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -24,8 +29,10 @@ export default async function SignInPage({
   const playgroundMode = runtime.playground;
   const nextPath = safeInternalRedirect(
     typeof params.next === "string" ? params.next : undefined,
+    defaultWorkspacePath,
   );
   const localSignOutNotice = params.notice === "local_sign_out";
+  const sessionExpiredNotice = params.notice === "session_expired";
 
   return (
     <main className="paper-noise relative grid min-h-svh overflow-hidden bg-[var(--graphite)] lg:grid-cols-[1.05fr_.95fr]">
@@ -34,8 +41,12 @@ export default async function SignInPage({
         <div className="relative flex items-center gap-3">
           <BrandMark className="size-10 rounded-xl" />
           <div>
-            <p className="text-base font-semibold tracking-[-0.03em]">Le Yard OS</p>
-            <p className="mt-0.5 text-[10px] tracking-[0.13em] text-white/55 uppercase">Private back office</p>
+            <p className="text-base font-semibold tracking-[-0.03em]">
+              {surfaceProductName}
+            </p>
+            <p className="mt-0.5 text-[10px] tracking-[0.13em] text-white/55 uppercase">
+              {isHostSurface ? "Private host stand" : "Private back office"}
+            </p>
           </div>
         </div>
 
@@ -50,13 +61,17 @@ export default async function SignInPage({
               ? "Owner playground · Mock operating data"
               : isDemoMode
                 ? "Synthetic Saturday service preview"
-              : "Private, tenant-scoped operator access"}
+                : "Private, tenant-scoped operator access"}
           </p>
           <h1 className="max-w-lg text-[clamp(2.8rem,5vw,5rem)] leading-[0.96] font-medium tracking-[-0.065em]">
-            Everything behind a great night.
+            {isHostSurface
+              ? "Every guest. Every table. One calm service."
+              : "Everything behind a great night."}
           </h1>
           <p className="mt-7 max-w-md text-sm leading-6 text-white/55">
-            Schedule the team, close the books, watch inventory, and keep every handoff in one quiet place.
+            {isHostSurface
+              ? "Run the book, pace the room, and remember the details that turn a reservation into hospitality."
+              : "Schedule the team, close the books, watch inventory, and keep every handoff in one quiet place."}
           </p>
         </div>
 
@@ -65,22 +80,24 @@ export default async function SignInPage({
             ? [
                 ["4", "Temporary demo accounts"],
                 ["Mock", "Operational records"],
-                ["8h", "Secure session window"],
+                ["8h / 30d", "Secure session options"],
               ]
             : isDemoMode
-            ? [
-                ["11", "Demo team on floor"],
-                ["92%", "Demo prep complete"],
-                ["6:00", "Demo doors open"],
-              ]
-            : [
-                ["RLS", "Tenant isolation"],
-                ["AAL1", "Password access"],
-                ["Private", "Operational records"],
-              ]
+              ? [
+                  ["11", "Demo team on floor"],
+                  ["92%", "Demo prep complete"],
+                  ["6:00", "Demo doors open"],
+                ]
+              : [
+                  ["RLS", "Tenant isolation"],
+                  ["AAL1", "Password access"],
+                  ["Private", "Operational records"],
+                ]
           ).map(([value, label]) => (
             <div key={label}>
-              <p className="numeric text-xl font-medium tracking-[-0.04em]">{value}</p>
+              <p className="numeric text-xl font-medium tracking-[-0.04em]">
+                {value}
+              </p>
               <p className="mt-1.5 text-[10px] text-white/55">{label}</p>
             </div>
           ))}
@@ -91,9 +108,9 @@ export default async function SignInPage({
         <div className="w-full max-w-[390px]">
           <div className="mb-12 flex items-center gap-3 lg:hidden">
             <BrandMark />
-            <p className="text-sm font-semibold">Le Yard OS</p>
+            <p className="text-sm font-semibold">{surfaceProductName}</p>
           </div>
-          <p className="eyebrow">Operator access</p>
+          <p className="eyebrow">{isHostSurface ? "Host access" : "Operator access"}</p>
           <h2 className="mt-4 text-3xl font-medium tracking-[-0.05em] text-[var(--ink)] sm:text-[2.3rem]">
             Welcome back.
           </h2>
@@ -102,9 +119,14 @@ export default async function SignInPage({
               ? "Use one of the temporary demo accounts created for this playground link."
               : "Sign in with the account your owner or administrator invited."}
           </p>
-          {localSignOutNotice ? (
-            <p role="status" className="mt-5 rounded-xl bg-[var(--warning-soft)] px-3 py-2.5 text-xs leading-5 text-[var(--warning)]">
-              This device was signed out, but the identity provider could not confirm a global sign-out. Other active devices may remain signed in.
+          {localSignOutNotice || sessionExpiredNotice ? (
+            <p
+              role="status"
+              className="mt-5 rounded-xl bg-[var(--warning-soft)] px-3 py-2.5 text-xs leading-5 text-[var(--warning)]"
+            >
+              {sessionExpiredNotice
+                ? "Your session expired on this device. Sign in again to continue."
+                : "This device was signed out, but the identity provider could not confirm a global sign-out. Other active devices may remain signed in."}
             </p>
           ) : null}
           <SignInForm

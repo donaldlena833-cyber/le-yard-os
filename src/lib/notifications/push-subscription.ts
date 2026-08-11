@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 export interface BrowserPushSubscription {
   endpoint: string;
@@ -33,4 +33,21 @@ export function encryptPushSubscription(
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const tag = cipher.getAuthTag();
   return Buffer.concat([Buffer.from([1]), nonce, tag, ciphertext]);
+}
+
+export function decryptPushSubscription(
+  encrypted: Buffer,
+  encodedKey?: string,
+): BrowserPushSubscription {
+  if (encrypted.length < 30 || encrypted[0] !== 1) throw new Error("Unsupported push subscription envelope.");
+  const key = readEncryptionKey(encodedKey);
+  const nonce = encrypted.subarray(1, 13);
+  const tag = encrypted.subarray(13, 29);
+  const ciphertext = encrypted.subarray(29);
+  const decipher = createDecipheriv("aes-256-gcm", key, nonce);
+  decipher.setAuthTag(tag);
+  const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  const parsed = JSON.parse(plaintext.toString("utf8")) as BrowserPushSubscription;
+  if (!parsed.endpoint || !parsed.keys?.p256dh || !parsed.keys.auth) throw new Error("Stored push subscription is incomplete.");
+  return parsed;
 }

@@ -19,7 +19,13 @@ import { useMemo, useRef, useState } from "react";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
+import { ReadState } from "@/components/ui/read-state";
+import {
+  ResponsiveDataView,
+  type ResponsiveDataColumn,
+} from "@/components/ui/responsive-data-view";
 import { StatusPill } from "@/components/ui/status-pill";
+import { StickyActionBar } from "@/components/ui/sticky-action-bar";
 import { demoIds, demoWorkspace } from "@/lib/demo";
 import { generateTipPayrollCsv } from "@/lib/exports";
 import {
@@ -475,6 +481,178 @@ export function CloseoutWorkspace() {
     URL.revokeObjectURL(url);
   }
 
+  function allocationFor(participant: ParticipantSource) {
+    return calculation?.employees.find(
+      (employee) => employee.employeeId === participant.personId,
+    );
+  }
+
+  function allocationExplanation(
+    participant: ParticipantSource,
+    surface: "desktop" | "mobile",
+  ) {
+    const allocation = allocationFor(participant);
+    if (!allocation || expandedEmployee !== participant.personId) return null;
+
+    return (
+      <div
+        id={`explanation-${surface}-${participant.personId}`}
+        className="grid gap-4 text-xs leading-4 text-[var(--ink-faint)] lg:grid-cols-[1fr_1fr_auto]"
+      >
+        <div>
+          <strong className="block text-xs text-[var(--ink)]">Eligibility</strong>
+          <span>{allocation.explanation.eligibilityNote}</span>
+          <span className="mt-1 block">
+            {allocation.explanation.segments.map((segment) => segment.note).join(" ")}
+          </span>
+        </div>
+        <div>
+          <strong className="block text-xs text-[var(--ink)]">Exact share</strong>
+          <span className="font-mono">
+            {allocation.explanation.exactShareNumerator} / {allocation.explanation.exactShareDenominator}
+          </span>
+          <span className="mt-1 block">
+            Floor {allocation.explanation.floorShareCents}¢ + rounding {allocation.explanation.roundingAwardCents}¢
+          </span>
+        </div>
+        <div className="lg:text-right">
+          <strong className="block text-xs text-[var(--ink)]">Reconciled</strong>
+          <span>{allocation.explanation.reconciliation}</span>
+        </div>
+      </div>
+    );
+  }
+
+  const allocationColumns: readonly ResponsiveDataColumn<ParticipantSource>[] = [
+    {
+      key: "member",
+      label: "Team member / job",
+      render: (participant) => {
+        const allocation = allocationFor(participant);
+        const expanded = expandedEmployee === participant.personId;
+        return (
+          <button
+            type="button"
+            disabled={!allocation}
+            aria-expanded={expanded}
+            aria-controls={`explanation-desktop-${participant.personId}`}
+            onClick={() => setExpandedEmployee(expanded ? null : participant.personId)}
+            className="focus-ring flex min-h-11 items-center gap-3 rounded-xl text-left disabled:cursor-default"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--canvas-strong)] text-xs font-semibold">
+              {participant.displayName.slice(0, 1)}
+            </span>
+            <span>
+              <span className="block text-[13px] font-semibold text-[var(--ink)]">
+                {participant.displayName}
+              </span>
+              <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--ink-faint)]">
+                {participant.jobName} · {participant.sourceLabel}
+                {allocation ? (
+                  <ChevronDown
+                    className={cn(
+                      "size-3 transition-transform motion-reduce:transition-none",
+                      expanded && "rotate-180",
+                    )}
+                  />
+                ) : null}
+              </span>
+            </span>
+          </button>
+        );
+      },
+    },
+    {
+      key: "eligible-time",
+      label: "Eligible time",
+      align: "right",
+      render: (participant) => `${(participant.minutes / 60).toFixed(2)}h`,
+    },
+    {
+      key: "points",
+      label: "Points",
+      align: "right",
+      render: (participant) => (
+        <input
+          aria-label={`${participant.displayName} tip points`}
+          value={weights[participant.personId] ?? ""}
+          disabled={locked || !participant.policyEligible}
+          onChange={(event) => {
+            setWeights((current) => ({
+              ...current,
+              [participant.personId]: event.target.value,
+            }));
+            invalidateCalculation();
+          }}
+          className="numeric h-11 w-20 rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-right text-xs font-semibold outline-none disabled:opacity-45"
+        />
+      ),
+    },
+    {
+      key: "adjustment",
+      label: "Adjustment",
+      align: "right",
+      render: (participant) => (
+        <span className="inline-flex h-11 w-24 items-center rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2">
+          <span className="text-xs text-[var(--ink-faint)]">$</span>
+          <input
+            aria-label={`${participant.displayName} adjustment`}
+            value={adjustments[participant.personId] ?? "0.00"}
+            disabled={locked}
+            onChange={(event) => {
+              setAdjustments((current) => ({
+                ...current,
+                [participant.personId]: event.target.value,
+              }));
+              invalidateCalculation();
+            }}
+            className="numeric min-w-0 flex-1 bg-transparent text-right text-xs font-semibold outline-none disabled:opacity-45"
+          />
+        </span>
+      ),
+    },
+    {
+      key: "allocation",
+      label: "Allocation",
+      align: "right",
+      render: (participant) => {
+        const allocation = allocationFor(participant);
+        return (
+          <>
+            {allocation ? formatMoney(allocation.totalTipCents) : "—"}
+            <span className="mt-1 block text-xs font-normal text-[var(--ink-faint)]">
+              {allocation?.explanation.eligibilityCode.replaceAll("_", " ") ??
+                (participant.policyEligible ? "Pending" : "Policy excluded")}
+            </span>
+          </>
+        );
+      },
+    },
+    {
+      key: "include",
+      label: "Include",
+      align: "right",
+      render: (participant) => (
+        <label className="inline-flex min-h-11 items-center gap-2 text-xs text-[var(--ink-faint)]">
+          <input
+            type="checkbox"
+            checked={!exclusions[participant.personId]}
+            disabled={locked}
+            onChange={(event) => {
+              setExclusions((current) => ({
+                ...current,
+                [participant.personId]: !event.target.checked,
+              }));
+              invalidateCalculation();
+            }}
+            className="size-5 accent-[var(--accent)]"
+          />
+          <span>{exclusions[participant.personId] ? "Excluded" : "Included"}</span>
+        </label>
+      ),
+    },
+  ];
+
   return (
     <PageFrame width="full" className="max-w-[1700px]">
       <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
@@ -595,54 +773,134 @@ export function CloseoutWorkspace() {
           detail="Tip points are multiplied by eligible hours. Expand a calculated row for exact arithmetic."
           action={<Button variant="secondary" size="sm" disabled={locked} onClick={calculate}><Calculator className="size-3.5" /> Calculate tips</Button>}
         />
-        <div className="overflow-x-auto border-y border-[var(--line)]">
-          <table className="w-full min-w-[880px] border-collapse text-left">
-            <thead className="bg-[var(--canvas-strong)]">
-              <tr>
-                <th className="px-4 py-2.5 text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Team member / job</th>
-                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Eligible time</th>
-                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Points</th>
-                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Adjustment</th>
-                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Allocation</th>
-                <th className="px-4 py-2.5 text-right text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">Include</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {scenario.participants.map((participant) => {
-                const allocation = calculation?.employees.find((employee) => employee.employeeId === participant.personId);
-                const expanded = expandedEmployee === participant.personId;
-                return (
-                  <AnimatePresence key={participant.personId} initial={false}>
-                    <motion.tr layout className="group hover:bg-[var(--paper)]">
-                      <td className="px-4 py-3.5">
-                        <button disabled={!allocation} aria-expanded={expanded} aria-controls={`explanation-${participant.personId}`} onClick={() => setExpandedEmployee(expanded ? null : participant.personId)} className="flex items-center gap-3 text-left disabled:cursor-default">
-                          <span className="flex size-8 items-center justify-center rounded-full bg-[var(--canvas-strong)] text-xs font-semibold">{participant.displayName.slice(0, 1)}</span>
-                          <span><span className="block text-[13px] font-semibold">{participant.displayName}</span><span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--ink-faint)]">{participant.jobName} · {participant.sourceLabel}{allocation ? <ChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} /> : null}</span></span>
-                        </button>
-                      </td>
-                      <td className="numeric px-4 py-3.5 text-right text-[13px] font-semibold">{(participant.minutes / 60).toFixed(2)}h</td>
-                      <td className="px-4 py-3.5 text-right"><input aria-label={`${participant.displayName} tip points`} value={weights[participant.personId] ?? ""} disabled={locked || !participant.policyEligible} onChange={(event) => { setWeights((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric h-8 w-20 rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-right text-xs font-semibold outline-none disabled:opacity-45" /></td>
-                      <td className="px-4 py-3.5 text-right"><span className="inline-flex h-8 w-24 items-center rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2"><span className="text-xs text-[var(--ink-faint)]">$</span><input aria-label={`${participant.displayName} adjustment`} value={adjustments[participant.personId] ?? "0.00"} disabled={locked} onChange={(event) => { setAdjustments((current) => ({ ...current, [participant.personId]: event.target.value })); invalidateCalculation(); }} className="numeric min-w-0 flex-1 bg-transparent text-right text-xs font-semibold outline-none disabled:opacity-45" /></span></td>
-                      <td className="numeric px-4 py-3.5 text-right text-[13px] font-semibold">{allocation ? formatMoney(allocation.totalTipCents) : "—"}<span className="mt-1 block text-xs font-normal text-[var(--ink-faint)]">{allocation?.explanation.eligibilityCode.replaceAll("_", " ") ?? (participant.policyEligible ? "Pending" : "Policy excluded")}</span></td>
-                      <td className="px-4 py-3.5 text-right"><label className="inline-flex items-center gap-2 text-xs text-[var(--ink-faint)]"><input type="checkbox" checked={!exclusions[participant.personId]} disabled={locked} onChange={(event) => { setExclusions((current) => ({ ...current, [participant.personId]: !event.target.checked })); invalidateCalculation(); }} className="size-4 accent-[var(--accent)]" /><span>{exclusions[participant.personId] ? "Excluded" : "Included"}</span></label></td>
-                    </motion.tr>
-                    {expanded && allocation ? (
-                      <motion.tr id={`explanation-${participant.personId}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="bg-[var(--paper)]">
-                        <td colSpan={6} className="px-5 py-4">
-                          <div className="grid gap-4 text-xs leading-4 text-[var(--ink-faint)] lg:grid-cols-[1fr_1fr_auto]">
-                            <div><strong className="block text-xs text-[var(--ink)]">Eligibility</strong><span>{allocation.explanation.eligibilityNote}</span><span className="mt-1 block">{allocation.explanation.segments.map((segment) => segment.note).join(" ")}</span></div>
-                            <div><strong className="block text-xs text-[var(--ink)]">Exact share</strong><span className="font-mono">{allocation.explanation.exactShareNumerator} / {allocation.explanation.exactShareDenominator}</span><span className="mt-1 block">Floor {allocation.explanation.floorShareCents}¢ + rounding {allocation.explanation.roundingAwardCents}¢</span></div>
-                            <div className="text-right"><strong className="block text-xs text-[var(--ink)]">Reconciled</strong><span>{allocation.explanation.reconciliation}</span></div>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    ) : null}
-                  </AnimatePresence>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ResponsiveDataView
+          items={scenario.participants}
+          columns={allocationColumns}
+          getItemKey={(participant) => participant.personId}
+          label="Tip allocation participants"
+          minTableWidth={880}
+          empty={
+            <ReadState
+              compact
+              state="empty"
+              title="No eligible shifts"
+              description="Closed time entries will appear here when they are eligible for this policy."
+            />
+          }
+          renderDetails={(participant) => allocationExplanation(participant, "desktop")}
+          renderCard={(participant) => {
+            const allocation = allocationFor(participant);
+            const expanded = expandedEmployee === participant.personId;
+            return (
+              <div className="rounded-[16px] border border-[var(--line)] bg-[var(--paper-strong)] p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    disabled={!allocation}
+                    aria-expanded={expanded}
+                    aria-controls={`explanation-mobile-${participant.personId}`}
+                    onClick={() => setExpandedEmployee(expanded ? null : participant.personId)}
+                    className="focus-ring -m-1 flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-xl p-1 text-left disabled:cursor-default"
+                  >
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--canvas-strong)] text-xs font-semibold">
+                      {participant.displayName.slice(0, 1)}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-semibold">
+                        {participant.displayName}
+                      </span>
+                      <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--ink-faint)]">
+                        {participant.jobName} · {(participant.minutes / 60).toFixed(2)}h
+                        {allocation ? (
+                          <ChevronDown
+                            className={cn(
+                              "size-3 shrink-0 transition-transform motion-reduce:transition-none",
+                              expanded && "rotate-180",
+                            )}
+                          />
+                        ) : null}
+                      </span>
+                    </span>
+                  </button>
+                  <label className="flex min-h-11 shrink-0 items-center gap-2 text-xs text-[var(--ink-faint)]">
+                    <input
+                      type="checkbox"
+                      checked={!exclusions[participant.personId]}
+                      disabled={locked}
+                      onChange={(event) => {
+                        setExclusions((current) => ({
+                          ...current,
+                          [participant.personId]: !event.target.checked,
+                        }));
+                        invalidateCalculation();
+                      }}
+                      className="size-5 accent-[var(--accent)]"
+                    />
+                    <span className="sr-only">
+                      Include {participant.displayName} in the tip pool
+                    </span>
+                  </label>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  <label className="text-xs font-semibold text-[var(--ink-faint)]">
+                    Points
+                    <input
+                      aria-label={`${participant.displayName} mobile tip points`}
+                      value={weights[participant.personId] ?? ""}
+                      disabled={locked || !participant.policyEligible}
+                      onChange={(event) => {
+                        setWeights((current) => ({
+                          ...current,
+                          [participant.personId]: event.target.value,
+                        }));
+                        invalidateCalculation();
+                      }}
+                      className="numeric mt-1.5 h-11 w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 text-right text-base font-semibold text-[var(--ink)] outline-none disabled:opacity-45"
+                    />
+                  </label>
+                  <label className="text-xs font-semibold text-[var(--ink-faint)]">
+                    Adjustment
+                    <span className="mt-1.5 flex h-11 items-center rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3">
+                      <span className="text-xs">$</span>
+                      <input
+                        aria-label={`${participant.displayName} mobile adjustment`}
+                        value={adjustments[participant.personId] ?? "0.00"}
+                        disabled={locked}
+                        onChange={(event) => {
+                          setAdjustments((current) => ({
+                            ...current,
+                            [participant.personId]: event.target.value,
+                          }));
+                          invalidateCalculation();
+                        }}
+                        className="numeric min-w-0 flex-1 bg-transparent text-right text-base font-semibold text-[var(--ink)] outline-none disabled:opacity-45"
+                      />
+                    </span>
+                  </label>
+                </div>
+
+                <div className="mt-4 flex items-end justify-between gap-3 border-t border-[var(--line)] pt-3">
+                  <div>
+                    <p className="text-xs font-semibold text-[var(--ink-faint)]">Allocation</p>
+                    <p className="numeric mt-1 text-base font-semibold">
+                      {allocation ? formatMoney(allocation.totalTipCents) : "—"}
+                    </p>
+                  </div>
+                  <StatusPill tone={exclusions[participant.personId] ? "warning" : "positive"}>
+                    {exclusions[participant.personId] ? "Excluded" : "Included"}
+                  </StatusPill>
+                </div>
+
+                {allocationExplanation(participant, "mobile") ? (
+                  <div className="mt-4 border-t border-[var(--line)] pt-4">
+                    {allocationExplanation(participant, "mobile")}
+                  </div>
+                ) : null}
+              </div>
+            );
+          }}
+        />
 
         {calculation ? (
           <div className="mt-4 grid gap-3 rounded-[16px] bg-[var(--graphite)] px-5 py-4 text-white sm:grid-cols-[1fr_auto_auto] sm:items-center">
@@ -657,14 +915,31 @@ export function CloseoutWorkspace() {
         {message ? <motion.div key={message} role="status" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="mt-6 flex items-start gap-3 rounded-xl bg-[var(--accent-soft)]/55 px-4 py-3 text-xs leading-4 text-[var(--ink-soft)]"><FileText className="mt-0.5 size-3.5 shrink-0 text-[var(--accent-strong)]" />{message}</motion.div> : null}
       </AnimatePresence>
 
-      <footer className="sticky bottom-[calc(72px+env(safe-area-inset-bottom)+0.75rem)] z-20 mt-7 rounded-[18px] border border-white/10 bg-[var(--graphite)] px-4 py-3 text-white shadow-[var(--shadow-float)] sm:flex sm:items-center sm:justify-between lg:bottom-3">
-        <div className="flex items-center gap-3"><span className="flex size-9 items-center justify-center rounded-xl bg-white/10">{status === "approved" ? <LockKeyhole className="size-4 text-[var(--positive)]" /> : <WalletCards className="size-4 text-[var(--accent)]" />}</span><div><p className="text-[13px] font-semibold">{location.name} · {draft.businessDate}</p><p className="mt-1 text-xs text-white/50">{status === "draft" ? "Manager draft · calculate before submitting" : status === "submitted" ? "Awaiting owner approval" : `Locked by ${currentDisplayName}`}</p></div></div>
-        <div className="mt-3 flex flex-wrap gap-2 sm:mt-0">
+      <StickyActionBar
+        label="Closeout workflow actions"
+        title={`${location.name} · ${draft.businessDate}`}
+        detail={
+          status === "draft"
+            ? "Manager draft · calculate before submitting"
+            : status === "submitted"
+              ? "Awaiting owner approval"
+              : `Locked by ${currentDisplayName}`
+        }
+        icon={
+          status === "approved" ? (
+            <LockKeyhole className="size-4 text-[var(--positive)]" />
+          ) : (
+            <WalletCards className="size-4 text-[var(--accent)]" />
+          )
+        }
+        actions={
+          <>
           {status === "draft" ? <><Button variant="secondary" size="sm" className="border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={calculate}><Calculator className="size-3.5" /> Calculate</Button><Button variant="accent" size="sm" onClick={submitCloseout}><ShieldCheck className="size-3.5" /> Submit closeout</Button></> : null}
           {status === "submitted" ? <><Button variant="quiet" size="sm" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={returnToDraft}><RotateCcw className="size-3.5" /> Return to draft</Button><Button variant="accent" size="sm" onClick={approveCloseout}><Check className="size-3.5" /> Owner approve</Button></> : null}
           {status === "approved" ? <Button variant="accent" size="sm" onClick={downloadPayroll}><ArrowDownToLine className="size-3.5" /> Payroll CSV</Button> : null}
-        </div>
-      </footer>
+          </>
+        }
+      />
     </PageFrame>
   );
 }

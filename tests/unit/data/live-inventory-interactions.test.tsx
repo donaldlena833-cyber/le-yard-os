@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   configureInventoryCatalogAction,
@@ -243,6 +250,56 @@ const mutationModel: LiveInventoryModel = {
 };
 
 describe("connected Inventory review interactions", () => {
+  it("opens item evidence in a Drawer and prefills named object actions", async () => {
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: mutationModel }}
+      />,
+    );
+
+    const row = screen.getByRole("button", {
+      name: "Open Lemons inventory details",
+    });
+    row.focus();
+    fireEvent.click(row);
+
+    const drawer = screen.getByRole("dialog", { name: "Lemons" });
+    expect(within(drawer).getByText("24 ea")).toBeTruthy();
+    expect(within(drawer).getByText("$13.2")).toBeTruthy();
+    expect(
+      within(drawer).getByRole("button", { name: "Record waste" }),
+    ).toBeTruthy();
+    expect(
+      within(drawer).getByRole("button", { name: "Start transfer" }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      within(drawer).getByRole("button", { name: "Record waste" }),
+    );
+    const wasteDialog = screen.getByRole("dialog", { name: "Record waste" });
+    expect(
+      (within(wasteDialog).getByLabelText("Item") as HTMLSelectElement).value,
+    ).toBe(model.items[0].id);
+    fireEvent.click(
+      within(wasteDialog).getByRole("button", { name: "Close dialog" }),
+    );
+    await waitFor(() => expect(document.activeElement).toBe(row));
+
+    fireEvent.click(row);
+    const reopenedDrawer = screen.getByRole("dialog", { name: "Lemons" });
+    fireEvent.click(
+      within(reopenedDrawer).getByRole("button", { name: "Start transfer" }),
+    );
+    const transferDialog = screen.getByRole("dialog", {
+      name: "Create transfer",
+    });
+    expect(
+      (within(transferDialog).getByLabelText("Item 1") as HTMLSelectElement)
+        .value,
+    ).toBe(model.items[0].id);
+  });
+
   it("opens a complete recipe editor from the Recipes tab and persists manual changes", async () => {
     const chefWorkspace = {
       ...workspace,
@@ -251,34 +308,63 @@ describe("connected Inventory review interactions", () => {
     const recipeId = "91000000-0000-4000-8000-000000000001";
     const recipeModel: LiveInventoryModel = {
       ...model,
-      recipes: [{
-        id: recipeId,
-        name: "Affogato",
-        yieldQuantity: 1,
-        yieldUnit: "ea",
-        menuPriceCents: 1000,
-        ingredientCount: 1,
-        knownCostCents: 55,
-        missingCostCount: 0,
-      }],
-      catalog: {
-        units: [{ ...model.units[0], isBase: true, isActive: true, updatedAt: "2026-08-01T12:00:00Z" }],
-        conversions: [],
-        categories: [],
-        vendors: [],
-        items: [{ id: model.items[0].id, name: "Lemons", sku: model.items[0].sku, description: null, categoryId: null, baseUnitId: model.items[0].baseUnitId, trackInventory: true, isActive: true }],
-        vendorItems: [],
-        priceHistory: [],
-        pars: [],
-        recipes: [{
+      recipes: [
+        {
           id: recipeId,
           name: "Affogato",
           yieldQuantity: 1,
-          yieldUnitId: model.items[0].baseUnitId,
+          yieldUnit: "ea",
           menuPriceCents: 1000,
-          isActive: true,
-          ingredients: [{ inventoryItemId: model.items[0].id, unitId: model.items[0].baseUnitId, quantity: 1, wasteFactor: 0 }],
-        }],
+          ingredientCount: 1,
+          knownCostCents: 55,
+          missingCostCount: 0,
+        },
+      ],
+      catalog: {
+        units: [
+          {
+            ...model.units[0],
+            isBase: true,
+            isActive: true,
+            updatedAt: "2026-08-01T12:00:00Z",
+          },
+        ],
+        conversions: [],
+        categories: [],
+        vendors: [],
+        items: [
+          {
+            id: model.items[0].id,
+            name: "Lemons",
+            sku: model.items[0].sku,
+            description: null,
+            categoryId: null,
+            baseUnitId: model.items[0].baseUnitId,
+            trackInventory: true,
+            isActive: true,
+          },
+        ],
+        vendorItems: [],
+        priceHistory: [],
+        pars: [],
+        recipes: [
+          {
+            id: recipeId,
+            name: "Affogato",
+            yieldQuantity: 1,
+            yieldUnitId: model.items[0].baseUnitId,
+            menuPriceCents: 1000,
+            isActive: true,
+            ingredients: [
+              {
+                inventoryItemId: model.items[0].id,
+                unitId: model.items[0].baseUnitId,
+                quantity: 1,
+                wasteFactor: 0,
+              },
+            ],
+          },
+        ],
       },
     };
     vi.mocked(configureInventoryCatalogAction).mockResolvedValue({
@@ -288,21 +374,45 @@ describe("connected Inventory review interactions", () => {
       data: { id: recipeId, command: "recipe.save", replayed: false },
     });
 
-    render(<LiveInventoryWorkspace workspace={chefWorkspace} result={{ ok: true, data: recipeModel }} />);
+    render(
+      <LiveInventoryWorkspace
+        workspace={chefWorkspace}
+        result={{ ok: true, data: recipeModel }}
+      />,
+    );
     fireEvent.click(screen.getByRole("tab", { name: "Recipes" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Edit Affogato" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Edit Affogato" }),
+    );
 
     const dialog = screen.getByRole("dialog", { name: "Edit Affogato" });
     expect(dialog.dataset.inventoryModalLayout).toBe("task");
-    expect(dialog.querySelector("[data-recipe-editor-scroll]")?.className).toContain("overflow-y-auto");
-    expect((within(dialog).getByLabelText("Recipe name") as HTMLInputElement).value).toBe("Affogato");
-    expect((within(dialog).getByLabelText("Ingredient item 1") as HTMLSelectElement).value).toBe(model.items[0].id);
-    fireEvent.change(within(dialog).getByLabelText("Menu price · USD"), { target: { value: "12.00" } });
-    fireEvent.change(within(dialog).getByLabelText("Ingredient quantity 1"), { target: { value: "2" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save change" }));
+    expect(
+      dialog.querySelector("[data-recipe-editor-scroll]")?.className,
+    ).toContain("overflow-y-auto");
+    expect(
+      (within(dialog).getByLabelText("Recipe name") as HTMLInputElement).value,
+    ).toBe("Affogato");
+    expect(
+      (within(dialog).getByLabelText("Ingredient item 1") as HTMLSelectElement)
+        .value,
+    ).toBe(model.items[0].id);
+    fireEvent.change(within(dialog).getByLabelText("Menu price · USD"), {
+      target: { value: "12.00" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Ingredient quantity 1"), {
+      target: { value: "2" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save change" }),
+    );
 
-    await waitFor(() => expect(configureInventoryCatalogAction).toHaveBeenCalledOnce());
-    expect(vi.mocked(configureInventoryCatalogAction).mock.calls[0][0]).toMatchObject({
+    await waitFor(() =>
+      expect(configureInventoryCatalogAction).toHaveBeenCalledOnce(),
+    );
+    expect(
+      vi.mocked(configureInventoryCatalogAction).mock.calls[0][0],
+    ).toMatchObject({
       command: "recipe.save",
       id: recipeId,
       name: "Affogato",
@@ -312,18 +422,33 @@ describe("connected Inventory review interactions", () => {
   });
 
   it("renders the count as a body-ported single-scroll task with safe actions and no input autofocus", async () => {
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
     const opener = screen.getByRole("button", { name: "Start full count" });
     opener.focus();
 
     fireEvent.click(opener);
     const dialog = screen.getByRole("dialog", { name: "Full inventory count" });
-    const overlay = dialog.closest<HTMLElement>("[data-inventory-modal-overlay]");
-    const modalBody = dialog.querySelector<HTMLElement>("[data-inventory-modal-body]");
-    const countScroll = dialog.querySelector<HTMLElement>("[data-inventory-count-scroll]");
-    const actions = dialog.querySelector<HTMLElement>("[data-inventory-count-actions]");
+    const overlay = dialog.closest<HTMLElement>(
+      "[data-inventory-modal-overlay]",
+    );
+    const modalBody = dialog.querySelector<HTMLElement>(
+      "[data-inventory-modal-body]",
+    );
+    const countScroll = dialog.querySelector<HTMLElement>(
+      "[data-inventory-count-scroll]",
+    );
+    const actions = dialog.querySelector<HTMLElement>(
+      "[data-inventory-count-actions]",
+    );
     const row = dialog.querySelector<HTMLElement>("[data-inventory-count-row]");
-    const input = within(dialog).getByRole("spinbutton", { name: "Counted quantity for Lemons" });
+    const input = within(dialog).getByRole("spinbutton", {
+      name: "Counted quantity for Lemons",
+    });
     const close = within(dialog).getByRole("button", { name: "Close dialog" });
 
     expect(overlay?.parentElement).toBe(document.body);
@@ -353,12 +478,20 @@ describe("connected Inventory review interactions", () => {
         alreadyApplied: false,
       },
     });
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Start full count" }));
-    fireEvent.change(screen.getByRole("spinbutton", { name: "Counted quantity for Lemons" }), {
-      target: { value: "22.5" },
-    });
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Counted quantity for Lemons" }),
+      {
+        target: { value: "22.5" },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Submit for review" }));
 
     expect(await screen.findByText(/Full count submitted/)).toBeTruthy();
@@ -378,44 +511,88 @@ describe("connected Inventory review interactions", () => {
   });
 
   it("prevents a counter from reviewing their own pending count", async () => {
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /Counts/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /Full count · Connected Manager/ }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /Full count · Connected Manager/,
+      }),
+    );
 
-    expect(screen.getByRole("dialog", { name: "Inventory count review" })).toBeTruthy();
-    expect(screen.getByText("You submitted this count. A different manager must review it.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Approve & post" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Reject" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByRole("dialog", { name: "Inventory count review" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "You submitted this count. A different manager must review it.",
+      ),
+    ).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Approve & post",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Reject" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("creates a purchase order with exact integer-cent prices and no trusted actor fields", async () => {
-    vi.mocked(createPurchaseOrderAction).mockResolvedValue({ ok: true } as never);
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: mutationModel }} />);
+    vi.mocked(createPurchaseOrderAction).mockResolvedValue({
+      ok: true,
+    } as never);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: mutationModel }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "New order" }));
-    expect((screen.getByLabelText("PO number") as HTMLInputElement).value).toBe("");
-    fireEvent.change(screen.getByLabelText("PO number"), { target: { value: "PO-2049" } });
-    fireEvent.change(screen.getByLabelText("Order quantity 1"), { target: { value: "2.5" } });
-    fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "1.29" } });
-    fireEvent.change(screen.getByLabelText("Tax · USD"), { target: { value: "0.07" } });
+    expect((screen.getByLabelText("PO number") as HTMLInputElement).value).toBe(
+      "",
+    );
+    fireEvent.change(screen.getByLabelText("PO number"), {
+      target: { value: "PO-2049" },
+    });
+    fireEvent.change(screen.getByLabelText("Order quantity 1"), {
+      target: { value: "2.5" },
+    });
+    fireEvent.change(screen.getByLabelText("Unit price 1"), {
+      target: { value: "1.29" },
+    });
+    fireEvent.change(screen.getByLabelText("Tax · USD"), {
+      target: { value: "0.07" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create order" }));
 
     expect(await screen.findByText(/Purchase order created/)).toBeTruthy();
     expect(createPurchaseOrderAction).toHaveBeenCalledOnce();
-    const input = vi.mocked(createPurchaseOrderAction).mock.calls[0][0] as Record<string, unknown>;
+    const input = vi.mocked(createPurchaseOrderAction).mock
+      .calls[0][0] as Record<string, unknown>;
     expect(input).toMatchObject({
       locationId: workspace.activeLocation.id,
       vendorId: mutationModel.vendors[0].id,
       taxCents: 7,
       shippingCents: 0,
-      lines: [{
-        inventoryItemId: model.items[0].id,
-        unitId: model.items[0].baseUnitId,
-        quantity: 2.5,
-        unitPriceCents: 129,
-        notes: null,
-      }],
+      lines: [
+        {
+          inventoryItemId: model.items[0].id,
+          unitId: model.items[0].baseUnitId,
+          quantity: 2.5,
+          unitPriceCents: 129,
+          notes: null,
+        },
+      ],
     });
     expect(input).not.toHaveProperty("organizationId");
     expect(input).not.toHaveProperty("actorId");
@@ -424,21 +601,37 @@ describe("connected Inventory review interactions", () => {
   it("reuses a request ID for an ambiguous retry and rotates it for a newly opened order", async () => {
     vi.mocked(createPurchaseOrderAction)
       .mockReset()
-      .mockResolvedValueOnce({ ok: false, message: "The response was interrupted. Retry this order." } as never)
+      .mockResolvedValueOnce({
+        ok: false,
+        message: "The response was interrupted. Retry this order.",
+      } as never)
       .mockResolvedValueOnce({ ok: true } as never)
       .mockResolvedValueOnce({ ok: true } as never);
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: mutationModel }} />);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: mutationModel }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "New order" }));
-    fireEvent.change(screen.getByLabelText("PO number"), { target: { value: "PO-2050" } });
-    fireEvent.change(screen.getByLabelText("Order quantity 1"), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "1.25" } });
+    fireEvent.change(screen.getByLabelText("PO number"), {
+      target: { value: "PO-2050" },
+    });
+    fireEvent.change(screen.getByLabelText("Order quantity 1"), {
+      target: { value: "2" },
+    });
+    fireEvent.change(screen.getByLabelText("Unit price 1"), {
+      target: { value: "1.25" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create order" }));
 
     const alert = await within(
       screen.getByRole("dialog", { name: "Create purchase order" }),
     ).findByRole("alert");
-    expect(alert.textContent).toContain("The response was interrupted. Retry this order.");
+    expect(alert.textContent).toContain(
+      "The response was interrupted. Retry this order.",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Create order" }));
     expect(await screen.findByText(/Purchase order created/)).toBeTruthy();
     await waitFor(() => {
@@ -447,43 +640,66 @@ describe("connected Inventory review interactions", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "New order" }));
-    fireEvent.change(screen.getByLabelText("PO number"), { target: { value: "PO-2050" } });
-    fireEvent.change(screen.getByLabelText("Order quantity 1"), { target: { value: "2" } });
-    fireEvent.change(screen.getByLabelText("Unit price 1"), { target: { value: "1.25" } });
+    fireEvent.change(screen.getByLabelText("PO number"), {
+      target: { value: "PO-2050" },
+    });
+    fireEvent.change(screen.getByLabelText("Order quantity 1"), {
+      target: { value: "2" },
+    });
+    fireEvent.change(screen.getByLabelText("Unit price 1"), {
+      target: { value: "1.25" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create order" }));
-    await waitFor(() => expect(createPurchaseOrderAction).toHaveBeenCalledTimes(3));
-
-    const [first, retry, reopened] = vi.mocked(createPurchaseOrderAction).mock.calls.map(
-      ([input]) => input as Record<string, unknown>,
+    await waitFor(() =>
+      expect(createPurchaseOrderAction).toHaveBeenCalledTimes(3),
     );
+
+    const [first, retry, reopened] = vi
+      .mocked(createPurchaseOrderAction)
+      .mock.calls.map(([input]) => input as Record<string, unknown>);
     expect(retry).toEqual(first);
     expect(reopened.requestId).not.toBe(first.requestId);
   });
 
   it("receives only the unfilled purchase-order quantity after a partial delivery", async () => {
-    vi.mocked(receiveInventoryDeliveryAction).mockResolvedValue({ ok: true } as never);
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: { ...mutationModel, deliveries: [] } }} />);
+    vi.mocked(receiveInventoryDeliveryAction).mockResolvedValue({
+      ok: true,
+    } as never);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: { ...mutationModel, deliveries: [] } }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /Orders/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Receive" }));
 
-    expect((screen.getByLabelText("Delivered quantity 1") as HTMLInputElement).value).toBe("3");
-    fireEvent.change(screen.getByLabelText("Accepted quantity 1"), { target: { value: "2.75" } });
+    expect(
+      (screen.getByLabelText("Delivered quantity 1") as HTMLInputElement).value,
+    ).toBe("3");
+    fireEvent.change(screen.getByLabelText("Accepted quantity 1"), {
+      target: { value: "2.75" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Receive delivery" }));
 
     expect(await screen.findByText(/Delivery received/)).toBeTruthy();
     expect(receiveInventoryDeliveryAction).toHaveBeenCalledOnce();
-    expect(vi.mocked(receiveInventoryDeliveryAction).mock.calls[0][0]).toMatchObject({
+    expect(
+      vi.mocked(receiveInventoryDeliveryAction).mock.calls[0][0],
+    ).toMatchObject({
       locationId: workspace.activeLocation.id,
       vendorId: mutationModel.vendors[0].id,
       purchaseOrderId: mutationModel.orders[0].id,
-      lines: [{
-        inventoryItemId: model.items[0].id,
-        unitId: model.items[0].baseUnitId,
-        quantity: 3,
-        acceptedQuantity: 2.75,
-        unitPriceCents: 125,
-      }],
+      lines: [
+        {
+          inventoryItemId: model.items[0].id,
+          unitId: model.items[0].baseUnitId,
+          quantity: 3,
+          acceptedQuantity: 2.75,
+          unitPriceCents: 125,
+        },
+      ],
     });
   });
 
@@ -491,31 +707,51 @@ describe("connected Inventory review interactions", () => {
     const bulkModel: LiveInventoryModel = {
       ...mutationModel,
       deliveries: [],
-      orders: [{
-        ...mutationModel.orders[0],
-        lines: [{
-          ...mutationModel.orders[0].lines[0],
-          quantity: 1_200,
-          receivedQuantity: 200,
-        }],
-      }],
+      orders: [
+        {
+          ...mutationModel.orders[0],
+          lines: [
+            {
+              ...mutationModel.orders[0].lines[0],
+              quantity: 1_200,
+              receivedQuantity: 200,
+            },
+          ],
+        },
+      ],
     };
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: bulkModel }} />);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: bulkModel }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /Orders/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Receive" }));
 
-    expect((screen.getByLabelText("Delivered quantity 1") as HTMLInputElement).value).toBe("1000");
-    expect((screen.getByLabelText("Accepted quantity 1") as HTMLInputElement).value).toBe("1000");
+    expect(
+      (screen.getByLabelText("Delivered quantity 1") as HTMLInputElement).value,
+    ).toBe("1000");
+    expect(
+      (screen.getByLabelText("Accepted quantity 1") as HTMLInputElement).value,
+    ).toBe("1000");
   });
 
   it("traps dialog focus, inerts the workspace, and returns focus to the opener", async () => {
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: mutationModel }} />);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: mutationModel }}
+      />,
+    );
     const opener = screen.getByRole("button", { name: "New order" });
     opener.focus();
 
     fireEvent.click(opener);
-    const dialog = screen.getByRole("dialog", { name: "Create purchase order" });
+    const dialog = screen.getByRole("dialog", {
+      name: "Create purchase order",
+    });
     const close = within(dialog).getByRole("button", { name: "Close dialog" });
     const submit = within(dialog).getByRole("button", { name: "Create order" });
     expect(dialog.contains(document.activeElement)).toBe(true);
@@ -534,37 +770,69 @@ describe("connected Inventory review interactions", () => {
   });
 
   it("keeps a waste recorder from approving their own observation", async () => {
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: mutationModel }} />);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: mutationModel }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /Waste/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Review" }));
 
     expect(screen.getByRole("dialog", { name: "Review waste" })).toBeTruthy();
-    expect(screen.getByText("You recorded this waste. A different manager must review it.")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Approve & post" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Reject" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "You recorded this waste. A different manager must review it.",
+      ),
+    ).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Approve & post",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "Reject" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("submits a transfer as pending evidence without posting a client-side stock movement", async () => {
-    vi.mocked(createInventoryTransferAction).mockResolvedValue({ ok: true } as never);
-    render(<LiveInventoryWorkspace workspace={workspace} result={{ ok: true, data: mutationModel }} />);
+    vi.mocked(createInventoryTransferAction).mockResolvedValue({
+      ok: true,
+    } as never);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: mutationModel }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /Transfers/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "New transfer" }));
-    fireEvent.change(screen.getByLabelText("Send quantity 1"), { target: { value: "4.25" } });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "New transfer" }),
+    );
+    fireEvent.change(screen.getByLabelText("Send quantity 1"), {
+      target: { value: "4.25" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Submit transfer" }));
 
     expect(await screen.findByText(/Transfer submitted/)).toBeTruthy();
     expect(createInventoryTransferAction).toHaveBeenCalledOnce();
-    const input = vi.mocked(createInventoryTransferAction).mock.calls[0][0] as Record<string, unknown>;
+    const input = vi.mocked(createInventoryTransferAction).mock
+      .calls[0][0] as Record<string, unknown>;
     expect(input).toMatchObject({
       fromLocationId: workspace.activeLocation.id,
       toLocationId: mutationModel.locations[1].id,
-      lines: [{
-        inventoryItemId: model.items[0].id,
-        unitId: model.items[0].baseUnitId,
-        sentQuantity: 4.25,
-      }],
+      lines: [
+        {
+          inventoryItemId: model.items[0].id,
+          unitId: model.items[0].baseUnitId,
+          sentQuantity: 4.25,
+        },
+      ],
     });
     expect(input).not.toHaveProperty("status");
     expect(input).not.toHaveProperty("approvedBy");
@@ -624,16 +892,33 @@ describe("inventory catalog setup", () => {
     expect(await screen.findByText("Inventory foundation")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Unit" }));
     const dialog = screen.getByRole("dialog", { name: "Add measurement unit" });
-    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Ounce" } });
-    fireEvent.change(within(dialog).getByLabelText("Symbol"), { target: { value: "oz" } });
-    fireEvent.change(within(dialog).getByLabelText("Dimension"), { target: { value: "mass" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save change" }));
+    fireEvent.change(within(dialog).getByLabelText("Name"), {
+      target: { value: "Ounce" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Symbol"), {
+      target: { value: "oz" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Dimension"), {
+      target: { value: "mass" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save change" }),
+    );
 
-    await waitFor(() => expect(configureInventoryCatalogAction).toHaveBeenCalledTimes(1));
-    expect(within(dialog).getByRole("alert").textContent).toContain("connection ended");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save change" }));
-    await waitFor(() => expect(configureInventoryCatalogAction).toHaveBeenCalledTimes(2));
-    const input = vi.mocked(configureInventoryCatalogAction).mock.calls[0][0] as Record<string, unknown>;
+    await waitFor(() =>
+      expect(configureInventoryCatalogAction).toHaveBeenCalledTimes(1),
+    );
+    expect(within(dialog).getByRole("alert").textContent).toContain(
+      "connection ended",
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save change" }),
+    );
+    await waitFor(() =>
+      expect(configureInventoryCatalogAction).toHaveBeenCalledTimes(2),
+    );
+    const input = vi.mocked(configureInventoryCatalogAction).mock
+      .calls[0][0] as Record<string, unknown>;
     expect(input).toMatchObject({
       workspaceLocationId: workspace.activeLocation.id,
       command: "unit.save",
@@ -643,7 +928,9 @@ describe("inventory catalog setup", () => {
       isActive: true,
     });
     expect(input.requestId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(vi.mocked(configureInventoryCatalogAction).mock.calls[1][0]).toMatchObject({
+    expect(
+      vi.mocked(configureInventoryCatalogAction).mock.calls[1][0],
+    ).toMatchObject({
       requestId: input.requestId,
     });
     expect(input).not.toHaveProperty("organizationId");

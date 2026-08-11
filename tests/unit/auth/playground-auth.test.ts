@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   PLAYGROUND_SESSION_TTL_SECONDS,
+  PLAYGROUND_REMEMBERED_SESSION_TTL_SECONDS,
   assessPlaygroundAuthConfiguration,
   authenticatePlaygroundCredentials,
   createPlaygroundPasswordHash,
@@ -15,8 +16,10 @@ const secret = Buffer.from(
   Uint8Array.from({ length: 48 }, (_, index) => index + 1),
 ).toString("base64url");
 
+let cachedConfiguration: PlaygroundAuthConfiguration | undefined;
+
 function configuration(): PlaygroundAuthConfiguration {
-  return {
+  cachedConfiguration ??= {
     sessionSecret: secret,
     users: [
       {
@@ -53,6 +56,7 @@ function configuration(): PlaygroundAuthConfiguration {
       },
     ],
   };
+  return cachedConfiguration;
 }
 
 function assessmentSource(config = configuration()) {
@@ -77,12 +81,9 @@ describe("playground authentication", () => {
     });
 
     expect(accepted.ready).toBe(true);
-    expect(accepted.configuration?.users.map((user) => user.principal)).toEqual([
-      "donald",
-      "irini",
-      "maris",
-      "mateo",
-    ]);
+    expect(accepted.configuration?.users.map((user) => user.principal)).toEqual(
+      ["donald", "irini", "maris", "mateo"],
+    );
     expect(wrongEnvironment.ready).toBe(false);
     expect(wrongEnvironment.issues).toContain("playground_not_vercel_preview");
     expect(incompleteUsers.ready).toBe(false);
@@ -155,7 +156,9 @@ describe("playground authentication", () => {
     expect(
       authenticatePlaygroundCredentials(config, "unknown", "incorrect"),
     ).toBeNull();
-    expect(config.users[0]?.passwordHash).not.toContain("fixture-password-one1");
+    expect(config.users[0]?.passwordHash).not.toContain(
+      "fixture-password-one1",
+    );
   });
 
   it("requires an exact registry, distinct hashes, and a canonical high-entropy secret", () => {
@@ -207,13 +210,21 @@ describe("playground authentication", () => {
     ).toThrow(/letter and number/);
   });
 
-  it("issues signed eight-hour sessions and rejects tampering or expiry", () => {
+  it("issues signed default and remembered sessions and rejects tampering or expiry", () => {
     const config = configuration();
     const issuedAt = 2_000_000_000;
     const token = createPlaygroundSessionToken(config, "maris", issuedAt);
+    const remembered = createPlaygroundSessionToken(
+      config,
+      "donald",
+      issuedAt,
+      PLAYGROUND_REMEMBERED_SESSION_TTL_SECONDS,
+    );
     const tampered = `${token.slice(0, -1)}${token.endsWith("a") ? "b" : "a"}`;
 
-    expect(verifyPlaygroundSessionToken(config, token, issuedAt + 1)).toBe("maris");
+    expect(verifyPlaygroundSessionToken(config, token, issuedAt + 1)).toBe(
+      "maris",
+    );
     expect(
       verifyPlaygroundSessionToken(
         config,
@@ -221,7 +232,26 @@ describe("playground authentication", () => {
         issuedAt + PLAYGROUND_SESSION_TTL_SECONDS,
       ),
     ).toBeNull();
-    expect(verifyPlaygroundSessionToken(config, tampered, issuedAt + 1)).toBeNull();
+    expect(
+      verifyPlaygroundSessionToken(config, tampered, issuedAt + 1),
+    ).toBeNull();
+    expect(
+      verifyPlaygroundSessionToken(
+        config,
+        remembered,
+        issuedAt + PLAYGROUND_SESSION_TTL_SECONDS,
+      ),
+    ).toBe("donald");
+    expect(
+      verifyPlaygroundSessionToken(
+        config,
+        remembered,
+        issuedAt + PLAYGROUND_REMEMBERED_SESSION_TTL_SECONDS,
+      ),
+    ).toBeNull();
+    expect(() =>
+      createPlaygroundSessionToken(config, "donald", issuedAt, 60),
+    ).toThrow("Unsupported playground session duration");
   });
 
   it("rejects a correctly signed token with an unexpected payload field", () => {
@@ -241,7 +271,11 @@ describe("playground authentication", () => {
       .digest("base64url");
 
     expect(
-      verifyPlaygroundSessionToken(config, `${input}.${signature}`, 2_000_000_001),
+      verifyPlaygroundSessionToken(
+        config,
+        `${input}.${signature}`,
+        2_000_000_001,
+      ),
     ).toBeNull();
   });
 });

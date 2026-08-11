@@ -1,16 +1,51 @@
 import type { MetadataRoute } from "next";
+import {
+  defaultWorkspacePath,
+  isHostSurface,
+  surfaceProductName,
+} from "@/lib/app-surface";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Le Yard OS",
+    name: surfaceProductName,
     short_name: "Le Yard",
-    description: "The private operating system for modern restaurant teams.",
-    start_url: "/today",
+    description: isHostSurface
+      ? "The private reservation book and guest CRM for Le Yard."
+      : "The private operating system for modern restaurant teams.",
+    start_url: defaultWorkspacePath,
     display: "standalone",
+    display_override: ["window-controls-overlay", "standalone"],
     orientation: "portrait-primary",
     background_color: "#f2f0e9",
     theme_color: "#171a17",
-    categories: ["business", "productivity"],
+    categories: ["business", "food", "productivity"],
+    shortcuts: isHostSurface ? [
+      {
+        name: "Host stand",
+        short_name: "Reservations",
+        url: "/reservations",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
+      },
+      {
+        name: "Guest CRM",
+        short_name: "Guests",
+        url: "/guests",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
+      },
+    ] : [
+      {
+        name: "Host stand",
+        short_name: "Reservations",
+        url: "/reservations",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
+      },
+      {
+        name: "Service control",
+        short_name: "Service",
+        url: "/service",
+        icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }],
+      },
+    ],
     icons: [
       {
         src: "/icons/icon-192.png",

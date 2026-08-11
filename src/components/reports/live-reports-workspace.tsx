@@ -5,7 +5,6 @@ import {
   BarChart3,
   CalendarRange,
   CheckCircle2,
-  CircleAlert,
   Clock3,
   Download,
   FileSpreadsheet,
@@ -15,7 +14,10 @@ import {
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
+import { ReadState } from "@/components/ui/read-state";
+import { ResponsiveDataView } from "@/components/ui/responsive-data-view";
 import { StatusPill } from "@/components/ui/status-pill";
+import { TabPanel, Tabs } from "@/components/ui/tabs";
 import type { LiveReportsModel } from "@/data/read-models/reports";
 import type { LiveReadResult } from "@/data/read-models/shared";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
@@ -105,7 +107,7 @@ export function LiveReportsWorkspace({
 }) {
   const router = useRouter();
   if (!result.ok) {
-    return <PageFrame><section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center"><CircleAlert className="mx-auto size-6 text-[var(--warning)]" /><h2 className="mt-4 text-xl font-medium">Report unavailable</h2><p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">{result.message}</p></section></PageFrame>;
+    return <PageFrame><ReadState className="mx-auto mt-[10svh] max-w-xl" state="unavailable" title="Report unavailable" description={result.message} detail="No report values were estimated or substituted." /></PageFrame>;
   }
   const model = result.data;
   const report = model.view;
@@ -113,6 +115,14 @@ export function LiveReportsWorkspace({
   const locationLabel = model.filters.locationId === "all"
     ? "All accessible locations"
     : model.locations.find((location) => location.id === model.filters.locationId)?.name ?? "Location";
+  const primaryColumn = report.columns[0];
+  const supportingColumns = report.columns.slice(1);
+  const responsiveColumns = report.columns.map((column) => ({
+    key: column.key,
+    label: column.label,
+    align: column.align,
+    render: (row: (typeof report.rows)[number]) => row.cells[column.key] || "—",
+  }));
 
   return (
     <PageFrame width="full" className="max-w-[1700px]">
@@ -122,17 +132,19 @@ export function LiveReportsWorkspace({
       </header>
 
       <div className="mt-6 lg:hidden"><label><span className="mb-1.5 block text-xs font-semibold text-[var(--ink-faint)]">Report view</span><select value={report.kind} onChange={(event) => router.push(reportUrl(event.target.value as ReportKind, model))} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs font-semibold outline-none">{catalog.map((item) => <option key={item.kind} value={item.kind}>{item.group} · {item.label}</option>)}</select></label></div>
-      <nav aria-label="Report views" className="mt-6 hidden overflow-x-auto border-y border-[var(--line)] lg:block"><div role="tablist" className="flex min-w-max items-center">{catalog.map((item) => <button key={item.kind} role="tab" aria-selected={report.kind === item.kind} onClick={() => router.push(reportUrl(item.kind, model))} className={cn("relative min-h-12 px-3.5 text-xs font-semibold text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]", report.kind === item.kind && "text-[var(--ink)]")}>{item.label}{report.kind === item.kind ? <motion.span layoutId="live-report-tab" className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-[var(--accent)]" /> : null}</button>)}</div></nav>
+      <Tabs id="live-report-views" label="Report views" className="mt-6 hidden border-y lg:flex" size="large" items={catalog.map((item) => ({ value: item.kind, label: item.label }))} value={report.kind} onValueChange={(kind) => router.push(reportUrl(kind, model))} />
 
       {model.truncated ? <div role="status" className="mt-4 rounded-xl bg-[var(--warning-soft)] px-4 py-3 text-xs text-[var(--warning)]">This view reached its 5,000-row safety bound. Narrow the date or location filter before exporting a complete report.</div> : null}
 
+      <TabPanel id="live-report-views" value={report.kind}>
       <div className="mt-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow">{group}</p><h3 className="mt-2 text-xl font-medium tracking-[-0.04em]">{report.title}</h3><p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">{report.description}</p></div><div className="flex gap-2"><ExportLink href={exportUrl("csv", model)} format="CSV" /><ExportLink href={exportUrl("pdf", model)} format="PDF" /></div></div>
 
       <section aria-label={`${report.title} metrics`} className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">{report.metrics.map((metric) => <Metric key={metric.label} label={metric.label} value={metric.value} detail={metric.detail} />)}</section>
 
       <div className="mt-7 grid gap-8 xl:grid-cols-[minmax(0,1fr)_310px]"><section className="min-w-0"><SectionHeading eyebrow="Selected view" title={report.chart.title} detail={report.chart.description} /><AccessibleBars model={model} /></section><aside><SectionHeading eyebrow="Evidence" title="Source coverage" /><div className="divide-y divide-[var(--line)] border-y border-[var(--line)]"><div className="flex gap-3 py-4"><CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[var(--positive)]" /><div><p className="text-[13px] font-semibold">{report.sourceLabel}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Primary tenant-scoped records</p></div></div><div className="flex gap-3 py-4"><Clock3 className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" /><div><p className="text-[13px] font-semibold">Fresh {new Date(report.freshnessAt).toLocaleString()}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Newest included source update</p></div></div><div className="flex gap-3 py-4"><MapPin className="mt-0.5 size-4 shrink-0 text-[var(--ink-faint)]" /><div><p className="text-[13px] font-semibold">{locationLabel}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">{model.filters.startsOn} through {model.filters.endsOn}</p></div></div><div className="flex gap-3 py-4"><Info className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" /><p className="text-xs leading-4 text-[var(--ink-soft)]">{report.coverageNote}</p></div></div></aside></div>
 
-      <section className="mt-9"><SectionHeading eyebrow="Source rows" title={`${report.rows.length} matching record${report.rows.length === 1 ? "" : "s"}`} detail={`${model.filters.startsOn} through ${model.filters.endsOn}`} action={<span className="flex items-center gap-1.5 text-xs text-[var(--ink-faint)]"><BarChart3 className="size-3" />Values preserve source precision</span>} /><div role="region" aria-label={`${report.title} source records`} tabIndex={0} className="overflow-x-auto border-y border-[var(--line)]"><table className="w-full min-w-[760px] border-collapse text-left"><thead className="bg-[var(--canvas-strong)]"><tr>{report.columns.map((column) => <th key={column.key} scope="col" className={cn("px-4 py-2.5 text-xs font-semibold tracking-[0.1em] text-[var(--ink-faint)] uppercase", column.align === "right" && "text-right")}>{column.label}</th>)}</tr></thead><tbody className="divide-y divide-[var(--line)]">{report.rows.map((row) => <tr key={row.id} className="transition-colors hover:bg-[var(--paper)]">{report.columns.map((column) => <td key={column.key} className={cn("px-4 py-3.5 text-xs text-[var(--ink-soft)]", column.align === "right" && "numeric text-right font-semibold text-[var(--ink)]")}>{row.cells[column.key] || "—"}</td>)}</tr>)}{!report.rows.length ? <tr><td colSpan={report.columns.length} className="px-5 py-12 text-center text-[13px] text-[var(--ink-faint)]">No source records match these filters.</td></tr> : null}</tbody></table></div></section>
+      <section className="mt-9"><SectionHeading eyebrow="Source rows" title={`${report.rows.length} matching record${report.rows.length === 1 ? "" : "s"}`} detail={`${model.filters.startsOn} through ${model.filters.endsOn}`} action={<span className="flex items-center gap-1.5 text-xs text-[var(--ink-faint)]"><BarChart3 className="size-3" />Values preserve source precision</span>} /><ResponsiveDataView items={report.rows} columns={responsiveColumns} getItemKey={(row) => row.id} label={`${report.title} source records`} empty={<ReadState compact state="empty" title="No matching source records" description="Adjust the report, location, or date filters to broaden the evidence window." />} renderCard={(row) => <div><p className="text-sm font-semibold text-[var(--ink)]">{primaryColumn ? row.cells[primaryColumn.key] || "—" : "Source record"}</p><dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">{supportingColumns.map((column) => <div key={column.key} className={column.align === "right" ? "text-right" : undefined}><dt className="text-[11px] font-semibold tracking-[0.08em] text-[var(--ink-faint)] uppercase">{column.label}</dt><dd className={cn("mt-1 text-xs text-[var(--ink-soft)]", column.align === "right" && "numeric font-semibold text-[var(--ink)]")}>{row.cells[column.key] || "—"}</dd></div>)}</dl></div>} /></section>
+      </TabPanel>
     </PageFrame>
   );
 }

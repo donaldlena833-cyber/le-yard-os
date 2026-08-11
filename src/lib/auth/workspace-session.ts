@@ -14,6 +14,7 @@ import {
   selectWorkspaceScope,
   toWorkspaceChoices,
   type WorkspaceContextValue,
+  type WorkspaceActiveJobAssignment,
   type WorkspaceLocationMembershipRow,
   type WorkspaceLocationRow,
   type WorkspaceMembershipRow,
@@ -21,6 +22,7 @@ import {
   type WorkspaceProfileRow,
 } from "@/lib/auth/workspace-context";
 import { readWorkspacePreference } from "@/lib/auth/workspace-preference.server";
+import { localDateKey } from "@/data/read-models/local-time";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -56,6 +58,7 @@ async function createDemoWorkspaceContext(
           : "Private Events · Mock"
         : location.name,
       isPrimary: index === 0,
+      timeZone: location.timezone,
     }));
   const isEmployee = principal === "irini";
   const isChef = principal === "mateo";
@@ -125,6 +128,23 @@ async function createDemoWorkspaceContext(
     role,
     organizationWide: role === "owner",
     capabilities,
+    ...(isEmployee
+      ? {
+          activeJob: {
+            name: "Server",
+            code: "SERVER",
+            department: "Front of house",
+          },
+        }
+      : isChef
+        ? {
+            activeJob: {
+              name: "Executive Chef",
+              code: "EXEC_CHEF",
+              department: "Back of house",
+            },
+          }
+        : {}),
     ...(isChef ? { persona: "chef" as const } : {}),
   };
 }
@@ -134,12 +154,16 @@ function metadataDisplayName(value: unknown): unknown {
   return (value as Record<string, unknown>).display_name;
 }
 
-async function resolveWorkspacePersona(
+async function resolveWorkspaceJobContext(
   supabase: Awaited<ReturnType<typeof createClient>>,
   organizationId: string,
   userId: string,
-  locationIds: readonly string[],
-): Promise<"chef" | undefined> {
+  activeLocationId: string,
+  effectiveOn: string,
+): Promise<{
+  persona?: "chef";
+  activeJob?: WorkspaceActiveJobAssignment;
+}> {
   const employeeResult = await supabase
     .from("employees")
     .select("id")
@@ -148,29 +172,55 @@ async function resolveWorkspacePersona(
     .eq("employment_status", "active")
     .maybeSingle();
   const employeeId = employeeResult.data?.id;
-  if (employeeResult.error || !employeeId || !locationIds.length) return undefined;
+  if (employeeResult.error || !employeeId) return {};
 
   const assignmentResult = await supabase
     .from("employee_job_roles")
-    .select("job_role_id")
+    .select("job_role_id, is_primary, effective_from")
     .eq("organization_id", organizationId)
     .eq("employee_id", employeeId)
-    .in("location_id", [...locationIds]);
-  const roleIds = [...new Set((assignmentResult.data ?? []).map((assignment) => assignment.job_role_id))];
-  if (assignmentResult.error || !roleIds.length) return undefined;
+    .eq("location_id", activeLocationId)
+    .lte("effective_from", effectiveOn)
+    .or(`effective_to.is.null,effective_to.gte.${effectiveOn}`)
+    .order("is_primary", { ascending: false })
+    .order("effective_from", { ascending: false });
+  const roleIds = [
+    ...new Set((assignmentResult.data ?? []).map((assignment) => assignment.job_role_id)),
+  ];
+  if (assignmentResult.error || !roleIds.length) return {};
 
   const roleResult = await supabase
     .from("job_roles")
-    .select("name, code, department")
+    .select("id, name, code, department")
     .eq("organization_id", organizationId)
-    .in("id", roleIds);
-  if (roleResult.error) return undefined;
-  const isKitchenRole = (roleResult.data ?? []).some((role) =>
-    [role.name, role.code, role.department ?? ""].some((value) =>
-      /chef|kitchen|culinary|boh|back.of.house/i.test(value),
-    ),
+    .in("id", roleIds)
+    .eq("is_active", true);
+  if (roleResult.error) return {};
+  const rolesById = new Map(
+    (roleResult.data ?? []).map((role) => [role.id, role]),
   );
-  return isKitchenRole ? "chef" : undefined;
+  const orderedRoles = roleIds.flatMap((roleId) => {
+    const role = rolesById.get(roleId);
+    return role ? [role] : [];
+  });
+  const primaryRole = orderedRoles[0];
+  const isKitchenRole = primaryRole
+    ? [primaryRole.name, primaryRole.code, primaryRole.department ?? ""].some((value) =>
+      /chef|kitchen|culinary|boh|back.of.house/i.test(value),
+    )
+    : false;
+  return {
+    ...(isKitchenRole ? { persona: "chef" as const } : {}),
+    ...(primaryRole
+      ? {
+          activeJob: {
+            name: primaryRole.name,
+            code: primaryRole.code,
+            department: primaryRole.department,
+          },
+        }
+      : {}),
+  };
 }
 
 export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolution> {
@@ -264,7 +314,7 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
       .eq("status", "active"),
     supabase
       .from("locations")
-      .select("id, organization_id, name, is_active")
+      .select("id, organization_id, name, is_active, timezone")
       .in("organization_id", organizationIds)
       .eq("is_active", true),
     supabase
@@ -302,16 +352,20 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
 
   if (!scope) return { status: "no_access", identity };
   if (!scope.activeLocation) return { status: "no_location", identity };
-  const [persona, capabilityResult] = await Promise.all([
-    resolveWorkspacePersona(
+  if (!scope.activeLocation.timeZone) return { status: "data_error", identity };
+  const effectiveOn = localDateKey(new Date(), scope.activeLocation.timeZone);
+  const [jobContext, capabilityResult] = await Promise.all([
+    resolveWorkspaceJobContext(
       supabase,
       scope.organization.id,
       userId,
-      scope.locations.map((location) => location.id),
+      scope.activeLocation.id,
+      effectiveOn,
     ),
     supabase.rpc("effective_capabilities", {
       p_organization_id: scope.organization.id,
       p_location_id: scope.activeLocation.id,
+      p_effective_on: effectiveOn,
     }),
   ]);
   if (capabilityResult.error) {
@@ -343,7 +397,7 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
       organizationWide:
         scope.membership.role === "owner" || scope.membership.role === "admin",
       capabilities,
-      ...(persona ? { persona } : {}),
+      ...jobContext,
     },
   };
 }

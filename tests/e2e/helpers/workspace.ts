@@ -9,6 +9,13 @@ export async function openWorkspace(
   path: string,
   heading: string | RegExp,
 ): Promise<void> {
+  const browserErrors: string[] = [];
+  const onConsole = (message: { type(): string; text(): string }) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  };
+  const onPageError = (error: Error) => browserErrors.push(error.message);
+  page.on("console", onConsole);
+  page.on("pageerror", onPageError);
   await page.emulateMedia({ reducedMotion: "reduce" });
   const response = await page.goto(path, { waitUntil: "domcontentloaded" });
 
@@ -22,6 +29,12 @@ export async function openWorkspace(
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
+  expect(
+    browserErrors,
+    `Navigation to ${path} should not emit browser errors`,
+  ).toEqual([]);
+  page.off("console", onConsole);
+  page.off("pageerror", onPageError);
 }
 
 export async function expectNoViewportOverflow(page: Page): Promise<void> {

@@ -3,13 +3,14 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 
 const root = process.cwd();
 const migrationsDirectory = join(root, "supabase", "migrations");
 const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
-const db = new PGlite({ extensions: { pgcrypto, pg_trgm } });
+const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
 
 const ids = {
   organization: "20000000-0000-4000-8000-000000000001",
@@ -139,6 +140,14 @@ try {
   process.stdout.write("PASS all migrations and synthetic seed for capability verification\n");
 
   await db.exec(`
+    update public.locations location
+    set timezone = case
+      when (statement_timestamp() at time zone 'Pacific/Kiritimati')::date <> current_date
+        then 'Pacific/Kiritimati'
+      else 'America/Adak'
+    end
+    where location.id = '${ids.location}'
+      and location.organization_id = '${ids.organization}';
     insert into public.job_roles (
       id, organization_id, name, code, department, default_tip_points, is_tipped
     ) values (
@@ -151,8 +160,22 @@ try {
     ) values (
       '${ids.chefAssignment}', '${ids.organization}',
       '50000000-0000-4000-8000-000000000004', '${ids.chefRole}',
-      '${ids.location}', date '2026-01-01', true
+      '${ids.location}', (
+        select (statement_timestamp() at time zone location.timezone)::date
+        from public.locations location
+        where location.organization_id = '${ids.organization}'
+          and location.id = '${ids.location}'
+      ), true
     );
+    update public.job_role_capabilities capability
+    set effective_from = (
+      select (statement_timestamp() at time zone location.timezone)::date
+      from public.locations location
+      where location.organization_id = '${ids.organization}'
+        and location.id = '${ids.location}'
+    )
+    where capability.organization_id = '${ids.organization}'
+      and capability.job_role_id = '${ids.chefRole}';
     set role authenticated;
   `);
 
@@ -180,7 +203,42 @@ try {
     "service.availability.manage",
     "reports.operational.view",
   ];
+  await assumeUser(ids.admin);
+  await db.query(
+    `select public.configure_user_capability_override(
+      'c1400000-0000-4000-8000-000000000010'::uuid, $1::uuid,
+      'c1500000-0000-4000-8000-000000000010'::uuid, $2::uuid,
+      'inventory.item.manage', $3::uuid, 'deny',
+      'UTC-date boundary proof', current_date, current_date, true
+    )`,
+    [ids.organization, ids.manager, ids.location],
+  );
   await assumeUser(ids.manager);
+  const localDateBoundary = (await db.query(
+    `select
+      current_date as session_date,
+      (
+        statement_timestamp() at time zone (
+          select location.timezone
+          from public.locations location
+          where location.organization_id = $1::uuid and location.id = $2::uuid
+        )
+      )::date as location_date,
+      public.has_capability($1::uuid, $2::uuid, 'inventory.item.manage') as local_default,
+      public.has_capability(
+        $1::uuid, $2::uuid, 'inventory.item.manage', current_date
+      ) as explicit_session_date`,
+    [ids.organization, ids.location],
+  )).rows[0];
+  if (
+    localDateBoundary.session_date === localDateBoundary.location_date
+    || !localDateBoundary.local_default
+    || localDateBoundary.explicit_session_date
+  ) {
+    throw new Error(
+      `Location-local capability date boundary failed: ${JSON.stringify(localDateBoundary)}`,
+    );
+  }
   const effective = await db.query(
     "select capability_key from public.effective_capabilities($1::uuid, $2::uuid)",
     [ids.organization, ids.location],

@@ -151,6 +151,8 @@ Employee-document uploads use a five-part organization/location/employee path. A
 
 Toast and Resy are represented by `integration_connections` adapters. The default adapter is manual/CSV and the application does not depend on live credentials. Sync jobs record direction, cursor, retry state, attempts, record-level results, and an append-only event history.
 
+`income_sales_checks` is the provider-neutral latest-state sales fact used by the Income snapshot. Raw rows and external IDs are service-role only. `ingest_income_sales_check` supplies replay/stale-version protection, while `income_operating_snapshot` returns an exact-capability, location-scoped aggregate of live sales, labor accrual, recorded day costs, closeout evidence, and hourly planning signals.
+
 Credential ciphertext lives in `private.integration_credentials`, a non-exposed schema with no `anon` or `authenticated` privileges. Encryption/decryption must happen in a trusted server/database boundary using an externally managed key; encryption keys never belong in PostgreSQL rows.
 
 AI results are stored in `ai_runs` with confidence and record-level `ai_citations`. Payroll exports, tip distributions, punch edits, inventory adjustments, and guest changes can exist only as `ai_action_proposals`. A trigger requires an authenticated human user to decide and apply a proposal. Operational functions separately enforce the human user's permissions.

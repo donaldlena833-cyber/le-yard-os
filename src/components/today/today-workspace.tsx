@@ -7,7 +7,11 @@ import {
   ArrowRight,
   CalendarDays,
   Check,
+  ChefHat,
   ChevronRight,
+  CircleDollarSign,
+  Clock3,
+  Radio,
   Sparkles,
   UsersRound,
   Utensils,
@@ -21,6 +25,10 @@ import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import { LiveClock } from "@/components/today/live-clock";
+import {
+  isSaturdayServicePreview,
+  saturdayServiceSimulation,
+} from "@/lib/demo";
 import { cn } from "@/lib/utils";
 
 const team = [
@@ -39,6 +47,197 @@ type TodayAction = {
 };
 
 const initialActions: TodayAction[] = [];
+
+const saturdayServiceActions: TodayAction[] = [
+  {
+    id: "table-nine-delay",
+    icon: Clock3,
+    tone: "danger",
+    title: "Table 9 is 18 minutes behind pace",
+    detail: "Party of 6 · entrées fired at 7:31 PM · server requested a manager touch.",
+  },
+  {
+    id: "filet-running-low",
+    icon: ChefHat,
+    tone: "warning",
+    title: "Filet au poivre is running low",
+    detail: "8 portions remain · 11 later covers have ordered steak on comparable Saturdays.",
+  },
+  {
+    id: "break-window",
+    icon: UsersRound,
+    tone: "warning",
+    title: "Two break windows need adjustment",
+    detail: "Irini and Leo cross six hours tonight; no break timing has been approved yet.",
+  },
+];
+
+const saturdayTeam = [
+  { name: "Donald", role: "Owner · floor", shift: "4:00–11:30", station: "Dining room" },
+  { name: "Maris", role: "Owner · host", shift: "4:30–12:00", station: "Door" },
+  { name: "Mateo", role: "Executive chef", shift: "2:30–11:30", station: "Expo" },
+  { name: "Irini", role: "Server", shift: "4:30–11:00", station: "Section 2" },
+  { name: "Aisha", role: "FOH manager", shift: "3:30–12:00", station: "Floor" },
+  { name: "Priya", role: "Bartender", shift: "4:00–12:00", station: "Bar" },
+  { name: "Leo", role: "Line cook", shift: "2:30–11:30", station: "Sauté" },
+  { name: "Imani", role: "Server", shift: "5:00–11:30", station: "Section 1" },
+];
+
+function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string }) {
+  const [actions, setActions] = useState(saturdayServiceActions);
+  const pacing = [
+    { label: "5 PM", covers: 18, width: "38%" },
+    { label: "6 PM", covers: 27, width: "58%" },
+    { label: "7 PM", covers: 46, width: "100%" },
+    { label: "8 PM", covers: 39, width: "85%", current: true },
+    { label: "9 PM", covers: 24, width: "52%" },
+    { label: "10 PM", covers: 9, width: "20%" },
+  ];
+
+  return (
+    <PageFrame>
+      <section className="relative overflow-hidden rounded-[30px] border border-white/[0.08] bg-[var(--graphite)] px-5 py-7 text-white shadow-[var(--shadow-raised)] sm:px-8 sm:py-9">
+        <div className="absolute inset-0 workspace-grid opacity-20" />
+        <div className="relative flex flex-col justify-between gap-8 xl:flex-row xl:items-end">
+          <div className="max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill tone="positive" dot className="bg-white/[0.08] text-[#93d0ad]">In service</StatusPill>
+              <StatusPill tone="neutral" className="bg-white/[0.08] text-white/70">Synthetic preview</StatusPill>
+              <span className="text-xs text-white/55">Saturday · April 18 · five months open</span>
+            </div>
+            <h2 className="mt-5 text-[clamp(2rem,4.2vw,4rem)] leading-none font-medium tracking-[-0.065em]">
+              Saturday night, {firstName}.
+            </h2>
+            <p className="mt-4 max-w-xl text-sm leading-6 text-white/60">
+              You are entering Le Yard at the peak of dinner service. Every record in this preview is synthetic and every owner workflow is available to explore.
+            </p>
+          </div>
+          <div className="flex items-end gap-8 border-t border-white/10 pt-5 xl:border-0 xl:pt-0">
+            <div>
+              <p className="text-xs tracking-[0.12em] text-white/55 uppercase">Simulated time</p>
+              <p className="numeric mt-2 text-3xl font-medium tracking-[-0.05em]">8:00 PM</p>
+            </div>
+            <div>
+              <p className="text-xs tracking-[0.12em] text-white/55 uppercase">Service state</p>
+              <p className="mt-2 flex items-center gap-2 text-xl font-medium"><Radio className="size-4 text-[#93d0ad]" /> Peak</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section aria-label="Saturday service metrics" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Covers" value="163" detail="128 booked · 35 walk-in" />
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Seated so far" value="112" detail="68.7% of projected covers" />
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Net sales" value="$8.4k" detail="$12.7k projected close" />
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Labor" value="13 on" detail="1 late · 2 break windows" />
+      </section>
+
+      <div className="mt-8 grid gap-8 xl:grid-cols-[1.45fr_.8fr] xl:gap-12">
+        <div className="space-y-9">
+          <section>
+            <SectionHeading
+              eyebrow="Service now"
+              title="Dining room pulse"
+              detail="Host, floor, kitchen, and sales context at the simulated 8:00 PM moment."
+              action={<Link href={`/reservations?date=${saturdayServiceSimulation.businessDate}`} className="focus-ring inline-flex min-h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">Open reservations <ArrowRight className="size-3" /></Link>}
+            />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { icon: UsersRound, label: "Dining room", value: "14 tables", note: "11 seated · 2 reset · 1 open" },
+                { icon: Clock3, label: "Average turn", value: "94 min", note: "6 min above Saturday target" },
+                { icon: ChefHat, label: "Kitchen", value: "17 open", note: "8 entrées firing · 9 on hold" },
+                { icon: CircleDollarSign, label: "Average check", value: "$74", note: "$3 above five-month average" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)]">
+                  <item.icon className="size-4 text-[var(--accent-strong)]" />
+                  <p className="mt-5 text-xs font-semibold tracking-[0.08em] text-[var(--ink-faint)] uppercase">{item.label}</p>
+                  <p className="numeric mt-2 text-xl font-semibold tracking-[-0.04em]">{item.value}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{item.note}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <div className="grid gap-8 lg:grid-cols-[.85fr_1.15fr]">
+            <section>
+              <SectionHeading eyebrow="Reservations" title="Pacing" detail="163 projected covers · current hour highlighted" />
+              <div className="space-y-3 rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-card)]">
+                {pacing.map((period) => (
+                  <div key={period.label} className="grid grid-cols-[44px_1fr_32px] items-center gap-3">
+                    <span className={cn("text-xs font-semibold", period.current ? "text-[var(--accent-strong)]" : "text-[var(--ink-faint)]")}>{period.label}</span>
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--canvas-strong)]">
+                      <div className={cn("h-full rounded-full", period.current ? "bg-[var(--accent)]" : "bg-[var(--graphite)]/65")} style={{ width: period.width }} />
+                    </div>
+                    <span className="numeric text-right text-xs font-semibold">{period.covers}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <SectionHeading eyebrow="Team" title="Who’s operating" detail="8 key team members shown · 13 clocked in" />
+              <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
+                {saturdayTeam.map((person, index) => (
+                  <div key={person.name} className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--line)] px-4 py-3 first:border-0 sm:grid-cols-[1fr_100px_92px]">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Avatar name={person.name} index={index} />
+                      <div className="min-w-0"><p className="truncate text-sm font-semibold">{person.name}</p><p className="truncate text-xs text-[var(--ink-faint)]">{person.role}</p></div>
+                    </div>
+                    <p className="hidden text-xs text-[var(--ink-faint)] sm:block">{person.station}</p>
+                    <StatusPill tone="positive" dot>On shift</StatusPill>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <aside className="space-y-9">
+          <section>
+            <SectionHeading eyebrow="Needs attention" title={`${actions.length} live decisions`} detail="Resolve freely; the preview resets without touching live data." />
+            <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
+              <AnimatePresence initial={false}>
+                {actions.map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <motion.div key={action.id} layout exit={{ opacity: 0, height: 0 }} className="border-b border-[var(--line)] last:border-0">
+                      <div className="flex items-start gap-3 px-4 pt-4">
+                        <span className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl", action.tone === "danger" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--warning-soft)] text-[var(--warning)]")}><Icon className="size-4" /></span>
+                        <div><p className="text-sm font-semibold leading-5">{action.title}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{action.detail}</p></div>
+                      </div>
+                      <div className="flex justify-end gap-2 px-4 py-3">
+                        <Button variant="quiet" size="sm">Review</Button>
+                        <Button variant="secondary" size="sm" onClick={() => setActions((current) => current.filter((item) => item.id !== action.id))}><Check className="size-3" /> Resolve</Button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+              {!actions.length ? <div className="px-5 py-9 text-center"><Check className="mx-auto size-5 text-[var(--positive)]" /><p className="mt-3 text-sm font-semibold">Service exceptions cleared</p><p className="mt-1 text-xs text-[var(--ink-faint)]">The simulated service remains active.</p></div> : null}
+            </div>
+          </section>
+
+          <section>
+            <SectionHeading eyebrow="Five-month context" title="Compared with prior Saturdays" />
+            <div className="space-y-4 rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)]">
+              {[
+                ["Cover pace", "+12%", "Ahead of the 145-cover average"],
+                ["Net sales pace", "+8%", "Average check is carrying the gain"],
+                ["Ticket time", "+6 min", "Entrée station is the current constraint"],
+                ["Guest recovery", "1 open", "Manager touch requested at table 9"],
+              ].map(([label, value, note]) => (
+                <div key={label} className="flex items-start justify-between gap-4 border-b border-[var(--line)] pb-4 last:border-0 last:pb-0">
+                  <div><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{note}</p></div>
+                  <p className="numeric shrink-0 text-sm font-semibold">{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+      </div>
+    </PageFrame>
+  );
+}
 
 const employeeOpenShifts = [
   { id: "open-tue", day: "Tue · Aug 11", time: "5:00–11:00 PM", role: "Server", covers: 72 },
@@ -133,6 +332,8 @@ export function TodayWorkspace() {
   const workspace = useWorkspaceContext();
   const [actions, setActions] = useState(initialActions);
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
+
+  if (isSaturdayServicePreview) return <SaturdayServiceTodayWorkspace firstName={firstName} />;
 
   if (workspace.role === "employee") return <EmployeeTodayWorkspace />;
   if (workspace.persona === "chef") return <ChefTodayWorkspace />;

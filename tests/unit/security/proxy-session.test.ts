@@ -135,14 +135,32 @@ describe("session proxy", () => {
 
   it("keeps refreshed cookies on an authenticated pass-through response", async () => {
     state.claims = { sub: "user-1" };
+    const deadline = Math.floor(Date.now() / 1_000) + 60 * 60;
     const response = await updateSession(
-      new NextRequest("https://ops.example.com/today"),
+      new NextRequest("https://ops.example.com/today", {
+        headers: {
+          cookie: `sb-session=active-token; __Host-le-yard-session-deadline=${deadline}`,
+        },
+      }),
       new Headers({ "x-nonce": "nonce-value" }),
     );
 
     expect(response.status).toBe(200);
     expect(response.cookies.get("sb-session")?.value).toBe("refreshed-token");
     expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+
+  it("expires connected auth cookies when the device session deadline is missing", async () => {
+    state.claims = { sub: "user-1" };
+    const response = await updateSession(
+      new NextRequest("https://ops.example.com/today", {
+        headers: { cookie: "sb-project-auth-token=active-token" },
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    expect(new URL(response.headers.get("location")!).pathname).toBe("/sign-in");
+    expect(response.cookies.get("sb-project-auth-token")?.value).toBe("");
   });
 
   it("does not initialize Supabase in explicit demo mode", async () => {

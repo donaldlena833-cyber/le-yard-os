@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -18,21 +18,21 @@ import {
   X,
 } from "lucide-react";
 import {
-  type FormEvent,
   type ReactNode,
   useEffect,
-  useMemo,
-  useRef,
   useState,
 } from "react";
-import { createPortal, useFormStatus } from "react-dom";
+import { useFormStatus } from "react-dom";
 import { signOutAction } from "@/app/actions/auth";
 import { ThemeProvider, useTheme } from "@/components/providers/theme-provider";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Avatar } from "@/components/ui/avatar";
 import { BrandMark } from "@/components/ui/brand-mark";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Drawer } from "@/components/ui/drawer";
+import { Popover } from "@/components/ui/popover";
 import { WorkspaceSwitcher } from "@/components/shell/workspace-switcher";
+import { ActionOmnibox } from "@/components/shell/action-omnibox";
 import {
   allNavItems,
   getMobileNavItems,
@@ -43,10 +43,14 @@ import {
 } from "@/components/shell/navigation";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { safeInternalRedirect } from "@/lib/auth/safe-redirect";
-import { useModalDialog } from "@/lib/accessibility/use-modal-dialog";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/types/database.generated";
+import {
+  isHostSurface,
+  surfaceProductDetail,
+  surfaceProductName,
+} from "@/lib/app-surface";
 
 const shellRoleLabel: Record<WorkspaceContextValue["role"], string> = {
   owner: "Owner",
@@ -181,15 +185,6 @@ function NotificationsControl({ workspace }: { workspace: WorkspaceContextValue 
     };
   }, [workspace.identity.userId, workspace.mode, workspace.organization.id]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
-
   async function markRead(notification: ShellNotification) {
     if (workspace.mode === "live" && !notification.readAt) {
       const readAt = new Date().toISOString();
@@ -228,28 +223,22 @@ function NotificationsControl({ workspace }: { workspace: WorkspaceContextValue 
   }
 
   return (
-    <>
-      <Button
-        variant="quiet"
-        size="icon"
-        aria-label={unreadCount ? `Open notifications, ${unreadCount} unread` : "Open notifications"}
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-        className="relative size-11 min-h-11 sm:size-10 sm:min-h-10"
-      >
-        <Bell className="size-4" />
-        {unreadCount ? <span className="absolute top-2 right-2 size-1.5 rounded-full bg-[var(--danger)] ring-2 ring-[var(--canvas)]" /> : null}
-      </Button>
-      <AnimatePresence>
-        {open ? (
-          <motion.aside
-            role="dialog"
-            aria-label="Notifications"
-            className="fixed top-[58px] right-3 z-50 w-[min(92vw,360px)] rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-2 shadow-[var(--shadow-float)] sm:top-[68px] sm:right-6"
-            initial={{ y: -8, opacity: 0, scale: 0.98 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: -6, opacity: 0, scale: 0.98 }}
-          >
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      label="Notifications"
+      triggerLabel={unreadCount ? `Open notifications, ${unreadCount} unread` : "Open notifications"}
+      triggerClassName={cn(
+        buttonVariants({ variant: "quiet", size: "icon" }),
+        "relative size-11 min-h-11 sm:size-10 sm:min-h-10",
+      )}
+      trigger={
+        <>
+          <Bell className="size-4" />
+          {unreadCount ? <span className="absolute top-2 right-2 size-1.5 rounded-full bg-[var(--danger)] ring-2 ring-[var(--canvas)]" /> : null}
+        </>
+      }
+    >
             <div className="flex items-center justify-between gap-3 px-3 py-2">
               <div>
                 <p className="text-sm font-semibold">Notifications</p>
@@ -270,10 +259,7 @@ function NotificationsControl({ workspace }: { workspace: WorkspaceContextValue 
                 <time dateTime={notification.createdAt} className="text-xs text-[var(--ink-faint)]">{notificationAge(notification.createdAt)}</time>
               </button>
             ))}
-          </motion.aside>
-        ) : null}
-      </AnimatePresence>
-    </>
+    </Popover>
   );
 }
 
@@ -341,10 +327,10 @@ function Sidebar({
         <BrandMark />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold tracking-[-0.02em]">
-            Le Yard OS
+            {surfaceProductName}
           </p>
           <p className="mt-0.5 text-xs font-medium tracking-[0.08em] text-white/55 uppercase">
-            Operator workspace
+            {surfaceProductDetail}
           </p>
         </div>
       </div>
@@ -405,143 +391,6 @@ function Sidebar({
   );
 }
 
-function CommandPalette({
-  open,
-  onClose,
-  workspace,
-}: {
-  open: boolean;
-  onClose: () => void;
-  workspace: WorkspaceContextValue;
-}) {
-  const router = useRouter();
-  const [query, setQuery] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const filtered = useMemo(
-    () =>
-      allNavItems.filter(
-        (item) =>
-          isNavItemVisible(item, workspace) &&
-          item.label.toLowerCase().includes(query.trim().toLowerCase()),
-      ),
-    [query, workspace],
-  );
-
-  function closePalette() {
-    setQuery("");
-    onClose();
-  }
-
-  useModalDialog({
-    active: open,
-    dialogRef,
-    overlayRef,
-    onClose: closePalette,
-    initialFocusSelector: "[data-command-input]",
-  });
-
-  useEffect(() => {
-    if (open) {
-      window.setTimeout(() => inputRef.current?.focus(), 80);
-    }
-  }, [open]);
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    if (filtered[0]) {
-      router.push(filtered[0].href);
-      closePalette();
-    }
-  }
-
-  const palette = (
-    <AnimatePresence>
-      {open ? (
-        <motion.div
-          ref={overlayRef}
-          className="fixed inset-0 z-[70] flex items-start justify-center bg-black/30 px-4 pt-[12svh] backdrop-blur-[5px]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closePalette();
-          }}
-        >
-          <motion.div
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Command menu"
-            tabIndex={-1}
-            className="w-full max-w-xl overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-float)]"
-            initial={{ y: -12, scale: 0.98, opacity: 0 }}
-            animate={{ y: 0, scale: 1, opacity: 1 }}
-            exit={{ y: -8, scale: 0.985, opacity: 0 }}
-            transition={{ duration: 0.18 }}
-          >
-            <form onSubmit={submit} className="flex items-center gap-3 border-b border-[var(--line)] px-4">
-              <Search className="size-4 text-[var(--ink-faint)]" />
-              <input
-                ref={inputRef}
-                data-command-input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Go to a workspace or search actions…"
-                className="h-14 flex-1 bg-transparent text-sm text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
-              />
-              <button
-                type="button"
-                onClick={closePalette}
-                className="rounded-md border border-[var(--line)] px-1.5 py-1 text-xs font-semibold text-[var(--ink-faint)] transition-[background-color,color,transform] duration-150 hover:-translate-y-px hover:bg-[var(--canvas)] hover:text-[var(--ink)]"
-              >
-                ESC
-              </button>
-            </form>
-            <div className="max-h-[360px] overflow-y-auto p-2">
-              <p className="eyebrow px-3 py-2">Workspaces</p>
-              {filtered.length ? (
-                filtered.map((item, index) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.href}
-                      type="button"
-                      onClick={() => {
-                        router.push(item.href);
-                        closePalette();
-                      }}
-                      className={cn(
-                        "focus-ring flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors",
-                        index === 0
-                          ? "bg-[var(--canvas-strong)] text-[var(--ink)]"
-                          : "text-[var(--ink-soft)] hover:bg-[var(--canvas)]",
-                      )}
-                    >
-                      <Icon className="size-4" />
-                      <span className="flex-1">{item.label}</span>
-                      {index === 0 ? (
-                        <span className="text-xs text-[var(--ink-faint)]">↵</span>
-                      ) : null}
-                    </button>
-                  );
-                })
-              ) : (
-                <p className="px-3 py-8 text-center text-sm text-[var(--ink-faint)]">
-                  No workspace matches “{query}”.
-                </p>
-              )}
-            </div>
-          </motion.div>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
-  );
-
-  return typeof document === "undefined" ? null : createPortal(palette, document.body);
-}
-
 function MobileDrawer({
   open,
   pathname,
@@ -553,45 +402,21 @@ function MobileDrawer({
   onClose: () => void;
   workspace: WorkspaceContextValue;
 }) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLElement>(null);
-
-  useModalDialog({
-    active: open,
-    dialogRef,
-    overlayRef,
-    onClose,
-    initialFocusSelector: "[data-drawer-close]",
-  });
-
-  const drawer = (
-    <AnimatePresence>
-      {open ? (
-        <motion.div
-          ref={overlayRef}
-          className="fixed inset-0 z-[60] bg-black/30 backdrop-blur-[3px] lg:hidden"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) onClose();
-          }}
-        >
-          <motion.aside
-            ref={dialogRef}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="mobile-navigation-title"
-            tabIndex={-1}
-            className="absolute inset-y-0 right-0 flex w-[min(88vw,360px)] flex-col bg-[var(--graphite)] px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1rem+env(safe-area-inset-bottom))] text-white shadow-2xl"
-            initial={{ x: "100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "100%" }}
-            transition={{ type: "spring", stiffness: 350, damping: 34 }}
-          >
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      labelledBy="mobile-navigation-title"
+      initialFocusSelector="[data-drawer-close]"
+      width="sm"
+      layer="navigation"
+      surface="graphite"
+      overlayClassName="lg:hidden"
+      className="px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl"
+    >
             <div className="mb-5 flex h-10 items-center gap-3">
               <BrandMark />
-              <span id="mobile-navigation-title" className="flex-1 text-sm font-semibold">Le Yard OS</span>
+              <span id="mobile-navigation-title" className="flex-1 text-sm font-semibold">{surfaceProductName}</span>
               <button
                 type="button"
                 data-drawer-close
@@ -648,13 +473,8 @@ function MobileDrawer({
               </div>
               <SignOutControl className="mt-2" />
             </div>
-          </motion.aside>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+    </Drawer>
   );
-
-  return typeof document === "undefined" ? null : createPortal(drawer, document.body);
 }
 
 function MobileNavigationControl({
@@ -717,11 +537,12 @@ function ShellContent({ children }: { children: ReactNode }) {
   const workspace = useWorkspaceContext();
   const visibleMobileNavItems = getMobileNavItems(workspace);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [commandTrigger, setCommandTrigger] = useState<HTMLElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
   const meta = routeMeta[pathname] || {
-    title: "Le Yard OS",
-    detail: "Operator workspace",
+    title: surfaceProductName,
+    detail: surfaceProductDetail,
   };
   const headerDetail =
     workspace.mode === "demo"
@@ -732,7 +553,13 @@ function ShellContent({ children }: { children: ReactNode }) {
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        setCommandOpen((current) => !current);
+        if (!commandOpen)
+          setCommandTrigger(
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null,
+          );
+        setCommandOpen(!commandOpen);
       }
       if (event.key === "Escape") {
         setCommandOpen(false);
@@ -741,7 +568,7 @@ function ShellContent({ children }: { children: ReactNode }) {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [commandOpen]);
 
   return (
     <div className="min-h-svh bg-[var(--canvas)]">
@@ -777,7 +604,10 @@ function ShellContent({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
-              onClick={() => setCommandOpen(true)}
+              onClick={(event) => {
+                setCommandTrigger(event.currentTarget);
+                setCommandOpen(true);
+              }}
               className="focus-ring hidden h-9 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs text-[var(--ink-faint)] transition-[background-color,border-color,color,transform] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:text-[var(--ink)] md:flex"
             >
               <Search className="size-3.5" />
@@ -789,6 +619,19 @@ function ShellContent({ children }: { children: ReactNode }) {
             <Button
               variant="quiet"
               size="icon"
+              aria-label="Open actions"
+              aria-expanded={commandOpen}
+              onClick={(event) => {
+                setCommandTrigger(event.currentTarget);
+                setCommandOpen(true);
+              }}
+              className="md:hidden"
+            >
+              <Search className="size-4" />
+            </Button>
+            <Button
+              variant="quiet"
+              size="icon"
               aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"}
               onClick={toggleTheme}
               className="hidden sm:inline-flex"
@@ -796,8 +639,16 @@ function ShellContent({ children }: { children: ReactNode }) {
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
             <NotificationsControl workspace={workspace} />
-            {workspace.mode === "demo" ? (
-              <Button variant="primary" size="sm" className="hidden sm:inline-flex" onClick={() => setCommandOpen(true)}>
+            {workspace.mode === "demo" && !isHostSurface ? (
+              <Button
+                variant="primary"
+                size="sm"
+                className="hidden sm:inline-flex"
+                onClick={(event) => {
+                  setCommandTrigger(event.currentTarget);
+                  setCommandOpen(true);
+                }}
+              >
                 <Plus className="size-3.5" />
                 Create
               </Button>
@@ -842,10 +693,12 @@ function ShellContent({ children }: { children: ReactNode }) {
         />
       </nav>
 
-      <CommandPalette
+      <ActionOmnibox
         open={commandOpen}
         workspace={workspace}
+        pathname={pathname}
         onClose={() => setCommandOpen(false)}
+        returnFocusTarget={commandTrigger}
       />
       <MobileDrawer
         open={drawerOpen}

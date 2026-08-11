@@ -3,13 +3,14 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 
 const root = process.cwd();
 const migrationsDirectory = join(root, "supabase", "migrations");
 const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql") && file <= "202608010020_inventory_catalog_configuration.sql")
   .sort();
-const db = new PGlite({ extensions: { pgcrypto, pg_trgm } });
+const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
 
 const ids = {
   owner: "ca000000-0000-4000-8000-000000000001",

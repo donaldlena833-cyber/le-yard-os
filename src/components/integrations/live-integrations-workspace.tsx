@@ -26,6 +26,7 @@ import {
   retryIntegrationSyncAction,
 } from "@/app/actions/workflows/integrations";
 import { Button } from "@/components/ui/button";
+import { Drawer } from "@/components/ui/drawer";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import type {
@@ -348,33 +349,24 @@ function AdapterDrawer({
   onImport,
   onClose,
 }: {
-  provider: IntegrationProvider;
+  provider: IntegrationProvider | null;
   connections: LiveIntegrationConnection[];
   canImport: boolean;
   onImport: () => void;
   onClose: () => void;
 }) {
-  const adapter = integrationAdapters[provider];
+  const adapter = provider ? integrationAdapters[provider] : null;
   return (
-    <motion.div
-      className="fixed inset-0 z-50 bg-black/25 backdrop-blur-[2px]"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <Drawer
+      open={adapter !== null}
+      onClose={onClose}
+      labelledBy="integration-adapter-title"
+      initialFocusSelector="[data-adapter-close]"
+      width="md"
+      className="p-5 sm:p-7"
     >
-      <motion.aside
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="integration-adapter-title"
-        className="absolute inset-y-0 right-0 w-[min(94vw,540px)] overflow-y-auto bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-float)] sm:p-7"
-        initial={{ x: "100%" }}
-        animate={{ x: 0 }}
-        exit={{ x: "100%" }}
-        transition={{ type: "spring", stiffness: 360, damping: 38 }}
-      >
+      {adapter ? (
+        <>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="eyebrow">Integration adapter</p>
@@ -383,7 +375,7 @@ function AdapterDrawer({
             </h3>
             <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">{adapter.description}</p>
           </div>
-          <Button variant="quiet" size="icon" onClick={onClose} aria-label="Close integration details">
+          <Button data-adapter-close variant="quiet" size="icon" onClick={onClose} aria-label="Close integration details">
             <X className="size-4" />
           </Button>
         </div>
@@ -460,8 +452,9 @@ function AdapterDrawer({
             </Button>
           </div>
         ) : null}
-      </motion.aside>
-    </motion.div>
+        </>
+      ) : null}
+    </Drawer>
   );
 }
 
@@ -912,6 +905,7 @@ export function LiveIntegrationsWorkspace({
               <button
                 key={provider}
                 onClick={() => setSelectedProvider(provider)}
+                aria-label={`${adapter.label} integration details`}
                 className="focus-ring group flex items-start gap-4 border-b border-[var(--line)] py-5 text-left"
               >
                 <span
@@ -1011,16 +1005,20 @@ export function LiveIntegrationsWorkspace({
         </div>
       </div>
 
+      <AdapterDrawer
+        provider={selectedProvider}
+        connections={
+          selectedProvider
+            ? connectionGroups.get(selectedProvider) ?? []
+            : []
+        }
+        canImport={canMutate}
+        onImport={() => {
+          if (selectedProvider) openImport(selectedProvider);
+        }}
+        onClose={() => setSelectedProvider(null)}
+      />
       <AnimatePresence>
-        {selectedProvider ? (
-          <AdapterDrawer
-            provider={selectedProvider}
-            connections={connectionGroups.get(selectedProvider) ?? []}
-            canImport={canMutate}
-            onImport={() => openImport(selectedProvider)}
-            onClose={() => setSelectedProvider(null)}
-          />
-        ) : null}
         {importOpen ? (
           <ImportDialog
             locationName={model.locationName}

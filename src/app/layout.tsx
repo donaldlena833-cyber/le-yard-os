@@ -3,6 +3,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { connection } from "next/server";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { publicEnv } from "@/lib/env";
+import {
+  isHostSurface,
+  surfaceProductName,
+} from "@/lib/app-surface";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,15 +22,17 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(publicEnv.NEXT_PUBLIC_APP_URL),
   title: {
-    default: "Le Yard OS",
-    template: "%s · Le Yard OS",
+    default: surfaceProductName,
+    template: `%s · ${surfaceProductName}`,
   },
-  description: "The private operating system for the Le Yard restaurant team.",
-  applicationName: "Le Yard OS",
+  description: isHostSurface
+    ? "The private reservation book and guest CRM for the Le Yard team."
+    : "The private operating system for the Le Yard restaurant team.",
+  applicationName: surfaceProductName,
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Le Yard OS",
+    title: surfaceProductName,
   },
   formatDetection: {
     telephone: false,

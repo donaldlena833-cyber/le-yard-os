@@ -5,13 +5,17 @@ import {
   isNavItemVisible,
   isWorkspaceRouteAccessible,
 } from "@/components/shell/navigation";
-import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import type {
+  WorkspaceActiveJobAssignment,
+  WorkspaceContextValue,
+} from "@/lib/auth/workspace-context";
 import { DEMO_CAPABILITY_TEMPLATES } from "@/lib/permissions/capabilities";
 
 function workspace(
   role: WorkspaceContextValue["role"],
   capabilities: WorkspaceContextValue["capabilities"],
   persona?: "chef",
+  activeJob?: WorkspaceActiveJobAssignment,
 ): WorkspaceContextValue {
   const location = {
     id: "30000000-0000-4000-8000-000000000001",
@@ -35,6 +39,7 @@ function workspace(
     role,
     organizationWide: role === "owner" || role === "admin",
     capabilities,
+    ...(activeJob ? { activeJob } : {}),
     ...(persona ? { persona } : {}),
   };
 }
@@ -74,9 +79,9 @@ describe("capability-aware navigation", () => {
     expect(labels).not.toContain("Settings");
     expect(getMobileNavItems(employeeWorkspace).map((item) => item.label)).toEqual([
       "Today",
+      "Time Clock",
       "Schedule",
       "Messages",
-      "Earnings",
     ]);
     expect(isWorkspaceRouteAccessible("/settings", employeeWorkspace)).toBe(false);
     expect(isWorkspaceRouteAccessible("/assistant", employeeWorkspace)).toBe(false);
@@ -87,12 +92,87 @@ describe("capability-aware navigation", () => {
     const chefWorkspace = workspace("manager", DEMO_CAPABILITY_TEMPLATES.executiveChef, "chef");
     expect(getMobileNavItems(chefWorkspace).map((item) => item.label)).toEqual([
       "Today",
-      "Schedule",
       "Kitchen",
+      "Inventory",
       "Messages",
     ]);
     expect(isWorkspaceRouteAccessible("/kitchen", chefWorkspace)).toBe(true);
     expect(isWorkspaceRouteAccessible("/team", chefWorkspace)).toBe(false);
     expect(isWorkspaceRouteAccessible("/earnings", chefWorkspace)).toBe(false);
+  });
+
+  it("uses the server-provided Host assignment without bypassing reservation authorization", () => {
+    const activeHost = {
+      name: "Host",
+      code: "HOST",
+      department: "Front of house",
+    };
+    const authorizedHost = workspace(
+      "employee",
+      ["reservations.view"],
+      undefined,
+      activeHost,
+    );
+    const unauthorizedHost = workspace("employee", [], undefined, activeHost);
+
+    expect(getMobileNavItems(authorizedHost).map((item) => item.label)).toEqual([
+      "Today",
+      "Reservations",
+      "Service Control",
+      "Messages",
+    ]);
+    expect(getMobileNavItems(unauthorizedHost).map((item) => item.label)).toEqual([
+      "Today",
+      "Service Control",
+      "Schedule",
+      "Messages",
+    ]);
+    expect(isWorkspaceRouteAccessible("/reservations", authorizedHost)).toBe(true);
+    expect(isWorkspaceRouteAccessible("/reservations", unauthorizedHost)).toBe(false);
+  });
+
+  it("lets an override-only service manager reach dated reservation controls", () => {
+    const context = workspace("manager", ["reservations.override"]);
+    expect(isWorkspaceRouteAccessible("/reservations/setup", context)).toBe(true);
+    expect(visibleLabels(context)).toContain("Reservation controls");
+  });
+
+  it("keeps Income behind the exact financial reporting capability", () => {
+    const financial = workspace("manager", ["reports.financial.view"]);
+    const operational = workspace("manager", ["reports.operational.view"]);
+    expect(isWorkspaceRouteAccessible("/income", financial)).toBe(true);
+    expect(visibleLabels(financial)).toContain("Income");
+    expect(isWorkspaceRouteAccessible("/income", operational)).toBe(false);
+    expect(visibleLabels(operational)).not.toContain("Income");
+  });
+
+  it("uses the server-provided BOH assignment and keeps kitchen capability-gated", () => {
+    const activeBoh = {
+      name: "Line Cook",
+      code: "BOH-LINE",
+      department: "Kitchen",
+    };
+    const kitchenEmployee = workspace(
+      "employee",
+      ["prep.complete"],
+      undefined,
+      activeBoh,
+    );
+    const unprivilegedBoh = workspace("employee", [], undefined, activeBoh);
+
+    expect(getMobileNavItems(kitchenEmployee).map((item) => item.label)).toEqual([
+      "Today",
+      "Time Clock",
+      "Kitchen",
+      "Messages",
+    ]);
+    expect(getMobileNavItems(unprivilegedBoh).map((item) => item.label)).toEqual([
+      "Today",
+      "Time Clock",
+      "Tasks & SOPs",
+      "Messages",
+    ]);
+    expect(isWorkspaceRouteAccessible("/kitchen", kitchenEmployee)).toBe(true);
+    expect(isWorkspaceRouteAccessible("/kitchen", unprivilegedBoh)).toBe(false);
   });
 });

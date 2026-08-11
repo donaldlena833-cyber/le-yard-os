@@ -3,11 +3,21 @@ import { safeInternalRedirect } from "@/lib/auth/safe-redirect";
 import { publicEnv } from "@/lib/env";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
 import { createClient } from "@/lib/supabase/server";
+import { defaultWorkspacePath } from "@/lib/app-surface";
+import {
+  CONNECTED_SESSION_DEADLINE_COOKIE,
+  STANDARD_SESSION_TTL_SECONDS,
+  connectedSessionCookieOptions,
+  sessionDeadlineValue,
+} from "@/lib/auth/session-duration";
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
-  const next = safeInternalRedirect(requestUrl.searchParams.get("next"));
+  const next = safeInternalRedirect(
+    requestUrl.searchParams.get("next"),
+    defaultWorkspacePath,
+  );
   const applicationOrigin = publicEnv.NEXT_PUBLIC_APP_URL;
   const runtime = getServerRuntimeConfiguration();
 
@@ -18,10 +28,18 @@ export async function GET(request: Request) {
   }
 
   if (code) {
-    const supabase = await createClient();
+    const supabase = await createClient({
+      cookieMaxAge: STANDARD_SESSION_TTL_SECONDS,
+    });
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(new URL(next, applicationOrigin));
+      const response = NextResponse.redirect(new URL(next, applicationOrigin));
+      response.cookies.set(
+        CONNECTED_SESSION_DEADLINE_COOKIE,
+        sessionDeadlineValue(STANDARD_SESSION_TTL_SECONDS),
+        connectedSessionCookieOptions(STANDARD_SESSION_TTL_SECONDS),
+      );
+      return response;
     }
   }
 

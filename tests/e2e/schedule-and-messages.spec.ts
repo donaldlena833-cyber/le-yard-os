@@ -7,6 +7,13 @@ import {
 
 test("publishes a schedule and records an employee acknowledgement", async ({ page }) => {
   await openWorkspace(page, "/schedule", "Dinner schedule");
+  const mobile = (page.viewportSize()?.width ?? 1_440) < 768;
+
+  await expect(
+    page.getByLabel(
+      mobile ? "Weekly schedule agenda" : "Weekly schedule board",
+    ),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Publish schedule", exact: true }).click();
   await expect(page.getByRole("button", { name: "Published", exact: true })).toBeDisabled();
@@ -18,9 +25,7 @@ test("publishes a schedule and records an employee acknowledgement", async ({ pa
     .first()
     .click();
 
-  const shiftPanel = page.locator("aside").filter({
-    has: page.getByRole("heading", { name: "Mateo", exact: true }),
-  });
+  const shiftPanel = page.getByRole("dialog", { name: "Mateo", exact: true });
   await expect(shiftPanel).toBeVisible();
   await expect(shiftPanel.getByText("Awaiting response", { exact: true })).toBeVisible();
   await shiftPanel.getByRole("button", { name: "Acknowledge shift" }).click();

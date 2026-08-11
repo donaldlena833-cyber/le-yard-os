@@ -41,11 +41,21 @@ The adapter must:
 - never treat an imported total as an approved closeout or tip distribution
 - retry transient failures with bounded exponential delay and surface permanent errors for review
 
-## Resy adapter
+## Income check-state boundary
 
-Initial intended capability: read reservations and guest/visit context. Live synchronization is disabled until approved integration access is supplied.
+The Income workspace reads a provider-neutral latest-check fact rather than querying a Toast-specific browser model. Only a trusted service-role adapter may call `ingest_income_sales_check`. The command is tenant/location scoped, serializes each external check, rejects stale or conflicting source versions, resolves the restaurant operating date, and stores money in integer cents. Browser roles cannot select raw external check identifiers or execute ingestion.
+
+Until an approved adapter supplies these facts, connected Income renders live revenue and tracked contribution as unavailable—not zero—and continues to show only authoritative internal labor, recorded expense, closeout, received-inventory, waste, and reservation-demand evidence. Reservation covers are never converted into revenue. Received inventory remains a purchasing diagnostic rather than same-day COGS, and tracked contribution is explicitly not accounting profit.
+
+## Reservation writer and future Resy adapter
+
+Le Yard's first-party reservation platform is the intended authoritative writer, not yet the proven live source of truth. Public inventory stays disabled until the owners select exactly one writer for the pilot and shadow reconciliation shows that covers, tables, cancellations, modifications, and availability match the incumbent source. A future Resy adapter may read or reconcile reservations and guest/visit context, but live synchronization is disabled until approved integration access and an independently tested conflict protocol are supplied.
+
+The system must never accept public writes from two reservation sources merely because both adapters are configured. If two-way writing is ever proposed, it requires explicit conflict ownership, external identifiers, replay-safe source bindings, delayed/out-of-order event handling, cancellation and date-swap tests, reconciliation evidence, a kill switch, and separate approval. None of those conditions is currently satisfied.
 
 The adapter must preserve consent provenance and must not infer marketing consent from a reservation. Guest deduplication remains a human-reviewed workflow.
+
+The public Le Yard website is not a Resy adapter. It uses the scoped, versioned Le Yard booking API described in [reservations.md](reservations.md).
 
 ## Payroll/accounting adapters
 

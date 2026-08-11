@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
+  LayoutDashboard,
   Megaphone,
   PackageSearch,
   UsersRound,
@@ -14,9 +15,177 @@ import { Avatar } from "@/components/ui/avatar";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
-import type { LiveTodayModel } from "@/data/read-models/today";
+import type {
+  ServiceDayException,
+  ServiceDayNowAction,
+  ServiceDaySnapshot,
+} from "@/data/read-models/service-day-snapshot";
 import type { LiveServiceControlModel } from "@/data/read-models/service-control";
 import type { LiveReadResult } from "@/data/read-models/shared";
+import type { TodayReservationSlice } from "@/lib/actions/today-reservation-slice";
+
+const phaseLabel = {
+  pre_service: "Pre-service",
+  in_service: "In service",
+  post_service: "Post-service",
+  off_hours: "Off hours",
+} as const;
+
+function snapshotLabel(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
+export function HostServiceNow({
+  slice,
+  action,
+  exceptions,
+}: {
+  slice: TodayReservationSlice;
+  action: ServiceDayNowAction;
+  exceptions: readonly ServiceDayException[];
+}) {
+  const visibleExceptions = exceptions.slice(0, 4);
+
+  return (
+    <section
+      aria-labelledby="host-service-now-title"
+      className="mt-5 border-y border-[var(--line)] py-5"
+    >
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill tone={slice.servicePhase === "in_service" ? "positive" : "neutral"} dot={slice.servicePhase === "in_service"}>
+              {phaseLabel[slice.servicePhase]}
+            </StatusPill>
+            <span className="text-xs font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">
+              Host / service
+            </span>
+          </div>
+          <h3 id="host-service-now-title" className="mt-3 text-xl font-semibold tracking-[-0.04em]">
+            <span className="sr-only">Host service</span>{" "}Now
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-[var(--ink-soft)]">
+            {slice.covers} covers · {slice.seated} seated · {slice.reservationCount} reservations
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">
+            {slice.serviceName} · {slice.serviceWindow} · snapshot at{" "}
+            <time dateTime={slice.freshness.observedAt}>
+              {snapshotLabel(slice.freshness.observedAt, slice.timeZone)}
+            </time>
+          </p>
+        </div>
+        <Link
+          href={action.destination}
+          data-analytics-name={action.analyticsName}
+          data-offline-policy={action.offlinePolicy}
+          className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-[#171a17] transition-[background-color,transform] hover:-translate-y-px hover:bg-[var(--accent-strong)] hover:text-white motion-reduce:transform-none"
+        >
+          <LayoutDashboard className="size-4" />
+          {action.label}
+        </Link>
+      </div>
+
+      <div className="mt-5 border-t border-[var(--line)]">
+        {visibleExceptions.length ? (
+          <ul aria-label="Service exceptions" className="divide-y divide-[var(--line)]">
+            {visibleExceptions.map((exception) => (
+              <li key={exception.id}>
+                <Link
+                  href={exception.destination}
+                  className="focus-ring flex min-h-11 items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-[var(--paper)]"
+                >
+                  <AlertCircle className={exception.urgency === "urgent" || exception.urgency === "critical" ? "size-4 shrink-0 text-[var(--danger)]" : "size-4 shrink-0 text-[var(--warning)]"} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold">{exception.label}</span>
+                    <span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">{exception.detail}</span>
+                  </span>
+                  <span className="numeric flex min-w-7 items-center justify-center rounded-full bg-[var(--canvas-strong)] px-2 py-1 text-xs font-semibold" aria-label={`${exception.count} items`}>
+                    {exception.count}
+                  </span>
+                  <ArrowRight className="size-3.5 shrink-0 text-[var(--ink-faint)]" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex min-h-11 items-center gap-3 px-2 py-3 text-xs text-[var(--positive)]">
+            <CheckCircle2 className="size-4" /> No service exceptions in this snapshot.
+          </div>
+        )}
+        {slice.pendingHoldCount ? (
+          <p className="border-t border-[var(--line)] px-2 py-3 text-xs leading-4 text-[var(--ink-faint)]">
+            {slice.pendingHoldCount} pending guest verification hold{slice.pendingHoldCount === 1 ? " is" : "s are"} tracked in snapshot freshness. {slice.pendingHoldCount === 1 ? "It is" : "They are"} not assigned as a staff exception.
+          </p>
+        ) : null}
+        <p className="border-t border-[var(--line)] px-2 pt-3 text-xs leading-4 text-[var(--ink-faint)]">
+          Snapshot freshness: {slice.freshness.maxAgeSeconds}s. Refresh before acting on older service data. Internal operations only; this does not enable public booking.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function ReservationNowResult({
+  snapshot,
+}: {
+  snapshot: ServiceDaySnapshot;
+}) {
+  const result = snapshot.reservationSlice;
+  if (!result) return null;
+  if (result.ok && snapshot.nowAction) {
+    return (
+      <HostServiceNow
+        slice={result.data}
+        action={snapshot.nowAction}
+        exceptions={snapshot.orderedExceptions}
+      />
+    );
+  }
+  if (result.ok) return null;
+  return (
+    <section role="status" className="mt-5 flex min-h-11 items-center gap-3 border-y border-[var(--line)] px-2 py-3 text-xs text-[var(--ink-faint)]">
+      <AlertCircle className="size-4 shrink-0 text-[var(--warning)]" />
+      <span className="min-w-0 flex-1">Reservation exceptions could not be refreshed. Open the service book before acting.</span>
+      <Link href={`/reservations?date=${snapshot.scope.businessDate}`} className="focus-ring inline-flex min-h-11 items-center rounded-xl px-3 font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">
+        Open book
+      </Link>
+    </section>
+  );
+}
+
+function SnapshotStatus({ snapshot }: { snapshot: ServiceDaySnapshot }) {
+  const unavailable = snapshot.sourceFreshness.filter(
+    (source) => source.state === "unavailable",
+  ).length;
+  const available = snapshot.sourceFreshness.filter(
+    (source) => source.state === "fresh",
+  ).length;
+  const providerLabel = snapshot.providerHealth.state.replaceAll("_", " ");
+  return (
+    <section
+      aria-label="Service day snapshot status"
+      className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-[var(--line)] px-2 py-3 text-xs text-[var(--ink-faint)]"
+    >
+      <StatusPill tone={unavailable ? "warning" : "neutral"}>
+        {unavailable ? `${unavailable} snapshot read unavailable` : `${available} snapshot reads fresh`}
+      </StatusPill>
+      <span>
+        Snapshot at{" "}
+        <time dateTime={snapshot.observedAt}>
+          {snapshotLabel(snapshot.observedAt, snapshot.today.timeZone)}
+        </time>
+      </span>
+      <span>Realtime: snapshot only</span>
+      <span>Provider sync evidence: {providerLabel}</span>
+      <span className="sr-only">{snapshot.realtime.detail}</span>
+    </section>
+  );
+}
 
 function ServiceStatusSummary({ result }: { result: LiveReadResult<LiveServiceControlModel> }) {
   if (!result.ok) return null;
@@ -57,13 +226,12 @@ function shiftDateLabel(value: string, timeZone: string): string {
 
 function EmployeeTodayWorkspace({
   workspace,
-  data,
-  serviceControl,
+  snapshot,
 }: {
   workspace: WorkspaceContextValue;
-  data: LiveTodayModel;
-  serviceControl: LiveReadResult<LiveServiceControlModel>;
+  snapshot: ServiceDaySnapshot;
 }) {
+  const data = snapshot.today;
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
   const openShifts = data.shifts.filter((shift) => shift.isOpen);
   const ownShifts = data.shifts.filter(
@@ -93,7 +261,9 @@ function EmployeeTodayWorkspace({
           </div>
         </div>
       </section>
-      <ServiceStatusSummary result={serviceControl} />
+      <SnapshotStatus snapshot={snapshot} />
+      <ServiceStatusSummary result={snapshot.serviceControl} />
+      <ReservationNowResult snapshot={snapshot} />
 
       <div className="mt-8 grid gap-9 xl:grid-cols-[1.2fr_.8fr]">
         <section>
@@ -174,13 +344,12 @@ function EmployeeTodayWorkspace({
 
 function ChefTodayWorkspace({
   workspace,
-  data,
-  serviceControl,
+  snapshot,
 }: {
   workspace: WorkspaceContextValue;
-  data: LiveTodayModel;
-  serviceControl: LiveReadResult<LiveServiceControlModel>;
+  snapshot: ServiceDaySnapshot;
 }) {
+  const data = snapshot.today;
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "Chef";
   const kitchenShifts = data.shifts.filter((shift) => {
     const roleText = `${shift.jobName} ${shift.department ?? ""}`;
@@ -200,7 +369,9 @@ function ChefTodayWorkspace({
           <div className="border-t border-white/10 pt-5 lg:border-0 lg:pt-0 lg:text-right"><p className="text-xs tracking-[0.14em] text-white/50 uppercase">Kitchen shifts today</p><p className="numeric mt-2 text-xl font-medium">{kitchenShifts.length}</p><p className="mt-1 text-xs text-white/45">Published schedule</p></div>
         </div>
       </section>
-      <ServiceStatusSummary result={serviceControl} />
+      <SnapshotStatus snapshot={snapshot} />
+      <ServiceStatusSummary result={snapshot.serviceControl} />
+      <ReservationNowResult snapshot={snapshot} />
 
       <div className="mt-8 grid gap-9 xl:grid-cols-[1.2fr_.8fr]">
         <section>
@@ -227,17 +398,15 @@ function ChefTodayWorkspace({
 
 export function LiveTodayWorkspace({
   workspace,
-  model,
-  serviceControl = { ok: false, message: "Service control unavailable." },
+  snapshot,
 }: {
   workspace: WorkspaceContextValue;
-  model: { ok: true; data: LiveTodayModel } | { ok: false; message: string };
-  serviceControl?: LiveReadResult<LiveServiceControlModel>;
+  snapshot: LiveReadResult<ServiceDaySnapshot>;
 }) {
-  if (!model.ok) return <ErrorState message={model.message} />;
-  const data = model.data;
-  if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} data={data} serviceControl={serviceControl} />;
-  if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} data={data} serviceControl={serviceControl} />;
+  if (!snapshot.ok) return <ErrorState message={snapshot.message} />;
+  const data = snapshot.data.today;
+  if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} snapshot={snapshot.data} />;
+  if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} snapshot={snapshot.data} />;
   const firstName = workspace.identity.displayName.split(" ")[0];
 
   return (
@@ -248,7 +417,7 @@ export function LiveTodayWorkspace({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill tone="positive" dot className="bg-white/[0.08] text-[#93d0ad]">
-                Live · {workspace.activeLocation.name}
+                Connected · {workspace.activeLocation.name}
               </StatusPill>
               <span className="text-xs text-white/55">Tenant-scoped operations</span>
             </div>
@@ -268,7 +437,9 @@ export function LiveTodayWorkspace({
           </div>
         </div>
       </section>
-      <ServiceStatusSummary result={serviceControl} />
+      <SnapshotStatus snapshot={snapshot.data} />
+      <ServiceStatusSummary result={snapshot.data.serviceControl} />
+      <ReservationNowResult snapshot={snapshot.data} />
 
       <section aria-label="Today’s live metrics" className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Scheduled" value={String(data.scheduledCount)} detail={`${data.openShiftCount} open for coverage`} />

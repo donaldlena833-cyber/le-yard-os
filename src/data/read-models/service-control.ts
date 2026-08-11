@@ -3,7 +3,8 @@ import "server-only";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { createClient } from "@/lib/supabase/server";
 import { hasCapability } from "@/lib/permissions/capabilities";
-import { localDateKey, readFailure, readSuccess, type LiveReadResult } from "./shared";
+import { readFailure, readSuccess, type LiveReadResult } from "./shared";
+import { loadLiveServiceDayContext } from "./service-day-context";
 
 export interface ServiceAvailabilityEvent {
   id: string;
@@ -62,6 +63,8 @@ export interface LiveServiceControlModel {
 
 export async function loadLiveServiceControl(
   workspace: WorkspaceContextValue,
+  businessDate?: string,
+  observedAt = new Date().toISOString(),
 ): Promise<LiveReadResult<LiveServiceControlModel>> {
   try {
     const supabase = await createClient();
@@ -74,7 +77,14 @@ export async function loadLiveServiceControl(
       .eq("id", locationId)
       .single();
     if (locationError || !location) return readFailure();
-    const date = localDateKey(new Date(), location.timezone);
+    const serviceDayResult = businessDate
+      ? null
+      : await loadLiveServiceDayContext(workspace, observedAt);
+    if (serviceDayResult && !serviceDayResult.ok) return readFailure(serviceDayResult.message);
+    const date = businessDate ?? serviceDayResult?.data.businessDate;
+    if (!date || (serviceDayResult && serviceDayResult.data.timeZone !== location.timezone)) {
+      return readFailure("The operating business date could not be resolved.");
+    }
     const canManageAvailability = hasCapability(workspace.capabilities, "service.availability.manage");
     const canManageLog = hasCapability(workspace.capabilities, "manager_log.manage");
     const canManagePreshift = hasCapability(workspace.capabilities, "preshift.manage");
@@ -83,7 +93,7 @@ export async function loadLiveServiceControl(
       supabase.from("service_availability_events")
         .select("id, subject_type, subject_label, status, estimated_portions, reason, effective_at, expected_restoration_at, notes")
         .eq("organization_id", organizationId).eq("location_id", locationId)
-        .lte("effective_at", new Date().toISOString())
+        .lte("effective_at", observedAt)
         .order("effective_at", { ascending: false }).limit(250),
       canManageLog
         ? supabase.from("manager_log_entries")

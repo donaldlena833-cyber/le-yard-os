@@ -18,6 +18,30 @@ test("keeps the synthetic demo workspace available without a live MFA challenge"
         : "Primary navigation",
     }),
   ).toBeVisible();
+  const notificationTrigger = page.getByRole("button", {
+    name: "Open notifications",
+    exact: true,
+  });
+  await notificationTrigger.click();
+  const notifications = page.getByRole("dialog", { name: "Notifications" });
+  await expect(notifications).toBeVisible();
+  await expect(notificationTrigger).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(notifications).toBeHidden();
+  await expect(notificationTrigger).toBeFocused();
+
+  if (isMobileProject(testInfo)) {
+    const openNavigation = page.getByRole("button", { name: "Open navigation" });
+    await openNavigation.click();
+    const drawer = page.getByRole("dialog", { name: "Le Yard OS" });
+    await expect(drawer).toBeVisible();
+    await expect(
+      drawer.getByRole("button", { name: "Close navigation" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
+    await expect(openNavigation).toBeFocused();
+  }
   await expectNoViewportOverflow(page);
 });
 
@@ -79,4 +103,7 @@ test("opens the realtime service-control surface", async ({ page }) => {
   await openWorkspace(page, "/service", "Service control");
   await expect(page.getByText("Steak frites", { exact: true })).toBeVisible();
   await expect(page.getByText("Internal status only; Toast is not changed.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "No unresolved handoffs." }),
+  ).toBeVisible();
 });

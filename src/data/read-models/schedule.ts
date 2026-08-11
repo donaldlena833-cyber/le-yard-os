@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { hasCapability } from "@/lib/permissions/capabilities";
 import { createClient } from "@/lib/supabase/server";
 import {
   addIsoDays,
@@ -59,6 +60,7 @@ export interface LiveScheduleModel {
   weekDates: string[];
   timeZone: string;
   canManage: boolean;
+  canPublish: boolean;
   selfEmployeeId: string | null;
   schedule: {
     id: string;
@@ -106,10 +108,14 @@ export async function loadLiveSchedule(
     const candidateWeekday = new Date(`${candidateWeek}T00:00:00Z`).getUTCDay();
     const weekStart = addIsoDays(candidateWeek, -((candidateWeekday - weekStartsOn + 7) % 7));
     const weekDates = Array.from({ length: 7 }, (_, index) => addIsoDays(weekStart, index));
-    const canManage =
-      workspace.role === "admin" ||
-      workspace.role === "manager" ||
-      workspace.role === "owner";
+    const canManage = hasCapability(
+      workspace.capabilities,
+      "schedule.manage",
+    );
+    const canPublish = hasCapability(
+      workspace.capabilities,
+      "schedule.publish",
+    );
 
     const [scheduleResult, jobRoleResult, employeeResult, templateResult, selfEmployeeResult] = await Promise.all([
       supabase
@@ -225,6 +231,7 @@ export async function loadLiveSchedule(
       weekDates,
       timeZone: location.timezone,
       canManage,
+      canPublish,
       selfEmployeeId: selfEmployeeResult.data?.id ?? null,
       schedule: schedule
         ? {
