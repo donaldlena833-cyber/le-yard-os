@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AlertCircle,
   ArrowRight,
@@ -11,6 +13,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Avatar } from "@/components/ui/avatar";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -23,6 +26,41 @@ import type {
 import type { LiveServiceControlModel } from "@/data/read-models/service-control";
 import type { LiveReadResult } from "@/data/read-models/shared";
 import type { TodayReservationSlice } from "@/lib/actions/today-reservation-slice";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+  type RealtimeInvalidationResult,
+} from "@/lib/realtime/use-realtime-invalidation";
+
+const todayRealtimeBindings = [
+  { table: "service_shifts", scope: "location" },
+  { table: "shift_closeouts", scope: "location" },
+  { table: "inventory_counts", scope: "location" },
+  { table: "tasks", scope: "organization" },
+  { table: "time_entries", scope: "location" },
+  { table: "time_breaks", scope: "organization" },
+  { table: "service_availability_events", scope: "location" },
+  { table: "manager_log_entries", scope: "location" },
+  { table: "preshifts", scope: "location" },
+  { table: "preshift_acknowledgements", scope: "location" },
+  { table: "employee_job_roles", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
+
+const noTodayReservationPostgresBindings = [] as const;
+const todayReservationBroadcastEvents = ["INSERT", "UPDATE", "DELETE"] as const;
+
+function combineRealtimeState(
+  ...sources: readonly RealtimeInvalidationResult[]
+): RealtimeInvalidationResult {
+  const active = sources.filter((source) => source.state !== "disabled");
+  const priority = ["offline", "reconnecting", "connecting", "live"] as const;
+  return {
+    state:
+      priority.find((state) => active.some((source) => source.state === state)) ??
+      "disabled",
+    isRefreshing: active.some((source) => source.isRefreshing),
+  };
+}
 
 const phaseLabel = {
   pre_service: "Pre-service",
@@ -158,7 +196,13 @@ function ReservationNowResult({
   );
 }
 
-function SnapshotStatus({ snapshot }: { snapshot: ServiceDaySnapshot }) {
+function SnapshotStatus({
+  snapshot,
+  realtimeSupported,
+}: {
+  snapshot: ServiceDaySnapshot;
+  realtimeSupported: boolean;
+}) {
   const unavailable = snapshot.sourceFreshness.filter(
     (source) => source.state === "unavailable",
   ).length;
@@ -180,7 +224,9 @@ function SnapshotStatus({ snapshot }: { snapshot: ServiceDaySnapshot }) {
           {snapshotLabel(snapshot.observedAt, snapshot.today.timeZone)}
         </time>
       </span>
-      <span>Realtime: snapshot only</span>
+      <span>
+        Realtime: {realtimeSupported ? "scoped invalidation" : "snapshot only"}
+      </span>
       <span>Provider sync evidence: {providerLabel}</span>
       <span className="sr-only">{snapshot.realtime.detail}</span>
     </section>
@@ -227,9 +273,11 @@ function shiftDateLabel(value: string, timeZone: string): string {
 function EmployeeTodayWorkspace({
   workspace,
   snapshot,
+  realtime,
 }: {
   workspace: WorkspaceContextValue;
   snapshot: ServiceDaySnapshot;
+  realtime: RealtimeInvalidationResult;
 }) {
   const data = snapshot.today;
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
@@ -261,7 +309,11 @@ function EmployeeTodayWorkspace({
           </div>
         </div>
       </section>
-      <SnapshotStatus snapshot={snapshot} />
+      <SnapshotStatus
+        snapshot={snapshot}
+        realtimeSupported={workspace.mode === "live"}
+      />
+      <RealtimeSyncStatus {...realtime} />
       <ServiceStatusSummary result={snapshot.serviceControl} />
       <ReservationNowResult snapshot={snapshot} />
 
@@ -345,9 +397,11 @@ function EmployeeTodayWorkspace({
 function ChefTodayWorkspace({
   workspace,
   snapshot,
+  realtime,
 }: {
   workspace: WorkspaceContextValue;
   snapshot: ServiceDaySnapshot;
+  realtime: RealtimeInvalidationResult;
 }) {
   const data = snapshot.today;
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "Chef";
@@ -369,7 +423,11 @@ function ChefTodayWorkspace({
           <div className="border-t border-white/10 pt-5 lg:border-0 lg:pt-0 lg:text-right"><p className="text-xs tracking-[0.14em] text-white/50 uppercase">Kitchen shifts today</p><p className="numeric mt-2 text-xl font-medium">{kitchenShifts.length}</p><p className="mt-1 text-xs text-white/45">Published schedule</p></div>
         </div>
       </section>
-      <SnapshotStatus snapshot={snapshot} />
+      <SnapshotStatus
+        snapshot={snapshot}
+        realtimeSupported={workspace.mode === "live"}
+      />
+      <RealtimeSyncStatus {...realtime} />
       <ServiceStatusSummary result={snapshot.serviceControl} />
       <ReservationNowResult snapshot={snapshot} />
 
@@ -403,10 +461,33 @@ export function LiveTodayWorkspace({
   workspace: WorkspaceContextValue;
   snapshot: LiveReadResult<ServiceDaySnapshot>;
 }) {
+  const operationalRealtime = useRealtimeInvalidation({
+    enabled: workspace.mode === "live" && snapshot.ok,
+    channelName: `today:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: todayRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
+  const reservationRealtime = useRealtimeInvalidation({
+    enabled:
+      workspace.mode === "live" &&
+      snapshot.ok &&
+      snapshot.data.reservationSlice?.ok === true,
+    channelName: `reservations:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: noTodayReservationPostgresBindings,
+    broadcastEvents: todayReservationBroadcastEvents,
+    privateChannel: true,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
+  const realtime = combineRealtimeState(
+    operationalRealtime,
+    reservationRealtime,
+  );
   if (!snapshot.ok) return <ErrorState message={snapshot.message} />;
   const data = snapshot.data.today;
-  if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} snapshot={snapshot.data} />;
-  if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} snapshot={snapshot.data} />;
+  if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} snapshot={snapshot.data} realtime={realtime} />;
+  if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} snapshot={snapshot.data} realtime={realtime} />;
   const firstName = workspace.identity.displayName.split(" ")[0];
 
   return (
@@ -437,7 +518,11 @@ export function LiveTodayWorkspace({
           </div>
         </div>
       </section>
-      <SnapshotStatus snapshot={snapshot.data} />
+      <SnapshotStatus
+        snapshot={snapshot.data}
+        realtimeSupported={workspace.mode === "live"}
+      />
+      <RealtimeSyncStatus {...realtime} />
       <ServiceStatusSummary result={snapshot.data.serviceControl} />
       <ReservationNowResult snapshot={snapshot.data} />
 

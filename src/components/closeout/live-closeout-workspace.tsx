@@ -38,6 +38,7 @@ import {
 import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/files";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
 import { TipPolicyConfiguration } from "@/components/closeout/tip-policy-configuration";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
@@ -56,6 +57,10 @@ import {
 } from "@/lib/actions/action-registry";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import { hasCapability } from "@/lib/permissions/capabilities";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { validatePrivateFile } from "@/lib/storage/private-files";
 import { createClient } from "@/lib/supabase/client";
 import { cn, formatMoney as formatCurrency } from "@/lib/utils";
@@ -79,6 +84,20 @@ type Draft = {
 };
 
 const CurrencyCodeContext = createContext("USD");
+
+const closeoutRealtimeBindings = [
+  { table: "shift_closeouts", scope: "location" },
+  { table: "closeout_attachments", scope: "organization" },
+  { table: "tip_pool_policies", scope: "organization" },
+  { table: "tip_pool_policy_versions", scope: "organization" },
+  { table: "tip_pool_eligibility_rules", scope: "organization" },
+  { table: "tip_runs", scope: "location" },
+  { table: "tip_sources", scope: "organization" },
+  { table: "tip_run_participants", scope: "organization" },
+  { table: "tip_allocations", scope: "organization" },
+  { table: "tip_adjustments", scope: "organization" },
+  { table: "time_entries", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 function blankDraft(date: string): Draft {
   return {
@@ -279,6 +298,13 @@ export function LiveCloseoutWorkspace({
 }) {
   const router = useRouter();
   const model = result.ok ? result.data : null;
+  const realtime = useRealtimeInvalidation({
+    enabled: workspace.mode === "live" && result.ok,
+    channelName: `closeout:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: closeoutRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
   const formatMoney = (value: number) =>
     formatCurrency(value, model?.currencyCode ?? "USD");
   const formatDateTime = (value: string) =>
@@ -611,6 +637,7 @@ export function LiveCloseoutWorkspace({
             New closeout
           </Button>
         </header>
+        <RealtimeSyncStatus {...realtime} />
 
         <div className="mt-7 grid gap-10 xl:grid-cols-[260px_minmax(0,1fr)_minmax(340px,.8fr)]">
           <aside>

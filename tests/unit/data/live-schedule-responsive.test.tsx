@@ -22,6 +22,21 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 
+vi.mock("@/lib/supabase/client", () => ({
+  createClient: () => {
+    const channel = {
+      on: vi.fn(),
+      subscribe: vi.fn(),
+    };
+    channel.on.mockReturnValue(channel);
+    channel.subscribe.mockReturnValue(channel);
+    return {
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(),
+    };
+  },
+}));
+
 vi.mock("@dnd-kit/core", () => ({
   DndContext: ({ children }: { children: React.ReactNode }) => children,
   KeyboardSensor: class KeyboardSensor {},

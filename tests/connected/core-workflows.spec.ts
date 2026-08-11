@@ -8,6 +8,7 @@ import {
   mutationFixture,
   signIn,
 } from "./support";
+import { connectedTestMode } from "./attestation-preflight";
 
 type ReadinessCheck = {
   path: string;
@@ -16,7 +17,7 @@ type ReadinessCheck = {
 };
 
 const fixtureVariables = [
-  ...credentialVariableNames("Admin"),
+  ...credentialVariableNames("Owner"),
   "E2E_CONNECTED_EXPECTED_ORGANIZATION_NAME",
   "E2E_CONNECTED_EXPECTED_LOCATION_NAME",
 ] as const;
@@ -92,15 +93,15 @@ const coreReadinessChecks: ReadinessCheck[] = [
 test.describe("connected core workflow readiness", () => {
   test.setTimeout(180_000);
 
-  test("Admin can read every tenant-backed core surface without issuing a write", async ({ page }, testInfo) => {
+  test("Owner can read every tenant-backed core surface without issuing a write", async ({ page }, testInfo) => {
     const missing = missingEnvironment(fixtureVariables);
     test.skip(
-      missing.length > 0,
+      connectedTestMode() === "developer-smoke" && missing.length > 0,
       `Connected core readiness needs these nonproduction fixtures: ${missing.join(", ")}`,
     );
 
     const fixture = connectedFixture();
-    await signIn(page, "Admin");
+    await signIn(page, "Owner");
     await expectConnectedShell(page, fixture);
     const firewall = await installReadOnlyRequestFirewall(page);
 
@@ -134,7 +135,7 @@ test.describe("connected core workflow readiness", () => {
 
   test("employee chat write path runs only with an explicit nonproduction mutation contract", async ({ page }, testInfo) => {
     test.skip(
-      testInfo.project.name !== "connected-desktop",
+      !testInfo.project.name.endsWith("desktop"),
       "The write probe runs once on desktop; mobile workflow readiness is covered by the read-only route matrix.",
     );
     test.skip(

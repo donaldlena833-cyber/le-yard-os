@@ -112,24 +112,29 @@ function fillAndReviewEdit() {
 }
 
 describe("staff reservation lifecycle dialogs", () => {
-  it("keeps a valid nonstandard turn visible and accepts another configured duration", () => {
+  it("keeps a valid nonstandard turn visible and accepts every whole-minute database duration", () => {
     const { model, reservation } = fixture();
 
     render(
       <ReservationEditDialog
         workspace={workspace}
         model={model}
-        reservation={{ ...reservation, durationMinutes: 75 }}
+        reservation={{ ...reservation, durationMinutes: 73 }}
         onClose={vi.fn()}
         onCompleted={vi.fn()}
       />,
     );
 
-    expect(screen.getByLabelText(/Turn time/)).toHaveProperty("value", "75");
-    fireEvent.change(screen.getByLabelText(/Turn time/), {
-      target: { value: "105" },
+    const duration = screen.getByLabelText(/Turn time/);
+    expect(duration).toHaveProperty("value", "73");
+    expect(duration.getAttribute("type")).toBe("number");
+    expect(duration.getAttribute("min")).toBe("15");
+    expect(duration.getAttribute("max")).toBe("720");
+    expect(duration.getAttribute("step")).toBe("1");
+    fireEvent.change(duration, {
+      target: { value: "719" },
     });
-    expect(screen.getByLabelText(/Turn time/)).toHaveProperty("value", "105");
+    expect(duration).toHaveProperty("value", "719");
   });
 
   it("restores focus to the primary edit field when returning from review", async () => {
@@ -236,6 +241,11 @@ describe("staff reservation lifecycle dialogs", () => {
     expect(
       await screen.findByText(/connection ended before a result was confirmed/i),
     ).toBeTruthy();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Save revision" }),
+      ),
+    );
     view.rerender(
       <ReservationEditDialog
         workspace={workspace}
@@ -250,6 +260,49 @@ describe("staff reservation lifecycle dialogs", () => {
       "disabled",
       false,
     );
+    fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
+
+    await waitFor(() => expect(modifyReservationAction).toHaveBeenCalledTimes(2));
+    const [first, second] = vi
+      .mocked(modifyReservationAction)
+      .mock.calls.map(([input]) => input as { requestId: string });
+    expect(second.requestId).toBe(first.requestId);
+  });
+
+  it("preserves the edit draft, error, and request id across retry review navigation", async () => {
+    vi.mocked(modifyReservationAction)
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce(lifecycleSuccess("staff_modified", true));
+    const { model, reservation } = fixture();
+
+    render(
+      <ReservationEditDialog
+        workspace={workspace}
+        model={model}
+        reservation={reservation}
+        onClose={vi.fn()}
+        onCompleted={vi.fn()}
+      />,
+    );
+
+    fillAndReviewEdit();
+    fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
+    await screen.findByText(
+      /connection ended before a result was confirmed/i,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Back to edit" }));
+
+    expect(screen.getByLabelText(/Reason for change/)).toHaveProperty(
+      "value",
+      "Guest requested a later arrival.",
+    );
+    expect(
+      screen.getByText(/connection ended before a result was confirmed/i),
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByLabelText(/Date/)),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
     fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
 
     await waitFor(() => expect(modifyReservationAction).toHaveBeenCalledTimes(2));
@@ -312,6 +365,9 @@ describe("staff reservation lifecycle dialogs", () => {
       reservationId: reservation.id,
     });
     expect(screen.getByText(/Thu, Aug 13/)).toBeTruthy();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByLabelText(/Date/)),
+    );
     expect(refresh).toHaveBeenCalledOnce();
     expect(modifyReservationAction).toHaveBeenCalledOnce();
   });
@@ -420,6 +476,11 @@ describe("staff reservation lifecycle dialogs", () => {
       "value",
       "Guest called because plans changed.",
     );
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByLabelText(/Cancellation reason/),
+      ),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Cancel reservation" }));
     await waitFor(() => expect(cancelReservationAction).toHaveBeenCalledTimes(2));
     const [first, second] = vi
@@ -430,5 +491,43 @@ describe("staff reservation lifecycle dialogs", () => {
     expect(first.expectedVersion).toBe(7);
     expect(second.expectedVersion).toBe(8);
     expect(second.requestId).not.toBe(first.requestId);
+  });
+
+  it("preserves one cancellation request id and restores the reason after an ambiguous retry", async () => {
+    vi.mocked(cancelReservationAction)
+      .mockRejectedValueOnce(new Error("response lost"))
+      .mockResolvedValueOnce(lifecycleSuccess("staff_cancelled", true));
+    const { model, reservation } = fixture();
+
+    render(
+      <ReservationCancelDialog
+        workspace={workspace}
+        model={model}
+        reservation={reservation}
+        onClose={vi.fn()}
+        onCompleted={vi.fn()}
+      />,
+    );
+    const reason = screen.getByLabelText(/Cancellation reason/);
+    fireEvent.change(reason, {
+      target: { value: "Guest called because plans changed." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel reservation" }));
+
+    expect(
+      await screen.findByText(/connection ended before a result was confirmed/i),
+    ).toBeTruthy();
+    expect(reason).toHaveProperty(
+      "value",
+      "Guest called because plans changed.",
+    );
+    await waitFor(() => expect(document.activeElement).toBe(reason));
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel reservation" }));
+    await waitFor(() => expect(cancelReservationAction).toHaveBeenCalledTimes(2));
+    const [first, second] = vi
+      .mocked(cancelReservationAction)
+      .mock.calls.map(([input]) => input as { requestId: string });
+    expect(second.requestId).toBe(first.requestId);
   });
 });

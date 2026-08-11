@@ -2,16 +2,13 @@ import { randomUUID } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Pool } from "pg";
+import { requireLocalPostgresControlUrl } from "./lib/require-local-postgres-control-url.mjs";
 
 const suppliedConnectionString = process.env.RESERVATION_TEST_DATABASE_URL;
-if (!suppliedConnectionString) {
-  throw new Error(
-    "RESERVATION_TEST_DATABASE_URL is required; this gate never falls back to PGlite.",
-  );
-}
-if (!/^postgres(?:ql)?:\/\//.test(suppliedConnectionString)) {
-  throw new Error("RESERVATION_TEST_DATABASE_URL must be a PostgreSQL URL.");
-}
+requireLocalPostgresControlUrl(
+  suppliedConnectionString,
+  "RESERVATION_TEST_DATABASE_URL",
+);
 
 const root = process.cwd();
 const migrationDirectory = join(root, "supabase", "migrations");
@@ -347,14 +344,7 @@ async function createStaffReservation(
         $4::integer, $5::integer, 'Lifecycle concurrency', 'manual',
         array[$6::uuid]
       ) result`,
-      [
-        requestId,
-        ids.location,
-        startsAt,
-        durationMinutes,
-        partySize,
-        tableId,
-      ],
+      [requestId, ids.location, startsAt, durationMinutes, partySize, tableId],
     )
   ).rows[0].result;
 }
@@ -406,6 +396,60 @@ async function cancelStaffReservation(
       [requestId, ids.location, reservationId, expectedVersion, reason],
     )
   ).rows[0].result;
+}
+
+async function insertMessageFenceHold(
+  client,
+  holdId,
+  publicCode,
+  email,
+  reservedAt,
+) {
+  await client.query(
+    `insert into private.public_booking_holds (
+      id, organization_id, location_id, reserved_at, duration_minutes,
+      party_size, public_code, first_name, last_name, email, phone,
+      expires_at
+    ) values (
+      $1::uuid, $2::uuid, $3::uuid, $6::timestamptz,
+      90, 2, $4::text, 'Message', 'Fence', $5::text, '+12125550999',
+      clock_timestamp() + interval '1 hour'
+    )`,
+    [holdId, ids.organization, ids.location, publicCode, email, reservedAt],
+  );
+}
+
+async function insertMessageFenceOutbox(
+  client,
+  { messageId, holdId, dedupeKey },
+) {
+  return client.query(
+    `insert into public.reservation_message_outbox (
+      id, organization_id, location_id, booking_hold_id, channel,
+      template_key, template_data, dedupe_key
+    ) values (
+      $1::uuid, $2::uuid, $3::uuid, $4::uuid, 'email',
+      'reservation_verify',
+      '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
+      $5::text
+    )
+    returning id, status, message_delivery_configuration_version`,
+    [messageId, ids.organization, ids.location, holdId, dedupeKey],
+  );
+}
+
+async function setMessageFenceConfiguration(client, enabled) {
+  await client.query(
+    `update public.reservation_settings
+    set online_booking_enabled = $3::boolean,
+      guest_messaging_enabled = $3::boolean,
+      verification_channels = array['email']::text[],
+      approved_at = case when $3::boolean then clock_timestamp() else null end,
+      approved_by = case when $3::boolean then $4::uuid else null end,
+      updated_at = clock_timestamp()
+    where organization_id = $1::uuid and location_id = $2::uuid`,
+    [ids.organization, ids.location, enabled, ids.owner],
+  );
 }
 
 let setup;
@@ -1295,6 +1339,500 @@ try {
     requireCode(immutabilityError, "55000", label);
   }
 
+  // Reminder scheduling and staff modification share the reservation row
+  // lock. Prove both orderings: a scheduler behind a modification must enqueue
+  // only the committed version, while a modification behind the scheduler
+  // must cancel the scheduler's row before it can commit.
+  await assumeRole(first, "service_role");
+  const reminderRaceInitialAt = new Date(
+    new Date(times.t9).valueOf() + 45 * 60_000,
+  ).toISOString();
+  const reminderRaceMovedAt = new Date(
+    new Date(reminderRaceInitialAt).valueOf() + 15 * 60_000,
+  ).toISOString();
+  const reminderRaceMovedAgainAt = new Date(
+    new Date(reminderRaceMovedAt).valueOf() + 15 * 60_000,
+  ).toISOString();
+  const reminderRaceHold = await createPublicHold(first, {
+    requestId: randomUUID(),
+    startsAt: reminderRaceInitialAt,
+    partySize: 2,
+    tableId: ids.tableB,
+    email: `reminder-race-${runId}@example.invalid`,
+  });
+  const reminderRaceConfirmed = await confirmHold(
+    first,
+    reminderRaceHold.holdId,
+    "c1".repeat(32),
+  );
+  if (
+    reminderRaceConfirmed.status !== "booked" ||
+    !reminderRaceConfirmed.reservationId
+  ) {
+    throw new Error(
+      `Reminder race fixture failed: ${JSON.stringify(reminderRaceConfirmed)}`,
+    );
+  }
+  const reminderRaceReservationId = reminderRaceConfirmed.reservationId;
+  const reminderRaceClock = new Date(
+    new Date(reminderRaceMovedAt).valueOf() - 23 * 60 * 60_000,
+  ).toISOString();
+
+  await assumeRole(first, "authenticated", ids.owner);
+  await assumeRole(second, "service_role");
+  await first.query("begin");
+  await second.query("begin");
+  const reminderRaceFirstModify = await modifyStaffReservation(first, {
+    requestId: randomUUID(),
+    reservationId: reminderRaceReservationId,
+    expectedVersion: 1,
+    startsAt: reminderRaceMovedAt,
+    partySize: 2,
+    tableId: ids.tableB,
+    reason: "Move before the reminder scheduler commits",
+  });
+  if (
+    reminderRaceFirstModify.version !== 2 ||
+    reminderRaceFirstModify.revisionKind !== "staff_modified" ||
+    !reminderRaceFirstModify.guestNotificationQueued
+  ) {
+    throw new Error(
+      `Reminder-race first modification failed: ${JSON.stringify(reminderRaceFirstModify)}`,
+    );
+  }
+  const schedulerBehindModify = second.query(
+    "select public.service_enqueue_reservation_reminders($1::timestamptz) count",
+    [reminderRaceClock],
+  );
+  await proveBlocked(
+    setup,
+    schedulerBehindModify,
+    second.processID,
+    "reminder scheduler behind staff modification",
+  );
+  await first.query("commit");
+  await settleWithin(
+    schedulerBehindModify,
+    "reminder scheduler behind staff modification",
+  );
+  await second.query("commit");
+
+  const versionTwoReminder = (
+    await setup.query(
+      `select id, status, reservation_version, recipient_destination_hmac,
+        template_data, dedupe_key
+      from public.reservation_message_outbox
+      where organization_id = $1::uuid
+        and location_id = $2::uuid
+        and reservation_id = $3::uuid
+        and template_key = 'reservation_reminder_24h'
+      order by created_at desc, id desc
+      limit 1`,
+      [ids.organization, ids.location, reminderRaceReservationId],
+    )
+  ).rows[0];
+  if (
+    versionTwoReminder?.status !== "queued" ||
+    versionTwoReminder.reservation_version !== 2 ||
+    versionTwoReminder.template_data?.reservationVersion !== 2 ||
+    !/^[0-9a-f]{64}$/.test(
+      versionTwoReminder.recipient_destination_hmac ?? "",
+    ) ||
+    versionTwoReminder.dedupe_key !==
+      `reservation:${reminderRaceReservationId}:reminder:24h:v2:email`
+  ) {
+    throw new Error(
+      `Scheduler inserted stale or unbound reminder evidence: ${JSON.stringify(versionTwoReminder)}`,
+    );
+  }
+
+  await second.query("begin");
+  await second.query(
+    "select public.service_enqueue_reservation_reminders($1::timestamptz)",
+    [reminderRaceClock],
+  );
+  await first.query("begin");
+  const modifyBehindScheduler = modifyStaffReservation(first, {
+    requestId: randomUUID(),
+    reservationId: reminderRaceReservationId,
+    expectedVersion: 2,
+    startsAt: reminderRaceMovedAgainAt,
+    partySize: 2,
+    tableId: ids.tableB,
+    reason: "Move after the reminder scheduler takes its row lock",
+  });
+  await proveBlocked(
+    setup,
+    modifyBehindScheduler,
+    first.processID,
+    "staff modification behind reminder scheduler",
+  );
+  await second.query("commit");
+  const reminderRaceSecondModify = await settleWithin(
+    modifyBehindScheduler,
+    "staff modification behind reminder scheduler",
+  );
+  await first.query("commit");
+  if (
+    reminderRaceSecondModify.version !== 3 ||
+    reminderRaceSecondModify.revisionKind !== "staff_modified" ||
+    !reminderRaceSecondModify.guestNotificationQueued
+  ) {
+    throw new Error(
+      `Reminder-race second modification failed: ${JSON.stringify(reminderRaceSecondModify)}`,
+    );
+  }
+
+  await setup.query("reset role");
+  const reminderRaceEvidence = (
+    await setup.query(
+      `select reservation.version,
+        (select count(*) from public.reservation_message_outbox message
+          where message.reservation_id = reservation.id
+            and message.template_key in (
+              'reservation_reminder_24h', 'reservation_reminder_2h'
+            )
+            and message.reservation_version = 1) version_one_reminders,
+        (select status from public.reservation_message_outbox message
+          where message.id = $2::uuid) version_two_status,
+        (select count(*) from public.reservation_message_outbox message
+          where message.reservation_id = reservation.id
+            and message.template_key in (
+              'reservation_reminder_24h', 'reservation_reminder_2h'
+            )
+            and message.status in ('queued', 'failed', 'sending')
+            and message.reservation_version <> reservation.version)
+          live_stale_reminders,
+        (select count(*) from public.reservation_revisions revision
+          where revision.reservation_id = reservation.id
+            and revision.operation_kind = 'reservation.modify')
+          modification_revisions
+      from public.reservations reservation
+      where reservation.id = $1::uuid`,
+      [reminderRaceReservationId, versionTwoReminder.id],
+    )
+  ).rows[0];
+  if (
+    reminderRaceEvidence.version !== 3 ||
+    Number(reminderRaceEvidence.version_one_reminders) !== 0 ||
+    reminderRaceEvidence.version_two_status !== "cancelled" ||
+    Number(reminderRaceEvidence.live_stale_reminders) !== 0 ||
+    Number(reminderRaceEvidence.modification_revisions) !== 2
+  ) {
+    throw new Error(
+      `Reminder scheduler/modification serialization evidence is incomplete: ${JSON.stringify(reminderRaceEvidence)}`,
+    );
+  }
+
+  // Message configuration and provider dispatch share one settings -> outbox
+  // lock order. Prove both enqueue/revocation orderings, then prove begin is the
+  // exact provider boundary and an expired post-begin lease is never replayed.
+  const messageFenceIds = {
+    insertFirstHold: randomUUID(),
+    insertFirstMessage: randomUUID(),
+    settingsFirstHold: randomUUID(),
+    settingsFirstMessage: randomUUID(),
+    begunHold: randomUUID(),
+    begunMessage: randomUUID(),
+    uncertainHold: randomUUID(),
+    uncertainMessage: randomUUID(),
+  };
+  const publicCodeStem = runId.slice(0, 8).toUpperCase();
+  await setup.query("reset role");
+  for (const [holdId, publicCode, email] of [
+    [
+      messageFenceIds.insertFirstHold,
+      `M1${publicCodeStem}`,
+      `message-insert-first-${runId}@example.invalid`,
+    ],
+    [
+      messageFenceIds.settingsFirstHold,
+      `M2${publicCodeStem}`,
+      `message-settings-first-${runId}@example.invalid`,
+    ],
+    [
+      messageFenceIds.begunHold,
+      `M3${publicCodeStem}`,
+      `message-begun-${runId}@example.invalid`,
+    ],
+    [
+      messageFenceIds.uncertainHold,
+      `M4${publicCodeStem}`,
+      `message-uncertain-${runId}@example.invalid`,
+    ],
+  ]) {
+    await insertMessageFenceHold(setup, holdId, publicCode, email, times.t10);
+  }
+
+  await first.query("reset role");
+  await second.query("reset role");
+  await first.query("begin");
+  const insertFirst = (
+    await insertMessageFenceOutbox(first, {
+      messageId: messageFenceIds.insertFirstMessage,
+      holdId: messageFenceIds.insertFirstHold,
+      dedupeKey: `message-fence:insert-first:${runId}`,
+    })
+  ).rows[0];
+  if (insertFirst.status !== "queued")
+    throw new Error(
+      `Insert-first message was not initially eligible: ${JSON.stringify(insertFirst)}`,
+    );
+  await second.query("begin");
+  const disableBehindInsert = setMessageFenceConfiguration(second, false);
+  await proveBlocked(
+    setup,
+    disableBehindInsert,
+    second.processID,
+    "reservation message settings revocation behind insert",
+  );
+  await first.query("commit");
+  await settleWithin(
+    disableBehindInsert,
+    "reservation message settings revocation behind insert",
+  );
+  await second.query("commit");
+
+  const insertFirstEvidence = (
+    await setup.query(
+      `select message.status, message.claim_token,
+        message.provider_attempted_at, message.last_error_code,
+        message.message_delivery_configuration_version message_version,
+        settings.message_delivery_configuration_version settings_version
+      from public.reservation_message_outbox message
+      join public.reservation_settings settings
+        on settings.organization_id = message.organization_id
+       and settings.location_id = message.location_id
+      where message.id = $1::uuid`,
+      [messageFenceIds.insertFirstMessage],
+    )
+  ).rows[0];
+  if (
+    insertFirstEvidence?.status !== "cancelled" ||
+    insertFirstEvidence.claim_token !== null ||
+    insertFirstEvidence.provider_attempted_at !== null ||
+    insertFirstEvidence.last_error_code !== "messaging_configuration_revoked" ||
+    Number(insertFirstEvidence.message_version) >=
+      Number(insertFirstEvidence.settings_version)
+  ) {
+    throw new Error(
+      `Insert-first settings fence evidence is incomplete: ${JSON.stringify(insertFirstEvidence)}`,
+    );
+  }
+  await setMessageFenceConfiguration(setup, true);
+
+  await first.query("begin");
+  await setMessageFenceConfiguration(first, false);
+  await second.query("begin");
+  const insertBehindSettings = insertMessageFenceOutbox(second, {
+    messageId: messageFenceIds.settingsFirstMessage,
+    holdId: messageFenceIds.settingsFirstHold,
+    dedupeKey: `message-fence:settings-first:${runId}`,
+  });
+  await proveBlocked(
+    setup,
+    insertBehindSettings,
+    second.processID,
+    "reservation message insert behind settings revocation",
+  );
+  await first.query("commit");
+  const settingsFirstInsert = await settleWithin(
+    insertBehindSettings,
+    "reservation message insert behind settings revocation",
+  );
+  await second.query("commit");
+  const settingsFirstInsertedRow = settingsFirstInsert.rows[0];
+  const settingsFirstVersion = (
+    await setup.query(
+      `select message_delivery_configuration_version
+      from public.reservation_settings
+      where organization_id = $1::uuid and location_id = $2::uuid`,
+      [ids.organization, ids.location],
+    )
+  ).rows[0].message_delivery_configuration_version;
+  if (
+    settingsFirstInsertedRow?.status !== "cancelled" ||
+    Number(settingsFirstInsertedRow.message_delivery_configuration_version) !==
+      Number(settingsFirstVersion)
+  ) {
+    throw new Error(
+      `Settings-first insert was not born terminally fenced: ${JSON.stringify({ settingsFirstInsertedRow, settingsFirstVersion })}`,
+    );
+  }
+  await setMessageFenceConfiguration(setup, true);
+
+  await insertMessageFenceOutbox(setup, {
+    messageId: messageFenceIds.begunMessage,
+    holdId: messageFenceIds.begunHold,
+    dedupeKey: `message-fence:begun:${runId}`,
+  });
+  const begunClaimToken = randomUUID();
+  await setup.query(
+    `update public.reservation_message_outbox
+    set status = 'sending', claim_token = $2::uuid, claimed_by = $3::uuid,
+      claimed_at = clock_timestamp(),
+      lease_expires_at = clock_timestamp() + interval '1 minute',
+      attempts = attempts + 1, updated_at = clock_timestamp()
+    where id = $1::uuid`,
+    [messageFenceIds.begunMessage, begunClaimToken, randomUUID()],
+  );
+
+  await assumeRole(first, "service_role");
+  await first.query("begin");
+  const begunSnapshot = (
+    await first.query(
+      `select public.service_begin_reservation_message_delivery(
+        $1::uuid, $2::uuid, clock_timestamp()
+      ) begun`,
+      [messageFenceIds.begunMessage, begunClaimToken],
+    )
+  ).rows[0].begun;
+  if (
+    begunSnapshot?.status !== "dispatching" ||
+    begunSnapshot.id !== messageFenceIds.begunMessage ||
+    begunSnapshot.recipientEmail !== `message-begun-${runId}@example.invalid` ||
+    begunSnapshot.templateKey !== "reservation_verify"
+  ) {
+    throw new Error(
+      `Native begin-delivery snapshot was not exact: ${JSON.stringify(begunSnapshot)}`,
+    );
+  }
+
+  await second.query("reset role");
+  await second.query("begin");
+  const disableBehindBegin = setMessageFenceConfiguration(second, false);
+  await proveBlocked(
+    setup,
+    disableBehindBegin,
+    second.processID,
+    "reservation message settings revocation behind begin delivery",
+  );
+  await first.query("commit");
+  await settleWithin(
+    disableBehindBegin,
+    "reservation message settings revocation behind begin delivery",
+  );
+  await second.query("commit");
+
+  const begunAfterRevocation = (
+    await setup.query(
+      `select message.status, message.claim_token,
+        message.provider_attempted_at,
+        message.message_delivery_configuration_version message_version,
+        settings.message_delivery_configuration_version settings_version
+      from public.reservation_message_outbox message
+      join public.reservation_settings settings
+        on settings.organization_id = message.organization_id
+       and settings.location_id = message.location_id
+      where message.id = $1::uuid`,
+      [messageFenceIds.begunMessage],
+    )
+  ).rows[0];
+  if (
+    begunAfterRevocation?.status !== "sending" ||
+    begunAfterRevocation.claim_token !== begunClaimToken ||
+    begunAfterRevocation.provider_attempted_at === null ||
+    Number(begunAfterRevocation.message_version) >=
+      Number(begunAfterRevocation.settings_version)
+  ) {
+    throw new Error(
+      `A begun provider dispatch was not preserved across revocation: ${JSON.stringify(begunAfterRevocation)}`,
+    );
+  }
+
+  await assumeRole(setup, "service_role");
+  const completedBegun = (
+    await setup.query(
+      `select public.service_complete_reservation_message_outbox(
+        $1::uuid, $2::uuid, 'sent', null, null, $3::text
+      ) completed`,
+      [
+        messageFenceIds.begunMessage,
+        begunClaimToken,
+        `native-provider-${runId}`,
+      ],
+    )
+  ).rows[0].completed;
+  if (completedBegun?.status !== "sent")
+    throw new Error(
+      `Begun provider dispatch could not complete after revocation: ${JSON.stringify(completedBegun)}`,
+    );
+  await setup.query("reset role");
+  await setMessageFenceConfiguration(setup, true);
+
+  await insertMessageFenceOutbox(setup, {
+    messageId: messageFenceIds.uncertainMessage,
+    holdId: messageFenceIds.uncertainHold,
+    dedupeKey: `message-fence:uncertain:${runId}`,
+  });
+  const uncertainClaimToken = randomUUID();
+  await setup.query(
+    `update public.reservation_message_outbox
+    set status = 'sending', claim_token = $2::uuid, claimed_by = $3::uuid,
+      claimed_at = clock_timestamp(),
+      lease_expires_at = clock_timestamp() + interval '5 seconds',
+      attempts = attempts + 1, updated_at = clock_timestamp()
+    where id = $1::uuid`,
+    [messageFenceIds.uncertainMessage, uncertainClaimToken, randomUUID()],
+  );
+  await assumeRole(setup, "service_role");
+  const uncertainBegun = (
+    await setup.query(
+      `select public.service_begin_reservation_message_delivery(
+        $1::uuid, $2::uuid, clock_timestamp()
+      ) begun`,
+      [messageFenceIds.uncertainMessage, uncertainClaimToken],
+    )
+  ).rows[0].begun;
+  if (uncertainBegun?.status !== "dispatching")
+    throw new Error(
+      `Post-begin uncertainty fixture did not begin: ${JSON.stringify(uncertainBegun)}`,
+    );
+
+  await first.query("reset role");
+  await first.query("begin");
+  await first.query(
+    `select id from public.reservation_message_outbox
+    where id <> $1::uuid and status in ('queued', 'failed', 'sending')
+    for update`,
+    [messageFenceIds.uncertainMessage],
+  );
+  await assumeRole(second, "service_role");
+  const postBeginReclaim = (
+    await second.query(
+      `select * from public.service_claim_reservation_message_outbox(
+        $1::uuid, 1, 30, clock_timestamp() + interval '10 seconds'
+      )`,
+      [randomUUID()],
+    )
+  ).rows;
+  await first.query("commit");
+  await setup.query("reset role");
+  const uncertainEvidence = (
+    await setup.query(
+      `select status, claim_token, claimed_by, claimed_at,
+        lease_expires_at, provider_attempted_at, last_error_code
+      from public.reservation_message_outbox where id = $1::uuid`,
+      [messageFenceIds.uncertainMessage],
+    )
+  ).rows[0];
+  if (
+    postBeginReclaim.some(
+      (message) => message.id === messageFenceIds.uncertainMessage,
+    ) ||
+    uncertainEvidence?.status !== "uncertain" ||
+    uncertainEvidence.claim_token !== null ||
+    uncertainEvidence.claimed_by !== null ||
+    uncertainEvidence.claimed_at !== null ||
+    uncertainEvidence.lease_expires_at !== null ||
+    uncertainEvidence.provider_attempted_at === null ||
+    uncertainEvidence.last_error_code !== "provider_outcome_unknown_after_lease"
+  ) {
+    throw new Error(
+      `Expired post-begin delivery was replayable: ${JSON.stringify({ postBeginReclaim, uncertainEvidence })}`,
+    );
+  }
+
   // Adjacent operating dates can still share one rolling pacing window. Use
   // separate late/early services and different tables to prove the canonical
   // location lock makes the second writer observe the committed covers.
@@ -1674,7 +2212,7 @@ try {
   await setup.query("reset role");
   await setup.query(`drop schema ${quoteIdentifier(markerSchema)} cascade`);
   process.stdout.write(
-    "PASS actual migrated PostgreSQL two-connection gate: service-period/timezone configuration, GiST, public/public table conflict with rollback evidence, same-day and adjacent-day pacing, cross-boundary stale expiry, confirm/create, canonical opposite-date swaps, public modify/modify, cancel/rebook, staff/public, staff modify/modify and cancel/modify lifecycle revisions, guest-identity post-lock recheck, and waitlist/public\n",
+    "PASS actual migrated PostgreSQL two-connection gate: service-period/timezone configuration, GiST, public/public table conflict with rollback evidence, same-day and adjacent-day pacing, cross-boundary stale expiry, confirm/create, canonical opposite-date swaps, public modify/modify, cancel/rebook, staff/public, staff modify/modify and cancel/modify lifecycle revisions, both reservation-reminder scheduler/modify lock orderings with version and destination fences, guest-identity post-lock recheck, and waitlist/public\n",
   );
 } finally {
   await rollbackQuietly(first);

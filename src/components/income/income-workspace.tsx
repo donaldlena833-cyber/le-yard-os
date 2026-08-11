@@ -2,9 +2,13 @@
 
 import {
   Activity,
+  ArrowRight,
   BadgeDollarSign,
+  CalendarRange,
   Clock3,
+  DatabaseZap,
   RefreshCw,
+  UserRoundCheck,
   UsersRound,
   WalletCards,
   X,
@@ -13,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
@@ -21,7 +25,11 @@ import { ReadState } from "@/components/ui/read-state";
 import { StatusPill } from "@/components/ui/status-pill";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import type { LiveReadResult } from "@/data/read-models/shared";
-import { deriveIncomePlanningSummary } from "@/lib/income/insights";
+import {
+  deriveIncomePlanningInsights,
+  deriveIncomePlanningSummary,
+  type IncomePlanningInsight,
+} from "@/lib/income/insights";
 import type {
   IncomeHourlyBucket,
   IncomeOperatingModel,
@@ -39,8 +47,10 @@ const incomeRealtimeBindings = [
   { table: "shift_closeouts", scope: "location" },
   { table: "expenses", scope: "location" },
   { table: "deliveries", scope: "location" },
+  { table: "delivery_lines", scope: "organization" },
   { table: "waste_records", scope: "location" },
   { table: "reservations", scope: "location" },
+  { table: "employee_job_roles", scope: "location" },
 ] satisfies readonly RealtimeInvalidationBinding[];
 
 function currency(cents: number | null, code: string): string {
@@ -72,6 +82,20 @@ function freshnessLabel(value: string | null, timeZone: string): string {
 }
 
 type HourlyMetric = "revenue" | "demand" | "labor";
+
+export interface IncomeActionAccess {
+  canManageSchedule: boolean;
+  canViewSchedule: boolean;
+  canOpenTimeClock: boolean;
+  canManageIntegrations: boolean;
+}
+
+const noIncomeActionAccess: IncomeActionAccess = {
+  canManageSchedule: false,
+  canViewSchedule: false,
+  canOpenTimeClock: false,
+  canManageIntegrations: false,
+};
 
 const hourlyMetricTabs = [
   { value: "revenue", label: "Revenue" },
@@ -327,15 +351,235 @@ function SlowBusySummary({ model }: { model: IncomeOperatingModel }) {
   );
 }
 
+function sourceTone(
+  freshness: "current" | "stale" | "unavailable" | null,
+): "positive" | "warning" | "neutral" {
+  if (freshness === "current") return "positive";
+  if (freshness === "stale") return "warning";
+  return "neutral";
+}
+
+function PlanningInsightAction({
+  insight,
+  access,
+}: {
+  insight: IncomePlanningInsight;
+  access: IncomeActionAccess;
+}) {
+  if (insight.kind === "busy_hour") {
+    if (access.canManageSchedule || access.canViewSchedule) {
+      return (
+        <a
+          href="/schedule"
+          className={buttonVariants({ variant: "secondary", size: "sm" })}
+        >
+          {access.canManageSchedule ? "Plan coverage" : "Review schedule"}
+          <ArrowRight className="size-3.5" aria-hidden="true" />
+        </a>
+      );
+    }
+    return (
+      <p className="text-xs leading-5 text-[var(--ink-faint)]">
+        Schedule access is required to act on this finding.
+      </p>
+    );
+  }
+
+  if (insight.kind === "staffed_without_demand") {
+    if (access.canManageSchedule) {
+      return (
+        <a
+          href="/schedule"
+          className={buttonVariants({ variant: "secondary", size: "sm" })}
+        >
+          Review staffing
+          <ArrowRight className="size-3.5" aria-hidden="true" />
+        </a>
+      );
+    }
+    if (access.canOpenTimeClock) {
+      return (
+        <a
+          href="/time-clock"
+          className={buttonVariants({ variant: "secondary", size: "sm" })}
+        >
+          Review time clock
+          <ArrowRight className="size-3.5" aria-hidden="true" />
+        </a>
+      );
+    }
+    return (
+      <p className="text-xs leading-5 text-[var(--ink-faint)]">
+        Time-clock or schedule access is required to investigate.
+      </p>
+    );
+  }
+
+  if (access.canManageIntegrations) {
+    return (
+      <a
+        href="/integrations"
+        className={buttonVariants({ variant: "secondary", size: "sm" })}
+      >
+        Review sources
+        <ArrowRight className="size-3.5" aria-hidden="true" />
+      </a>
+    );
+  }
+  return (
+    <p className="text-xs leading-5 text-[var(--ink-faint)]">
+      An integrations manager can resolve source coverage.
+    </p>
+  );
+}
+
+function PlanningInsights({
+  model,
+  access,
+}: {
+  model: IncomeOperatingModel;
+  access: IncomeActionAccess;
+}) {
+  const insights = deriveIncomePlanningInsights(model);
+
+  return (
+    <section className="mt-8" aria-label="Planning insights">
+      <SectionHeading
+        eyebrow="Insight to action"
+        title="Planning insights"
+        detail="Deterministic findings with their evidence, freshness, and one safe next step."
+      />
+      <div className="grid gap-3 lg:grid-cols-3">
+        {insights.map((insight) => {
+          if (insight.kind === "busy_hour") {
+            const revenueBasis = insight.basis === "recorded_revenue";
+            return (
+              <article
+                key={insight.kind}
+                className="flex min-h-[280px] flex-col rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <CalendarRange
+                    className="size-5 text-[var(--accent)]"
+                    aria-hidden="true"
+                  />
+                  <StatusPill tone={sourceTone(insight.sourceFreshness)}>
+                    {insight.sourceFreshness ?? "demand signal"}
+                  </StatusPill>
+                </div>
+                <h3 className="mt-5 text-sm font-semibold">
+                  Busy-hour capacity
+                </h3>
+                <p className="mt-1 text-2xl font-medium tracking-[-0.035em]">
+                  {insight.bucket
+                    ? `${hourLabel(insight.bucket.hour)} is the busiest observed hour`
+                    : "More history is needed"}
+                </p>
+                <p className="mt-3 text-xs leading-5 text-[var(--ink-faint)]">
+                  {insight.bucket && insight.average !== null
+                    ? revenueBasis
+                      ? `${currency(Math.round(insight.average), model.currencyCode)} average recorded revenue across ${insight.sampleDays} observed sales ${insight.sampleDays === 1 ? "day" : "days"}; ${insight.bucket.salesCovers} recorded covers and ${insight.bucket.reservationCovers} reserved covers in the selected history.`
+                      : `${insight.average.toFixed(1)} reserved covers per day across ${insight.sampleDays} calendar day(s). Revenue was not used.`
+                    : "No comparable sales or reservation-demand evidence is available."}
+                </p>
+                <div className="mt-auto pt-5">
+                  <PlanningInsightAction insight={insight} access={access} />
+                </div>
+              </article>
+            );
+          }
+
+          if (insight.kind === "staffed_without_demand") {
+            const hourRange = insight.buckets
+              .map((bucket) => hourLabel(bucket.hour))
+              .join(", ");
+            return (
+              <article
+                key={insight.kind}
+                className="flex min-h-[280px] flex-col rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-5"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <UserRoundCheck
+                    className="size-5 text-[var(--warning)]"
+                    aria-hidden="true"
+                  />
+                  <StatusPill tone={sourceTone(insight.timeClockFreshness)}>
+                    clock {insight.timeClockFreshness}
+                  </StatusPill>
+                </div>
+                <h3 className="mt-5 text-sm font-semibold">
+                  Staffed without recorded demand
+                </h3>
+                <p className="mt-1 text-2xl font-medium tracking-[-0.035em]">
+                  {insight.buckets.length
+                    ? `${insight.buckets.length} hour${insight.buckets.length === 1 ? "" : "s"} to investigate`
+                    : "No coverage exception found"}
+                </p>
+                <p className="mt-3 text-xs leading-5 text-[var(--ink-faint)]">
+                  {insight.buckets.length
+                    ? `${hourRange}: ${(insight.laborMinutes / 60).toFixed(1)} labor hours and ${currency(insight.laborCostCents, model.currencyCode)} known labor with no recorded check observation or reserved covers. Sales source is ${insight.salesFreshness}; verify context before changing staffing.`
+                    : "Every staffed hour has at least one recorded sales observation or reservation-demand signal in this view."}
+                </p>
+                <div className="mt-auto pt-5">
+                  <PlanningInsightAction insight={insight} access={access} />
+                </div>
+              </article>
+            );
+          }
+
+          const issueLabels = insight.issues
+            .map((source) => `${source.label} (${source.freshness})`)
+            .join(", ");
+          return (
+            <article
+              key={insight.kind}
+              className="flex min-h-[280px] flex-col rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <DatabaseZap
+                  className="size-5 text-[var(--positive)]"
+                  aria-hidden="true"
+                />
+                <StatusPill
+                  tone={insight.issues.length ? "warning" : "positive"}
+                >
+                  {insight.currentSourceCount}/{insight.totalSourceCount}{" "}
+                  current
+                </StatusPill>
+              </div>
+              <h3 className="mt-5 text-sm font-semibold">Data coverage</h3>
+              <p className="mt-1 text-2xl font-medium tracking-[-0.035em]">
+                {insight.issues.length
+                  ? "Resolve gaps before making structural changes"
+                  : "Planning sources are current"}
+              </p>
+              <p className="mt-3 text-xs leading-5 text-[var(--ink-faint)]">
+                {insight.issues.length
+                  ? `${issueLabels}. Rankings show observed evidence only; missing data is never treated as zero activity.`
+                  : "Sales checks, time entries, expenses, and closeouts all meet their source-specific freshness thresholds."}
+              </p>
+              <div className="mt-auto pt-5">
+                <PlanningInsightAction insight={insight} access={access} />
+              </div>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function IncomeWorkspace({
   result,
   locationName,
   realtimeScope,
+  actionAccess = noIncomeActionAccess,
   demo = false,
 }: {
   result: LiveReadResult<IncomeOperatingModel>;
   locationName: string;
   realtimeScope?: { organizationId: string; locationId: string };
+  actionAccess?: IncomeActionAccess;
   demo?: boolean;
 }) {
   const router = useRouter();
@@ -499,6 +743,7 @@ export function IncomeWorkspace({
           <div className="mt-5">
             <SlowBusySummary model={model} />
           </div>
+          <PlanningInsights model={model} access={actionAccess} />
         </section>
 
         <aside className="space-y-7">

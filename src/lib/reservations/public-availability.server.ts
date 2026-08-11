@@ -11,6 +11,7 @@ import {
   BookingApiError,
   type BookingApiClientContext,
 } from "./api-auth.server";
+import { assertPublicReservationInventoryEnabled } from "./public-booking-policy.server";
 import { createBookingSlotToken } from "./slot-token.server";
 import {
   reservationDurationFitsServiceWindow,
@@ -55,7 +56,9 @@ export async function loadPublicAvailability(
   client: BookingApiClientContext,
   businessDate: string,
   partySize: number,
+  options?: { existingManagementSessionAuthorized?: boolean },
 ) {
+  assertPublicReservationInventoryEnabled(options);
   const admin = createAdminClient();
   const reservationRpc = admin.rpc as unknown as (
     name: string,
@@ -267,14 +270,14 @@ export async function loadPublicAvailability(
   ).map((reservation) => ({
     startsAt: reservation.startsAt,
     partySize: reservation.partySize,
-    status:
-      reservation.kind === "hold" ? "pending_verification" : "confirmed",
+    status: reservation.kind === "hold" ? "pending_verification" : "confirmed",
   }));
   const earliest = Date.now() + (settings.minimum_lead_minutes ?? 0) * 60_000;
   const slots = periods.flatMap((period) => {
     const serviceStartsAt = new Date(period.startsAt).valueOf();
     const serviceEndsAt = new Date(period.endsAt).valueOf();
-    if (!Number.isFinite(serviceStartsAt) || !Number.isFinite(serviceEndsAt)) return [];
+    if (!Number.isFinite(serviceStartsAt) || !Number.isFinite(serviceEndsAt))
+      return [];
     const bookable = resolveServiceShiftBookableWindow({
       startsAt: period.startsAt,
       endsAt: period.endsAt,
@@ -298,7 +301,8 @@ export async function loadPublicAvailability(
       let cursor = bookableStartsAt;
       cursor + durationMinutes * 60_000 <= bookableEndsAt;
       cursor +=
-        (settings.slot_interval_minutes ?? period.pacingIntervalMinutes) * 60_000
+        (settings.slot_interval_minutes ?? period.pacingIntervalMinutes) *
+        60_000
     ) {
       const startsAt = new Date(cursor).toISOString();
       const endsAt = cursor + durationMinutes * 60_000;

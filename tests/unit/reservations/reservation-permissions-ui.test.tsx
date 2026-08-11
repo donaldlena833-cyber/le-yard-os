@@ -214,6 +214,44 @@ describe("reservation host capability affordances", () => {
     );
   });
 
+  it("accepts any whole-minute turn from the database contract when staff book", async () => {
+    mocks.saveReservation.mockResolvedValue({
+      ok: true,
+      persisted: true,
+      mode: "live",
+      data: {},
+    });
+    renderHost({
+      view: true,
+      operate: true,
+      override: false,
+      configure: false,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Book" }));
+    const dialog = screen.getByRole("dialog", { name: "New reservation" });
+    const duration = screen.getByLabelText(/^Turn time/);
+    expect(dialog.contains(duration)).toBe(true);
+    expect(duration.tagName).toBe("INPUT");
+    expect(duration.getAttribute("min")).toBe("15");
+    expect(duration.getAttribute("max")).toBe("720");
+    expect(duration.getAttribute("step")).toBe("1");
+
+    fireEvent.change(screen.getByLabelText("Guest name"), {
+      target: { value: "Flexible Turn" },
+    });
+    fireEvent.change(duration, { target: { value: "73" } });
+    fireEvent.submit(dialog.querySelector("form")!);
+
+    await waitFor(() => expect(mocks.saveReservation).toHaveBeenCalledOnce());
+    expect(mocks.saveReservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayName: "Flexible Turn",
+        durationMinutes: 73,
+      }),
+    );
+  });
+
   it("confirms a no-show before invoking the terminal transition", async () => {
     mocks.transitionReservation.mockResolvedValue({
       ok: true,

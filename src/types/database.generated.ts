@@ -5112,6 +5112,10 @@ export type Database = {
           "last_error_code": string | null
           "created_at": string
           "updated_at": string
+          "reservation_version": number | null
+          "recipient_destination_hmac": string | null
+          "message_delivery_configuration_version": number
+          "provider_attempted_at": string | null
         }
         Insert: {
           "id"?: string
@@ -5138,6 +5142,10 @@ export type Database = {
           "last_error_code"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "reservation_version"?: number | null
+          "recipient_destination_hmac"?: string | null
+          "message_delivery_configuration_version": number
+          "provider_attempted_at"?: string | null
         }
         Update: {
           "id"?: string
@@ -5164,6 +5172,10 @@ export type Database = {
           "last_error_code"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "reservation_version"?: number | null
+          "recipient_destination_hmac"?: string | null
+          "message_delivery_configuration_version"?: number
+          "provider_attempted_at"?: string | null
         }
         Relationships: [
           {
@@ -5204,6 +5216,13 @@ export type Database = {
           "sent_at": string | null
           "created_at": string
           "updated_at": string
+          "claim_token": string | null
+          "claimed_by": string | null
+          "claimed_at": string | null
+          "lease_expires_at": string | null
+          "next_attempt_at": string | null
+          "provider_attempted_at": string | null
+          "last_provider_status_code": number | null
         }
         Insert: {
           "id"?: string
@@ -5216,6 +5235,13 @@ export type Database = {
           "sent_at"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "claim_token"?: string | null
+          "claimed_by"?: string | null
+          "claimed_at"?: string | null
+          "lease_expires_at"?: string | null
+          "next_attempt_at"?: string | null
+          "provider_attempted_at"?: string | null
+          "last_provider_status_code"?: number | null
         }
         Update: {
           "id"?: string
@@ -5228,6 +5254,13 @@ export type Database = {
           "sent_at"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "claim_token"?: string | null
+          "claimed_by"?: string | null
+          "claimed_at"?: string | null
+          "lease_expires_at"?: string | null
+          "next_attempt_at"?: string | null
+          "provider_attempted_at"?: string | null
+          "last_provider_status_code"?: number | null
         }
         Relationships: [
           {
@@ -5235,6 +5268,12 @@ export type Database = {
             columns: ["notification_id"]
             referencedRelation: "notifications"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_push_deliveries_notification_org_fk"
+            columns: ["organization_id","notification_id"]
+            referencedRelation: "notifications"
+            referencedColumns: ["organization_id","id"]
           },
           {
             foreignKeyName: "reservation_push_deliveries_organization_id_fkey"
@@ -5247,6 +5286,12 @@ export type Database = {
             columns: ["subscription_id"]
             referencedRelation: "push_subscriptions"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_push_deliveries_subscription_org_fk"
+            columns: ["organization_id","subscription_id"]
+            referencedRelation: "push_subscriptions"
+            referencedColumns: ["organization_id","id"]
           },
         ]
       };
@@ -5271,6 +5316,7 @@ export type Database = {
           "allocation_evidence": Json
           "result_evidence": Json
           "created_at": string
+          "operation_kind": string | null
         }
         Insert: {
           "id"?: string
@@ -5292,6 +5338,7 @@ export type Database = {
           "allocation_evidence"?: Json
           "result_evidence": Json
           "created_at"?: string
+          "operation_kind"?: string | null
         }
         Update: {
           "id"?: string
@@ -5313,6 +5360,7 @@ export type Database = {
           "allocation_evidence"?: Json
           "result_evidence"?: Json
           "created_at"?: string
+          "operation_kind"?: string | null
         }
         Relationships: [
           {
@@ -5432,6 +5480,7 @@ export type Database = {
           "approved_by": string | null
           "created_at": string
           "updated_at": string
+          "message_delivery_configuration_version": number
         }
         Insert: {
           "id"?: string
@@ -5453,6 +5502,7 @@ export type Database = {
           "approved_by"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "message_delivery_configuration_version"?: number
         }
         Update: {
           "id"?: string
@@ -5474,6 +5524,7 @@ export type Database = {
           "approved_by"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "message_delivery_configuration_version"?: number
         }
         Relationships: [
           {
@@ -9818,6 +9869,22 @@ export type Database = {
         }
         Returns: { "id": string | null; "created_at": string | null }[]
       };
+      "service_begin_reservation_message_delivery": {
+        Args: {
+          "p_id": string | null
+          "p_claim_token": string | null
+          "p_now": string | null
+        }
+        Returns: Json
+      };
+      "service_begin_reservation_push_delivery": {
+        Args: {
+          "p_id": string | null
+          "p_claim_token": string | null
+          "p_now": string | null
+        }
+        Returns: Json
+      };
       "service_cancel_public_reservation": {
         Args: {
           "p_request_id": string | null
@@ -9843,7 +9910,16 @@ export type Database = {
           "p_lease_seconds": number | null
           "p_now": string | null
         }
-        Returns: { "id": string | null; "claimToken": string | null; "organizationId": string | null; "locationId": string | null; "reservationId": string | null; "bookingHoldId": string | null; "waitlistEntryId": string | null; "guestId": string | null; "channel": string | null; "templateKey": string | null; "templateData": Json | null; "attempts": number | null; "createdAt": string | null; "guestName": string | null; "recipientEmail": string | null; "recipientPhone": string | null; "publicCode": string | null; "reservedAt": string | null; "offerExpiresAt": string | null; "holdExpiresAt": string | null }[]
+        Returns: { "id": string | null; "claimToken": string | null; "attempts": number | null }[]
+      };
+      "service_claim_reservation_push_deliveries": {
+        Args: {
+          "p_worker_id": string | null
+          "p_limit": number | null
+          "p_lease_seconds": number | null
+          "p_now": string | null
+        }
+        Returns: { "id": string | null; "claimToken": string | null; "organizationId": string | null; "notificationId": string | null; "subscriptionId": string | null; "attempts": number | null; "deliveryTopic": string | null }[]
       };
       "service_complete_reservation_message_outbox": {
         Args: {
@@ -9853,6 +9929,19 @@ export type Database = {
           "p_error_code"?: string | null
           "p_next_attempt_at"?: string | null
           "p_provider_message_id"?: string | null
+        }
+        Returns: Json
+      };
+      "service_complete_reservation_push_delivery": {
+        Args: {
+          "p_id": string | null
+          "p_claim_token": string | null
+          "p_status": string | null
+          "p_error_code": string | null
+          "p_next_attempt_at": string | null
+          "p_provider_status_code": number | null
+          "p_block_subscription": boolean | null
+          "p_now": string | null
         }
         Returns: Json
       };
@@ -9866,6 +9955,15 @@ export type Database = {
           "p_available_channels": string[] | null
         }
         Returns: Json
+      };
+      "service_connected_acceptance_marker": {
+        Args: {
+          "p_target_id": string | null
+          "p_schema_version": string | null
+          "p_fixture_id": string | null
+          "p_fixture_revision": string | null
+        }
+        Returns: { "target_id": string | null; "environment": string | null; "schema_version": string | null; "fixture_id": string | null; "fixture_revision": string | null; "expires_at": string | null }[]
       };
       "service_create_public_reservation": {
         Args: {
@@ -10080,14 +10178,6 @@ export type Database = {
           "p_notes": string | null
         }
         Returns: { "id": string | null; "display_name": string | null; "updated_at": string | null }[]
-      };
-      "service_validate_reservation_message_claim": {
-        Args: {
-          "p_id": string | null
-          "p_claim_token": string | null
-          "p_now": string | null
-        }
-        Returns: boolean
       };
       "set_chat_channel_archived": {
         Args: {
@@ -10748,11 +10838,16 @@ export const DatabaseObjectNames = {
       "seat_waitlist_entry",
       "serialize_tip_labor_evidence",
       "service_add_guest_note",
+      "service_begin_reservation_message_delivery",
+      "service_begin_reservation_push_delivery",
       "service_cancel_public_reservation",
       "service_claim_booking_rate_limit",
       "service_claim_reservation_message_outbox",
+      "service_claim_reservation_push_deliveries",
       "service_complete_reservation_message_outbox",
+      "service_complete_reservation_push_delivery",
       "service_confirm_public_reservation",
+      "service_connected_acceptance_marker",
       "service_create_public_reservation",
       "service_day_business_date",
       "service_day_provider_health",
@@ -10774,7 +10869,6 @@ export const DatabaseObjectNames = {
       "service_reservation_pacing_snapshot",
       "service_reservation_shift_snapshot",
       "service_save_guest",
-      "service_validate_reservation_message_claim",
       "set_chat_channel_archived",
       "set_delivery_receipt_link",
       "set_expense_category_active",

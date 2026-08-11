@@ -556,7 +556,8 @@ export function composeServiceDaySnapshot({
       state: "snapshot_only",
       transport: "server_request",
       lastEventAt: null,
-      detail: "Fresh server reads; Today does not claim an active realtime subscription.",
+      detail:
+        "The server snapshot remains authoritative; connected clients may attach scoped invalidation and refresh this route.",
     },
     providerHealth: scopedProviderHealth,
   };

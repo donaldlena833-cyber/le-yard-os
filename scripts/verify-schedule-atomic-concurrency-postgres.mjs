@@ -2,21 +2,16 @@ import { randomUUID } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Pool } from "pg";
+import { requireLocalPostgresControlUrl } from "./lib/require-local-postgres-control-url.mjs";
 
 const suppliedConnectionString =
   process.env.SCHEDULE_TEST_DATABASE_URL ??
   process.env.RESERVATION_TEST_DATABASE_URL;
 
-if (!suppliedConnectionString) {
-  throw new Error(
-    "SCHEDULE_TEST_DATABASE_URL or RESERVATION_TEST_DATABASE_URL is required; this gate never falls back to PGlite.",
-  );
-}
-if (!/^postgres(?:ql)?:\/\//.test(suppliedConnectionString)) {
-  throw new Error(
-    "SCHEDULE_TEST_DATABASE_URL (or its reservation fallback) must be a PostgreSQL URL.",
-  );
-}
+requireLocalPostgresControlUrl(
+  suppliedConnectionString,
+  "SCHEDULE_TEST_DATABASE_URL or RESERVATION_TEST_DATABASE_URL",
+);
 
 const root = process.cwd();
 const migrationDirectory = join(root, "supabase", "migrations");

@@ -180,8 +180,12 @@ export function ReservationEditDialog({
   const titleId = useId();
   const discardTitleId = useId();
   const reviewBackRef = useRef<HTMLButtonElement>(null);
+  const reviewSaveRef = useRef<HTMLButtonElement>(null);
   const editPrimaryRef = useRef<HTMLInputElement>(null);
-  const restoreEditFocusRef = useRef(false);
+  const pendingFocusRef = useRef<
+    "edit-primary" | "review-back" | "review-save" | null
+  >(null);
+  const [focusRequestVersion, setFocusRequestVersion] = useState(0);
   const [loadedHead, setLoadedHead] = useState<ReservationLifecycleHead | null>(
     null,
   );
@@ -216,16 +220,25 @@ export function ReservationEditDialog({
       !["booked", "confirmed"].includes(currentReservation.status)) &&
     !recoveringUnconfirmed;
 
+  function requestDialogFocus(
+    target: "edit-primary" | "review-back" | "review-save",
+  ) {
+    pendingFocusRef.current = target;
+    setFocusRequestVersion((current) => current + 1);
+  }
+
   useEffect(() => {
-    if (reviewPayload) {
-      reviewBackRef.current?.focus();
-      return;
-    }
-    if (restoreEditFocusRef.current) {
-      restoreEditFocusRef.current = false;
-      editPrimaryRef.current?.focus();
-    }
-  }, [reviewPayload]);
+    if (busy || !pendingFocusRef.current) return;
+    const focusTarget =
+      pendingFocusRef.current === "edit-primary"
+        ? editPrimaryRef.current
+        : pendingFocusRef.current === "review-back"
+          ? reviewBackRef.current
+          : reviewSaveRef.current;
+    if (!focusTarget) return;
+    pendingFocusRef.current = null;
+    focusTarget.focus({ preventScroll: true });
+  }, [busy, focusRequestVersion, reviewPayload]);
 
   async function loadLatestReservation() {
     try {
@@ -260,9 +273,8 @@ export function ReservationEditDialog({
   function requestClose() {
     if (busy) return;
     if (reviewPayload) {
-      restoreEditFocusRef.current = true;
+      requestDialogFocus("edit-primary");
       setReviewPayload(null);
-      setError(null);
       setRecoveringUnconfirmed(false);
       return;
     }
@@ -294,23 +306,21 @@ export function ReservationEditDialog({
     const durationMinutes = Number(draft.durationMinutes);
     const partySize = Number(draft.partySize);
     const reason = draft.reason.trim();
-    if (
+    const durationInvalid =
       !Number.isInteger(durationMinutes) ||
       durationMinutes < 15 ||
-      durationMinutes > 720 ||
-      !Number.isInteger(partySize) ||
-      partySize < 1 ||
-      partySize > 100 ||
-      reason.length < 4
-    ) {
+      durationMinutes > 720;
+    const partySizeInvalid =
+      !Number.isInteger(partySize) || partySize < 1 || partySize > 100;
+    if (durationInvalid || partySizeInvalid || reason.length < 4) {
       setError({
         code: "validation",
         message: "Check the highlighted fields before reviewing this change.",
         fieldErrors: {
-          ...(durationMinutes < 15 || durationMinutes > 720
-            ? { durationMinutes: ["Choose a turn time from 15 to 720 minutes."] }
+          ...(durationInvalid
+            ? { durationMinutes: ["Enter a whole-minute turn time from 15 to 720 minutes."] }
             : {}),
-          ...(partySize < 1 || partySize > 100
+          ...(partySizeInvalid
             ? { partySize: ["Party size must be from 1 to 100."] }
             : {}),
           ...(reason.length < 4
@@ -334,6 +344,7 @@ export function ReservationEditDialog({
       });
       return;
     }
+    requestDialogFocus("review-back");
     setReviewPayload({
       locationId: workspace.activeLocation.id,
       reservationId: currentReservation.id,
@@ -374,11 +385,13 @@ export function ReservationEditDialog({
       if (!response.ok) {
         setError(response);
         if (response.code === "stale") {
+          requestDialogFocus("edit-primary");
           setRecoveringUnconfirmed(false);
           setStaleVersion(reviewPayload.expectedVersion);
           setReviewPayload(null);
           await loadLatestReservation();
         } else {
+          requestDialogFocus("review-save");
           setRecoveringUnconfirmed(response.code === "database");
         }
         setBusy(false);
@@ -400,6 +413,7 @@ export function ReservationEditDialog({
       );
       onClose();
     } catch {
+      requestDialogFocus("review-save");
       setBusy(false);
       setRecoveringUnconfirmed(true);
       setError({
@@ -499,9 +513,8 @@ export function ReservationEditDialog({
                 type="button"
                 variant="secondary"
                 onClick={() => {
-                  restoreEditFocusRef.current = true;
+                  requestDialogFocus("edit-primary");
                   setReviewPayload(null);
-                  setError(null);
                   setRecoveringUnconfirmed(false);
                 }}
                 disabled={busy}
@@ -509,6 +522,7 @@ export function ReservationEditDialog({
                 Back to edit
               </Button>
               <Button
+                ref={reviewSaveRef}
                 type="button"
                 variant="accent"
                 onClick={() => void commitChanges()}
@@ -539,7 +553,10 @@ export function ReservationEditDialog({
                         type="button"
                         variant="quiet"
                         size="sm"
-                        onClick={() => void loadLatestReservation()}
+                        onClick={() => {
+                          requestDialogFocus("edit-primary");
+                          void loadLatestReservation();
+                        }}
                       >
                         <RefreshCw className="size-4" />
                         Review latest
@@ -610,7 +627,7 @@ export function ReservationEditDialog({
                 <FormField
                   id="reservation-edit-duration"
                   label="Turn time"
-                  description="Enter the configured turn policy in 15-minute increments."
+                  description="Enter any whole-minute duration from 15 to 720. Service policy is revalidated when you save."
                   required
                   error={firstFieldError(error, "durationMinutes")}
                 >
@@ -619,7 +636,7 @@ export function ReservationEditDialog({
                     inputMode="numeric"
                     min={15}
                     max={720}
-                    step={15}
+                    step={1}
                     value={draft.durationMinutes}
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, durationMinutes: event.target.value }))
@@ -717,6 +734,9 @@ export function ReservationCancelDialog({
       ? reservationWithLifecycleHead(reservation, loadedHead)
       : reservation;
   const [reason, setReason] = useState("");
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const pendingReasonFocusRef = useRef(false);
+  const [reasonFocusRequestVersion, setReasonFocusRequestVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<LifecycleFailure | null>(null);
   const [staleVersion, setStaleVersion] = useState<number | null>(null);
@@ -734,6 +754,17 @@ export function ReservationCancelDialog({
         currentReservation.status,
       )) &&
     recoveryPayload === null;
+
+  function requestReasonFocus() {
+    pendingReasonFocusRef.current = true;
+    setReasonFocusRequestVersion((current) => current + 1);
+  }
+
+  useEffect(() => {
+    if (busy || !pendingReasonFocusRef.current || !reasonRef.current) return;
+    pendingReasonFocusRef.current = false;
+    reasonRef.current.focus({ preventScroll: true });
+  }, [busy, reasonFocusRequestVersion, currentReservation.version]);
 
   async function loadLatestReservation() {
     try {
@@ -803,6 +834,7 @@ export function ReservationCancelDialog({
       });
       if (!response.ok) {
         setError(response);
+        requestReasonFocus();
         if (response.code === "stale") {
           setRecoveryPayload(null);
           setStaleVersion(payload.expectedVersion);
@@ -829,6 +861,7 @@ export function ReservationCancelDialog({
       );
       onClose();
     } catch {
+      requestReasonFocus();
       setBusy(false);
       setRecoveryPayload(payload);
       setError({
@@ -869,7 +902,10 @@ export function ReservationCancelDialog({
                   type="button"
                   variant="quiet"
                   size="sm"
-                  onClick={() => void loadLatestReservation()}
+                  onClick={() => {
+                    requestReasonFocus();
+                    void loadLatestReservation();
+                  }}
                 >
                   <RefreshCw className="size-4" />
                   Review latest
@@ -908,6 +944,7 @@ export function ReservationCancelDialog({
           error={firstFieldError(error, "reason")}
         >
           <textarea
+            ref={reasonRef}
             rows={4}
             minLength={4}
             maxLength={1_000}

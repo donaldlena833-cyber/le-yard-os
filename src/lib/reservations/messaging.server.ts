@@ -179,40 +179,40 @@ export async function sendReservationOutboxMessage(input: {
             sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"} is confirmed${action ? `. Manage it securely: ${action.url}` : "."}`,
           }
         : input.templateKey === "reservation_reminder_24h" ||
-    input.templateKey === "reservation_reminder_2h"
-      ? {
-          subject: "A reminder for your Le Yard reservation",
-          headline:
-            input.templateKey === "reservation_reminder_24h"
-              ? "Your table is waiting tomorrow."
-              : "We’ll see you soon.",
-          body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is set for ${scheduled}` : " is coming up"}. We look forward to welcoming you.`,
-          sms: `Le Yard reminder: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"}${scheduled ? ` is set for ${scheduled}` : " is coming up"}.`,
-        }
-      : input.templateKey === "waitlist_table_ready"
-        ? {
-            subject: "Your table at Le Yard is ready",
-            headline: "Your table is ready.",
-            body: offerDeadline
-              ? `Please check in by ${offerDeadline}. If your plans changed, call the restaurant so we can offer the table to the next party.`
-              : "Please come to the host stand within 15 minutes. If your plans changed, call the restaurant so we can offer the table to the next party.",
-            sms: offerDeadline
-              ? `Le Yard: your table is ready. Please check in by ${offerDeadline}.`
-              : "Le Yard: your table is ready. Please check in with the host within 15 minutes.",
-          }
-        : input.templateKey === "reservation_modified"
+            input.templateKey === "reservation_reminder_2h"
           ? {
-              subject: "Your Le Yard reservation was updated",
-              headline: "Your reservation was updated.",
-              body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is now set for ${scheduled}` : " has new details"}. Use the secure link to review or manage it.`,
-              sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"}${scheduled ? ` is now set for ${scheduled}` : " was updated"}${action ? `. Manage it securely: ${action.url}` : "."}`,
+              subject: "A reminder for your Le Yard reservation",
+              headline:
+                input.templateKey === "reservation_reminder_24h"
+                  ? "Your table is waiting tomorrow."
+                  : "We’ll see you soon.",
+              body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is set for ${scheduled}` : " is coming up"}. We look forward to welcoming you.`,
+              sms: `Le Yard reminder: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"}${scheduled ? ` is set for ${scheduled}` : " is coming up"}.`,
             }
-          : {
-              subject: "Your Le Yard reservation was cancelled",
-              headline: "Your reservation is cancelled.",
-              body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"} has been cancelled. We hope to welcome you another evening.`,
-              sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"} has been cancelled.`,
-            };
+          : input.templateKey === "waitlist_table_ready"
+            ? {
+                subject: "Your table at Le Yard is ready",
+                headline: "Your table is ready.",
+                body: offerDeadline
+                  ? `Please check in by ${offerDeadline}. If your plans changed, call the restaurant so we can offer the table to the next party.`
+                  : "Please come to the host stand within 15 minutes. If your plans changed, call the restaurant so we can offer the table to the next party.",
+                sms: offerDeadline
+                  ? `Le Yard: your table is ready. Please check in by ${offerDeadline}.`
+                  : "Le Yard: your table is ready. Please check in with the host within 15 minutes.",
+              }
+            : input.templateKey === "reservation_modified"
+              ? {
+                  subject: "Your Le Yard reservation was updated",
+                  headline: "Your reservation was updated.",
+                  body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is now set for ${scheduled}` : " has new details"}. Use the secure link to review or manage it.`,
+                  sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"}${scheduled ? ` is now set for ${scheduled}` : " was updated"}${action ? `. Manage it securely: ${action.url}` : "."}`,
+                }
+              : {
+                  subject: "Your Le Yard reservation was cancelled",
+                  headline: "Your reservation is cancelled.",
+                  body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"} has been cancelled. We hope to welcome you another evening.`,
+                  sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"} has been cancelled.`,
+                };
 
   if (input.channel === "email") {
     if (!input.email) return { state: "failed", providerMessageId: null };

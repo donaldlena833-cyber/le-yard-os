@@ -1,21 +1,14 @@
 import { defineConfig } from "@playwright/test";
+import {
+  connectedTestMode,
+  validateConnectedConfigTarget,
+} from "./tests/connected/attestation-preflight";
 
-const configuredUrl = process.env.E2E_CONNECTED_APP_URL?.trim();
-if (!configuredUrl) {
-  throw new Error("E2E_CONNECTED_APP_URL is required for connected acceptance.");
-}
-const parsedUrl = new URL(configuredUrl);
-const localHostname = parsedUrl.hostname === "localhost"
-  || parsedUrl.hostname.endsWith(".localhost")
-  || parsedUrl.hostname.startsWith("127.");
-if (parsedUrl.protocol !== "https:" && !(localHostname && process.env.E2E_CONNECTED_ALLOW_LOCAL === "true")) {
-  throw new Error("Connected acceptance requires HTTPS; local HTTP needs E2E_CONNECTED_ALLOW_LOCAL=true.");
-}
-if (parsedUrl.pathname !== "/" || parsedUrl.search || parsedUrl.hash || parsedUrl.username || parsedUrl.password) {
-  throw new Error("E2E_CONNECTED_APP_URL must be a canonical origin.");
-}
+const target = validateConnectedConfigTarget();
+const mode = connectedTestMode();
 
 export default defineConfig({
+  globalSetup: "./tests/connected/global-setup.ts",
   testDir: "./tests/connected",
   outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR ?? "/tmp/le-yard-os-connected-playwright-results",
   fullyParallel: false,
@@ -26,7 +19,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   reporter: process.env.CI ? [["github"], ["line"]] : [["list"]],
   use: {
-    baseURL: parsedUrl.origin,
+    baseURL: target.origin,
     colorScheme: "light",
     locale: "en-US",
     serviceWorkers: "block",
@@ -37,11 +30,15 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "connected-desktop",
+      name: mode === "release-acceptance"
+        ? "connected-acceptance-desktop"
+        : "connected-developer-smoke-desktop",
       use: { browserName: "chromium", viewport: { width: 1440, height: 1_000 } },
     },
     {
-      name: "connected-mobile-390",
+      name: mode === "release-acceptance"
+        ? "connected-acceptance-mobile-390"
+        : "connected-developer-smoke-mobile-390",
       use: { browserName: "chromium", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true },
     },
   ],

@@ -4,7 +4,7 @@
 
 The reservation system is a connected-preview implementation. **Public booking is disabled.** The first-party OS is the intended future writer, but it is not the live source of truth until a one-writer decision, shadow reconciliation, production-like acceptance, and explicit activation approval are complete.
 
-The reservation and operating-day migrations are local drafts. They may be hardened in place while they remain unshipped. If any has reached a shared database, stop and replace further edits with forward-only migrations.
+The reviewed reservation and operating-day migration chain through `20260811074315_production_schema_compatibility.sql` has reached the shared Supabase project. All subsequent database work is forward-only. The local `20260811080634_reservation_message_recipient_and_version_fences.sql` closeout passed the full migrated-schema two-connection suite on a disposable PostgreSQL 17.10 cluster; it remains intentionally unshipped until connected Supabase acceptance is complete.
 
 There are no deposits, card holds, or payment flows.
 
@@ -13,22 +13,22 @@ There are no deposits, card holds, or payment flows.
 | Boundary                                                 | Current contract                                                                                                                                                                                                  |
 | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `private.public_booking_holds`                           | Provisional interval and contact data only while pending. Confirmation or expiry atomically redacts names, contacts, requests, and any unproved coordinate. A hold is never presented as a confirmed reservation. |
-| `private.public_booking_verifications`                   | One consumed, tenant/location/hold/channel-bound verification fingerprint plus a salted hash of the exact proven destination. The first proven channel wins.                                                       |
+| `private.public_booking_verifications`                   | One consumed, tenant/location/hold/channel-bound verification fingerprint plus a salted hash of the exact proven destination. The first proven channel wins.                                                      |
 | `public.reservations`                                    | Confirmed staff or guest commitments only, with a version counter and append-only operational events.                                                                                                             |
-| `public.reservation_revisions`                           | Immutable staff edit/cancel evidence bound to the exact reservation, location, actor, request scope, payload hash, version, policy, and allocation result.                                                         |
+| `public.reservation_revisions`                           | Immutable staff edit/cancel evidence bound to the exact reservation, location, actor, request scope, payload hash, version, policy, and allocation result.                                                        |
 | `public.reservation_table_allocations`                   | Active holds, assignments, and blocks. A PostgreSQL GiST exclusion constraint rejects overlapping active intervals for a table.                                                                                   |
 | `private.public_booking_requests`                        | Scoped request ID, payload hash, completion state, and deterministic replay evidence for public commands.                                                                                                         |
 | `private.public_booking_management_exchanges` and tokens | One-time, browser-bound exchange evidence and hashed management sessions. Raw session material is returned only to the public-site BFF.                                                                           |
 | `public.reservation_message_outbox`                      | Tenant/location-scoped transactional work with dedupe keys, bounded attempts, claim tokens, leases, and stale-worker recovery.                                                                                    |
 | `public.waitlist_entries`                                | Explicit waiting, offered, accepted, seated, expired, and cancelled lifecycle. Expiry is atomic with queued-message cancellation.                                                                                 |
-| `public.service_shifts`                                  | Materialized operating-day instances with exact timezone-aware boundaries, party limits, turn duration, pacing, buffers, online state, and source-configuration evidence.                                        |
-| `public.service_shift_exceptions`                        | Explicit closure, pacing-override, or buffer-override evidence with reason, actor, request replay, revocation, audit, and overlap protection.                                                                      |
+| `public.service_shifts`                                  | Materialized operating-day instances with exact timezone-aware boundaries, party limits, turn duration, pacing, buffers, online state, and source-configuration evidence.                                         |
+| `public.service_shift_exceptions`                        | Explicit closure, pacing-override, or buffer-override evidence with reason, actor, request replay, revocation, audit, and overlap protection.                                                                     |
 
 The private hold is the provisional-contact boundary. Confirmation copies only the coordinate proven by the signed delivery channel into CRM; the other email or phone is never used for identity matching or management delivery. Confirmation and deadline expiry atomically erase provisional names, contacts, and requests, leaving only non-PII lifecycle/channel evidence. Production privacy, consent, backup-retention, and deletion acceptance remain release gates.
 
 Staff edits and cancellations use expected-version commands. Exact retries return the immutable original result even after later changes; stale new requests fail without overwriting the current commitment. Edits revalidate the materialized service shift, closure, buffers, party bounds, turn policy, pacing, and table intervals under the canonical location inventory lock. Cancellation releases interval inventory, revokes public management tokens, invalidates stale message work, and never fabricates a physical floor-availability event. Browser DTOs receive only bounded revision metadata; reason, actor, payload hash, and full policy/allocation evidence remain service-only.
 
-For a verified web reservation, staff modify/cancel messages are queued only when the current CRM destination still matches the exact salted destination claim captured at confirmation. The worker repeats that check immediately before provider delivery. Non-web, missing, changed, or unapproved destinations remain a manual-contact workflow. A provider request already accepted after the final validation cannot be recalled and remains an explicit release/operations gate.
+For a verified web reservation, staff modify/cancel messages are queued only when the current CRM destination still matches the exact salted destination claim captured at confirmation. Claims require current, approved reservation settings, `guest_messaging_enabled`, and exact membership of the claimed channel in `verification_channels`; the worker repeats those checks immediately before each provider call. Disabling, de-approving, deleting, or removing a channel atomically cancels queued, failed, and leased work for that scope, clears claims, and records bounded cancellation evidence. Re-enabling delivery permits only new work and never revives a cancelled row. Non-web, missing, changed, or unapproved destinations remain a manual-contact workflow. A provider request already accepted after the final validation cannot be recalled and remains an explicit release/operations gate.
 
 The operating-date implementation now materializes dated `service_shifts` from approved recurring periods with exact timezone-aware start/end instants. It resolves an active materialized shift first, then the latest published schedule's active shift, then a calendar fallback. Closures, pacing overrides, and opening/closing buffer overrides are explicit, revocable lifecycle records rather than inferred UI state.
 
@@ -71,6 +71,8 @@ npm run booking:create-client -- --location-id=<location-uuid> --origin=https://
 
 The public website runtime receives `LE_YARD_BOOKING_API_URL` and the one-time `LE_YARD_BOOKING_API_KEY`. Neither value belongs in this OS runtime or in a `NEXT_PUBLIC_` variable.
 
+New public availability and hold creation additionally require the OS server variable `RESERVATION_PUBLIC_BOOKING_ENABLED=true`. It defaults fail-closed and remains false until the full release gates pass. A valid existing HttpOnly management session may still request replacement slots while the gate is off; confirmation, management reads, modifications, and cancellations remain available for recovery.
+
 ## Staff authorization and guest minimization
 
 RLS is authoritative. Reservation reads and commands use exact effective capability, organization, and location checks; a Manager role alone is not a reservation grant.
@@ -111,8 +113,7 @@ Real concurrency requires a dedicated disposable PostgreSQL database:
 RESERVATION_TEST_DATABASE_URL=postgresql://... npm run test:reservations:concurrency
 ```
 
-The script must refuse a missing URL, apply the real migration chain in isolation, use separate connections, and exercise the actual reservation functions. Synthetic look-alike tables do not satisfy this gate.
-CI provisions an isolated PostgreSQL 17 service for this job. A local missing-URL failure is still an honest unexecuted gate; the workflow result must pass before release.
+The script must refuse a missing URL, apply the real migration chain in isolation, use separate connections, and exercise the actual reservation functions. Synthetic look-alike tables do not satisfy this gate. On August 11, 2026, the complete suite passed locally against a disposable PostgreSQL 17.10 cluster; CI independently provisions PostgreSQL 17 for the same release gate.
 
 Atomic schedule commands have a separate native gate:
 
@@ -120,19 +121,30 @@ Atomic schedule commands have a separate native gate:
 SCHEDULE_TEST_DATABASE_URL=postgresql://... npm run test:schedule-atomic:concurrency
 ```
 
-It proves create/create versioning, same-name template serialization, and both publication/direct-shift lock orders against the actual migration chain. It is also CI-wired and intentionally has no portable fallback.
+It proves create/create versioning, same-name template serialization, and both publication/direct-shift lock orders against the actual migration chain. The complete schedule suite also passed on August 11, 2026 against a separate disposable PostgreSQL 17.10 cluster. It remains CI-wired and intentionally has no portable fallback.
+
+Materialized service-shift exceptions have their own native gate:
+
+```sh
+SERVICE_SHIFT_TEST_DATABASE_URL=postgresql://... npm run test:service-shifts:concurrency
+```
+
+It refuses remote or shared hosts, requires PostgreSQL 17, creates a unique disposable database, applies the actual migration chain, and proves database-visible serialization for exact configure replay, competing pacing and buffer overrides, concurrent revocation, and both exception-first and configuration-first boundary changes. The complete suite passed on August 11, 2026 against a disposable local PostgreSQL 17.10 cluster and is CI-wired without a portable fallback.
 
 ## Delivery worker
 
-`/api/internal/reservation-messages` requires `Authorization: Bearer <RESERVATION_DELIVERY_SECRET>`. It expires scoped hold/waitlist deadlines before reminders and message claims. Claims are deliberately bounded to eight messages for a 120-second lease with a 10-second provider timeout, leaving completion margin for sequential processing. Reminder identities include the reservation version, so a scheduler racing a reschedule cannot block the later correct reminder. Before each provider call, the worker revalidates the claim lease, current reservation/hold/waitlist lifecycle, reminder window, reservation version, verified channel, and exact verified destination.
+`/api/internal/reservation-messages` requires `Authorization: Bearer <RESERVATION_DELIVERY_SECRET>`. It expires scoped hold/waitlist deadlines before reminders and message claims. Claims are deliberately bounded to eight messages for a 120-second lease with a 10-second provider timeout, leaving completion margin for sequential processing. Reminder identities include the reservation version, so a scheduler racing a reschedule cannot block the later correct reminder. Before each provider call, the worker revalidates the claim lease, current approved location settings, guest-messaging switch, exact configured channel, reservation/hold/waitlist lifecycle, reminder window, reservation version, verified channel, and exact verified destination.
 
 Resend requests use an outbox-derived provider idempotency key. Provider response IDs are recorded when returned. Standard Twilio Message creation has no proven idempotent boundary in this implementation, so SMS remains disabled for production until crash-after-provider-acceptance reconciliation or another approved duplicate-safe protocol passes. The server-side `RESERVATION_SMS_DELIVERY_ENABLED` kill switch defaults to `false`; Twilio credentials do not make SMS discoverable or sendable unless that variable is exactly `true`.
+
+Reservation push uses a separate service-role RPC contract. The database atomically materializes eligible notification/subscription pairs, gives one worker a rotating claim token, and rechecks preference, location setting, unread state, tenant, reservation, and subscription immediately before a durable `dispatching` transition. Only the exact token can complete the attempt. Expired pre-provider claims recover, while an expired `dispatching` lease or transport-ambiguous provider failure becomes terminally `uncertain` and is not sent again automatically. Explicit provider HTTP failures may retry up to five attempts; invalid subscriptions are blocked without deleting delivery evidence and are unblocked only when fresh encrypted subscription evidence is saved. `RESERVATION_PUSH_DELIVERY_ENABLED` defaults to `false` and must be exactly `true` in addition to the Owner location setting and approved provider configuration. Web Push acceptance still cannot prove device display, so connected provider monitoring remains a release gate.
 
 ## Activation gates
 
 Keep `online_booking_enabled`, guest messaging, SMS, push, and public inventory off until every applicable item is proven:
 
 - isolated Supabase environment with Auth, RLS, Realtime, cron, monitoring, backup/PITR, restore, and secret-rotation acceptance;
+- a successful fail-closed connected preflight for the exact nonproduction Preview commit and short-lived private target/schema/fixture marker before any role password is read or Auth request is sent;
 - real two-connection create/create, staff/public, modify/modify, date-swap, cancellation/rebook, and waitlist-seat conflict tests;
 - connected Owner, Manager, Host, view-only, operate-only, denied, expired-assignment, and cross-location tests;
 - approved sender identities, delivery/error monitoring, stale-worker recovery, and provider-failure exercises;

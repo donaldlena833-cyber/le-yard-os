@@ -24,7 +24,6 @@ import { useRouter } from "next/navigation";
 import {
   type FormEvent,
   type ReactNode,
-  useEffect,
   useId,
   useMemo,
   useRef,
@@ -40,12 +39,14 @@ import {
   assignReservationTablesAction,
 } from "@/app/actions/workflows/reservations";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import {
   ReservationCancelDialog,
   ReservationEditDialog,
 } from "@/components/reservations/reservation-lifecycle-dialogs";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import { FormField } from "@/components/ui/form-field";
 import { InlineNotice } from "@/components/ui/inline-notice";
 import { Modal } from "@/components/ui/modal";
 import { ReadState } from "@/components/ui/read-state";
@@ -86,10 +87,12 @@ import {
   canAccessReservationHost,
   isReservationLifecycleOwnedByOs,
 } from "@/lib/reservations/model";
-import { createClient } from "@/lib/supabase/client";
+import { useRealtimeInvalidation } from "@/lib/realtime/use-realtime-invalidation";
 import { cn, formatMoney } from "@/lib/utils";
 
 type BookMode = "reservation" | "walk_in";
+const noReservationPostgresBindings = [] as const;
+const reservationBroadcastEvents = ["INSERT", "UPDATE", "DELETE"] as const;
 const fieldClass =
   "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base outline-none focus:border-[var(--accent)] sm:text-sm";
 const stateStyles: Record<ReservationPhysicalTableState, string> = {
@@ -377,6 +380,17 @@ export function ReservationsWorkspace({
       ),
     [filter, model],
   );
+  const realtime = useRealtimeInvalidation({
+    enabled:
+      workspace.mode === "live" &&
+      Boolean(model && canAccessReservationHost(model.permissions)),
+    channelName: `reservations:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: noReservationPostgresBindings,
+    broadcastEvents: reservationBroadcastEvents,
+    privateChannel: true,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
 
   function showMobileView(view: "book" | "floor" | "service") {
     setMobileView(view);
@@ -390,26 +404,6 @@ export function ReservationsWorkspace({
       mobileViewAnchorRef.current?.scrollIntoView({ block: "start" }),
     );
   }
-
-  useEffect(() => {
-    if (workspace.mode !== "live") return;
-    const supabase = createClient();
-    const channel = supabase.channel(
-      `reservations:${workspace.organization.id}:${workspace.activeLocation.id}`,
-      { config: { private: true } },
-    );
-    for (const event of ["INSERT", "UPDATE", "DELETE"])
-      channel.on("broadcast", { event }, () => router.refresh());
-    channel.subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [
-    router,
-    workspace.activeLocation.id,
-    workspace.mode,
-    workspace.organization.id,
-  ]);
 
   if (!model)
     return (
@@ -641,6 +635,16 @@ export function ReservationsWorkspace({
     }
     const data = new FormData(event.currentTarget);
     const displayName = String(data.get("displayName") ?? "").trim();
+    const partySize = Number(data.get("partySize"));
+    const durationMinutes = Number(data.get("durationMinutes"));
+    if (
+      !Number.isInteger(durationMinutes) ||
+      durationMinutes < 15 ||
+      durationMinutes > 720
+    ) {
+      setMessage("Turn time must be a whole number from 15 to 720 minutes.");
+      return;
+    }
     if (workspace.mode === "demo") {
       setMessage(
         `Demo: ${displayName} added to the ${bookMode === "walk_in" ? "walk-in book" : "day book"}.`,
@@ -666,8 +670,6 @@ export function ReservationsWorkspace({
       );
       return;
     }
-    const partySize = Number(data.get("partySize"));
-    const durationMinutes = Number(data.get("durationMinutes"));
     const suggestions = suggestTables({
       partySize,
       startsAt: tentative,
@@ -915,6 +917,7 @@ export function ReservationsWorkspace({
           </>
         }
       />
+      <RealtimeSyncStatus {...realtime} />
 
       {message ? (
         <div
@@ -1604,21 +1607,22 @@ export function ReservationsWorkspace({
                 required
               />
             </label>
-            <label>
-              <span className="mb-1.5 block text-xs font-semibold">
-                Turn time
-              </span>
-              <select
-                className={fieldClass}
+            <FormField
+              id="reservation-book-duration"
+              label="Turn time"
+              description="Whole minutes from 15 to 720. Service policy is checked when saved."
+              required
+            >
+              <input
                 name="durationMinutes"
+                type="number"
+                inputMode="numeric"
+                min="15"
+                max="720"
+                step="1"
                 defaultValue="90"
-              >
-                <option value="60">1 hour</option>
-                <option value="90">1½ hours</option>
-                <option value="120">2 hours</option>
-                <option value="150">2½ hours</option>
-              </select>
-            </label>
+              />
+            </FormField>
             <label>
               <span className="mb-1.5 block text-xs font-semibold">Date</span>
               <input

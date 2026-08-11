@@ -52,34 +52,35 @@ describe("reservation maintenance worker", () => {
     expect(expiry).toBeGreaterThan(-1);
     expect(reminders).toBeGreaterThan(expiry);
     expect(claim).toBeGreaterThan(reminders);
-    expect(source).toContain('p_organization_id: scope.organizationId');
-    expect(source).toContain('p_location_id: scope.locationId');
+    expect(source).toContain("p_organization_id: scope.organizationId");
+    expect(source).toContain("p_location_id: scope.locationId");
   });
 
   it("uses leased atomic claim and claim-token completion RPCs", async () => {
     const source = await readFile(workerUrl, "utf8");
     expect(source).toContain("service_claim_reservation_message_outbox");
-    expect(source).toContain(
-      "p_lease_seconds: reservationMessageLeaseSeconds",
-    );
+    expect(source).toContain("p_lease_seconds: reservationMessageLeaseSeconds");
     expect(source).toContain("p_limit: reservationMessageClaimLimit");
     expect(source).toContain("service_complete_reservation_message_outbox");
-    expect(source).toContain("service_validate_reservation_message_claim");
-    expect(source).toContain("p_claim_token: message.claimToken");
+    expect(source).toContain("service_begin_reservation_message_delivery");
+    expect(source).toContain("p_claim_token: claim.claimToken");
     expect(source).toContain(
       "p_provider_message_id: delivered.providerMessageId",
     );
     expect(source).not.toContain('.from("reservation_message_outbox")');
-    expect(source.indexOf("service_validate_reservation_message_claim"))
-      .toBeLessThan(source.indexOf("sendReservationOutboxMessage({"));
+    expect(source).not.toContain("service_validate_reservation_message_claim");
+    expect(
+      source.indexOf("service_begin_reservation_message_delivery"),
+    ).toBeLessThan(source.indexOf("sendReservationOutboxMessage({"));
+    expect(source).toContain("const message = begun.message");
   });
 
   it("keeps the sequential provider batch inside the lease safety budget", () => {
     expect(reservationMessageClaimLimit).toBe(8);
     expect(reservationMessageClaimIsLeaseSafe()).toBe(true);
-    expect(reservationMessageClaimLimit * reservationProviderTimeoutMs).toBeLessThanOrEqual(
-      (reservationMessageLeaseSeconds * 1_000 * 2) / 3,
-    );
+    expect(
+      reservationMessageClaimLimit * reservationProviderTimeoutMs,
+    ).toBeLessThanOrEqual((reservationMessageLeaseSeconds * 1_000 * 2) / 3);
   });
 
   it("rejects verification and management messages whose metadata names another channel", () => {
@@ -135,9 +136,11 @@ describe("reservation maintenance worker", () => {
     process.env.RESERVATION_EMAIL_FROM = "reservations@leyard.example";
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ id: "email_123" }), { status: 200 }),
-      ),
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ id: "email_123" }), { status: 200 }),
+        ),
     );
     await expect(
       sendReservationOutboxMessage({
@@ -194,9 +197,11 @@ describe("reservation maintenance worker", () => {
     process.env.TWILIO_ACCOUNT_SID = "AC123";
     process.env.TWILIO_AUTH_TOKEN = "twilio-test";
     process.env.TWILIO_FROM_NUMBER = "+12125550100";
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ sid: "SM123" }), { status: 200 }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ sid: "SM123" }), { status: 200 }),
+      );
     vi.stubGlobal("fetch", fetchMock);
     await expect(
       sendReservationOutboxMessage({

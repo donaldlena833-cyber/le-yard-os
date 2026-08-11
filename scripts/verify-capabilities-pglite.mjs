@@ -141,11 +141,11 @@ try {
 
   await db.exec(`
     update public.locations location
-    set timezone = case
-      when (statement_timestamp() at time zone 'Pacific/Kiritimati')::date <> current_date
-        then 'Pacific/Kiritimati'
-      else 'America/Adak'
-    end
+    -- Use fixed, opposing POSIX offsets rather than a named zone. PGlite does
+    -- not ship the IANA zone data needed for Pacific/Kiritimati/America/Adak.
+    -- UTC+14 and UTC-14 are 28 hours apart under PostgreSQL's POSIX offset
+    -- convention, so their calendar dates cannot be equal at any instant.
+    set timezone = 'UTC-14'
     where location.id = '${ids.location}'
       and location.organization_id = '${ids.organization}';
     insert into public.job_roles (
@@ -203,6 +203,10 @@ try {
     "service.availability.manage",
     "reports.operational.view",
   ];
+  // Pair the session with the location's opposite fixed offset. This makes
+  // the deny override apply to the explicit session date but not the default
+  // location-local date, proving that the authorization default is local.
+  await db.exec("set timezone to 'UTC+14'");
   await assumeUser(ids.admin);
   await db.query(
     `select public.configure_user_capability_override(

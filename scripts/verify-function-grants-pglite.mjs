@@ -202,10 +202,14 @@ const requiredServiceFunctions = new Set([
   "service_get_managed_reservation",
   "service_claim_booking_rate_limit",
   "service_claim_reservation_message_outbox",
+  "service_claim_reservation_push_deliveries",
   "service_complete_reservation_message_outbox",
+  "service_begin_reservation_push_delivery",
+  "service_complete_reservation_push_delivery",
+  "service_connected_acceptance_marker",
   "service_modify_public_reservation",
   "service_reservation_pacing_snapshot",
-  "service_validate_reservation_message_claim",
+  "service_begin_reservation_message_delivery",
 ]);
 
 const platformBootstrap = `
@@ -308,6 +312,36 @@ try {
         'private.resolve_location_guest_identity(uuid,uuid,uuid,uuid,text,text,text,text,text,text,text,jsonb)'::regprocedure
     `)
   ).rows[0];
+  const privateReservationDeliveryAndLifecycleFunctions = (
+    await db.query(
+      `
+      select
+        p.proname as name,
+        p.prosecdef as security_definer,
+        coalesce(array_to_string(p.proconfig, ','), '') as configuration,
+        has_function_privilege('anon', p.oid, 'EXECUTE') as anon_execute,
+        has_function_privilege('authenticated', p.oid, 'EXECUTE') as authenticated_execute,
+        has_function_privilege('service_role', p.oid, 'EXECUTE') as service_execute
+      from pg_proc p
+      where p.pronamespace = 'private'::regnamespace
+        and p.proname = any($1::text[])
+      order by p.proname
+    `,
+      [
+        [
+          "bind_reservation_message_delivery_evidence",
+          "cancel_ineligible_reservation_messages",
+          "cancel_reservation_messages_on_settings_change",
+          "cancel_reservation_authoritative_kernel",
+          "fence_reservation_message_delivery_insert",
+          "modify_reservation_authoritative_kernel",
+          "reservation_lifecycle_head_authoritative_kernel",
+          "reservation_verified_recipient_hmac",
+          "version_reservation_message_delivery_settings",
+        ],
+      ],
+    )
+  ).rows;
 
   if (process.env.PRINT_FUNCTION_GRANTS === "1") {
     process.stdout.write(`${JSON.stringify(functions.rows, null, 2)}\n`);
@@ -346,6 +380,9 @@ try {
     (entry) =>
       requiredServiceFunctions.has(entry.name) && entry.authenticated_execute,
   );
+  const legacyReservationClaimValidator = functions.rows.find(
+    (entry) => entry.name === "service_validate_reservation_message_claim",
+  );
 
   if (anonExecutable.length) {
     throw new Error(
@@ -377,6 +414,11 @@ try {
       `Service-only grant boundary failed: ${JSON.stringify({ missingService, serviceExposedToAuthenticated })}`,
     );
   }
+  if (legacyReservationClaimValidator) {
+    throw new Error(
+      `Legacy reservation claim validator remains exposed: ${JSON.stringify(legacyReservationClaimValidator)}`,
+    );
+  }
   if (
     !privateGuestIdentityResolver?.security_definer ||
     !privateGuestIdentityResolver.configuration.includes('search_path=""') ||
@@ -386,6 +428,21 @@ try {
   ) {
     throw new Error(
       `Private guest identity resolver grant boundary failed: ${JSON.stringify(privateGuestIdentityResolver)}`,
+    );
+  }
+  if (
+    privateReservationDeliveryAndLifecycleFunctions.length !== 9 ||
+    privateReservationDeliveryAndLifecycleFunctions.some(
+      (entry) =>
+        !entry.security_definer ||
+        !entry.configuration.includes('search_path=""') ||
+        entry.anon_execute ||
+        entry.authenticated_execute ||
+        entry.service_execute,
+    )
+  ) {
+    throw new Error(
+      `Private reservation delivery/lifecycle grants failed: ${JSON.stringify(privateReservationDeliveryAndLifecycleFunctions)}`,
     );
   }
   process.stdout.write(

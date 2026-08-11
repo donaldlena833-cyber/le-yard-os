@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   rateLimit: vi.fn(),
   contactRateLimit: vi.fn(),
   verifySlot: vi.fn(),
+  availability: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -30,9 +31,8 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 vi.mock("@/lib/reservations/api-auth.server", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("@/lib/reservations/api-auth.server")
-  >();
+  const actual =
+    await importOriginal<typeof import("@/lib/reservations/api-auth.server")>();
   return {
     ...actual,
     authenticateBookingApiRequest: mocks.authenticate,
@@ -43,6 +43,10 @@ vi.mock("@/lib/reservations/api-auth.server", async (importOriginal) => {
 
 vi.mock("@/lib/reservations/slot-token.server", () => ({
   verifyBookingSlotToken: mocks.verifySlot,
+}));
+
+vi.mock("@/lib/reservations/public-availability.server", () => ({
+  loadPublicAvailability: mocks.availability,
 }));
 
 const client = {
@@ -56,13 +60,14 @@ const client = {
 
 const environment = {
   RESERVATION_PUBLIC_SITE_URL: process.env.RESERVATION_PUBLIC_SITE_URL,
-  RESERVATION_LINK_SIGNING_SECRET:
-    process.env.RESERVATION_LINK_SIGNING_SECRET,
+  RESERVATION_LINK_SIGNING_SECRET: process.env.RESERVATION_LINK_SIGNING_SECRET,
   RESERVATION_DELIVERY_SECRET: process.env.RESERVATION_DELIVERY_SECRET,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   RESERVATION_EMAIL_FROM: process.env.RESERVATION_EMAIL_FROM,
   RESERVATION_SMS_DELIVERY_ENABLED:
     process.env.RESERVATION_SMS_DELIVERY_ENABLED,
+  RESERVATION_PUBLIC_BOOKING_ENABLED:
+    process.env.RESERVATION_PUBLIC_BOOKING_ENABLED,
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID,
   TWILIO_AUTH_TOKEN: process.env.TWILIO_AUTH_TOKEN,
   TWILIO_FROM_NUMBER: process.env.TWILIO_FROM_NUMBER,
@@ -85,6 +90,17 @@ beforeEach(() => {
   process.env.RESEND_API_KEY = "resend-test";
   process.env.RESERVATION_EMAIL_FROM = "reservations@leyard.example";
   process.env.RESERVATION_SMS_DELIVERY_ENABLED = "false";
+  process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "true";
+  mocks.availability.mockResolvedValue({
+    location: {
+      id: client.locationId,
+      name: "Le Yard",
+      timeZone: "America/New_York",
+    },
+    businessDate: "2026-08-12",
+    partySize: 2,
+    slots: [],
+  });
 });
 
 afterEach(() => {
@@ -96,6 +112,100 @@ afterEach(() => {
 });
 
 describe("public reservation API contracts", () => {
+  it("keeps new public holds disabled unless the deployment switch is exactly true", async () => {
+    delete process.env.RESERVATION_PUBLIC_BOOKING_ENABLED;
+    const { POST } = await import("@/app/api/v1/reservations/route");
+    const response = await POST(
+      new Request("https://os.example/api/v1/reservations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "55555555-5555-4555-8555-555555555555",
+        },
+        body: JSON.stringify({
+          slotToken: "x".repeat(80),
+          partySize: 2,
+          firstName: "Ada",
+          lastName: "Lovelace",
+          email: "ada@example.com",
+          phone: "+1 212 555 0100",
+        }),
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "booking_unavailable" },
+    });
+    expect(mocks.authenticate).not.toHaveBeenCalled();
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("keeps new availability disabled before API authentication", async () => {
+    process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "TRUE";
+    const { GET } = await import("@/app/api/v1/availability/route");
+    const response = await GET(
+      new Request(
+        "https://os.example/api/v1/availability?date=2026-08-12&partySize=2",
+      ),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "booking_unavailable" },
+    });
+    expect(mocks.authenticate).not.toHaveBeenCalled();
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.availability).not.toHaveBeenCalled();
+  });
+
+  it("preserves availability for a valid existing management session while new inventory is off", async () => {
+    process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "false";
+    mocks.rpc.mockResolvedValueOnce({
+      data: { status: "confirmed" },
+      error: null,
+    });
+    const { GET } = await import("@/app/api/v1/availability/route");
+    const response = await GET(
+      new Request(
+        "https://os.example/api/v1/availability?date=2026-08-12&partySize=2",
+        { headers: { "x-booking-manage-token": "m".repeat(64) } },
+      ),
+    );
+    expect(response.status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "service_get_managed_reservation",
+      expect.objectContaining({
+        p_organization_id: client.organizationId,
+        p_location_id: client.locationId,
+        p_manage_token_hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+      }),
+    );
+    expect(mocks.availability).toHaveBeenCalledWith(client, "2026-08-12", 2, {
+      existingManagementSessionAuthorized: true,
+    });
+  });
+
+  it("does not let an invalid management token bypass the disabled inventory gate", async () => {
+    process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "false";
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: "P0002" },
+    });
+    const { GET } = await import("@/app/api/v1/availability/route");
+    const response = await GET(
+      new Request(
+        "https://os.example/api/v1/availability?date=2026-08-12&partySize=2",
+        { headers: { "x-booking-manage-token": "m".repeat(64) } },
+      ),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "booking_unavailable" },
+    });
+    expect(mocks.rateLimit).not.toHaveBeenCalled();
+    expect(mocks.availability).not.toHaveBeenCalled();
+  });
+
   it("creates a scoped hold with server adapter channels and returns only hold state", async () => {
     mocks.rpc.mockResolvedValueOnce({
       data: {
@@ -227,9 +337,8 @@ describe("public reservation API contracts", () => {
   });
 
   it("does not spend create quotas when API scope authentication fails", async () => {
-    const { BookingApiError } = await import(
-      "@/lib/reservations/api-auth.server"
-    );
+    const { BookingApiError } =
+      await import("@/lib/reservations/api-auth.server");
     mocks.authenticate.mockRejectedValueOnce(
       new BookingApiError(
         403,
@@ -263,9 +372,8 @@ describe("public reservation API contracts", () => {
   });
 
   it("validates the signed slot before charging the contact limiter", async () => {
-    const { BookingApiError } = await import(
-      "@/lib/reservations/api-auth.server"
-    );
+    const { BookingApiError } =
+      await import("@/lib/reservations/api-auth.server");
     mocks.verifySlot.mockImplementationOnce(() => {
       throw new BookingApiError(
         400,
@@ -337,9 +445,8 @@ describe("public reservation API contracts", () => {
       },
       error: null,
     });
-    const { createReservationLinkToken } = await import(
-      "@/lib/reservations/link-token.server"
-    );
+    const { createReservationLinkToken } =
+      await import("@/lib/reservations/link-token.server");
     const verificationToken = createReservationLinkToken({
       purpose: "verify",
       organizationId: client.organizationId,
@@ -348,9 +455,7 @@ describe("public reservation API contracts", () => {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       verifiedChannel: "email",
     });
-    const { POST } = await import(
-      "@/app/api/v1/reservations/confirm/route"
-    );
+    const { POST } = await import("@/app/api/v1/reservations/confirm/route");
     const response = await POST(
       new Request("https://os.example/api/v1/reservations/confirm", {
         method: "POST",
@@ -373,9 +478,7 @@ describe("public reservation API contracts", () => {
   });
 
   it("does not spend confirmation quota on an invalid signed link", async () => {
-    const { POST } = await import(
-      "@/app/api/v1/reservations/confirm/route"
-    );
+    const { POST } = await import("@/app/api/v1/reservations/confirm/route");
     const response = await POST(
       new Request("https://os.example/api/v1/reservations/confirm", {
         method: "POST",
@@ -388,9 +491,8 @@ describe("public reservation API contracts", () => {
   });
 
   it("does not substitute an available email adapter for an SMS verification", async () => {
-    const { createReservationLinkToken } = await import(
-      "@/lib/reservations/link-token.server"
-    );
+    const { createReservationLinkToken } =
+      await import("@/lib/reservations/link-token.server");
     const verificationToken = createReservationLinkToken({
       purpose: "verify",
       organizationId: client.organizationId,
@@ -399,9 +501,7 @@ describe("public reservation API contracts", () => {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       verifiedChannel: "sms",
     });
-    const { POST } = await import(
-      "@/app/api/v1/reservations/confirm/route"
-    );
+    const { POST } = await import("@/app/api/v1/reservations/confirm/route");
     const response = await POST(
       new Request("https://os.example/api/v1/reservations/confirm", {
         method: "POST",
@@ -424,9 +524,8 @@ describe("public reservation API contracts", () => {
       },
       error: null,
     });
-    const { createReservationLinkToken } = await import(
-      "@/lib/reservations/link-token.server"
-    );
+    const { createReservationLinkToken } =
+      await import("@/lib/reservations/link-token.server");
     const verificationToken = createReservationLinkToken({
       purpose: "verify",
       organizationId: client.organizationId,
@@ -435,9 +534,7 @@ describe("public reservation API contracts", () => {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       verifiedChannel: "email",
     });
-    const { POST } = await import(
-      "@/app/api/v1/reservations/confirm/route"
-    );
+    const { POST } = await import("@/app/api/v1/reservations/confirm/route");
     const response = await POST(
       new Request("https://os.example/api/v1/reservations/confirm", {
         method: "POST",
@@ -455,9 +552,8 @@ describe("public reservation API contracts", () => {
       data: null,
       error: { code: "55000" },
     });
-    const { createReservationLinkToken } = await import(
-      "@/lib/reservations/link-token.server"
-    );
+    const { createReservationLinkToken } =
+      await import("@/lib/reservations/link-token.server");
     const verificationToken = createReservationLinkToken({
       purpose: "verify",
       organizationId: client.organizationId,
@@ -466,9 +562,7 @@ describe("public reservation API contracts", () => {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       verifiedChannel: "email",
     });
-    const { POST } = await import(
-      "@/app/api/v1/reservations/confirm/route"
-    );
+    const { POST } = await import("@/app/api/v1/reservations/confirm/route");
     const response = await POST(
       new Request("https://os.example/api/v1/reservations/confirm", {
         method: "POST",
@@ -484,9 +578,8 @@ describe("public reservation API contracts", () => {
   it("fails confirmation safely before the RPC when providers are unavailable", async () => {
     delete process.env.RESEND_API_KEY;
     delete process.env.RESERVATION_EMAIL_FROM;
-    const { createReservationLinkToken } = await import(
-      "@/lib/reservations/link-token.server"
-    );
+    const { createReservationLinkToken } =
+      await import("@/lib/reservations/link-token.server");
     const verificationToken = createReservationLinkToken({
       purpose: "verify",
       organizationId: client.organizationId,
@@ -495,9 +588,7 @@ describe("public reservation API contracts", () => {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       verifiedChannel: "email",
     });
-    const { POST } = await import(
-      "@/app/api/v1/reservations/confirm/route"
-    );
+    const { POST } = await import("@/app/api/v1/reservations/confirm/route");
     const response = await POST(
       new Request("https://os.example/api/v1/reservations/confirm", {
         method: "POST",
@@ -512,9 +603,8 @@ describe("public reservation API contracts", () => {
   });
 
   it("recovers the same management session after commit-response loss", async () => {
-    const { createReservationLinkToken } = await import(
-      "@/lib/reservations/link-token.server"
-    );
+    const { createReservationLinkToken } =
+      await import("@/lib/reservations/link-token.server");
     const exchangeToken = createReservationLinkToken({
       purpose: "manage_exchange",
       organizationId: client.organizationId,
@@ -522,9 +612,8 @@ describe("public reservation API contracts", () => {
       subjectId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
-    const { POST } = await import(
-      "@/app/api/v1/reservations/manage/exchange/route"
-    );
+    const { POST } =
+      await import("@/app/api/v1/reservations/manage/exchange/route");
     mocks.rpc.mockResolvedValueOnce({
       data: {
         manageExpiresAt: "2026-09-10T01:00:00.000Z",
@@ -571,9 +660,8 @@ describe("public reservation API contracts", () => {
   });
 
   it("does not spend management-exchange quota on an invalid signed link", async () => {
-    const { POST } = await import(
-      "@/app/api/v1/reservations/manage/exchange/route"
-    );
+    const { POST } =
+      await import("@/app/api/v1/reservations/manage/exchange/route");
     const response = await POST(
       new Request("https://os.example/api/v1/reservations/manage/exchange", {
         method: "POST",
@@ -586,9 +674,8 @@ describe("public reservation API contracts", () => {
   });
 
   it("rejects the same management link when another browser presents it", async () => {
-    const { createReservationLinkToken } = await import(
-      "@/lib/reservations/link-token.server"
-    );
+    const { createReservationLinkToken } =
+      await import("@/lib/reservations/link-token.server");
     const exchangeToken = createReservationLinkToken({
       purpose: "manage_exchange",
       organizationId: client.organizationId,
@@ -596,15 +683,12 @@ describe("public reservation API contracts", () => {
       subjectId: "abababab-abab-4bab-8bab-abababababab",
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
-    const { POST } = await import(
-      "@/app/api/v1/reservations/manage/exchange/route"
-    );
-    mocks.authenticate
-      .mockResolvedValueOnce(client)
-      .mockResolvedValueOnce({
-        ...client,
-        abuseIdentity: "77777777-7777-4777-8777-777777777777",
-      });
+    const { POST } =
+      await import("@/app/api/v1/reservations/manage/exchange/route");
+    mocks.authenticate.mockResolvedValueOnce(client).mockResolvedValueOnce({
+      ...client,
+      abuseIdentity: "77777777-7777-4777-8777-777777777777",
+    });
     mocks.rpc
       .mockResolvedValueOnce({
         data: {

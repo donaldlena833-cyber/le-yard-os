@@ -30,16 +30,22 @@ function isSupportedTemplate(value: string): value is SupportedTemplate {
 type ClaimedMessage = {
   id: string;
   claimToken: string;
+  attempts: number;
+};
+
+type BegunMessage = {
+  id: string;
+  status: "dispatching";
+  attempts: number;
   organizationId: string;
   locationId: string;
   reservationId: string | null;
   bookingHoldId: string | null;
   waitlistEntryId: string | null;
-  channel: string;
+  channel: "email" | "sms";
   templateKey: string;
   templateData: unknown;
-  attempts: number;
-  createdAt: string;
+  messageCreatedAt: string;
   guestName: string | null;
   recipientEmail: string | null;
   recipientPhone: string | null;
@@ -47,6 +53,7 @@ type ClaimedMessage = {
   reservedAt: string | null;
   offerExpiresAt: string | null;
   holdExpiresAt: string | null;
+  configurationVersion: number;
 };
 
 type ReservationRpc = (
@@ -70,6 +77,68 @@ async function completeReservationMessage(
     return !completed.error && result?.status === args.p_status;
   } catch {
     return false;
+  }
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isBegunMessage(value: unknown): value is BegunMessage {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const message = value as Record<string, unknown>;
+  return (
+    message.status === "dispatching" &&
+    typeof message.id === "string" &&
+    Number.isInteger(message.attempts) &&
+    typeof message.organizationId === "string" &&
+    typeof message.locationId === "string" &&
+    isNullableString(message.reservationId) &&
+    isNullableString(message.bookingHoldId) &&
+    isNullableString(message.waitlistEntryId) &&
+    (message.channel === "email" || message.channel === "sms") &&
+    typeof message.templateKey === "string" &&
+    message.templateData !== null &&
+    typeof message.templateData === "object" &&
+    !Array.isArray(message.templateData) &&
+    typeof message.messageCreatedAt === "string" &&
+    isNullableString(message.guestName) &&
+    isNullableString(message.recipientEmail) &&
+    isNullableString(message.recipientPhone) &&
+    isNullableString(message.publicCode) &&
+    isNullableString(message.reservedAt) &&
+    isNullableString(message.offerExpiresAt) &&
+    isNullableString(message.holdExpiresAt) &&
+    Number.isInteger(message.configurationVersion) &&
+    Number(message.configurationVersion) > 0
+  );
+}
+
+async function beginReservationMessageDelivery(
+  rpc: ReservationRpc,
+  message: Pick<ClaimedMessage, "id" | "claimToken">,
+  begunAt: Date,
+): Promise<
+  | { state: "dispatching"; message: BegunMessage }
+  | { state: "cancelled" }
+  | { state: "unavailable" }
+> {
+  try {
+    const begun = await rpc("service_begin_reservation_message_delivery", {
+      p_id: message.id,
+      p_claim_token: message.claimToken,
+      p_now: begunAt.toISOString(),
+    });
+    if (begun.error)
+      return begun.error.code === "P0002"
+        ? { state: "cancelled" }
+        : { state: "unavailable" };
+    const result = begun.data as { status?: unknown } | null;
+    if (result?.status === "cancelled") return { state: "cancelled" };
+    if (!isBegunMessage(result)) return { state: "unavailable" };
+    return { state: "dispatching", message: result };
+  } catch {
+    return { state: "unavailable" };
   }
 }
 
@@ -189,14 +258,42 @@ async function deliverReservationMessages(request: Request) {
   let failed = 0;
   let skipped = 0;
   let completionErrors = 0;
-  for (const message of (data ?? []) as ClaimedMessage[]) {
+  for (const claim of (data ?? []) as ClaimedMessage[]) {
+    const begunAt = new Date();
+    const begun = await beginReservationMessageDelivery(rpc, claim, begunAt);
+    if (begun.state === "cancelled") {
+      skipped += 1;
+      continue;
+    }
+    if (begun.state === "unavailable") {
+      const completed = await completeReservationMessage(rpc, {
+        p_id: claim.id,
+        p_claim_token: claim.claimToken,
+        p_status: "failed",
+        p_error_code: "begin_delivery_unavailable",
+        p_next_attempt_at: new Date(
+          begunAt.valueOf() + 5 * 60_000,
+        ).toISOString(),
+        p_provider_message_id: null,
+      });
+      if (completed) failed += 1;
+      else completionErrors += 1;
+      continue;
+    }
+
+    const message = begun.message;
     const templateKey = message.templateKey;
-    if (!isSupportedTemplate(templateKey)) {
+    if (
+      !isSupportedTemplate(templateKey) ||
+      !isReservationMessageChannelBound(message)
+    ) {
       const completed = await completeReservationMessage(rpc, {
-        p_id: message.id,
-        p_claim_token: message.claimToken,
+        p_id: claim.id,
+        p_claim_token: claim.claimToken,
         p_status: "cancelled",
-        p_error_code: "unsupported_template",
+        p_error_code: !isSupportedTemplate(templateKey)
+          ? "unsupported_template"
+          : "channel_binding_invalid",
         p_next_attempt_at: null,
         p_provider_message_id: null,
       });
@@ -205,53 +302,7 @@ async function deliverReservationMessages(request: Request) {
       continue;
     }
 
-    const validatedAt = new Date();
-    let validation: Awaited<ReturnType<ReservationRpc>>;
-    try {
-      validation = await rpc("service_validate_reservation_message_claim", {
-        p_id: message.id,
-        p_claim_token: message.claimToken,
-        p_now: validatedAt.toISOString(),
-      });
-    } catch {
-      validation = { data: null, error: { code: "validation_unavailable" } };
-    }
-    if (validation.error || validation.data !== true) {
-      const retryAt = validation.error
-        ? new Date(validatedAt.valueOf() + 5 * 60_000).toISOString()
-        : null;
-      const completed = await completeReservationMessage(rpc, {
-        p_id: message.id,
-        p_claim_token: message.claimToken,
-        p_status: validation.error ? "failed" : "cancelled",
-        p_error_code: validation.error
-          ? "claim_validation_unavailable"
-          : "linked_lifecycle_stale",
-        p_next_attempt_at: retryAt,
-        p_provider_message_id: null,
-      });
-      if (completed) {
-        if (validation.error) failed += 1;
-        else skipped += 1;
-      } else completionErrors += 1;
-      continue;
-    }
-
-    if (!isReservationMessageChannelBound(message)) {
-      const completed = await completeReservationMessage(rpc, {
-        p_id: message.id,
-        p_claim_token: message.claimToken,
-        p_status: "cancelled",
-        p_error_code: "channel_binding_invalid",
-        p_next_attempt_at: null,
-        p_provider_message_id: null,
-      });
-      if (completed) skipped += 1;
-      else completionErrors += 1;
-      continue;
-    }
-
-    const channel = message.channel as "email" | "sms";
+    const channel = message.channel;
     const hasRecipient =
       channel === "email"
         ? Boolean(message.recipientEmail)
@@ -277,7 +328,7 @@ async function deliverReservationMessages(request: Request) {
           reservedAt: message.reservedAt,
           offerExpiresAt: message.offerExpiresAt,
           holdExpiresAt: message.holdExpiresAt,
-          messageCreatedAt: message.createdAt,
+          messageCreatedAt: message.messageCreatedAt,
         });
       } catch {
         delivered = { state: "failed", providerMessageId: null };
@@ -287,8 +338,8 @@ async function deliverReservationMessages(request: Request) {
     const completedAt = new Date().toISOString();
     if (delivered.state === "sent") {
       const completed = await completeReservationMessage(rpc, {
-        p_id: message.id,
-        p_claim_token: message.claimToken,
+        p_id: claim.id,
+        p_claim_token: claim.claimToken,
         p_status: "sent",
         p_error_code: null,
         p_next_attempt_at: null,
@@ -304,8 +355,8 @@ async function deliverReservationMessages(request: Request) {
         Math.min(30, 2 ** Math.max(1, message.attempts)) * 60_000,
     ).toISOString();
     const completed = await completeReservationMessage(rpc, {
-      p_id: message.id,
-      p_claim_token: message.claimToken,
+      p_id: claim.id,
+      p_claim_token: claim.claimToken,
       p_status: "failed",
       p_error_code: hasRecipient ? delivered.state : "recipient_missing",
       p_next_attempt_at: retryAt,

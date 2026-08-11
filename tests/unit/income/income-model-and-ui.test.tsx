@@ -8,7 +8,10 @@ import {
   createDemoIncomeModel,
   parseIncomeOperatingModel,
 } from "@/lib/income/model";
-import { deriveIncomePlanningSummary } from "@/lib/income/insights";
+import {
+  deriveIncomePlanningInsights,
+  deriveIncomePlanningSummary,
+} from "@/lib/income/insights";
 import type { Json } from "@/types/database.generated";
 
 vi.mock("next/navigation", () => ({
@@ -54,6 +57,41 @@ describe("income operating model", () => {
     expect(summary.basis).toBe("recorded_revenue");
     expect(summary.busiest?.bucket.hour).toBe(18);
     expect(summary.busiest?.average).toBe(20_000);
+  });
+
+  it("derives separate busy, staffing, and coverage evidence", () => {
+    const [busy, staffing, coverage] = deriveIncomePlanningInsights(
+      createDemoIncomeModel(),
+    );
+    expect(busy.kind).toBe("busy_hour");
+    expect(busy.bucket?.hour).toBe(19);
+    expect(busy.sampleDays).toBe(21);
+    expect(staffing.kind).toBe("staffed_without_demand");
+    expect(staffing.buckets.map((bucket) => bucket.hour)).toEqual([15]);
+    expect(coverage.kind).toBe("data_coverage");
+    expect(coverage.currentSourceCount).toBe(3);
+    expect(coverage.issues.map((source) => source.key)).toEqual(["closeouts"]);
+  });
+
+  it("falls back to reservation demand without treating missing sales as zero", () => {
+    const demo = createDemoIncomeModel();
+    demo.hourly = demo.hourly.map((bucket) => ({
+      ...bucket,
+      revenueCents: 0,
+      salesSampleDays: 0,
+    }));
+    demo.sources[0] = {
+      ...demo.sources[0],
+      lastObservedAt: null,
+      recordCount: 0,
+      freshness: "unavailable",
+    };
+
+    const [busy] = deriveIncomePlanningInsights(demo);
+    expect(busy.basis).toBe("reserved_covers");
+    expect(busy.bucket?.hour).toBe(19);
+    expect(busy.sourceFreshness).toBeNull();
+    expect(busy.sampleDays).toBe(28);
   });
 });
 
@@ -110,5 +148,67 @@ describe("IncomeWorkspace", () => {
       screen.getByText(/real-time revenue source is not connected/i),
     ).toBeTruthy();
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("renders evidence beside permission-aware planning actions", () => {
+    render(
+      <IncomeWorkspace
+        result={readSuccess(createDemoIncomeModel())}
+        locationName="Le Yard"
+        actionAccess={{
+          canManageSchedule: true,
+          canViewSchedule: true,
+          canOpenTimeClock: true,
+          canManageIntegrations: false,
+        }}
+        demo
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Planning insights" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/7 PM is the busiest observed hour/i)).toBeTruthy();
+    expect(screen.getByText(/21 observed sales day/i)).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Plan coverage/i }).getAttribute("href"),
+    ).toBe("/schedule");
+    expect(
+      screen.getByText(/An integrations manager can resolve source coverage/i),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Review sources/i })).toBeNull();
+  });
+
+  it("offers review-only destinations without implying edit authority", () => {
+    render(
+      <IncomeWorkspace
+        result={readSuccess(createDemoIncomeModel())}
+        locationName="Le Yard"
+        actionAccess={{
+          canManageSchedule: false,
+          canViewSchedule: true,
+          canOpenTimeClock: true,
+          canManageIntegrations: true,
+        }}
+        demo
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("link", { name: /Review schedule/i })
+        .getAttribute("href"),
+    ).toBe("/schedule");
+    expect(
+      screen
+        .getByRole("link", { name: /Review time clock/i })
+        .getAttribute("href"),
+    ).toBe("/time-clock");
+    expect(
+      screen
+        .getByRole("link", { name: /Review sources/i })
+        .getAttribute("href"),
+    ).toBe("/integrations");
+    expect(screen.queryByRole("link", { name: /Plan coverage/i })).toBeNull();
   });
 });

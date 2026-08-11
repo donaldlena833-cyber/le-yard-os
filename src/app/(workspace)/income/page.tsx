@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 
-import { IncomeWorkspace } from "@/components/income/income-workspace";
+import {
+  IncomeWorkspace,
+  type IncomeActionAccess,
+} from "@/components/income/income-workspace";
 import { loadLiveIncome } from "@/data/read-models/income";
 import { readSuccess } from "@/data/read-models/shared";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
@@ -28,6 +31,12 @@ export default async function IncomePage({
       <IncomeWorkspace
         result={readSuccess(model)}
         locationName="Le Yard — Playground"
+        actionAccess={{
+          canManageSchedule: true,
+          canViewSchedule: true,
+          canOpenTimeClock: true,
+          canManageIntegrations: true,
+        }}
         demo
       />
     );
@@ -37,10 +46,21 @@ export default async function IncomePage({
   if (resolution.status !== "ready" || resolution.context.mode !== "live")
     return null;
   requireWorkspaceRouteAccess("/income", resolution.context);
+  const privileged =
+    resolution.context.role === "owner" || resolution.context.role === "admin";
+  const capabilities = new Set(resolution.context.capabilities);
+  const actionAccess: IncomeActionAccess = {
+    canManageSchedule: privileged || capabilities.has("schedule.manage"),
+    canViewSchedule: true,
+    canOpenTimeClock: true,
+    canManageIntegrations:
+      privileged || capabilities.has("integrations.manage"),
+  };
   return (
     <IncomeWorkspace
       result={await loadLiveIncome(resolution.context, days)}
       locationName={resolution.context.activeLocation.name}
+      actionAccess={actionAccess}
       realtimeScope={{
         organizationId: resolution.context.organization.id,
         locationId: resolution.context.activeLocation.id,

@@ -33,6 +33,7 @@ const bootstrap = `
   do $$ begin create role anon nologin; exception when duplicate_object then null; end $$;
   do $$ begin create role authenticated nologin; exception when duplicate_object then null; end $$;
   do $$ begin create role service_role nologin; exception when duplicate_object then null; end $$;
+  create publication supabase_realtime;
 
   create table auth.users (
     instance_id uuid,
@@ -3694,7 +3695,13 @@ try {
          'time_correction_decision_notification',
          'task_assignment_notification',
          'notification_evidence_guard'
-       ) and not tgisinternal) as notification_triggers
+       ) and not tgisinternal) as notification_triggers,
+      (select not pubdelete from pg_publication
+       where pubname = 'supabase_realtime') as realtime_delete_disabled,
+      (select not pubtruncate from pg_publication
+       where pubname = 'supabase_realtime') as realtime_truncate_disabled,
+      (select pubinsert and pubupdate from pg_publication
+       where pubname = 'supabase_realtime') as realtime_safe_changes_enabled
   `);
   const finalSecurityContracts = finalSecurityContractsQuery.rows[0];
   if (
@@ -3713,7 +3720,10 @@ try {
     finalSecurityContracts.browser_has_notification_table_write ||
     !finalSecurityContracts.recipient_can_mark_notification_read ||
     finalSecurityContracts.recipient_can_update_notification_title ||
-    finalSecurityContracts.notification_triggers !== 5
+    finalSecurityContracts.notification_triggers !== 5 ||
+    !finalSecurityContracts.realtime_delete_disabled ||
+    !finalSecurityContracts.realtime_truncate_disabled ||
+    !finalSecurityContracts.realtime_safe_changes_enabled
   ) {
     throw new Error(`Final security contract catalog failed: ${JSON.stringify(finalSecurityContracts)}`);
   }

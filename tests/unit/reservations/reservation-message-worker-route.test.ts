@@ -31,32 +31,47 @@ let claimedMessages: Array<ReturnType<typeof claimedMessage>> = [];
 let completionError: { code: string } | null = null;
 let completionThrows = false;
 let completionStatusOverride: string | null = null;
-let claimValidation: true | false | "error" = true;
+let beginResults: Array<
+  ReturnType<typeof begunMessage> | "cancelled" | "revoked" | "error"
+> = [];
 
 function claimedMessage(
   overrides: Partial<{
     id: string;
     claimToken: string;
-    channel: string;
+    attempts: number;
+  }> = {},
+) {
+  return {
+    id: overrides.id ?? "11111111-1111-4111-8111-111111111111",
+    claimToken: overrides.claimToken ?? "22222222-2222-4222-8222-222222222222",
+    attempts: overrides.attempts ?? 1,
+  };
+}
+
+function begunMessage(
+  overrides: Partial<{
+    id: string;
+    channel: "email" | "sms";
     templateKey: string;
+    templateData: Record<string, unknown>;
     recipientEmail: string | null;
     recipientPhone: string | null;
   }> = {},
 ) {
   return {
     id: overrides.id ?? "11111111-1111-4111-8111-111111111111",
-    claimToken:
-      overrides.claimToken ?? "22222222-2222-4222-8222-222222222222",
+    status: "dispatching",
+    attempts: 1,
     organizationId: "33333333-3333-4333-8333-333333333333",
     locationId: "44444444-4444-4444-8444-444444444444",
     reservationId: "55555555-5555-4555-8555-555555555555",
     bookingHoldId: null,
     waitlistEntryId: null,
-    channel: overrides.channel ?? "email",
+    channel: overrides.channel ?? ("email" as const),
     templateKey: overrides.templateKey ?? "reservation_cancelled",
-    templateData: {},
-    attempts: 1,
-    createdAt: "2026-08-10T01:00:00.000Z",
+    templateData: overrides.templateData ?? {},
+    messageCreatedAt: "2026-08-10T01:00:00.000Z",
     guestName: "Ada",
     recipientEmail:
       overrides.recipientEmail === undefined
@@ -67,13 +82,12 @@ function claimedMessage(
     reservedAt: "2026-08-12T23:00:00.000Z",
     offerExpiresAt: null,
     holdExpiresAt: null,
+    configurationVersion: 7,
   };
 }
 
 async function runWorker() {
-  const { GET } = await import(
-    "@/app/api/internal/reservation-messages/route"
-  );
+  const { GET } = await import("@/app/api/internal/reservation-messages/route");
   return GET(
     new Request("https://os.example/api/internal/reservation-messages", {
       headers: {
@@ -88,7 +102,7 @@ beforeEach(() => {
   completionError = null;
   completionThrows = false;
   completionStatusOverride = null;
-  claimValidation = true;
+  beginResults = [];
   process.env.RESERVATION_DELIVERY_SECRET = "d".repeat(48);
   mocks.channelBound.mockReset().mockReturnValue(true);
   mocks.send.mockReset().mockResolvedValue({
@@ -102,10 +116,20 @@ beforeEach(() => {
         return { data: null, error: null };
       if (name === "service_claim_reservation_message_outbox")
         return { data: claimedMessages, error: null };
-      if (name === "service_validate_reservation_message_claim")
-        return claimValidation === "error"
-          ? { data: null, error: { code: "database_unavailable" } }
-          : { data: claimValidation, error: null };
+      if (name === "service_begin_reservation_message_delivery") {
+        const current =
+          beginResults.shift() ?? begunMessage({ id: String(args.p_id) });
+        if (current === "error")
+          return { data: null, error: { code: "database_unavailable" } };
+        if (current === "revoked")
+          return { data: null, error: { code: "P0002" } };
+        if (current === "cancelled")
+          return {
+            data: { id: args.p_id, status: "cancelled", attempts: 1 },
+            error: null,
+          };
+        return { data: current, error: null };
+      }
       if (name === "service_complete_reservation_message_outbox") {
         if (completionThrows) throw new Error("completion unavailable");
         return {
@@ -128,15 +152,17 @@ afterEach(() => {
 describe("reservation message worker completion accounting", () => {
   it("counts sent, failed, and skipped rows only after completion succeeds", async () => {
     claimedMessages = [
-      claimedMessage({
-        id: "11111111-1111-4111-8111-111111111111",
-        recipientEmail: "ada@example.com",
-      }),
-      claimedMessage({
+      claimedMessage({ id: "11111111-1111-4111-8111-111111111111" }),
+      claimedMessage({ id: "22222222-2222-4222-8222-222222222222" }),
+      claimedMessage({ id: "33333333-3333-4333-8333-333333333333" }),
+    ];
+    beginResults = [
+      begunMessage({ id: "11111111-1111-4111-8111-111111111111" }),
+      begunMessage({
         id: "22222222-2222-4222-8222-222222222222",
         recipientEmail: null,
       }),
-      claimedMessage({
+      begunMessage({
         id: "33333333-3333-4333-8333-333333333333",
         templateKey: "unsupported_template",
       }),
@@ -172,7 +198,7 @@ describe("reservation message worker completion accounting", () => {
 
   it("cancels a stale linked lifecycle before calling the provider", async () => {
     claimedMessages = [claimedMessage()];
-    claimValidation = false;
+    beginResults = ["cancelled"];
     const response = await runWorker();
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -180,17 +206,35 @@ describe("reservation message worker completion accounting", () => {
     });
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.rpc).toHaveBeenCalledWith(
-      "service_complete_reservation_message_outbox",
+      "service_begin_reservation_message_delivery",
       expect.objectContaining({
-        p_status: "cancelled",
-        p_error_code: "linked_lifecycle_stale",
+        p_claim_token: claimedMessages[0]!.claimToken,
       }),
+    );
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      "service_complete_reservation_message_outbox",
+      expect.anything(),
     );
   });
 
-  it("fails closed and schedules retry when lifecycle validation is unavailable", async () => {
+  it("treats an atomically revoked claim as skipped without retrying it", async () => {
     claimedMessages = [claimedMessage()];
-    claimValidation = "error";
+    beginResults = ["revoked"];
+    const response = await runWorker();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: { sent: 0, failed: 0, skipped: 1, completionErrors: 0 },
+    });
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.rpc).not.toHaveBeenCalledWith(
+      "service_complete_reservation_message_outbox",
+      expect.anything(),
+    );
+  });
+
+  it("fails closed and schedules retry when begin delivery is unavailable", async () => {
+    claimedMessages = [claimedMessage()];
+    beginResults = ["error"];
     const response = await runWorker();
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -201,16 +245,44 @@ describe("reservation message worker completion accounting", () => {
       "service_complete_reservation_message_outbox",
       expect.objectContaining({
         p_status: "failed",
-        p_error_code: "claim_validation_unavailable",
+        p_error_code: "begin_delivery_unavailable",
         p_next_attempt_at: expect.any(String),
       }),
     );
   });
 
-  it("leaves a cancelled row reclaimable when cancellation completion fails", async () => {
-    claimedMessages = [
-      claimedMessage({ templateKey: "unsupported_template" }),
+  it("uses only the exact begin snapshot for the provider call", async () => {
+    claimedMessages = [claimedMessage()];
+    beginResults = [
+      begunMessage({
+        recipientEmail: "fresh-recipient@example.com",
+        templateData: { channel: "email", snapshot: "begin" },
+      }),
     ];
+    const response = await runWorker();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      data: { sent: 1, failed: 0, skipped: 0, completionErrors: 0 },
+    });
+    expect(mocks.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: "fresh-recipient@example.com",
+        messageId: begunMessage().id,
+      }),
+    );
+    expect(mocks.send.mock.calls[0]![0]).not.toHaveProperty(
+      "authorizeProviderCall",
+    );
+    const beginIndex = mocks.rpc.mock.calls.findIndex(
+      ([name]) => name === "service_begin_reservation_message_delivery",
+    );
+    expect(beginIndex).toBeGreaterThan(-1);
+    expect(mocks.send).toHaveBeenCalledOnce();
+  });
+
+  it("leaves a cancelled row reclaimable when cancellation completion fails", async () => {
+    claimedMessages = [claimedMessage()];
+    beginResults = [begunMessage({ templateKey: "unsupported_template" })];
     completionError = { code: "database_unavailable" };
     const response = await runWorker();
     expect(response.status).toBe(503);
@@ -227,7 +299,8 @@ describe("reservation message worker completion accounting", () => {
   });
 
   it("keeps a failed-delivery row on its lease when completion throws", async () => {
-    claimedMessages = [claimedMessage({ recipientEmail: null })];
+    claimedMessages = [claimedMessage()];
+    beginResults = [begunMessage({ recipientEmail: null })];
     completionThrows = true;
     const response = await runWorker();
     expect(response.status).toBe(503);
@@ -245,9 +318,8 @@ describe("reservation message worker completion accounting", () => {
   });
 
   it("rejects a completion response that does not confirm the requested state", async () => {
-    claimedMessages = [
-      claimedMessage({ templateKey: "unsupported_template" }),
-    ];
+    claimedMessages = [claimedMessage()];
+    beginResults = [begunMessage({ templateKey: "unsupported_template" })];
     completionStatusOverride = "sending";
     const response = await runWorker();
     expect(response.status).toBe(503);

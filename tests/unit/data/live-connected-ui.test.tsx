@@ -1,8 +1,12 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LiveTodayWorkspace } from "@/components/today/live-today-workspace";
 import type { ServiceDaySnapshot } from "@/data/read-models/service-day-snapshot";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 const workspace: WorkspaceContextValue = {
   mode: "live",
@@ -112,7 +116,8 @@ const emptySnapshot: ServiceDaySnapshot = {
     state: "snapshot_only",
     transport: "server_request",
     lastEventAt: null,
-    detail: "Fresh server reads; Today does not claim an active realtime subscription.",
+    detail:
+      "The server snapshot remains authoritative; connected clients may attach scoped invalidation and refresh this route.",
   },
   providerHealth: { state: "restricted", providers: [] },
 };
@@ -127,7 +132,7 @@ describe("connected Today UI", () => {
     );
 
     expect(markup).toContain("Connected · Main Dining Room");
-    expect(markup).toContain("Realtime: snapshot only");
+    expect(markup).toContain("Realtime: scoped invalidation");
     expect(markup).toContain("Provider sync evidence: restricted");
     expect(markup).toContain("No visible shifts today");
     expect(markup).toContain("No live announcements yet");

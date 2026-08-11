@@ -18,6 +18,30 @@ export interface IncomePlanningSummary {
   staffedWithoutDemand: IncomeHourlyBucket[];
 }
 
+export type IncomePlanningInsight =
+  | {
+      kind: "busy_hour";
+      basis: IncomePlanningBasis | null;
+      bucket: IncomeHourlyBucket | null;
+      average: number | null;
+      sampleDays: number;
+      sourceFreshness: "current" | "stale" | "unavailable" | null;
+    }
+  | {
+      kind: "staffed_without_demand";
+      buckets: IncomeHourlyBucket[];
+      laborMinutes: number;
+      laborCostCents: number;
+      timeClockFreshness: "current" | "stale" | "unavailable";
+      salesFreshness: "current" | "stale" | "unavailable";
+    }
+  | {
+      kind: "data_coverage";
+      currentSourceCount: number;
+      totalSourceCount: number;
+      issues: IncomeOperatingModel["sources"];
+    };
+
 function rankedHour(
   bucket: IncomeHourlyBucket,
   basis: IncomePlanningBasis,
@@ -76,4 +100,67 @@ export function deriveIncomePlanningSummary(
     observedHourCount: observed.length,
     staffedWithoutDemand,
   };
+}
+
+/**
+ * Builds deterministic planning evidence. Each insight stays within one
+ * measurement grain and keeps source freshness beside the conclusion.
+ */
+export function deriveIncomePlanningInsights(
+  model: IncomeOperatingModel,
+): readonly [
+  Extract<IncomePlanningInsight, { kind: "busy_hour" }>,
+  Extract<IncomePlanningInsight, { kind: "staffed_without_demand" }>,
+  Extract<IncomePlanningInsight, { kind: "data_coverage" }>,
+] {
+  const summary = deriveIncomePlanningSummary(model);
+  const salesSource = model.sources.find(
+    (source) => source.key === "sales_checks",
+  );
+  const timeClockSource = model.sources.find(
+    (source) => source.key === "time_entries",
+  );
+  const staffed = summary.staffedWithoutDemand;
+  const issues = model.sources.filter(
+    (source) => source.freshness !== "current",
+  );
+
+  return [
+    {
+      kind: "busy_hour",
+      basis: summary.basis,
+      bucket: summary.busiest?.bucket ?? null,
+      average: summary.busiest?.average ?? null,
+      sampleDays:
+        summary.basis === "recorded_revenue"
+          ? (summary.busiest?.bucket.salesSampleDays ?? 0)
+          : summary.basis === "reserved_covers"
+            ? model.historyDays
+            : 0,
+      sourceFreshness:
+        summary.basis === "recorded_revenue"
+          ? (salesSource?.freshness ?? "unavailable")
+          : null,
+    },
+    {
+      kind: "staffed_without_demand",
+      buckets: staffed,
+      laborMinutes: staffed.reduce(
+        (total, bucket) => total + bucket.laborMinutes,
+        0,
+      ),
+      laborCostCents: staffed.reduce(
+        (total, bucket) => total + bucket.laborCostCents,
+        0,
+      ),
+      timeClockFreshness: timeClockSource?.freshness ?? "unavailable",
+      salesFreshness: salesSource?.freshness ?? "unavailable",
+    },
+    {
+      kind: "data_coverage",
+      currentSourceCount: model.sources.length - issues.length,
+      totalSourceCount: model.sources.length,
+      issues,
+    },
+  ];
 }

@@ -57,9 +57,15 @@ jobs:
       - run: npm run test:reservations:concurrency
         env:
           RESERVATION_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      - run: npm run test:reservation-push:concurrency
+        env:
+          RESERVATION_PUSH_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
       - run: npm run test:schedule-atomic:concurrency
         env:
           SCHEDULE_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      - run: npm run test:service-shifts:concurrency
+        env:
+          SERVICE_SHIFT_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
 
   demo-e2e:
     runs-on: ubuntu-latest

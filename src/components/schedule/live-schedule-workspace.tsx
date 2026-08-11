@@ -46,6 +46,7 @@ import {
   saveLiveScheduleTemplateAction,
 } from "@/app/actions/workflows/live-schedule";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { ScheduleAgenda } from "@/components/schedule/schedule-agenda";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
@@ -64,10 +65,26 @@ import {
   type ActionResolutionContext,
 } from "@/lib/actions/action-registry";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { cn } from "@/lib/utils";
 
 type LiveResult =
   { ok: true; persisted: boolean } | { ok: false; message: string };
+
+const scheduleRealtimeBindings = [
+  { table: "schedules", scope: "location" },
+  { table: "shifts", scope: "location" },
+  { table: "shift_acknowledgements", scope: "organization" },
+  { table: "shift_swap_requests", scope: "location" },
+  { table: "shift_swap_offers", scope: "organization" },
+  { table: "schedule_templates", scope: "location" },
+  { table: "schedule_template_shifts", scope: "organization" },
+  { table: "service_shifts", scope: "location" },
+  { table: "employee_job_roles", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 function dateLabel(date: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -632,6 +649,13 @@ function LiveScheduleContent({
   data: LiveScheduleModel;
 }) {
   const router = useRouter();
+  const realtime = useRealtimeInvalidation({
+    enabled: workspace.mode === "live",
+    channelName: `schedule:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: scheduleRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
   const [isPending, startTransition] = useTransition();
   const [notice, setNotice] = useState<{
     tone: "success" | "error";
@@ -932,6 +956,7 @@ function LiveScheduleContent({
           ) : null}
         </div>
       </div>
+      <RealtimeSyncStatus {...realtime} />
 
       <div className="mt-5 flex items-center justify-between gap-3 border-y border-[var(--line)] py-3">
         <Link

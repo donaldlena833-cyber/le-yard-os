@@ -1,6 +1,11 @@
 import { expect, type Page, type Route } from "@playwright/test";
+import {
+  connectedTestMode,
+  credentialVariableNames,
+  type AcceptanceRole,
+} from "./attestation-preflight";
 
-export type AcceptanceRole = "Owner" | "Admin" | "Manager" | "Employee";
+export { credentialVariableNames, type AcceptanceRole };
 
 const readOnlyMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -10,16 +15,24 @@ function requiredValue(name: string): string {
   return value;
 }
 
+function assertConnectedPreflight() {
+  const proof = process.env.E2E_CONNECTED_PREFLIGHT_COMPLETE ?? "";
+  const expectedPrefix =
+    connectedTestMode() === "release-acceptance"
+      ? "release:"
+      : "developer-smoke:";
+  if (!proof.startsWith(expectedPrefix))
+    throw new Error(
+      "Connected tests cannot read fixture values before their named global preflight completes.",
+    );
+}
+
 export function missingEnvironment(names: readonly string[]): string[] {
   return names.filter((name) => !process.env[name]?.trim());
 }
 
-export function credentialVariableNames(role: AcceptanceRole): [string, string] {
-  const prefix = `E2E_CONNECTED_${role.toUpperCase()}`;
-  return [`${prefix}_EMAIL`, `${prefix}_PASSWORD`];
-}
-
-function credentials(role: AcceptanceRole) {
+function credentials(role: AcceptanceRole | "Employee") {
+  assertConnectedPreflight();
   const [emailName, passwordName] = credentialVariableNames(role);
   return {
     email: requiredValue(emailName),
@@ -28,13 +41,17 @@ function credentials(role: AcceptanceRole) {
 }
 
 export function connectedFixture() {
+  assertConnectedPreflight();
   return {
     organizationName: requiredValue("E2E_CONNECTED_EXPECTED_ORGANIZATION_NAME"),
     locationName: requiredValue("E2E_CONNECTED_EXPECTED_LOCATION_NAME"),
   };
 }
 
-export async function signIn(page: Page, role: AcceptanceRole): Promise<void> {
+export async function signIn(
+  page: Page,
+  role: AcceptanceRole | "Employee",
+): Promise<void> {
   const identity = credentials(role);
   await page.goto("/sign-in?next=/today");
   await expect(
@@ -104,9 +121,9 @@ export function mutationFixture() {
   if (process.env.E2E_CONNECTED_ENABLE_MUTATIONS !== "true") {
     throw new Error("E2E_CONNECTED_ENABLE_MUTATIONS must equal true.");
   }
-  if (process.env.E2E_CONNECTED_ENVIRONMENT !== "nonproduction") {
+  if (process.env.E2E_CONNECTED_ENVIRONMENT !== "nonproduction_preview") {
     throw new Error(
-      "E2E_CONNECTED_ENVIRONMENT must equal nonproduction before connected writes are allowed.",
+      "E2E_CONNECTED_ENVIRONMENT must equal nonproduction_preview before connected writes are allowed.",
     );
   }
 

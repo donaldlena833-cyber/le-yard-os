@@ -67,6 +67,25 @@ function context(result: unknown) {
 }
 
 describe("reservation lifecycle application contract", () => {
+  it("accepts every bounded whole-minute turn and rejects values outside the database contract", () => {
+    for (const durationMinutes of [15, 73, 719, 720]) {
+      expect(
+        modifyReservationInputSchema.safeParse({
+          ...modifyInput,
+          durationMinutes,
+        }).success,
+      ).toBe(true);
+    }
+    for (const durationMinutes of [14, 73.5, 721]) {
+      expect(
+        modifyReservationInputSchema.safeParse({
+          ...modifyInput,
+          durationMinutes,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it("requires expected-version and staff evidence for modify and cancel", () => {
     expect(modifyReservationInputSchema.safeParse(modifyInput).success).toBe(
       true,

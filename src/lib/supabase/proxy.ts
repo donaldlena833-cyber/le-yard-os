@@ -1,6 +1,9 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { isPublicRequestPath } from "@/lib/auth/public-paths";
+import {
+  isPreAuthenticationRequestPath,
+  isPublicRequestPath,
+} from "@/lib/auth/public-paths";
 import { safeInternalRedirect } from "@/lib/auth/safe-redirect";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
 import { requireSupabasePublicEnv } from "@/lib/env";
@@ -228,6 +231,14 @@ export async function updateSession(
 
   if (!isRequestPathAllowedForAppSurface(request.nextUrl.pathname)) {
     return NextResponse.redirect(new URL(defaultWorkspacePath, runtime.appUrl!));
+  }
+
+  // Connected release attestation must execute before a test runner reads any
+  // user password or sends an Auth request. The exact internal route owns a
+  // stronger Preview/commit/HMAC/private-marker contract, so it bypasses only
+  // session initialization—not runtime readiness or route-level attestation.
+  if (isPreAuthenticationRequestPath(request.nextUrl.pathname)) {
+    return forwardRequest(request, additionalRequestHeaders);
   }
 
   if (runtime.mode === "demo") {

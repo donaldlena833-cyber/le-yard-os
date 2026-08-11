@@ -15,6 +15,7 @@ import {
   assertApprovedReservationDeliveryChannel,
   configuredReservationDeliveryAdapters,
 } from "@/lib/reservations/delivery-readiness.server";
+import { assertPublicReservationInventoryEnabled } from "@/lib/reservations/public-booking-policy.server";
 
 const createSchema = z
   .object({
@@ -71,11 +72,7 @@ function rpcFailure(
       "That time was just booked. Choose another available time.",
     );
   if (error?.code === "23514")
-    throw new BookingApiError(
-      409,
-      "booking_rule_conflict",
-      fallback,
-    );
+    throw new BookingApiError(409, "booking_rule_conflict", fallback);
   if (error?.code === "P0002")
     throw new BookingApiError(
       404,
@@ -88,16 +85,14 @@ function rpcFailure(
 export async function POST(request: Request) {
   const requestId = crypto.randomUUID();
   try {
+    assertPublicReservationInventoryEnabled();
     const client = await authenticateBookingApiRequest(
       request,
       "reservations:write",
     );
     const requestKey = idempotencyKey(request);
     const input = createSchema.parse(
-      await readBookingJson(
-        request,
-        "The booking request is too large.",
-      ),
+      await readBookingJson(request, "The booking request is too large."),
     );
     const slot = verifyBookingSlotToken(input.slotToken, client.id);
     if (
@@ -226,10 +221,7 @@ export async function PATCH(request: Request) {
         "A reservation manage token is required.",
       );
     const input = modifySchema.parse(
-      await readBookingJson(
-        request,
-        "The booking request is too large.",
-      ),
+      await readBookingJson(request, "The booking request is too large."),
     );
     const slot = verifyBookingSlotToken(input.slotToken, client.id);
     if (
@@ -290,10 +282,7 @@ export async function DELETE(request: Request) {
         "A reservation manage token is required.",
       );
     const input = cancelSchema.parse(
-      await readBookingJson(
-        request,
-        "The booking request is too large.",
-      ),
+      await readBookingJson(request, "The booking request is too large."),
     );
     const admin = createAdminClient();
     const { data, error } = await admin.rpc(

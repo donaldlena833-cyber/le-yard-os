@@ -110,6 +110,18 @@ describe("session proxy", () => {
     expect(health.status).toBe(200);
   });
 
+  it("forwards only the exact attestation path before initializing Auth", async () => {
+    const response = await updateSession(
+      new NextRequest(
+        "https://ops.example.com/api/internal/connected-acceptance/attest",
+        { method: "POST" },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(createServerClient).not.toHaveBeenCalled();
+  });
+
   it("preserves refreshed cookies and auth cache headers on a sign-in redirect", async () => {
     const request = new NextRequest(
       "https://ops.example.com/reports?kind=tips&locationId=all",

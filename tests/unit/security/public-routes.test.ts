@@ -9,6 +9,7 @@ describe("public route boundary", () => {
     "/api/health",
     "/api/internal/reservation-push",
     "/api/internal/reservation-messages",
+    "/api/internal/connected-acceptance/attest",
     "/api/v1/availability",
     "/api/v1/reservations/confirm",
     "/manifest.webmanifest",

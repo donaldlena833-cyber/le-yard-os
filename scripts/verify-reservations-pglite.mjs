@@ -123,6 +123,10 @@ const ids = {
   lifecycleCrossLocationRequest: "eb100000-0000-4000-8000-000000000005",
   lifecycleLegacyUpdateRequest: "eb100000-0000-4000-8000-000000000006",
   lifecycleLegacyCancelRequest: "eb100000-0000-4000-8000-000000000007",
+  lifecycleMissingModifyRequest: "eb100000-0000-4000-8000-000000000008",
+  lifecycleMissingCancelRequest: "eb100000-0000-4000-8000-000000000009",
+  lifecycleInvalidRevisionRequest: "eb100000-0000-4000-8000-00000000000a",
+  lifecycleInvalidRevision: "eb200000-0000-4000-8000-000000000001",
 };
 
 const platformBootstrap = `
@@ -576,12 +580,7 @@ try {
         $1::uuid, $2::uuid, null::uuid, null::uuid, $3::timestamptz,
         120, 2, 'Initial lifecycle request', 'phone', array[$4::uuid]
       ) result`,
-      [
-        ids.lifecycleReservation,
-        ids.location,
-        lifecycleTime,
-        ids.otherTable,
-      ],
+      [ids.lifecycleReservation, ids.location, lifecycleTime, ids.otherTable],
     )
   ).rows[0].result;
   if (
@@ -640,6 +639,52 @@ try {
   await expectDatabaseError(
     () =>
       db.query(
+        `select public.modify_reservation(
+          $1::uuid, $2::uuid, $3::uuid, 1, $4::timestamptz,
+          120, 3, 'Missing reservation', array[$5::uuid],
+          'Authorized actor cannot probe a missing reservation'
+        )`,
+        [
+          ids.lifecycleMissingModifyRequest,
+          ids.location,
+          ids.lifecycleMissingReservation,
+          lifecycleMovedTime,
+          ids.otherTable,
+        ],
+      ),
+    "42501",
+    "authorized missing reservation modification",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.cancel_reservation(
+          $1::uuid, $2::uuid, $3::uuid, 1,
+          'Authorized actor cannot probe a missing reservation'
+        )`,
+        [
+          ids.lifecycleMissingCancelRequest,
+          ids.location,
+          ids.lifecycleMissingReservation,
+        ],
+      ),
+    "42501",
+    "authorized missing reservation cancellation",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.service_reservation_lifecycle_head(
+          $1::uuid, $2::uuid
+        )`,
+        [ids.location, ids.lifecycleMissingReservation],
+      ),
+    "42501",
+    "authorized missing reservation lifecycle head",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
         `select public.cancel_reservation(
           $1::uuid, $2::uuid, $3::uuid, 1,
           'Wrong-location cancellation attempt'
@@ -650,7 +695,7 @@ try {
           ids.lifecycleReservation,
         ],
       ),
-    "P0002",
+    "42501",
     "cross-location staff reservation cancellation",
   );
   await expectDatabaseError(
@@ -812,14 +857,14 @@ try {
         $1::uuid, $2::uuid, $3::uuid, 2,
         'Guest called to cancel dinner'
       ) result`,
-      [
-        ids.lifecycleCancelRequest,
-        ids.location,
-        ids.lifecycleReservation,
-      ],
+      [ids.lifecycleCancelRequest, ids.location, ids.lifecycleReservation],
     )
   ).rows[0].result;
-  expectExactKeys(cancelledLifecycle, lifecycleResultKeys, "cancel_reservation");
+  expectExactKeys(
+    cancelledLifecycle,
+    lifecycleResultKeys,
+    "cancel_reservation",
+  );
   if (
     cancelledLifecycle.status !== "cancelled" ||
     cancelledLifecycle.version !== 3 ||
@@ -885,11 +930,7 @@ try {
         $1::uuid, $2::uuid, $3::uuid, 2,
         'Guest called to cancel dinner'
       ) result`,
-      [
-        ids.lifecycleCancelRequest,
-        ids.location,
-        ids.lifecycleReservation,
-      ],
+      [ids.lifecycleCancelRequest, ids.location, ids.lifecycleReservation],
     )
   ).rows[0].result;
   if (
@@ -908,11 +949,7 @@ try {
           $1::uuid, $2::uuid, $3::uuid, 2,
           'Changed cancellation reason'
         )`,
-        [
-          ids.lifecycleCancelRequest,
-          ids.location,
-          ids.lifecycleReservation,
-        ],
+        [ids.lifecycleCancelRequest, ids.location, ids.lifecycleReservation],
       ),
     "23505",
     "changed staff cancellation replay",
@@ -975,13 +1012,15 @@ try {
           ids.lifecycleCrossLocationRequest,
           ids.lifecycleLegacyUpdateRequest,
           ids.lifecycleLegacyCancelRequest,
+          ids.lifecycleMissingModifyRequest,
+          ids.lifecycleMissingCancelRequest,
         ],
       ],
     )
   ).rows[0];
   const lifecycleRevisions = (
     await db.query(
-      `select mutation_kind, actor_id, version, reason, payload_hash,
+      `select mutation_kind, operation_kind, actor_id, version, reason, payload_hash,
         before_state, after_state, service_shift_id, service_shift_evidence,
         policy_hash, policy_evidence, allocation_evidence, result_evidence
       from public.reservation_revisions
@@ -1000,11 +1039,13 @@ try {
     Number(lifecycleEvidence.lifecycle_events) !== 2 ||
     lifecycleRevisions.length !== 2 ||
     lifecycleRevisions[0].mutation_kind !== "staff_modified" ||
+    lifecycleRevisions[0].operation_kind !== "reservation.modify" ||
     lifecycleRevisions[0].version !== 2 ||
     lifecycleRevisions[0].actor_id !== ids.owner ||
     lifecycleRevisions[0].before_state.version !== 1 ||
     lifecycleRevisions[0].after_state.version !== 2 ||
     lifecycleRevisions[1].mutation_kind !== "staff_cancelled" ||
+    lifecycleRevisions[1].operation_kind !== "reservation.cancel" ||
     lifecycleRevisions[1].version !== 3 ||
     lifecycleRevisions[1].before_state.version !== 2 ||
     lifecycleRevisions[1].after_state.version !== 3 ||
@@ -1023,6 +1064,93 @@ try {
       `Staff lifecycle evidence is incomplete: ${JSON.stringify({ lifecycleEvidence, lifecycleRevisions })}`,
     );
   }
+
+  const revisionIntegrityCatalog = (
+    await db.query(
+      `select
+        count(*) constraint_count,
+        bool_and(constraint_row.contype in ('c', 'f')) expected_types,
+        (select attribute.attgenerated = 's'
+          from pg_attribute attribute
+          where attribute.attrelid = 'public.reservation_revisions'::regclass
+            and attribute.attname = 'operation_kind') operation_kind_generated
+      from pg_constraint constraint_row
+      where constraint_row.conrelid = 'public.reservation_revisions'::regclass
+        and constraint_row.conname = any($1::text[])`,
+      [
+        [
+          "reservation_revisions_operation_kind_check",
+          "reservation_revisions_operation_evidence_fkey",
+          "reservation_revisions_version_chain_check",
+          "reservation_revisions_mutation_state_check",
+          "reservation_revisions_result_identity_check",
+        ],
+      ],
+    )
+  ).rows[0];
+  if (
+    Number(revisionIntegrityCatalog.constraint_count) !== 5 ||
+    !revisionIntegrityCatalog.expected_types ||
+    !revisionIntegrityCatalog.operation_kind_generated
+  ) {
+    throw new Error(
+      `Reservation revision integrity catalog is incomplete: ${JSON.stringify(revisionIntegrityCatalog)}`,
+    );
+  }
+
+  const invalidRevisionPayloadHash = "ab".repeat(32);
+  await db.query(
+    `insert into private.operation_requests (
+      request_id, operation_kind, organization_id, location_id,
+      record_id, actor_id, payload_hash, completed_at
+    ) values (
+      $1::uuid, 'reservation.modify', $2::uuid, $3::uuid,
+      $4::uuid, $5::uuid, $6::text, clock_timestamp()
+    )`,
+    [
+      ids.lifecycleInvalidRevisionRequest,
+      ids.organization,
+      ids.location,
+      ids.lifecycleReservation,
+      ids.owner,
+      invalidRevisionPayloadHash,
+    ],
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `insert into public.reservation_revisions (
+          id, organization_id, location_id, reservation_id, request_id, actor_id,
+          version, mutation_kind, reason, payload_hash,
+          before_state, after_state, result_evidence
+        ) values (
+          $7::uuid, $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
+          4, 'staff_modified', 'Attempted malformed revision evidence', $6::text,
+          '{"version":1,"status":"booked"}'::jsonb,
+          '{"version":4,"status":"booked"}'::jsonb,
+          jsonb_build_object(
+            'id', $3::uuid, 'revisionId', $7::uuid,
+            'version', 4, 'revisionKind', 'staff_modified',
+            'status', 'booked'
+          )
+        )`,
+        [
+          ids.organization,
+          ids.location,
+          ids.lifecycleReservation,
+          ids.lifecycleInvalidRevisionRequest,
+          ids.owner,
+          invalidRevisionPayloadHash,
+          ids.lifecycleInvalidRevision,
+        ],
+      ),
+    "23514",
+    "malformed reservation revision version chain",
+  );
+  await db.query(
+    "delete from private.operation_requests where request_id = $1::uuid",
+    [ids.lifecycleInvalidRevisionRequest],
+  );
 
   await db.exec("set role authenticated");
   await assumeUser(ids.owner);
@@ -1475,7 +1603,8 @@ try {
   ).rows[0];
   if (
     publicIdentityPreconfirmationEvidence.hold_status !== "pending" ||
-    Number(publicIdentityPreconfirmationEvidence.collision_reservations) !== 0 ||
+    Number(publicIdentityPreconfirmationEvidence.collision_reservations) !==
+      0 ||
     Number(publicIdentityPreconfirmationEvidence.collision_guests) !== 0 ||
     Number(publicIdentityPreconfirmationEvidence.wrapper_claims) !== 0
   ) {
@@ -1575,9 +1704,9 @@ try {
       )
     ).rows[0].count,
   );
-  if (reminderQueued !== 2 || reminderReplay !== 0)
+  if (reminderQueued !== 0 || reminderReplay !== 0)
     throw new Error(
-      `Reminder enqueue was not exact-idempotent: ${reminderQueued}/${reminderReplay}`,
+      `Unverified staff reminder scheduling did not fail closed: ${reminderQueued}/${reminderReplay}`,
     );
   const publicTime = (
     await db.query(
@@ -1600,55 +1729,66 @@ try {
   await db.exec("reset role");
 
   await expectDatabaseError(
-    () => db.query(
-      "select private.assert_reservation_pacing($1::uuid, $2::uuid, $3::timestamptz, 1, null, null)",
-      [ids.organization, ids.location, publicTime],
-    ),
+    () =>
+      db.query(
+        "select private.assert_reservation_pacing($1::uuid, $2::uuid, $3::timestamptz, 1, null, null)",
+        [ids.organization, ids.location, publicTime],
+      ),
     "23514",
     "party below service-period minimum",
   );
   await expectDatabaseError(
-    () => db.query(
-      "select private.assert_reservation_pacing($1::uuid, $2::uuid, $3::timestamptz, 7, null, null)",
-      [ids.organization, ids.location, publicTime],
-    ),
+    () =>
+      db.query(
+        "select private.assert_reservation_pacing($1::uuid, $2::uuid, $3::timestamptz, 7, null, null)",
+        [ids.organization, ids.location, publicTime],
+      ),
     "23514",
     "party above service-period maximum",
   );
 
-  await db.query(`
+  await db.query(
+    `
     insert into public.reservation_turn_rules (
       organization_id, service_period_id, min_party_size,
       max_party_size, duration_minutes
     ) values ($1::uuid, $2::uuid, 3, 3, 90)
-  `, [ids.organization, ids.period]);
+  `,
+    [ids.organization, ids.period],
+  );
   await db.query(
     "select private.assert_public_reservation_slot_contract($1::uuid, $2::uuid, $3::timestamptz, 90, 3)",
     [ids.organization, ids.location, publicTime],
   );
   await expectDatabaseError(
-    () => db.query(
-      "select private.assert_public_reservation_slot_contract($1::uuid, $2::uuid, $3::timestamptz, 120, 3)",
-      [ids.organization, ids.location, publicTime],
-    ),
+    () =>
+      db.query(
+        "select private.assert_public_reservation_slot_contract($1::uuid, $2::uuid, $3::timestamptz, 120, 3)",
+        [ids.organization, ids.location, publicTime],
+      ),
     "23514",
     "stale duration against party turn rule",
   );
   await expectDatabaseError(
-    () => db.query(`
+    () =>
+      db.query(
+        `
       insert into public.reservation_turn_rules (
         organization_id, service_period_id, min_party_size,
         max_party_size, duration_minutes
       ) values ($1::uuid, $2::uuid, 2, 4, 105)
-    `, [ids.organization, ids.period]),
+    `,
+        [ids.organization, ids.period],
+      ),
     "23P01",
     "overlapping party turn rules",
   );
   await expectDatabaseError(
-    () => db.query(
-      "select private.assert_public_reservation_slot_contract($1::uuid, $2::uuid, $3::timestamptz + interval '3 hours', 120, 2)",
-      [ids.organization, ids.location, publicTime],
-    ),
+    () =>
+      db.query(
+        "select private.assert_public_reservation_slot_contract($1::uuid, $2::uuid, $3::timestamptz + interval '3 hours', 120, 2)",
+        [ids.organization, ids.location, publicTime],
+      ),
     "23514",
     "turn duration extending past service end",
   );
@@ -1664,10 +1804,11 @@ try {
     [ids.period],
   );
   await expectDatabaseError(
-    () => db.query(
-      "select private.assert_public_reservation_slot_contract($1::uuid, $2::uuid, $3::timestamptz, 120, 2)",
-      [ids.organization, ids.location, publicTime],
-    ),
+    () =>
+      db.query(
+        "select private.assert_public_reservation_slot_contract($1::uuid, $2::uuid, $3::timestamptz, 120, 2)",
+        [ids.organization, ids.location, publicTime],
+      ),
     "23514",
     "slot signed before service-policy edit",
   );
@@ -1792,7 +1933,13 @@ try {
           'Unavailable', 'Adapter', 'unavailable@example.invalid', '+12125550999',
           null, array[$5::uuid], array['sms']::text[]
         )`,
-        [unavailableAdapterRequest, ids.organization, ids.location, publicTime, ids.otherTable],
+        [
+          unavailableAdapterRequest,
+          ids.organization,
+          ids.location,
+          publicTime,
+          ids.otherTable,
+        ],
       ),
     "55000",
     "public create without an effective verification adapter",
@@ -1807,7 +1954,9 @@ try {
     ).rows[0].count,
   );
   if (unavailableHoldCount !== 0)
-    throw new Error("Failed delivery precondition left a provisional booking record");
+    throw new Error(
+      "Failed delivery precondition left a provisional booking record",
+    );
   await db.query(
     "update public.reservation_settings set verification_channels = array['email','sms']::text[] where organization_id = $1::uuid and location_id = $2::uuid",
     [ids.organization, ids.location],
@@ -1872,9 +2021,13 @@ try {
     )
   ).rows;
   if (
-    hostCapacitySnapshot.filter((row) => row.kind === "reservation").length !== 1
-    || hostCapacitySnapshot.filter((row) => row.kind === "hold").length !== 1
-    || hostCapacitySnapshot.reduce((sum, row) => sum + Number(row.partySize), 0) !== 12
+    hostCapacitySnapshot.filter((row) => row.kind === "reservation").length !==
+      1 ||
+    hostCapacitySnapshot.filter((row) => row.kind === "hold").length !== 1 ||
+    hostCapacitySnapshot.reduce(
+      (sum, row) => sum + Number(row.partySize),
+      0,
+    ) !== 12
   ) {
     throw new Error(
       `Host-safe capacity snapshot diverged from DB pacing: ${JSON.stringify(hostCapacitySnapshot)}`,
@@ -1882,13 +2035,14 @@ try {
   }
   await assumeUser(ids.employee);
   await expectDatabaseError(
-    () => db.query(
-      `select * from public.reservation_capacity_snapshot(
+    () =>
+      db.query(
+        `select * from public.reservation_capacity_snapshot(
         $1::uuid, $2::uuid, $3::timestamptz - interval '1 hour',
         $3::timestamptz + interval '1 hour'
       )`,
-      [ids.organization, ids.location, publicTime],
-    ),
+        [ids.organization, ids.location, publicTime],
+      ),
     "42501",
     "capacity snapshot without a reservation capability",
   );
@@ -1941,16 +2095,27 @@ try {
     JSON.stringify({ role: "service_role" }),
   ]);
 
-  const claimNow = (
-    await db.query("select clock_timestamp() as value")
-  ).rows[0].value;
+  const claimNow = (await db.query("select clock_timestamp() as value")).rows[0]
+    .value;
   const allClaimedMessages = (
     await db.query(
       "select * from public.service_claim_reservation_message_outbox($1::uuid, 20, 30, $2::timestamptz)",
       ["d5200000-0000-4000-8000-000000000001", claimNow],
     )
   ).rows;
-  const claimedMessages = allClaimedMessages.filter(
+  const allBegunMessages = [];
+  for (const claim of allClaimedMessages) {
+    const begun = (
+      await db.query(
+        `select public.service_begin_reservation_message_delivery(
+          $1::uuid, $2::uuid, $3::timestamptz
+        ) result`,
+        [claim.id, claim.claimToken, claimNow],
+      )
+    ).rows[0].result;
+    allBegunMessages.push({ ...begun, claimToken: claim.claimToken });
+  }
+  const claimedMessages = allBegunMessages.filter(
     (message) => message.bookingHoldId === publicReservation.holdId,
   );
   if (
@@ -1961,9 +2126,11 @@ try {
         message.recipientEmail !== "jamie.reservation@example.invalid",
     )
   ) {
-    throw new Error(`Provisional outbox claim was incomplete: ${JSON.stringify(claimedMessages)}`);
+    throw new Error(
+      `Provisional outbox claim was incomplete: ${JSON.stringify(claimedMessages)}`,
+    );
   }
-  for (const message of allClaimedMessages.filter(
+  for (const message of allBegunMessages.filter(
     (candidate) => candidate.bookingHoldId !== publicReservation.holdId,
   )) {
     await db.query(
@@ -1975,17 +2142,17 @@ try {
     "select public.service_complete_reservation_message_outbox($1::uuid, $2::uuid, 'sent', null, null, 'provider-1')",
     [claimedMessages[0].id, claimedMessages[0].claimToken],
   );
-  const reclaimed = (
+  const postBeginReclaims = (
     await db.query(
-      "select * from public.service_claim_reservation_message_outbox($1::uuid, 1, 30, $2::timestamptz)",
+      "select * from public.service_claim_reservation_message_outbox($1::uuid, 20, 30, $2::timestamptz)",
       [
         "d5200000-0000-4000-8000-000000000002",
         new Date(new Date(claimNow).valueOf() + 60_000).toISOString(),
       ],
     )
-  ).rows[0];
-  if (!reclaimed || reclaimed.id !== claimedMessages[1].id || reclaimed.claimToken === claimedMessages[1].claimToken)
-    throw new Error("Stale sending message was not reclaimed with a fresh lease");
+  ).rows;
+  if (postBeginReclaims.some((message) => message.id === claimedMessages[1].id))
+    throw new Error("An expired post-begin message was replayed");
   await expectDatabaseError(
     () =>
       db.query(
@@ -1993,18 +2160,41 @@ try {
         [claimedMessages[1].id, claimedMessages[1].claimToken],
       ),
     "P0002",
-    "stale outbox claim completion",
+    "uncertain outbox claim completion",
   );
-  await db.query(
-    "select public.service_complete_reservation_message_outbox($1::uuid, $2::uuid, 'sent', null, null, 'provider-2')",
-    [reclaimed.id, reclaimed.claimToken],
-  );
+  await db.exec("reset role");
+  const uncertainMessage = (
+    await db.query(
+      `select status, last_error_code, claim_token
+      from public.reservation_message_outbox where id = $1::uuid`,
+      [claimedMessages[1].id],
+    )
+  ).rows[0];
+  if (
+    uncertainMessage.status !== "uncertain" ||
+    uncertainMessage.last_error_code !==
+      "provider_outcome_unknown_after_lease" ||
+    uncertainMessage.claim_token !== null
+  ) {
+    throw new Error(
+      `Expired post-begin delivery was not made terminally uncertain: ${JSON.stringify(uncertainMessage)}`,
+    );
+  }
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
 
   await expectDatabaseError(
     () =>
       db.query(
         "select public.service_confirm_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'email', array['sms']::text[])",
-        [ids.organization, ids.location, publicReservation.holdId, confirmationFingerprint],
+        [
+          ids.organization,
+          ids.location,
+          publicReservation.holdId,
+          confirmationFingerprint,
+        ],
       ),
     "55000",
     "confirmation without its verified delivery adapter",
@@ -2022,7 +2212,12 @@ try {
     () =>
       db.query(
         "select public.service_confirm_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'email', array['email','sms']::text[])",
-        [ids.organization, ids.location, publicReservation.holdId, confirmationFingerprint],
+        [
+          ids.organization,
+          ids.location,
+          publicReservation.holdId,
+          confirmationFingerprint,
+        ],
       ),
     "55000",
     "confirmation after booking kill switch",
@@ -2039,7 +2234,12 @@ try {
   const confirmed = (
     await db.query(
       "select public.service_confirm_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'email', array['email','sms']::text[]) as result",
-      [ids.organization, ids.location, publicReservation.holdId, confirmationFingerprint],
+      [
+        ids.organization,
+        ids.location,
+        publicReservation.holdId,
+        confirmationFingerprint,
+      ],
     )
   ).rows[0].result;
   if (confirmed.status !== "booked")
@@ -2048,7 +2248,12 @@ try {
   const confirmationReplay = (
     await db.query(
       "select public.service_confirm_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'email', array['email','sms']::text[]) as result",
-      [ids.organization, ids.location, publicReservation.holdId, confirmationFingerprint],
+      [
+        ids.organization,
+        ids.location,
+        publicReservation.holdId,
+        confirmationFingerprint,
+      ],
     )
   ).rows[0].result;
   if (!confirmationReplay.replayed)
@@ -2110,7 +2315,14 @@ try {
   const exchanged = (
     await db.query(
       "select public.service_exchange_reservation_management($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) as result",
-      [ids.organization, ids.location, publicReservationId, exchangeFingerprint, manageHash, browserBindingHash],
+      [
+        ids.organization,
+        ids.location,
+        publicReservationId,
+        exchangeFingerprint,
+        manageHash,
+        browserBindingHash,
+      ],
     )
   ).rows[0].result;
   if (exchanged.replayed || !exchanged.manageExpiresAt)
@@ -2118,7 +2330,14 @@ try {
   const exchangeReplay = (
     await db.query(
       "select public.service_exchange_reservation_management($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) as result",
-      [ids.organization, ids.location, publicReservationId, exchangeFingerprint, manageHash, browserBindingHash],
+      [
+        ids.organization,
+        ids.location,
+        publicReservationId,
+        exchangeFingerprint,
+        manageHash,
+        browserBindingHash,
+      ],
     )
   ).rows[0].result;
   if (!exchangeReplay.replayed)
@@ -2127,7 +2346,14 @@ try {
     () =>
       db.query(
         "select public.service_exchange_reservation_management($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::text)",
-        [ids.organization, ids.location, publicReservationId, exchangeFingerprint, "e".repeat(64), browserBindingHash],
+        [
+          ids.organization,
+          ids.location,
+          publicReservationId,
+          exchangeFingerprint,
+          "e".repeat(64),
+          browserBindingHash,
+        ],
       ),
     "23505",
     "mismatched management exchange retry",
@@ -2136,7 +2362,14 @@ try {
     () =>
       db.query(
         "select public.service_exchange_reservation_management($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::text)",
-        [ids.organization, ids.location, publicReservationId, exchangeFingerprint, manageHash, "5".repeat(64)],
+        [
+          ids.organization,
+          ids.location,
+          publicReservationId,
+          exchangeFingerprint,
+          manageHash,
+          "5".repeat(64),
+        ],
       ),
     "23505",
     "management exchange from a different browser binding",
@@ -2169,7 +2402,14 @@ try {
     () =>
       db.query(
         "select public.service_exchange_reservation_management($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::text)",
-        [ids.organization, ids.location, ids.expiredManageReservation, "4".repeat(64), "3".repeat(64), browserBindingHash],
+        [
+          ids.organization,
+          ids.location,
+          ids.expiredManageReservation,
+          "4".repeat(64),
+          "3".repeat(64),
+          browserBindingHash,
+        ],
       ),
     "P0002",
     "management exchange whose resulting token is already expired",
@@ -2195,7 +2435,14 @@ try {
         $1::uuid, $2::uuid, $3::uuid, $4::text, $5::timestamptz, 120, 2,
         'Anniversary updated', array[$6::uuid]
       ) as result`,
-      [modifyRequest, ids.organization, ids.location, manageHash, modifiedTime, ids.otherTable],
+      [
+        modifyRequest,
+        ids.organization,
+        ids.location,
+        manageHash,
+        modifiedTime,
+        ids.otherTable,
+      ],
     )
   ).rows[0].result;
   if (
@@ -2250,7 +2497,14 @@ try {
         $1::uuid, $2::uuid, $3::uuid, $4::text, $5::timestamptz, 120, 2,
         'Anniversary updated', array[$6::uuid]
       ) as result`,
-      [modifyRequest, ids.organization, ids.location, manageHash, modifiedTime, ids.otherTable],
+      [
+        modifyRequest,
+        ids.organization,
+        ids.location,
+        manageHash,
+        modifiedTime,
+        ids.otherTable,
+      ],
     )
   ).rows[0].result;
   if (!modifyReplay.replayed)
@@ -2271,7 +2525,14 @@ try {
           $1::uuid, $2::uuid, $3::uuid, $4::text,
           $5::timestamptz + interval '1 day', 120, 2, null, array[$6::uuid]
         )`,
-        ["d5100000-0000-4000-8000-000000000004", ids.organization, ids.location, manageHash, modifiedTime, ids.otherTable],
+        [
+          "d5100000-0000-4000-8000-000000000004",
+          ids.organization,
+          ids.location,
+          manageHash,
+          modifiedTime,
+          ids.otherTable,
+        ],
       ),
     "23514",
     "public modification after booking kill switch",
@@ -2293,7 +2554,13 @@ try {
           clock_timestamp() + interval '31 days', 120, 2, null,
           array[$5::uuid]
         )`,
-        ["d5100000-0000-4000-8000-000000000005", ids.organization, ids.location, manageHash, ids.otherTable],
+        [
+          "d5100000-0000-4000-8000-000000000005",
+          ids.organization,
+          ids.location,
+          manageHash,
+          ids.otherTable,
+        ],
       ),
     "23514",
     "public modification outside booking horizon",
@@ -2301,7 +2568,12 @@ try {
   const cancelled = (
     await db.query(
       "select public.service_cancel_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'Plans changed') as result",
-      ["d5100000-0000-4000-8000-000000000001", ids.organization, ids.location, manageHash],
+      [
+        "d5100000-0000-4000-8000-000000000001",
+        ids.organization,
+        ids.location,
+        manageHash,
+      ],
     )
   ).rows[0].result;
   if (cancelled.status !== "cancelled")
@@ -2309,7 +2581,12 @@ try {
   const cancellationReplay = (
     await db.query(
       "select public.service_cancel_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'Plans changed') as result",
-      ["d5100000-0000-4000-8000-000000000001", ids.organization, ids.location, manageHash],
+      [
+        "d5100000-0000-4000-8000-000000000001",
+        ids.organization,
+        ids.location,
+        manageHash,
+      ],
     )
   ).rows[0].result;
   if (!cancellationReplay.replayed)
@@ -2325,7 +2602,13 @@ try {
         'Injected', 'SMS', 'atomic@example.invalid', '+19995550101',
         null, array[$5::uuid], array['email','sms']::text[]
       ) as result`,
-      [ids.smsInjectionRequest, ids.organization, ids.location, smsInjectionTime, ids.otherTable],
+      [
+        ids.smsInjectionRequest,
+        ids.organization,
+        ids.location,
+        smsInjectionTime,
+        ids.otherTable,
+      ],
     )
   ).rows[0].result;
   const smsConfirmed = (
@@ -2363,7 +2646,9 @@ try {
     JSON.stringify(smsIdentity.delivery_channels) !== JSON.stringify(["sms"]) ||
     Number(smsIdentity.active_verify_messages) !== 0
   ) {
-    throw new Error(`SMS verification trusted an unproven email: ${JSON.stringify(smsIdentity)}`);
+    throw new Error(
+      `SMS verification trusted an unproven email: ${JSON.stringify(smsIdentity)}`,
+    );
   }
   await db.exec("set role service_role");
   await db.query("select set_config('request.jwt.claims', $1, false)", [
@@ -2373,7 +2658,12 @@ try {
     () =>
       db.query(
         "select public.service_confirm_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'email', array['email','sms']::text[])",
-        [ids.organization, ids.location, smsInjectionHold.holdId, "f".repeat(64)],
+        [
+          ids.organization,
+          ids.location,
+          smsInjectionHold.holdId,
+          "f".repeat(64),
+        ],
       ),
     "23505",
     "confirmation replay with a confused channel",
@@ -2389,13 +2679,24 @@ try {
         'Same', 'Phone', 'unproven-other@example.invalid', '1 (999) 555-0101',
         null, array[$5::uuid], array['sms']::text[]
       ) as result`,
-      [ids.smsFormatReplayRequest, ids.organization, ids.location, smsFormatReplayTime, ids.otherTable],
+      [
+        ids.smsFormatReplayRequest,
+        ids.organization,
+        ids.location,
+        smsFormatReplayTime,
+        ids.otherTable,
+      ],
     )
   ).rows[0].result;
   const smsFormatConfirmed = (
     await db.query(
       "select public.service_confirm_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'sms', array['sms']::text[]) as result",
-      [ids.organization, ids.location, smsFormatReplayHold.holdId, "7".repeat(64)],
+      [
+        ids.organization,
+        ids.location,
+        smsFormatReplayHold.holdId,
+        "7".repeat(64),
+      ],
     )
   ).rows[0].result;
   await db.exec("reset role");
@@ -2406,7 +2707,9 @@ try {
     )
   ).rows[0].guest_id;
   if (smsFormatGuestId !== smsIdentity.guest_id)
-    throw new Error("Equivalent SMS phone formats created duplicate CRM identities");
+    throw new Error(
+      "Equivalent SMS phone formats created duplicate CRM identities",
+    );
   await db.exec("set role service_role");
   await db.query("select set_config('request.jwt.claims', $1, false)", [
     JSON.stringify({ role: "service_role" }),
@@ -2422,13 +2725,24 @@ try {
         'Injected', 'Email', 'verified-new@example.invalid', '+12125550122',
         null, array[$5::uuid], array['email','sms']::text[]
       ) as result`,
-      [ids.emailInjectionRequest, ids.organization, ids.location, emailInjectionTime, ids.otherTable],
+      [
+        ids.emailInjectionRequest,
+        ids.organization,
+        ids.location,
+        emailInjectionTime,
+        ids.otherTable,
+      ],
     )
   ).rows[0].result;
   const emailConfirmed = (
     await db.query(
       "select public.service_confirm_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'email', array['email','sms']::text[]) as result",
-      [ids.organization, ids.location, emailInjectionHold.holdId, "9".repeat(64)],
+      [
+        ids.organization,
+        ids.location,
+        emailInjectionHold.holdId,
+        "9".repeat(64),
+      ],
     )
   ).rows[0].result;
   await db.exec("reset role");
@@ -2447,7 +2761,9 @@ try {
     emailIdentity.email !== "verified-new@example.invalid" ||
     emailIdentity.phone !== null
   ) {
-    throw new Error(`Email verification trusted an unproven phone: ${JSON.stringify(emailIdentity)}`);
+    throw new Error(
+      `Email verification trusted an unproven phone: ${JSON.stringify(emailIdentity)}`,
+    );
   }
   await db.exec("set role service_role");
   await db.query("select set_config('request.jwt.claims', $1, false)", [
@@ -2464,19 +2780,37 @@ try {
         'Existing', 'Guest', 'atomic@example.invalid', '+19995550199',
         null, array[$5::uuid], array['email','sms']::text[]
       ) as result`,
-      [ids.matchedContactRequest, ids.organization, ids.location, matchedContactTime, ids.otherTable],
+      [
+        ids.matchedContactRequest,
+        ids.organization,
+        ids.location,
+        matchedContactTime,
+        ids.otherTable,
+      ],
     )
   ).rows[0].result;
   const matchedConfirmed = (
     await db.query(
       "select public.service_confirm_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'email', array['email','sms']::text[]) as result",
-      [ids.organization, ids.location, matchedContactHold.holdId, "2".repeat(64)],
+      [
+        ids.organization,
+        ids.location,
+        matchedContactHold.holdId,
+        "2".repeat(64),
+      ],
     )
   ).rows[0].result;
   const matchedExchange = (
     await db.query(
       "select public.service_exchange_reservation_management($1::uuid, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) as result",
-      [ids.organization, ids.location, matchedConfirmed.reservationId, "1".repeat(64), "0".repeat(64), "a".repeat(64)],
+      [
+        ids.organization,
+        ids.location,
+        matchedConfirmed.reservationId,
+        "1".repeat(64),
+        "0".repeat(64),
+        "a".repeat(64),
+      ],
     )
   ).rows[0].result;
   if (!matchedExchange.manageExpiresAt)
@@ -2490,18 +2824,34 @@ try {
         $1::uuid, $2::uuid, $3::uuid, $4::text, $5::timestamptz,
         120, 2, null, array[$6::uuid]
       ) as result`,
-      ["d5100000-0000-4000-8000-000000000006", ids.organization, ids.location, "0".repeat(64), matchedModifiedTime, ids.otherTable],
+      [
+        "d5100000-0000-4000-8000-000000000006",
+        ids.organization,
+        ids.location,
+        "0".repeat(64),
+        matchedModifiedTime,
+        ids.otherTable,
+      ],
     )
   ).rows[0].result;
   if (!matchedModified.manageExpiresAt)
     throw new Error("Public modification omitted refreshed management expiry");
   await db.query(
     "select public.service_enqueue_reservation_reminders($1::timestamptz)",
-    [new Date(new Date(matchedModifiedTime).valueOf() - 60 * 60 * 1000).toISOString()],
+    [
+      new Date(
+        new Date(matchedModifiedTime).valueOf() - 60 * 60 * 1000,
+      ).toISOString(),
+    ],
   );
   await db.query(
     "select public.service_cancel_public_reservation($1::uuid, $2::uuid, $3::uuid, $4::text, 'Channel proof test')",
-    ["d5100000-0000-4000-8000-000000000007", ids.organization, ids.location, "0".repeat(64)],
+    [
+      "d5100000-0000-4000-8000-000000000007",
+      ids.organization,
+      ids.location,
+      "0".repeat(64),
+    ],
   );
   await db.exec("reset role");
   const matchedEvidence = (
@@ -2526,7 +2876,9 @@ try {
     !matchedEvidence.templates.includes("reservation_reminder_2h") ||
     !matchedEvidence.templates.includes("reservation_cancelled")
   ) {
-    throw new Error(`Public messaging escaped its proven channel: ${JSON.stringify(matchedEvidence)}`);
+    throw new Error(
+      `Public messaging escaped its proven channel: ${JSON.stringify(matchedEvidence)}`,
+    );
   }
   await db.exec("set role service_role");
   await db.query("select set_config('request.jwt.claims', $1, false)", [
@@ -2665,7 +3017,9 @@ try {
     Number(expiredEvidence.active_hold_messages) !== 0 ||
     expiredEvidence.waitlist_status !== "expired"
   ) {
-    throw new Error(`Expired deadline cleanup is incomplete: ${JSON.stringify(expiredEvidence)}`);
+    throw new Error(
+      `Expired deadline cleanup is incomplete: ${JSON.stringify(expiredEvidence)}`,
+    );
   }
 
   // A hold that starts on the prior calendar/service day can leave an expired
@@ -3017,7 +3371,14 @@ try {
     ) values
       ($1::uuid, $3::uuid, $4::uuid, $5::uuid, clock_timestamp(), 2, 2, 10000, 'manual'),
       ($2::uuid, $3::uuid, $6::uuid, $5::uuid, clock_timestamp(), 2, 2, 12000, 'manual')`,
-    [ids.guestVisit, ids.crossLocationGuestVisit, ids.organization, ids.location, reservationGuestId, ids.otherLocation],
+    [
+      ids.guestVisit,
+      ids.crossLocationGuestVisit,
+      ids.organization,
+      ids.location,
+      reservationGuestId,
+      ids.otherLocation,
+    ],
   );
   await db.query(
     `insert into public.guests (
@@ -3161,7 +3522,8 @@ try {
     ).rows[0].count,
   );
   const managerGuestVisitCount = Number(
-    (await db.query("select count(*) count from public.guest_visits")).rows[0].count,
+    (await db.query("select count(*) count from public.guest_visits")).rows[0]
+      .count,
   );
   const managerRemoteGuestEvidence = (
     await db.query(
@@ -3279,16 +3641,15 @@ try {
       ],
     ],
   ]) {
-    await expectDatabaseError(
-      () => db.query(query, params),
-      "42501",
-      label,
-    );
+    await expectDatabaseError(() => db.query(query, params), "42501", label);
   }
   if (
-    managerReservationCount !== 0 || managerRawGuestCount !== 0 ||
+    managerReservationCount !== 0 ||
+    managerRawGuestCount !== 0 ||
     managerGuestVisitCount !== 0 ||
-    Object.values(managerRemoteGuestEvidence).some((value) => Number(value) !== 0)
+    Object.values(managerRemoteGuestEvidence).some(
+      (value) => Number(value) !== 0,
+    )
   )
     throw new Error(
       `Legacy Manager RLS shortcuts still expose reservations or raw CRM: ${JSON.stringify({ managerReservationCount, managerRawGuestCount, managerGuestVisitCount })}`,
@@ -3304,7 +3665,13 @@ try {
       'grant', 'Reservation Gate 0 authorization test', current_date, true,
       $5::uuid, $5::uuid
     )`,
-    [ids.capabilityOverride, ids.organization, ids.employee, ids.location, ids.owner],
+    [
+      ids.capabilityOverride,
+      ids.organization,
+      ids.employee,
+      ids.location,
+      ids.owner,
+    ],
   );
   await db.query(
     `insert into public.reservations (
@@ -3314,7 +3681,12 @@ try {
       $1::uuid, $2::uuid, $3::uuid, $4::uuid,
       clock_timestamp() + interval '8 days', 2, 'booked', 'manual', 'staff'
     )`,
-    [ids.crossLocationReservation, ids.organization, ids.otherLocation, reservationGuestId],
+    [
+      ids.crossLocationReservation,
+      ids.organization,
+      ids.otherLocation,
+      reservationGuestId,
+    ],
   );
   await db.exec("set role authenticated");
   await assumeUser(ids.employee);
@@ -3404,11 +3776,14 @@ try {
     ).rows[0].count,
   );
   const operateRawVisitCount = Number(
-    (await db.query("select count(*) count from public.guest_visits")).rows[0].count,
+    (await db.query("select count(*) count from public.guest_visits")).rows[0]
+      .count,
   );
   if (
-    operateReadCount !== 0 || operateSummary.length !== 1 ||
-    operateRawGuestCount !== 0 || operateRawVisitCount !== 0
+    operateReadCount !== 0 ||
+    operateSummary.length !== 1 ||
+    operateRawGuestCount !== 0 ||
+    operateRawVisitCount !== 0
   )
     throw new Error("Operate-only safe read boundary is inconsistent");
   for (const [label, query] of [
@@ -3438,7 +3813,9 @@ try {
     )
   ).rows[0].result;
   if (operateTransition.status !== "confirmed")
-    throw new Error("Operate-only capability could not run an approved command");
+    throw new Error(
+      "Operate-only capability could not run an approved command",
+    );
 
   await db.exec("reset role");
   await db.query(
@@ -3478,7 +3855,9 @@ try {
     !viewHostSnapshot.some((row) => row.id === ids.staffReservation) ||
     viewDirectReservationCount !== 0
   )
-    throw new Error("View-only capability could not use the safe read boundary");
+    throw new Error(
+      "View-only capability could not use the safe read boundary",
+    );
   await expectDatabaseError(
     () =>
       db.query(
@@ -3541,7 +3920,9 @@ try {
     ).rows[0].count,
   );
   if (expiredGrantReadCount !== 0)
-    throw new Error("Expired reservation capability still authorized core reads");
+    throw new Error(
+      "Expired reservation capability still authorized core reads",
+    );
   await expectDatabaseError(
     () =>
       db.query(
@@ -3584,7 +3965,9 @@ try {
     ).rows[0].count,
   );
   if (crossLocationCount !== 0)
-    throw new Error("Location-scoped reservation grant leaked another location");
+    throw new Error(
+      "Location-scoped reservation grant leaked another location",
+    );
   const crossLocationVisitCount = Number(
     (
       await db.query(
@@ -3594,7 +3977,9 @@ try {
     ).rows[0].count,
   );
   if (crossLocationVisitCount !== 0)
-    throw new Error("Reservation operate grant leaked cross-location guest visits");
+    throw new Error(
+      "Reservation operate grant leaked cross-location guest visits",
+    );
   await expectDatabaseError(
     () =>
       db.query(
@@ -3670,11 +4055,7 @@ try {
       ],
     ],
   ]) {
-    await expectDatabaseError(
-      () => db.query(query, params),
-      "42501",
-      label,
-    );
+    await expectDatabaseError(() => db.query(query, params), "42501", label);
   }
   const crmReservationRows = (
     await db.query(
@@ -3686,7 +4067,9 @@ try {
     )
   ).rows;
   if (crmReservationRows.length !== 1)
-    throw new Error("Exact guest.manage reservation-history read was not preserved");
+    throw new Error(
+      "Exact guest.manage reservation-history read was not preserved",
+    );
   const locationScopedGuestEvidence = (
     await db.query(
       `select
@@ -4112,7 +4495,9 @@ try {
     mergeRecheckIndex <= mergeLockIndex ||
     mergeMutationIndex <= mergeRecheckIndex
   ) {
-    throw new Error("Merge authorization is not rechecked after stable row locks");
+    throw new Error(
+      "Merge authorization is not rechecked after stable row locks",
+    );
   }
 
   const mergeIdentityLoopIndex = mergeKernelDefinition.indexOf(
@@ -4149,9 +4534,10 @@ try {
       "target_snapshot.phone",
       "case when result_email is not null",
       "case when result_phone is not null",
-    ].every((marker) =>
-      mergeKernelDefinition.indexOf(marker, mergeIdentityLoopIndex) >
-        mergeIdentityLoopIndex
+    ].every(
+      (marker) =>
+        mergeKernelDefinition.indexOf(marker, mergeIdentityLoopIndex) >
+        mergeIdentityLoopIndex,
     )
   ) {
     throw new Error(
@@ -4403,7 +4789,11 @@ try {
         'shared.conflict@example.invalid', '+1 646 555 0101', 'manual'),
       ($2::uuid, $3::uuid, 'Shared phone conflict',
         'shared.phone@example.invalid', '1-212-555-0188', 'manual')`,
-    [ids.sharedEmailConflictGuest, ids.sharedPhoneConflictGuest, ids.organization],
+    [
+      ids.sharedEmailConflictGuest,
+      ids.sharedPhoneConflictGuest,
+      ids.organization,
+    ],
   );
   await db.query(
     `insert into public.guest_locations (
@@ -4677,7 +5067,9 @@ try {
       ) definition`,
     )
   ).rows[0].definition.toLowerCase();
-  const identityLoopIndex = saveGuestDefinition.indexOf("for identity_lock_key in");
+  const identityLoopIndex = saveGuestDefinition.indexOf(
+    "for identity_lock_key in",
+  );
   const oldEmailKeyIndex = saveGuestDefinition.indexOf(
     "snapshot_guest.email",
     identityLoopIndex,
@@ -4720,12 +5112,13 @@ try {
     oldPhoneKeyIndex <= identityLoopIndex ||
     newEmailKeyIndex <= identityLoopIndex ||
     newPhoneKeyIndex <= identityLoopIndex ||
-    sortedKeyIndex <= Math.max(
-      oldEmailKeyIndex,
-      oldPhoneKeyIndex,
-      newEmailKeyIndex,
-      newPhoneKeyIndex,
-    ) ||
+    sortedKeyIndex <=
+      Math.max(
+        oldEmailKeyIndex,
+        oldPhoneKeyIndex,
+        newEmailKeyIndex,
+        newPhoneKeyIndex,
+      ) ||
     lockedGuestIndex <= sortedKeyIndex ||
     staleSnapshotIndex <= lockedGuestIndex ||
     freshScopeIndex <= lockedGuestIndex ||
@@ -4739,16 +5132,17 @@ try {
   await db.query(
     `delete from public.user_capability_overrides
       where id = any($1::uuid[])`,
-    [[
-      ids.employeeOtherLocationManageOverride,
-      ids.employeeSharedSensitiveAOverride,
-      ids.employeeSharedSensitiveBOverride,
-    ]],
+    [
+      [
+        ids.employeeOtherLocationManageOverride,
+        ids.employeeSharedSensitiveAOverride,
+        ids.employeeSharedSensitiveBOverride,
+      ],
+    ],
   );
-  await db.query(
-    `delete from public.guest_locations where id = $1::uuid`,
-    [ids.sharedGuestLocation],
-  );
+  await db.query(`delete from public.guest_locations where id = $1::uuid`, [
+    ids.sharedGuestLocation,
+  ]);
   await db.query(
     `delete from public.location_memberships where id = $1::uuid`,
     [ids.employeeOtherLocationMembership],
@@ -4996,7 +5390,11 @@ try {
       ],
     )
   ).rows[0];
-  expectExactKeys(consentCreate, ["id", "captured_at"], "service_record_guest_consent");
+  expectExactKeys(
+    consentCreate,
+    ["id", "captured_at"],
+    "service_record_guest_consent",
+  );
   if (
     consentCreate.id !== ids.localGuestConsent ||
     consentReplay.id !== consentCreate.id
@@ -5023,7 +5421,10 @@ try {
     )
   ).rows[0];
   expectExactKeys(noteCreate, ["id", "created_at"], "service_add_guest_note");
-  if (noteCreate.id !== ids.localGuestNoteCommand || noteReplay.id !== noteCreate.id) {
+  if (
+    noteCreate.id !== ids.localGuestNoteCommand ||
+    noteReplay.id !== noteCreate.id
+  ) {
     throw new Error(
       `Note fixed DTO replay failed: ${JSON.stringify({ noteCreate, noteReplay })}`,
     );
@@ -5154,11 +5555,7 @@ try {
       ],
     ],
   ]) {
-    await expectDatabaseError(
-      () => db.query(query, params),
-      "42501",
-      label,
-    );
+    await expectDatabaseError(() => db.query(query, params), "42501", label);
   }
 
   await db.exec("reset role");
@@ -5538,7 +5935,9 @@ try {
     ).rows[0].count,
   );
   if (ownerGuestCount !== 1)
-    throw new Error("Authorized Guests workspace access was not preserved for Owner");
+    throw new Error(
+      "Authorized Guests workspace access was not preserved for Owner",
+    );
   const ownerRemoteGuestEvidence = (
     await db.query(
       `select
@@ -5569,10 +5968,13 @@ try {
     "Owner browser reservation management identifier read",
   );
   const ownerVisitCount = Number(
-    (await db.query("select count(*) count from public.guest_visits")).rows[0].count,
+    (await db.query("select count(*) count from public.guest_visits")).rows[0]
+      .count,
   );
   if (ownerVisitCount !== 2)
-    throw new Error("Authorized guest-visit workspace access was not preserved for Owner");
+    throw new Error(
+      "Authorized guest-visit workspace access was not preserved for Owner",
+    );
 
   await db.exec("reset role");
   await db.query("select set_config('request.jwt.claims', '{}', false)");
@@ -5701,18 +6103,22 @@ try {
   await db.query(
     `insert into public.reservation_message_outbox (
       organization_id, location_id, booking_hold_id, channel, template_key,
-      dedupe_key, next_attempt_at, created_at, updated_at
+      template_data, dedupe_key, next_attempt_at, created_at, updated_at
     ) values
       ($1::uuid, $2::uuid, $4::uuid, 'email', 'reservation_verify',
+       '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
        'claim-guard:hold:non-pending', '2000-01-02 00:00:00+00',
        '2000-01-02 00:00:00+00', $6::timestamptz),
       ($1::uuid, $3::uuid, $5::uuid, 'email', 'reservation_verify',
+       '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
        'claim-guard:hold:wrong-location', '2000-01-02 12:00:00+00',
        '2000-01-02 12:00:00+00', $6::timestamptz),
       ($1::uuid, $2::uuid, $7::uuid, 'email', 'reservation_verify',
+       '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
        'claim-guard:hold:near-expiry', '2000-01-02 18:00:00+00',
        '2000-01-02 18:00:00+00', $6::timestamptz),
       ($1::uuid, $2::uuid, $5::uuid, 'email', 'reservation_verify',
+       '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
        'claim-guard:hold:live', '2000-01-03 00:00:00+00',
        '2000-01-03 00:00:00+00', $6::timestamptz)`,
     [
@@ -5817,44 +6223,50 @@ try {
       claimGuardNow,
     ],
   );
-  await db.query(
-    `insert into public.reservation_message_outbox (
-      organization_id, location_id, reservation_id, channel, template_key,
-      dedupe_key, next_attempt_at, created_at, updated_at
-    ) values
-      ($1::uuid, $2::uuid, $3::uuid, 'email', 'reservation_reminder_24h',
-       'claim-guard:reminder:cancelled', '2000-01-06 00:00:00+00',
-       '2000-01-06 00:00:00+00', $7::timestamptz),
-      ($1::uuid, $2::uuid, $4::uuid, 'email', 'reservation_reminder_2h',
-       'claim-guard:reminder:past', '2000-01-06 01:00:00+00',
-       '2000-01-06 01:00:00+00', $7::timestamptz),
-      ($1::uuid, $2::uuid, $3::uuid, 'email', 'reservation_confirmed',
-       'claim-guard:confirmation:cancelled', '2000-01-06 02:00:00+00',
-       '2000-01-06 02:00:00+00', $7::timestamptz),
-      ($1::uuid, $2::uuid, $6::uuid, 'email', 'reservation_confirmed',
-       'claim-guard:confirmation:expired-management',
-       '2000-01-06 03:00:00+00', '2000-01-06 03:00:00+00',
-       $7::timestamptz),
-      ($1::uuid, $2::uuid, $5::uuid, 'email', 'reservation_confirmed',
-       'claim-guard:confirmation:live', '2000-01-06 04:00:00+00',
-       '2000-01-06 04:00:00+00', $7::timestamptz),
-      ($1::uuid, $2::uuid, $5::uuid, 'email', 'reservation_reminder_2h',
-       'claim-guard:reminder:live', '2000-01-07 00:00:00+00',
-       '2000-01-07 00:00:00+00', $7::timestamptz),
-      ($1::uuid, $2::uuid, $3::uuid, 'email', 'reservation_modified',
-       'claim-guard:other:modified', '2000-01-08 00:00:00+00',
-       '2000-01-08 00:00:00+00', $7::timestamptz)`,
-    [
-      ids.organization,
-      ids.location,
-      claimGuardIds.cancelledReservation,
-      claimGuardIds.pastReservation,
-      claimGuardIds.liveReminderReservation,
-      ids.expiredManageReservation,
-      claimGuardNow,
-    ],
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `insert into public.reservation_message_outbox (
+          organization_id, location_id, reservation_id, channel, template_key,
+          template_data, dedupe_key, next_attempt_at
+        ) values (
+          $1::uuid, $2::uuid, $3::uuid, 'email',
+          'reservation_reminder_2h',
+          jsonb_build_object('reservationVersion', 1),
+          'claim-guard:non-web-reminder', clock_timestamp()
+        )`,
+        [ids.organization, ids.location, claimGuardIds.liveReminderReservation],
+      ),
+    "23514",
+    "non-web reservation lifecycle outbox insert",
   );
 
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  await db.query(
+    "select public.service_enqueue_reservation_reminders($1::timestamptz)",
+    [claimGuardNow],
+  );
+  await db.exec("reset role");
+  const nonWebReminderCount = Number(
+    (
+      await db.query(
+        `select count(*) count from public.reservation_message_outbox
+        where reservation_id = $1::uuid
+          and template_key in (
+            'reservation_confirmed', 'reservation_modified',
+            'reservation_cancelled', 'reservation_reminder_24h',
+            'reservation_reminder_2h'
+          )`,
+        [claimGuardIds.liveReminderReservation],
+      )
+    ).rows[0].count,
+  );
+  if (nonWebReminderCount !== 0) {
+    throw new Error("The scheduler queued a non-web reservation message");
+  }
   await db.exec("set role service_role");
   await db.query("select set_config('request.jwt.claims', $1, false)", [
     JSON.stringify({ role: "service_role" }),
@@ -5865,13 +6277,23 @@ try {
       ["e4000000-0000-4000-8000-000000000001", claimGuardNow],
     )
   ).rows;
+  const liveHoldDispatch = liveHoldClaim[0]
+    ? (
+        await db.query(
+          `select public.service_begin_reservation_message_delivery(
+            $1::uuid, $2::uuid, $3::timestamptz
+          ) result`,
+          [liveHoldClaim[0].id, liveHoldClaim[0].claimToken, claimGuardNow],
+        )
+      ).rows[0].result
+    : null;
   if (
     liveHoldClaim.length !== 1 ||
-    liveHoldClaim[0].bookingHoldId !== claimGuardIds.liveHold ||
-    liveHoldClaim[0].templateKey !== "reservation_verify"
+    liveHoldDispatch?.bookingHoldId !== claimGuardIds.liveHold ||
+    liveHoldDispatch?.templateKey !== "reservation_verify"
   ) {
     throw new Error(
-      `Stale verification rows blocked the live claim: ${JSON.stringify(liveHoldClaim)}`,
+      `Stale verification rows blocked the live claim: ${JSON.stringify({ liveHoldClaim, liveHoldDispatch })}`,
     );
   }
   await db.query(
@@ -5885,81 +6307,32 @@ try {
       ["e4000000-0000-4000-8000-000000000002", claimGuardNow],
     )
   ).rows;
+  const liveWaitlistDispatch = liveWaitlistClaim[0]
+    ? (
+        await db.query(
+          `select public.service_begin_reservation_message_delivery(
+            $1::uuid, $2::uuid, $3::timestamptz
+          ) result`,
+          [
+            liveWaitlistClaim[0].id,
+            liveWaitlistClaim[0].claimToken,
+            claimGuardNow,
+          ],
+        )
+      ).rows[0].result
+    : null;
   if (
     liveWaitlistClaim.length !== 1 ||
-    liveWaitlistClaim[0].waitlistEntryId !== claimGuardIds.liveWaitlist ||
-    liveWaitlistClaim[0].templateKey !== "waitlist_table_ready"
+    liveWaitlistDispatch?.waitlistEntryId !== claimGuardIds.liveWaitlist ||
+    liveWaitlistDispatch?.templateKey !== "waitlist_table_ready"
   ) {
     throw new Error(
-      `Stale waitlist rows blocked the live claim: ${JSON.stringify(liveWaitlistClaim)}`,
+      `Stale waitlist rows blocked the live claim: ${JSON.stringify({ liveWaitlistClaim, liveWaitlistDispatch })}`,
     );
   }
   await db.query(
     "select public.service_complete_reservation_message_outbox($1::uuid, $2::uuid, 'sent', null, null, 'claim-guard-waitlist')",
     [liveWaitlistClaim[0].id, liveWaitlistClaim[0].claimToken],
-  );
-
-  const liveConfirmationClaim = (
-    await db.query(
-      "select * from public.service_claim_reservation_message_outbox($1::uuid, 1, 30, $2::timestamptz)",
-      ["e4000000-0000-4000-8000-000000000003", claimGuardNow],
-    )
-  ).rows;
-  if (
-    liveConfirmationClaim.length !== 1 ||
-    liveConfirmationClaim[0].reservationId !==
-      claimGuardIds.liveReminderReservation ||
-    liveConfirmationClaim[0].templateKey !== "reservation_confirmed"
-  ) {
-    throw new Error(
-      `Stale confirmation rows blocked the live claim: ${JSON.stringify(liveConfirmationClaim)}`,
-    );
-  }
-  await db.query(
-    "select public.service_complete_reservation_message_outbox($1::uuid, $2::uuid, 'sent', null, null, 'claim-guard-confirmation')",
-    [liveConfirmationClaim[0].id, liveConfirmationClaim[0].claimToken],
-  );
-
-  const liveReminderClaim = (
-    await db.query(
-      "select * from public.service_claim_reservation_message_outbox($1::uuid, 1, 30, $2::timestamptz)",
-      ["e4000000-0000-4000-8000-000000000004", claimGuardNow],
-    )
-  ).rows;
-  if (
-    liveReminderClaim.length !== 1 ||
-    liveReminderClaim[0].reservationId !==
-      claimGuardIds.liveReminderReservation ||
-    liveReminderClaim[0].templateKey !== "reservation_reminder_2h"
-  ) {
-    throw new Error(
-      `Stale reminder rows blocked the live claim: ${JSON.stringify(liveReminderClaim)}`,
-    );
-  }
-  await db.query(
-    "select public.service_complete_reservation_message_outbox($1::uuid, $2::uuid, 'sent', null, null, 'claim-guard-reminder')",
-    [liveReminderClaim[0].id, liveReminderClaim[0].claimToken],
-  );
-
-  const preservedOtherClaim = (
-    await db.query(
-      "select * from public.service_claim_reservation_message_outbox($1::uuid, 1, 30, $2::timestamptz)",
-      ["e4000000-0000-4000-8000-000000000005", claimGuardNow],
-    )
-  ).rows;
-  if (
-    preservedOtherClaim.length !== 1 ||
-    preservedOtherClaim[0].reservationId !==
-      claimGuardIds.cancelledReservation ||
-    preservedOtherClaim[0].templateKey !== "reservation_modified"
-  ) {
-    throw new Error(
-      `Claim guard suppressed an unrelated template: ${JSON.stringify(preservedOtherClaim)}`,
-    );
-  }
-  await db.query(
-    "select public.service_complete_reservation_message_outbox($1::uuid, $2::uuid, 'sent', null, null, 'claim-guard-other')",
-    [preservedOtherClaim[0].id, preservedOtherClaim[0].claimToken],
   );
 
   await db.exec("reset role");
@@ -5979,36 +6352,14 @@ try {
         (select count(*) from public.reservation_message_outbox
           where dedupe_key like 'claim-guard:waitlist:%'
             and dedupe_key <> 'claim-guard:waitlist:live'
-            and status = 'queued' and attempts = 0) untouched_waitlist,
-        (select count(*) from public.reservation_message_outbox
-          where dedupe_key in (
-            'claim-guard:reminder:cancelled', 'claim-guard:reminder:past'
-          )) reminder_count,
-        (select count(*) from public.reservation_message_outbox
-          where dedupe_key in (
-            'claim-guard:reminder:cancelled', 'claim-guard:reminder:past'
-          ) and status = 'queued' and attempts = 0) untouched_reminders,
-        (select count(*) from public.reservation_message_outbox
-          where dedupe_key in (
-            'claim-guard:confirmation:cancelled',
-            'claim-guard:confirmation:expired-management'
-          )) confirmation_count,
-        (select count(*) from public.reservation_message_outbox
-          where dedupe_key in (
-            'claim-guard:confirmation:cancelled',
-            'claim-guard:confirmation:expired-management'
-          ) and status = 'queued' and attempts = 0) untouched_confirmations`,
+            and status = 'queued' and attempts = 0) untouched_waitlist`,
     )
   ).rows[0];
   if (
     Number(deadClaimEvidence.hold_count) !== 504 ||
-    Number(deadClaimEvidence.untouched_holds) !== 504 ||
+    Number(deadClaimEvidence.untouched_holds) !== 503 ||
     Number(deadClaimEvidence.waitlist_count) !== 4 ||
-    Number(deadClaimEvidence.untouched_waitlist) !== 4 ||
-    Number(deadClaimEvidence.reminder_count) !== 2 ||
-    Number(deadClaimEvidence.untouched_reminders) !== 2 ||
-    Number(deadClaimEvidence.confirmation_count) !== 2 ||
-    Number(deadClaimEvidence.untouched_confirmations) !== 2
+    Number(deadClaimEvidence.untouched_waitlist) !== 3
   ) {
     throw new Error(
       `Dead outbox rows were claimed: ${JSON.stringify(deadClaimEvidence)}`,
@@ -6136,7 +6487,9 @@ try {
       [staffWebReservationId, webManageHash, webExchangeFingerprint],
     )
   ).rows[0];
-  if (!/^[0-9a-f]{64}$/.test(staffWebInitialEvidence.verified_destination_hash)) {
+  if (
+    !/^[0-9a-f]{64}$/.test(staffWebInitialEvidence.verified_destination_hash)
+  ) {
     throw new Error(
       `Verified staff-web hold omitted destination evidence: ${JSON.stringify(staffWebInitialEvidence)}`,
     );
@@ -6183,22 +6536,6 @@ try {
     ],
   );
 
-  await db.exec("set role service_role");
-  await db.query("select set_config('request.jwt.claims', $1, false)", [
-    JSON.stringify({ role: "service_role" }),
-  ]);
-  const staleClaimInitiallyValid = (
-    await db.query(
-      `select public.service_validate_reservation_message_claim(
-        $1::uuid, $2::uuid, clock_timestamp()
-      ) valid`,
-      [staffWebIds.staleModified, staffWebIds.staleClaim],
-    )
-  ).rows[0].valid;
-  if (!staleClaimInitiallyValid)
-    throw new Error("Current staff lifecycle message claim was rejected");
-
-  await db.exec("reset role");
   await db.exec("set role authenticated");
   await assumeUser(ids.owner);
   const staffWebModified = (
@@ -6217,7 +6554,11 @@ try {
       ],
     )
   ).rows[0].result;
-  expectExactKeys(staffWebModified, lifecycleResultKeys, "verified web staff modify");
+  expectExactKeys(
+    staffWebModified,
+    lifecycleResultKeys,
+    "verified web staff modify",
+  );
   if (
     staffWebModified.version !== 2 ||
     staffWebModified.replayed ||
@@ -6236,12 +6577,7 @@ try {
           $3::timestamptz - interval '1 hour',
           $3::timestamptz + interval '1 hour'
         ) snapshot where snapshot.id = $4::uuid`,
-        [
-          ids.organization,
-          ids.location,
-          staffWebTime,
-          staffWebReservationId,
-        ],
+        [ids.organization, ids.location, staffWebTime, staffWebReservationId],
       )
     ).rows[0].count,
   );
@@ -6253,7 +6589,11 @@ try {
       [ids.location, staffWebReservationId],
     )
   ).rows[0].result;
-  expectExactKeys(staffWebHead, lifecycleHeadKeys, "out-of-window lifecycle head");
+  expectExactKeys(
+    staffWebHead,
+    lifecycleHeadKeys,
+    "out-of-window lifecycle head",
+  );
   if (
     oldWindowCount !== 0 ||
     staffWebHead.version !== 2 ||
@@ -6288,16 +6628,19 @@ try {
       `select id, status, dedupe_key, claim_token
       from public.reservation_message_outbox
       where id = any($1::uuid[]) order by id`,
-      [[
-        staffWebIds.staleReminder24,
-        staffWebIds.staleReminder2,
-        staffWebIds.staleModified,
-      ]],
+      [
+        [
+          staffWebIds.staleReminder24,
+          staffWebIds.staleReminder2,
+          staffWebIds.staleModified,
+        ],
+      ],
     )
   ).rows;
   const staffWebModifiedMessage = (
     await db.query(
-      `select id, guest_id, channel, status, template_data, dedupe_key
+      `select id, guest_id, channel, status, template_data, dedupe_key,
+        reservation_version, recipient_destination_hmac
       from public.reservation_message_outbox
       where reservation_id = $1::uuid
         and template_key = 'reservation_modified'
@@ -6320,7 +6663,8 @@ try {
       new Date(staffWebInitialEvidence.token_expires_at).valueOf() ||
     staleLifecycleMessages.length !== 3 ||
     staleLifecycleMessages.some(
-      (message) => message.status !== "cancelled" || message.claim_token !== null,
+      (message) =>
+        message.status !== "cancelled" || message.claim_token !== null,
     ) ||
     staleMessageById.get(staffWebIds.staleReminder24)?.dedupe_key !==
       `reservation:${staffWebReservationId}:reminder:24h:email:v1` ||
@@ -6330,6 +6674,10 @@ try {
     staffWebModifiedMessage.channel !== "email" ||
     staffWebModifiedMessage.guest_id !== staffWebInitialEvidence.guest_id ||
     staffWebModifiedMessage.template_data.reservationVersion !== 2 ||
+    staffWebModifiedMessage.reservation_version !== 2 ||
+    !/^[0-9a-f]{64}$/.test(
+      staffWebModifiedMessage.recipient_destination_hmac ?? "",
+    ) ||
     new Date(staffWebModifiedMessage.template_data.reservedAt).valueOf() !==
       new Date(staffWebMovedTime).valueOf()
   ) {
@@ -6353,7 +6701,8 @@ try {
   await db.exec("reset role");
   const staffWebVersionedReminder = (
     await db.query(
-      `select status, channel, template_key, template_data, dedupe_key
+      `select status, channel, template_key, template_data, dedupe_key,
+        reservation_version, recipient_destination_hmac
       from public.reservation_message_outbox
       where organization_id = $1::uuid
         and reservation_id = $2::uuid
@@ -6370,6 +6719,10 @@ try {
     staffWebVersionedReminder.channel !== "email" ||
     staffWebVersionedReminder.template_key !== "reservation_reminder_24h" ||
     staffWebVersionedReminder.template_data.reservationVersion !== 2 ||
+    staffWebVersionedReminder.reservation_version !== 2 ||
+    !/^[0-9a-f]{64}$/.test(
+      staffWebVersionedReminder.recipient_destination_hmac ?? "",
+    ) ||
     staffWebVersionedReminder.template_data.channel !== "email"
   ) {
     throw new Error(
@@ -6403,36 +6756,29 @@ try {
       ],
     )
   ).rows[0].result;
-  const postModifyClaimValidity = (
+  await db.exec("reset role");
+  const postModifyClaimState = (
     await db.query(
       `select
-        public.service_validate_reservation_message_claim(
-          $1::uuid, $2::uuid, clock_timestamp()
-        ) stale_valid,
-        public.service_validate_reservation_message_claim(
-          $3::uuid, $4::uuid, clock_timestamp()
-        ) current_valid`,
-      [
-        staffWebIds.staleModified,
-        staffWebIds.staleClaim,
-        staffWebModifiedMessage.id,
-        staffWebIds.modifiedClaim,
-      ],
+        (select status from public.reservation_message_outbox
+          where id = $1::uuid) stale_status,
+        (select status from public.reservation_message_outbox
+          where id = $2::uuid) current_status`,
+      [staffWebIds.staleModified, staffWebModifiedMessage.id],
     )
   ).rows[0];
   if (
     !staffWebExchangeReplay.replayed ||
     new Date(staffWebExchangeReplay.manageExpiresAt).valueOf() !==
       expectedStaffWebExpiry ||
-    postModifyClaimValidity.stale_valid ||
-    !postModifyClaimValidity.current_valid
+    postModifyClaimState.stale_status !== "cancelled" ||
+    postModifyClaimState.current_status !== "sending"
   ) {
     throw new Error(
-      `Staff modification claim validation is incomplete: ${JSON.stringify({ staffWebExchangeReplay, postModifyClaimValidity })}`,
+      `Staff modification claim state is incomplete: ${JSON.stringify({ staffWebExchangeReplay, postModifyClaimState })}`,
     );
   }
 
-  await db.exec("reset role");
   await db.query(
     "update public.guests set email = 'changed.staff.lifecycle@example.invalid' where organization_id = $1::uuid and id = $2::uuid",
     [ids.organization, staffWebInitialEvidence.guest_id],
@@ -6441,19 +6787,85 @@ try {
   await db.query("select set_config('request.jwt.claims', $1, false)", [
     JSON.stringify({ role: "service_role" }),
   ]);
-  const changedDestinationClaimValid = (
+  const changedDestinationDispatch = (
     await db.query(
-      `select public.service_validate_reservation_message_claim(
+      `select public.service_begin_reservation_message_delivery(
         $1::uuid, $2::uuid, clock_timestamp()
-      ) valid`,
+      ) result`,
       [staffWebModifiedMessage.id, staffWebIds.modifiedClaim],
     )
-  ).rows[0].valid;
-  if (changedDestinationClaimValid) {
-    throw new Error("A lifecycle message claim survived CRM destination drift");
+  ).rows[0].result;
+  if (changedDestinationDispatch?.status !== "cancelled") {
+    throw new Error(
+      `A lifecycle message claim survived CRM destination drift: ${JSON.stringify(changedDestinationDispatch)}`,
+    );
   }
 
   await db.exec("reset role");
+  await db.query(
+    `update public.reservation_message_outbox
+    set status = 'failed', claim_token = null, claimed_by = null,
+      claimed_at = null, lease_expires_at = null,
+      next_attempt_at = '2000-01-01 00:00:00+00'
+    where id = $1::uuid`,
+    [staffWebModifiedMessage.id],
+  );
+  const driftAttemptsBeforeClaim = Number(
+    (
+      await db.query(
+        "select attempts from public.reservation_message_outbox where id = $1::uuid",
+        [staffWebModifiedMessage.id],
+      )
+    ).rows[0].attempts,
+  );
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const destinationDriftClaims = (
+    await db.query(
+      `select * from public.service_claim_reservation_message_outbox(
+        $1::uuid, 500, 60, clock_timestamp()
+      )`,
+      ["ec300000-0000-4000-8000-000000000004"],
+    )
+  ).rows;
+  if (
+    destinationDriftClaims.some(
+      (message) => message.id === staffWebModifiedMessage.id,
+    )
+  ) {
+    throw new Error(
+      "The outbox claim returned an unverified changed destination",
+    );
+  }
+  for (const message of destinationDriftClaims) {
+    await db.query(
+      `select public.service_complete_reservation_message_outbox(
+        $1::uuid, $2::uuid, 'failed', 'test_claim_released',
+        clock_timestamp() + interval '1 day', null
+      )`,
+      [message.id, message.claimToken],
+    );
+  }
+  await db.exec("reset role");
+  const driftClaimEvidence = (
+    await db.query(
+      `select status, attempts, claim_token
+      from public.reservation_message_outbox where id = $1::uuid`,
+      [staffWebModifiedMessage.id],
+    )
+  ).rows[0];
+  if (
+    driftClaimEvidence.status !== "failed" ||
+    Number(driftClaimEvidence.attempts) !== driftAttemptsBeforeClaim ||
+    driftClaimEvidence.claim_token !== null
+  ) {
+    throw new Error(
+      `Destination-drift claim fence mutated the rejected row: ${JSON.stringify(driftClaimEvidence)}`,
+    );
+  }
+
   await db.exec("set role authenticated");
   await assumeUser(ids.owner);
   const staffWebDestinationDriftModified = (
@@ -6512,7 +6924,8 @@ try {
   ).rows[0];
   if (
     Number(changedDestinationMessageEvidence.new_modified_messages) !== 0 ||
-    changedDestinationMessageEvidence.previous_modified_status !== "cancelled" ||
+    changedDestinationMessageEvidence.previous_modified_status !==
+      "cancelled" ||
     changedDestinationMessageEvidence.previous_reminder_status !== "cancelled"
   ) {
     throw new Error(
@@ -6536,7 +6949,11 @@ try {
       [staffWebIds.cancelRequest, ids.location, staffWebReservationId],
     )
   ).rows[0].result;
-  expectExactKeys(staffWebCancelled, lifecycleResultKeys, "verified web staff cancel");
+  expectExactKeys(
+    staffWebCancelled,
+    lifecycleResultKeys,
+    "verified web staff cancel",
+  );
   if (
     staffWebCancelled.status !== "cancelled" ||
     staffWebCancelled.version !== 4 ||
@@ -6568,7 +6985,8 @@ try {
   ).rows[0];
   const staffWebCancelledMessage = (
     await db.query(
-      `select id, guest_id, channel, status, template_data, dedupe_key
+      `select id, guest_id, channel, status, template_data, dedupe_key,
+        reservation_version, recipient_destination_hmac
       from public.reservation_message_outbox
       where reservation_id = $1::uuid
         and template_key = 'reservation_cancelled'`,
@@ -6583,6 +7001,10 @@ try {
     staffWebCancelledMessage.channel !== "email" ||
     staffWebCancelledMessage.guest_id !== staffWebInitialEvidence.guest_id ||
     staffWebCancelledMessage.template_data.reservationVersion !== 4 ||
+    staffWebCancelledMessage.reservation_version !== 4 ||
+    !/^[0-9a-f]{64}$/.test(
+      staffWebCancelledMessage.recipient_destination_hmac ?? "",
+    ) ||
     staffWebCancelledMessage.dedupe_key !==
       `reservation:${staffWebReservationId}:cancelled:4:email`
   ) {
@@ -6602,26 +7024,21 @@ try {
   await db.query("select set_config('request.jwt.claims', $1, false)", [
     JSON.stringify({ role: "service_role" }),
   ]);
-  const postCancelClaimValidity = (
+  const cancelledDispatch = (
     await db.query(
-      `select
-        public.service_validate_reservation_message_claim(
-          $1::uuid, $2::uuid, clock_timestamp()
-        ) modified_valid,
-        public.service_validate_reservation_message_claim(
-          $3::uuid, $4::uuid, clock_timestamp()
-        ) cancelled_valid`,
-      [
-        staffWebModifiedMessage.id,
-        staffWebIds.modifiedClaim,
-        staffWebCancelledMessage.id,
-        staffWebIds.cancelledClaim,
-      ],
+      `select public.service_begin_reservation_message_delivery(
+        $1::uuid, $2::uuid, clock_timestamp()
+      ) result`,
+      [staffWebCancelledMessage.id, staffWebIds.cancelledClaim],
     )
-  ).rows[0];
-  if (postCancelClaimValidity.modified_valid || !postCancelClaimValidity.cancelled_valid) {
+  ).rows[0].result;
+  if (
+    cancelledDispatch?.status !== "dispatching" ||
+    cancelledDispatch.templateKey !== "reservation_cancelled" ||
+    cancelledDispatch.recipientEmail !== "staff.lifecycle.web@example.invalid"
+  ) {
     throw new Error(
-      `Staff cancellation claim validation is incomplete: ${JSON.stringify(postCancelClaimValidity)}`,
+      `Staff cancellation dispatch snapshot is incomplete: ${JSON.stringify(cancelledDispatch)}`,
     );
   }
 
@@ -6728,8 +7145,538 @@ try {
     );
   }
 
+  // Delivery authorization is evaluated from the current, exact
+  // tenant/location settings both when work is claimed and at the provider
+  // boundary. Revocation cancels queued, failed, and leased work atomically;
+  // re-enabling permits only newly queued work and never resurrects a row.
+  const deliveryFenceIds = {
+    queuedHold: "ee000000-0000-4000-8000-000000000001",
+    failedHold: "ee000000-0000-4000-8000-000000000002",
+    staleLeaseHold: "ee000000-0000-4000-8000-000000000003",
+    crossLocationWaitlist: "ee000000-0000-4000-8000-000000000004",
+    reenabledHold: "ee000000-0000-4000-8000-000000000005",
+    queuedMessage: "ef000000-0000-4000-8000-000000000001",
+    failedMessage: "ef000000-0000-4000-8000-000000000002",
+    staleLeaseMessage: "ef000000-0000-4000-8000-000000000003",
+    crossLocationMessage: "ef000000-0000-4000-8000-000000000004",
+    reenabledEmailMessage: "ef000000-0000-4000-8000-000000000005",
+    reenabledSmsMessage: "ef000000-0000-4000-8000-000000000006",
+    disabledLateMessage: "ef000000-0000-4000-8000-000000000007",
+    staleClaim: "f0000000-0000-4000-8000-000000000001",
+    staleWorker: "f0000000-0000-4000-8000-000000000002",
+    reenabledWorker: "f0000000-0000-4000-8000-000000000003",
+  };
+  const deliveryFenceNow = (await db.query("select clock_timestamp() value"))
+    .rows[0].value;
+  const deliveryFenceReservedAt = new Date(
+    new Date(staffWebMovedTime).valueOf() + 86_400_000,
+  ).toISOString();
+
+  await db.exec("reset role");
+  await db.query(
+    `select private.ensure_service_shifts(
+      $1::uuid, $2::uuid,
+      array[($3::timestamptz at time zone 'America/New_York')::date]
+    )`,
+    [ids.organization, ids.location, deliveryFenceReservedAt],
+  );
+  await db.query(
+    `update public.reservation_settings
+    set online_booking_enabled = false,
+      guest_messaging_enabled = true,
+      verification_channels = array['email','sms']::text[],
+      approved_at = coalesce(approved_at, clock_timestamp()),
+      approved_by = coalesce(approved_by, $3::uuid),
+      updated_at = clock_timestamp()
+    where organization_id = $1::uuid and location_id = $2::uuid`,
+    [ids.organization, ids.location, ids.owner],
+  );
+  await db.query(
+    `delete from public.reservation_settings
+    where organization_id = $1::uuid and location_id = $2::uuid`,
+    [ids.organization, ids.otherLocation],
+  );
+  await db.query(
+    `insert into private.public_booking_holds (
+      id, organization_id, location_id, reserved_at, duration_minutes,
+      party_size, public_code, first_name, last_name, email, phone,
+      expires_at, created_at, updated_at
+    ) values
+      ($1::uuid, $5::uuid, $6::uuid, $8::timestamptz,
+        120, 2, 'LYFENCE1', 'Queue', 'Fence',
+        'queue.fence@example.invalid', '+12125550201',
+        $7::timestamptz + interval '1 day', $7::timestamptz, $7::timestamptz),
+      ($2::uuid, $5::uuid, $6::uuid, $8::timestamptz,
+        120, 2, 'LYFENCE2', 'Failed', 'Fence',
+        'failed.fence@example.invalid', '+12125550202',
+        $7::timestamptz + interval '1 day', $7::timestamptz, $7::timestamptz),
+      ($3::uuid, $5::uuid, $6::uuid, $8::timestamptz,
+        120, 2, 'LYFENCE3', 'Lease', 'Fence',
+        'lease.fence@example.invalid', '+12125550203',
+        $7::timestamptz + interval '1 day', $7::timestamptz, $7::timestamptz),
+      ($4::uuid, $5::uuid, $6::uuid, $8::timestamptz,
+        120, 2, 'LYFENCE5', 'Reenabled', 'Fence',
+        'reenabled.fence@example.invalid', '+12125550205',
+        $7::timestamptz + interval '1 day', $7::timestamptz, $7::timestamptz)`,
+    [
+      deliveryFenceIds.queuedHold,
+      deliveryFenceIds.failedHold,
+      deliveryFenceIds.staleLeaseHold,
+      deliveryFenceIds.reenabledHold,
+      ids.organization,
+      ids.location,
+      deliveryFenceNow,
+      deliveryFenceReservedAt,
+    ],
+  );
+  await db.query(
+    `insert into public.waitlist_entries (
+      id, organization_id, location_id, display_name, email, phone,
+      party_size, status, notified_at, offer_expires_at, created_at, updated_at
+    ) values (
+      $1::uuid, $2::uuid, $3::uuid, 'Cross-location fence',
+      'cross.fence@example.invalid', '+12125550204', 2, 'notified',
+      $4::timestamptz, $4::timestamptz + interval '1 day',
+      $4::timestamptz, $4::timestamptz
+    )`,
+    [
+      deliveryFenceIds.crossLocationWaitlist,
+      ids.organization,
+      ids.otherLocation,
+      deliveryFenceNow,
+    ],
+  );
+  await db.query(
+    `insert into public.reservation_message_outbox (
+      id, organization_id, location_id, booking_hold_id, channel,
+      template_key, template_data, status, dedupe_key, attempts,
+      next_attempt_at, claim_token, claimed_by, claimed_at,
+      lease_expires_at, created_at, updated_at
+    ) values
+      ($1::uuid, $9::uuid, $10::uuid, $2::uuid, 'email',
+        'reservation_verify',
+        '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
+        'queued', 'delivery-fence:queued', 0, $11::timestamptz,
+        null, null, null, null, $11::timestamptz, $11::timestamptz),
+      ($3::uuid, $9::uuid, $10::uuid, $4::uuid, 'email',
+        'reservation_verify',
+        '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
+        'failed', 'delivery-fence:failed', 1,
+        $11::timestamptz - interval '1 minute',
+        null, null, null, null, $11::timestamptz, $11::timestamptz),
+      ($5::uuid, $9::uuid, $10::uuid, $6::uuid, 'email',
+        'reservation_verify',
+        '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
+        'sending', 'delivery-fence:stale-lease', 1,
+        $11::timestamptz - interval '1 minute', $7::uuid, $8::uuid,
+        $11::timestamptz - interval '2 minutes',
+        $11::timestamptz - interval '1 minute',
+        $11::timestamptz, $11::timestamptz)`,
+    [
+      deliveryFenceIds.queuedMessage,
+      deliveryFenceIds.queuedHold,
+      deliveryFenceIds.failedMessage,
+      deliveryFenceIds.failedHold,
+      deliveryFenceIds.staleLeaseMessage,
+      deliveryFenceIds.staleLeaseHold,
+      deliveryFenceIds.staleClaim,
+      deliveryFenceIds.staleWorker,
+      ids.organization,
+      ids.location,
+      deliveryFenceNow,
+    ],
+  );
+  await db.query(
+    `insert into public.reservation_message_outbox (
+      id, organization_id, location_id, waitlist_entry_id, channel,
+      template_key, template_data, dedupe_key, next_attempt_at,
+      created_at, updated_at
+    ) values (
+      $1::uuid, $2::uuid, $3::uuid, $4::uuid, 'email',
+      'waitlist_table_ready', '{"channel":"email"}'::jsonb,
+      'delivery-fence:cross-location', $5::timestamptz,
+      $5::timestamptz, $5::timestamptz
+    )`,
+    [
+      deliveryFenceIds.crossLocationMessage,
+      ids.organization,
+      ids.otherLocation,
+      deliveryFenceIds.crossLocationWaitlist,
+      deliveryFenceNow,
+    ],
+  );
+
+  await db.query(
+    `update public.reservation_settings
+    set guest_messaging_enabled = false,
+      approved_at = null,
+      approved_by = null,
+      updated_at = clock_timestamp()
+    where organization_id = $1::uuid and location_id = $2::uuid`,
+    [ids.organization, ids.location],
+  );
+  await db.query(
+    `insert into public.reservation_message_outbox (
+      id, organization_id, location_id, booking_hold_id, channel,
+      template_key, template_data, dedupe_key, next_attempt_at,
+      created_at, updated_at
+    ) values (
+      $1::uuid, $2::uuid, $3::uuid, $4::uuid, 'email',
+      'reservation_verify',
+      '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
+      'delivery-fence:disabled-late', $5::timestamptz,
+      $5::timestamptz, $5::timestamptz
+    )`,
+    [
+      deliveryFenceIds.disabledLateMessage,
+      ids.organization,
+      ids.location,
+      deliveryFenceIds.reenabledHold,
+      deliveryFenceNow,
+    ],
+  );
+  const disabledDeliveryRows = (
+    await db.query(
+      `select id, status, claim_token, claimed_by, claimed_at,
+        lease_expires_at, last_error_code
+      from public.reservation_message_outbox
+      where id = any($1::uuid[]) order by id`,
+      [
+        [
+          deliveryFenceIds.queuedMessage,
+          deliveryFenceIds.failedMessage,
+          deliveryFenceIds.staleLeaseMessage,
+          deliveryFenceIds.disabledLateMessage,
+        ],
+      ],
+    )
+  ).rows;
+  if (
+    disabledDeliveryRows.length !== 4 ||
+    disabledDeliveryRows.some(
+      (message) =>
+        message.status !== "cancelled" ||
+        message.claim_token !== null ||
+        message.claimed_by !== null ||
+        message.claimed_at !== null ||
+        message.lease_expires_at !== null ||
+        message.last_error_code !== "messaging_configuration_revoked",
+    )
+  ) {
+    throw new Error(
+      `Configuration revocation did not atomically cancel delivery work: ${JSON.stringify(disabledDeliveryRows)}`,
+    );
+  }
+
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const disabledClaims = (
+    await db.query(
+      `select * from public.service_claim_reservation_message_outbox(
+        $1::uuid, 20, 30, $2::timestamptz
+      )`,
+      [deliveryFenceIds.reenabledWorker, deliveryFenceNow],
+    )
+  ).rows;
+  if (
+    disabledClaims.some((message) =>
+      [
+        deliveryFenceIds.queuedMessage,
+        deliveryFenceIds.failedMessage,
+        deliveryFenceIds.staleLeaseMessage,
+        deliveryFenceIds.disabledLateMessage,
+        deliveryFenceIds.crossLocationMessage,
+      ].includes(message.id),
+    )
+  ) {
+    throw new Error(
+      `Disabled or cross-location delivery work was claimed: ${JSON.stringify(disabledClaims)}`,
+    );
+  }
+
+  await db.exec("reset role");
+  const disabledAudit = (
+    await db.query(
+      `select metadata from public.audit_events
+      where organization_id = $1::uuid and location_id = $2::uuid
+        and action = 'reservation_messages_cancelled_by_configuration'
+      order by occurred_at desc, id desc limit 1`,
+      [ids.organization, ids.location],
+    )
+  ).rows[0];
+  if (
+    Number(disabledAudit?.metadata?.cancelledCount ?? 0) < 3 ||
+    disabledAudit?.metadata?.reason !== "messaging_configuration_revoked"
+  ) {
+    throw new Error(
+      `Configuration cancellation audit evidence is incomplete: ${JSON.stringify(disabledAudit)}`,
+    );
+  }
+
+  await db.query(
+    `update public.reservation_settings
+    set guest_messaging_enabled = true,
+      verification_channels = array['email','sms']::text[],
+      approved_at = clock_timestamp(),
+      approved_by = $3::uuid,
+      updated_at = clock_timestamp()
+    where organization_id = $1::uuid and location_id = $2::uuid`,
+    [ids.organization, ids.location, ids.owner],
+  );
+  await db.query(
+    `insert into public.reservation_message_outbox (
+      id, organization_id, location_id, booking_hold_id, channel,
+      template_key, template_data, dedupe_key, next_attempt_at,
+      created_at, updated_at
+    ) values
+      ($1::uuid, $4::uuid, $5::uuid, $3::uuid, 'email',
+        'reservation_verify',
+        '{"purpose":"reservation_verify","channel":"email"}'::jsonb,
+        'delivery-fence:reenabled:email', $6::timestamptz,
+        $6::timestamptz, $6::timestamptz),
+      ($2::uuid, $4::uuid, $5::uuid, $3::uuid, 'sms',
+        'reservation_verify',
+        '{"purpose":"reservation_verify","channel":"sms"}'::jsonb,
+        'delivery-fence:reenabled:sms', $6::timestamptz,
+        $6::timestamptz, $6::timestamptz)`,
+    [
+      deliveryFenceIds.reenabledEmailMessage,
+      deliveryFenceIds.reenabledSmsMessage,
+      deliveryFenceIds.reenabledHold,
+      ids.organization,
+      ids.location,
+      deliveryFenceNow,
+    ],
+  );
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const reenabledClaims = (
+    await db.query(
+      `select * from public.service_claim_reservation_message_outbox(
+        $1::uuid, 20, 30, $2::timestamptz
+      )`,
+      [deliveryFenceIds.reenabledWorker, deliveryFenceNow],
+    )
+  ).rows;
+  const reenabledClaimIds = reenabledClaims
+    .map((message) => message.id)
+    .filter((id) =>
+      [
+        deliveryFenceIds.reenabledEmailMessage,
+        deliveryFenceIds.reenabledSmsMessage,
+      ].includes(id),
+    )
+    .sort();
+  if (
+    JSON.stringify(reenabledClaimIds) !==
+      JSON.stringify(
+        [
+          deliveryFenceIds.reenabledEmailMessage,
+          deliveryFenceIds.reenabledSmsMessage,
+        ].sort(),
+      ) ||
+    reenabledClaims.some(
+      (message) => message.id === deliveryFenceIds.crossLocationMessage,
+    )
+  ) {
+    throw new Error(
+      `Re-enabled messaging claimed the wrong delivery set: ${JSON.stringify(reenabledClaims)}`,
+    );
+  }
+  const reenabledById = new Map(
+    reenabledClaims.map((message) => [message.id, message]),
+  );
+  const initialEmailDispatch = (
+    await db.query(
+      `select public.service_begin_reservation_message_delivery(
+        $1::uuid, $2::uuid, $3::timestamptz
+      ) begun`,
+      [
+        deliveryFenceIds.reenabledEmailMessage,
+        reenabledById.get(deliveryFenceIds.reenabledEmailMessage)?.claimToken,
+        deliveryFenceNow,
+      ],
+    )
+  ).rows[0].begun;
+  if (
+    initialEmailDispatch?.status !== "dispatching" ||
+    initialEmailDispatch.id !== deliveryFenceIds.reenabledEmailMessage ||
+    initialEmailDispatch.templateKey !== "reservation_verify" ||
+    initialEmailDispatch.recipientEmail !== "reenabled.fence@example.invalid" ||
+    initialEmailDispatch.recipientPhone !== "+12125550205" ||
+    initialEmailDispatch.configurationVersion < 1
+  ) {
+    throw new Error(
+      `Begin delivery did not return the exact provider snapshot: ${JSON.stringify(initialEmailDispatch)}`,
+    );
+  }
+
+  await db.exec("reset role");
+  await db.query(
+    `update public.reservation_settings
+    set verification_channels = array['email']::text[],
+      updated_at = clock_timestamp()
+    where organization_id = $1::uuid and location_id = $2::uuid`,
+    [ids.organization, ids.location],
+  );
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.service_begin_reservation_message_delivery(
+          $1::uuid, $2::uuid, clock_timestamp()
+        )`,
+        [
+          deliveryFenceIds.reenabledSmsMessage,
+          reenabledById.get(deliveryFenceIds.reenabledSmsMessage)?.claimToken,
+        ],
+      ),
+    "P0002",
+    "revoked pre-provider reservation message claim",
+  );
+
+  await db.exec("reset role");
+  const channelRemovalFence = (
+    await db.query(
+      `select message.id, message.status, message.claim_token,
+        message.provider_attempted_at,
+        message.message_delivery_configuration_version,
+        settings.message_delivery_configuration_version
+          current_configuration_version
+      from public.reservation_message_outbox message
+      join public.reservation_settings settings
+        on settings.organization_id = message.organization_id
+       and settings.location_id = message.location_id
+      where message.id = any($1::uuid[]) order by message.id`,
+      [
+        [
+          deliveryFenceIds.reenabledEmailMessage,
+          deliveryFenceIds.reenabledSmsMessage,
+        ],
+      ],
+    )
+  ).rows;
+  const channelRemovalById = new Map(
+    channelRemovalFence.map((message) => [message.id, message]),
+  );
+  const inFlightEmail = channelRemovalById.get(
+    deliveryFenceIds.reenabledEmailMessage,
+  );
+  const revokedSms = channelRemovalById.get(
+    deliveryFenceIds.reenabledSmsMessage,
+  );
+  if (
+    inFlightEmail?.status !== "sending" ||
+    inFlightEmail.claim_token !==
+      reenabledById.get(deliveryFenceIds.reenabledEmailMessage)?.claimToken ||
+    inFlightEmail.provider_attempted_at === null ||
+    revokedSms?.status !== "cancelled" ||
+    revokedSms.claim_token !== null ||
+    revokedSms.provider_attempted_at !== null ||
+    Number(inFlightEmail.message_delivery_configuration_version) >=
+      Number(inFlightEmail.current_configuration_version) ||
+    Number(revokedSms.message_delivery_configuration_version) >=
+      Number(revokedSms.current_configuration_version)
+  ) {
+    throw new Error(
+      `Channel removal did not preserve only the begun dispatch: ${JSON.stringify(channelRemovalFence)}`,
+    );
+  }
+
+  await db.exec("reset role");
+  await db.query(
+    `update public.reservation_settings
+    set approved_at = null, approved_by = null, updated_at = clock_timestamp()
+    where organization_id = $1::uuid and location_id = $2::uuid`,
+    [ids.organization, ids.location],
+  );
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const completedBegunEmail = (
+    await db.query(
+      `select public.service_complete_reservation_message_outbox(
+        $1::uuid, $2::uuid, 'sent', null, null, 'provider-fence-email'
+      ) completed`,
+      [
+        deliveryFenceIds.reenabledEmailMessage,
+        reenabledById.get(deliveryFenceIds.reenabledEmailMessage)?.claimToken,
+      ],
+    )
+  ).rows[0].completed;
+  if (completedBegunEmail?.status !== "sent")
+    throw new Error(
+      `A dispatch begun before settings revocation could not complete: ${JSON.stringify(completedBegunEmail)}`,
+    );
+
+  await db.exec("reset role");
+  const finalDeliveryFenceEvidence = (
+    await db.query(
+      `select id, status, attempts, claim_token, claimed_by, claimed_at,
+        lease_expires_at, provider_attempted_at, provider_message_id,
+        last_error_code
+      from public.reservation_message_outbox
+      where id = any($1::uuid[]) order by id`,
+      [
+        [
+          deliveryFenceIds.queuedMessage,
+          deliveryFenceIds.failedMessage,
+          deliveryFenceIds.staleLeaseMessage,
+          deliveryFenceIds.disabledLateMessage,
+          deliveryFenceIds.crossLocationMessage,
+          deliveryFenceIds.reenabledEmailMessage,
+          deliveryFenceIds.reenabledSmsMessage,
+        ],
+      ],
+    )
+  ).rows;
+  const finalDeliveryById = new Map(
+    finalDeliveryFenceEvidence.map((message) => [message.id, message]),
+  );
+  const oldRows = [
+    deliveryFenceIds.queuedMessage,
+    deliveryFenceIds.failedMessage,
+    deliveryFenceIds.staleLeaseMessage,
+    deliveryFenceIds.disabledLateMessage,
+  ].map((id) => finalDeliveryById.get(id));
+  const emailRow = finalDeliveryById.get(
+    deliveryFenceIds.reenabledEmailMessage,
+  );
+  const smsRow = finalDeliveryById.get(deliveryFenceIds.reenabledSmsMessage);
+  const crossRow = finalDeliveryById.get(deliveryFenceIds.crossLocationMessage);
+  if (
+    oldRows.some(
+      (message) =>
+        message?.status !== "cancelled" ||
+        message.last_error_code !== "messaging_configuration_revoked",
+    ) ||
+    emailRow?.status !== "sent" ||
+    smsRow?.status !== "cancelled" ||
+    emailRow.claim_token !== null ||
+    smsRow.claim_token !== null ||
+    emailRow.provider_attempted_at === null ||
+    emailRow.provider_message_id !== "provider-fence-email" ||
+    emailRow.last_error_code !== null ||
+    smsRow.last_error_code !== "messaging_configuration_revoked" ||
+    crossRow?.status !== "cancelled" ||
+    Number(crossRow.attempts) !== 0 ||
+    crossRow.last_error_code !== "messaging_configuration_revoked"
+  ) {
+    throw new Error(
+      `Final delivery configuration evidence is incomplete: ${JSON.stringify(finalDeliveryFenceEvidence)}`,
+    );
+  }
+
   process.stdout.write(
-    "PASS reservation configuration, atomic staff lifecycle revisions, table states, rate limits, reminders, public verification/modification/cancellation, exact cross-boundary expiry, waitlist seating, and messaging evidence\n",
+    "PASS reservation configuration, atomic staff lifecycle revisions, table states, rate limits, reminders, public verification/modification/cancellation, exact cross-boundary expiry, waitlist seating, recipient/version evidence, and linearized begin-delivery authorization fences\n",
   );
 } finally {
   await db.close();
