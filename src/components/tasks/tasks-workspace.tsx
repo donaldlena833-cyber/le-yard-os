@@ -70,7 +70,7 @@ const demoWorkspace = {
   checklistRuns: playgroundChecklistRuns,
 };
 
-function EmployeeTasksWorkspace() {
+function EmployeeTasksWorkspace({ timeZone }: { timeZone: string }) {
   const [tab, setTab] = useState<"sops" | "maintenance" | "incidents">("sops");
   const [selectedSop, setSelectedSop] = useState(
     playgroundSopDocuments[0] || null,
@@ -303,7 +303,9 @@ function EmployeeTasksWorkspace() {
                   <p className="text-xs font-semibold">{incident.summary}</p>
                   <p className="numeric mt-1 text-xs text-[var(--ink-faint)]">
                     {incident.kind} ·{" "}
-                    {new Date(incident.occurredAt).toLocaleDateString()}
+                    {new Date(incident.occurredAt).toLocaleDateString("en-US", {
+                      timeZone,
+                    })}
                   </p>
                 </div>
                 <StatusPill
@@ -386,6 +388,7 @@ function EmployeeTasksWorkspace() {
 export function TasksWorkspace() {
   const workspace = useWorkspaceContext();
   const currentUserId = workspace.identity.userId;
+  const timeZone = workspace.activeLocation.timeZone ?? "UTC";
   const [tab, setTab] = useState<Tab>("tasks");
   const [tasks, setTasks] = useState(playgroundTasks);
   const [checkItems, setCheckItems] = useState<Record<string, string>>(() => {
@@ -412,7 +415,8 @@ export function TasksWorkspace() {
   const completedCount =
     checklist?.items.filter((item) => Boolean(checkItems[item.id])).length || 0;
 
-  if (workspace.role === "employee") return <EmployeeTasksWorkspace />;
+  if (workspace.role === "employee")
+    return <EmployeeTasksWorkspace timeZone={timeZone} />;
 
   function setTaskStatus(task: Task, status: Task["status"]) {
     const now = new Date().toISOString();
@@ -636,6 +640,7 @@ export function TasksWorkspace() {
                         {new Date(task.dueAt).toLocaleTimeString("en-US", {
                           hour: "numeric",
                           minute: "2-digit",
+                          timeZone,
                         })}
                       </p>
                     </div>
@@ -950,7 +955,9 @@ export function TasksWorkspace() {
                   <p className="text-xs font-semibold">{incident.summary}</p>
                   <p className="numeric mt-1 text-xs text-[var(--ink-faint)]">
                     {incident.kind} ·{" "}
-                    {new Date(incident.occurredAt).toLocaleString()}
+                    {new Date(incident.occurredAt).toLocaleString("en-US", {
+                      timeZone,
+                    })}
                   </p>
                 </div>
                 <StatusPill

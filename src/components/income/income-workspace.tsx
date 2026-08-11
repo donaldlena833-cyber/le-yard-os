@@ -43,8 +43,16 @@ function hourLabel(hour: number): string {
   }).format(new Date(Date.UTC(2026, 0, 1, hour)));
 }
 
-function freshnessLabel(value: string | null): string {
-  return value ? new Date(value).toLocaleString() : "No source records";
+function dateTimeLabel(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone,
+  }).format(new Date(value));
+}
+
+function freshnessLabel(value: string | null, timeZone: string): string {
+  return value ? dateTimeLabel(value, timeZone) : "No source records";
 }
 
 type HourlyMetric = "revenue" | "demand" | "labor";
@@ -322,7 +330,11 @@ export function IncomeWorkspace({
   const refreshLabel = useMemo(
     () =>
       result.ok
-        ? `Observed ${new Date(result.data.observedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+        ? `Observed ${new Intl.DateTimeFormat("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            timeZone: result.data.timeZone,
+          }).format(new Date(result.data.observedAt))}`
         : "Unavailable",
     [result],
   );
@@ -464,7 +476,7 @@ export function IncomeWorkspace({
             <SectionHeading
               eyebrow="Current operating day"
               title={model.businessDate}
-              detail={`${new Date(model.windowStartsAt).toLocaleString()} – ${new Date(model.windowEndsAt).toLocaleString()}`}
+              detail={`${dateTimeLabel(model.windowStartsAt, model.timeZone)} – ${dateTimeLabel(model.windowEndsAt, model.timeZone)}`}
             />
             <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
               <div className="flex gap-3 py-4">
@@ -559,8 +571,12 @@ export function IncomeWorkspace({
             </div>
             <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-[var(--ink-faint)]">
               <Clock3 className="mt-0.5 size-3.5 shrink-0" />
-              Sales: {freshnessLabel(salesSource?.lastObservedAt ?? null)}.
-              Provider status and source-data freshness are intentionally
+              Sales:{" "}
+              {freshnessLabel(
+                salesSource?.lastObservedAt ?? null,
+                model.timeZone,
+              )}
+              . Provider status and source-data freshness are intentionally
               separate.
             </p>
           </section>

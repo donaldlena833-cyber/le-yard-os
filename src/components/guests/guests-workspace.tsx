@@ -37,6 +37,7 @@ type Filter = "all" | "vip" | "allergies" | "recent";
 
 export function GuestsWorkspace() {
   const workspace = useWorkspaceContext();
+  const timeZone = workspace.activeLocation.timeZone ?? "UTC";
   const [guests, setGuests] = useState<Guest[]>(demoWorkspace.guests);
   const [selected, setSelected] = useState<Guest | null>(null);
   const [selectedTrigger, setSelectedTrigger] = useState<HTMLElement | null>(
@@ -318,6 +319,7 @@ export function GuestsWorkspace() {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
+                      timeZone,
                     })
                   : "Never"}
               </span>
@@ -530,7 +532,7 @@ export function GuestsWorkspace() {
                         <p className="text-xs font-semibold">
                           {new Date(visit.visitedAt).toLocaleDateString(
                             "en-US",
-                            { month: "long", day: "numeric" },
+                            { month: "long", day: "numeric", timeZone },
                           )}{" "}
                           · party of {visit.partySize}
                         </p>
