@@ -132,6 +132,7 @@ async function pause(milliseconds) {
 
 async function proveBlocked(observer, promise, backendPid, label) {
   let settled = false;
+  let lastActivity;
   promise.then(
     () => {
       settled = true;
@@ -149,17 +150,24 @@ async function proveBlocked(observer, promise, backendPid, label) {
     }
     const activity = (
       await observer.query(
-        `select state, wait_event_type, wait_event
+        `select state, wait_event_type, wait_event,
+          pg_blocking_pids(pid) as blocking_pids
         from pg_stat_activity where pid = $1`,
         [backendPid],
       )
     ).rows[0];
-    if (activity?.state === "active" && activity.wait_event_type === "Lock") {
-      return activity.wait_event;
+    lastActivity = activity;
+    if (
+      activity?.state === "active" &&
+      (activity.wait_event_type === "Lock" || activity.blocking_pids?.length)
+    ) {
+      return activity.wait_event ?? "blocking_pid";
     }
     await pause(20);
   }
-  throw new Error(`${label} never reached a database-visible lock wait.`);
+  throw new Error(
+    `${label} never reached a database-visible lock wait: ${JSON.stringify(lastActivity ?? null)}.`,
+  );
 }
 
 function trackQuery(promise) {
@@ -539,8 +547,8 @@ try {
     )
   ).rows[0];
   if (
-    configurationEvidence?.timezone !== "UTC"
-    || !configurationEvidence.starts_local.startsWith("01:30")
+    configurationEvidence?.timezone !== "UTC" ||
+    !configurationEvidence.starts_local.startsWith("01:30")
   ) {
     throw new Error(
       `Configuration serialization left unsafe state: ${JSON.stringify(configurationEvidence)}`,
@@ -1178,10 +1186,8 @@ try {
   // supplied contact.
   const staleIdentityGuestId = randomUUID();
   const staleIdentityRequestId = randomUUID();
-  const staleIdentityOldEmail =
-    `stale-identity-${runId}@example.invalid`;
-  const staleIdentityNewEmail =
-    `moved-identity-${runId}@example.invalid`;
+  const staleIdentityOldEmail = `stale-identity-${runId}@example.invalid`;
+  const staleIdentityNewEmail = `moved-identity-${runId}@example.invalid`;
   const staleIdentityPhone = "+12125550991";
   await setup.query("reset role");
   await setup.query(
@@ -1234,11 +1240,7 @@ try {
   } catch (error) {
     staleIdentityError = error;
   }
-  requireCode(
-    staleIdentityError,
-    "40001",
-    "guest identity post-lock recheck",
-  );
+  requireCode(staleIdentityError, "40001", "guest identity post-lock recheck");
   await rollbackQuietly(second);
   const staleIdentityEvidence = (
     await setup.query(
