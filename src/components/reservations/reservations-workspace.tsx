@@ -413,7 +413,7 @@ function FloorPlan({
           </span>
         </div>
         <div className="absolute bottom-[6%] left-[4%] top-[26%] w-[19%] rounded-[16px] border border-dashed border-[#3f423c] bg-white/[.018]">
-          <span className="absolute bottom-3 left-3 text-[9px] font-semibold uppercase tracking-[.18em] text-[#73766f] [writing-mode:vertical-rl]">
+          <span className="absolute bottom-3 left-3 text-[9px] font-semibold uppercase tracking-[.18em] text-[#a6a89f] [writing-mode:vertical-rl]">
             Service lane
           </span>
         </div>
