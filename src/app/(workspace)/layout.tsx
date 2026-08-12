@@ -44,6 +44,13 @@ function WorkspaceAccessState({
       detail:
         "Your sign-in succeeded, but Le Yard OS could not load the authorized workspace records. Try again, then sign out and back in if this continues.",
     },
+    mfa_required: {
+      icon: ShieldAlert,
+      eyebrow: "Additional verification",
+      title: "Multi-factor authentication required",
+      detail:
+        "Owner and Admin workspace access requires a verified MFA session. Complete the MFA challenge, then sign in again.",
+    },
   }[resolution.status];
   const Icon = content.icon;
 

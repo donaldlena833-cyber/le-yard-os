@@ -159,7 +159,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/reservations/setup": { title: "Reservation controls", detail: "Floor, service rules, exceptions, and public booking approval" },
   "/schedule": { title: "Service", detail: "Schedule and availability" },
   "/service": { title: "Service Control", detail: "Availability, pre-shift, and handoff" },
-  "/time-clock": { title: "Time Clock", detail: "Punches, breaks, and corrections" },
+  "/time-clock": { title: "Time Clock", detail: "Toast POS attendance mirror" },
   "/team": { title: "Team", detail: "People and job roles" },
   "/vendors": { title: "Vendors", detail: "Prices and purchasing" },
   "/kitchen": { title: "Kitchen", detail: "Recipes and production" },

@@ -338,7 +338,9 @@ export async function loadLiveReservations(
   ) {
     return readFailure("The configured pacing window exceeds the safe preview.");
   }
-  const reservationRpc = supabase.rpc as unknown as ReservationRpc;
+  const reservationRpc = supabase.rpc.bind(
+    supabase,
+  ) as unknown as ReservationRpc;
 
   const [
     settingsResult,
@@ -431,20 +433,31 @@ export async function loadLiveReservations(
       p_to: capacityWindowEndsAt,
     }),
   ]);
-  if (
-    [
-      settingsResult,
-      areaResult,
-      tableResult,
-      reservationResult,
-      allocationResult,
-      floorAllocationResult,
-      waitlistResult,
-      combinationResult,
-      memberResult,
-      capacityResult,
-    ].some((result) => result.error)
-  ) {
+  const reservationReadResults = [
+    ["settings", settingsResult],
+    ["areas", areaResult],
+    ["tables", tableResult],
+    ["reservations", reservationResult],
+    ["allocations", allocationResult],
+    ["floor_allocations", floorAllocationResult],
+    ["waitlist", waitlistResult],
+    ["combinations", combinationResult],
+    ["combination_members", memberResult],
+    ["capacity", capacityResult],
+  ] as const;
+  const failedReservationReads = reservationReadResults
+    .filter(([, result]) => result.error)
+    .map(([source, result]) => ({
+      source,
+      message: result.error?.message ?? "unknown_error",
+    }));
+  if (failedReservationReads.length) {
+    console.error("reservation_book_read_failed", {
+      organizationId: organization.id,
+      locationId: activeLocation.id,
+      businessDate,
+      failures: failedReservationReads,
+    });
     return readFailure(
       "The reservation book could not be loaded from the live workspace.",
     );

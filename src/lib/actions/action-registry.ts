@@ -1633,10 +1633,10 @@ export const ACTION_REGISTRY = [
   },
   {
     id: "reservation.suggest_table",
-    label: "Suggest table",
-    shortLabel: "Suggest table",
+    label: "Assign table",
+    shortLabel: "Assign table",
     description:
-      "Assign the best approved table for the exact reservation interval.",
+      "Enter table-assignment mode for the exact reservation interval.",
     workModes: ["owner_operator", "service_manager", "host_service"],
     capabilities: reservationOperateCapabilityRequirement,
     servicePhases: allServicePhases,

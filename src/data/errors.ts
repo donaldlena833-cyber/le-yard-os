@@ -19,6 +19,10 @@ export function isUniqueViolation(error: unknown): boolean {
   return isSupabaseError(error) && error.code === "23505";
 }
 
+export function isExclusionViolation(error: unknown): boolean {
+  return isSupabaseError(error) && error.code === "23P01";
+}
+
 export function throwDatabaseError(
   error: unknown,
   fallbackMessage = "The request could not be completed.",

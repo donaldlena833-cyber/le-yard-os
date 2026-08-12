@@ -168,15 +168,17 @@ export async function sendReservationOutboxMessage(input: {
       ? {
           subject: "Confirm your table at Le Yard",
           headline: "Your table is almost yours.",
-          body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your table"} is being held briefly. Use the secure link to confirm before the hold expires.`,
-          sms: `Le Yard: confirm ${input.publicCode ? `reservation ${input.publicCode}` : "your table"}${action ? `: ${action.url}` : "."}`,
+          body: "Your table is being held briefly. Use the secure link to confirm before the hold expires.",
+          sms: `Le Yard: confirm your table${action ? `: ${action.url}` : "."}`,
         }
       : input.templateKey === "reservation_confirmed"
         ? {
-            subject: "Your Le Yard reservation is confirmed",
-            headline: "We’ll see you at Le Yard.",
-            body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is set for ${scheduled}` : " is confirmed"}. Use the secure link to view or make changes.`,
-            sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"} is confirmed${action ? `. Manage it securely: ${action.url}` : "."}`,
+            subject: "Your table at Le Yard is booked",
+            headline: "Your table is booked.",
+            body: scheduled
+              ? `We’re looking forward to welcoming you on ${scheduled}.`
+              : "We’re looking forward to welcoming you.",
+            sms: `Le Yard: your table is booked${scheduled ? ` for ${scheduled}` : ""}${action ? `. Manage it securely: ${action.url}` : "."}`,
           }
         : input.templateKey === "reservation_reminder_24h" ||
             input.templateKey === "reservation_reminder_2h"
@@ -186,8 +188,8 @@ export async function sendReservationOutboxMessage(input: {
                 input.templateKey === "reservation_reminder_24h"
                   ? "Your table is waiting tomorrow."
                   : "We’ll see you soon.",
-              body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is set for ${scheduled}` : " is coming up"}. We look forward to welcoming you.`,
-              sms: `Le Yard reminder: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"}${scheduled ? ` is set for ${scheduled}` : " is coming up"}.`,
+              body: `Your reservation${scheduled ? ` is set for ${scheduled}` : " is coming up"}. We look forward to welcoming you.`,
+              sms: `Le Yard reminder: your reservation${scheduled ? ` is set for ${scheduled}` : " is coming up"}.`,
             }
           : input.templateKey === "waitlist_table_ready"
             ? {
@@ -204,20 +206,21 @@ export async function sendReservationOutboxMessage(input: {
               ? {
                   subject: "Your Le Yard reservation was updated",
                   headline: "Your reservation was updated.",
-                  body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"}${scheduled ? ` is now set for ${scheduled}` : " has new details"}. Use the secure link to review or manage it.`,
-                  sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"}${scheduled ? ` is now set for ${scheduled}` : " was updated"}${action ? `. Manage it securely: ${action.url}` : "."}`,
+                  body: `Your reservation${scheduled ? ` is now set for ${scheduled}` : " has new details"}. Use the secure link to review or manage it.`,
+                  sms: `Le Yard: your reservation${scheduled ? ` is now set for ${scheduled}` : " was updated"}${action ? `. Manage it securely: ${action.url}` : "."}`,
                 }
               : {
                   subject: "Your Le Yard reservation was cancelled",
                   headline: "Your reservation is cancelled.",
-                  body: `${input.publicCode ? `Reservation ${input.publicCode}` : "Your reservation"} has been cancelled. We hope to welcome you another evening.`,
-                  sms: `Le Yard: ${input.publicCode ? `reservation ${input.publicCode}` : "your reservation"} has been cancelled.`,
+                  body: "Your reservation has been cancelled. We hope to welcome you another evening.",
+                  sms: "Le Yard: your reservation has been cancelled.",
                 };
 
   if (input.channel === "email") {
     if (!input.email) return { state: "failed", providerMessageId: null };
     const apiKey = process.env.RESEND_API_KEY?.trim();
     const from = process.env.RESERVATION_EMAIL_FROM?.trim();
+    const replyTo = process.env.RESERVATION_EMAIL_REPLY_TO?.trim();
     if (!apiKey || !from)
       return { state: "not_configured", providerMessageId: null };
     return fetch("https://api.resend.com/emails", {
@@ -229,9 +232,10 @@ export async function sendReservationOutboxMessage(input: {
       },
       body: JSON.stringify({
         from,
+        ...(replyTo ? { reply_to: replyTo } : {}),
         to: [input.email],
         subject: copy.subject,
-        html: `<div style="font-family:Georgia,serif;color:#171713;line-height:1.55"><p style="font:700 11px Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#9a722e">Le Yard · Guest services</p><h1 style="font-size:34px;font-weight:500">${escapeHtml(copy.headline)}</h1><p>Hello ${escapeHtml(input.guestName)},</p><p>${escapeHtml(copy.body)}</p>${action ? `<p><a href="${escapeHtml(action.url)}" style="display:inline-block;background:#171713;color:#fff4df;padding:14px 20px;text-decoration:none">${escapeHtml(action.label)}</a></p>` : ""}<p style="font:12px Arial,sans-serif;color:#69675f">If you did not request this reservation, you can ignore this message.</p></div>`,
+        html: `<!doctype html><html><body style="margin:0;background:#191b18;padding:32px 16px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#fffdf7;border-radius:18px;overflow:hidden"><tr><td style="padding:28px 32px 22px;border-bottom:1px solid #e4dfd2"><p style="margin:0;font:700 12px Arial,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#8b6731">Le Yard</p></td></tr><tr><td style="padding:36px 32px 32px;color:#171713;font-family:Arial,sans-serif"><p style="margin:0 0 12px;font-size:15px;color:#625f58">Hello ${escapeHtml(input.guestName)},</p><h1 style="margin:0;font-family:Georgia,serif;font-size:38px;line-height:1.08;font-weight:500;letter-spacing:-.02em">${escapeHtml(copy.headline)}</h1><p style="margin:20px 0 0;font-size:16px;line-height:1.65;color:#4f4c45">${escapeHtml(copy.body)}</p>${scheduled ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:26px;background:#f4f0e6;border-radius:12px"><tr><td style="padding:18px 20px"><p style="margin:0 0 5px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#837d70">Date &amp; time</p><p style="margin:0;font-family:Georgia,serif;font-size:20px;color:#171713">${escapeHtml(scheduled)}</p></td></tr></table>` : ""}${action ? `<p style="margin:28px 0 0"><a href="${escapeHtml(action.url)}" style="display:inline-block;border-radius:10px;background:#171713;color:#fffdf7;padding:14px 20px;font-size:14px;font-weight:700;text-decoration:none">${escapeHtml(action.label)}</a></p>` : ""}</td></tr><tr><td style="padding:20px 32px 28px;border-top:1px solid #e4dfd2;font:12px/1.6 Arial,sans-serif;color:#777168">Questions? Reply to this email and our team will help.<br>If you did not make this reservation, you can ignore this message.</td></tr></table></td></tr></table></body></html>`,
       }),
       signal: AbortSignal.timeout(reservationProviderTimeoutMs),
     })

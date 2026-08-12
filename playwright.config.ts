@@ -47,7 +47,10 @@ export default defineConfig({
   webServer: {
     command:
       "npx next dev --webpack --hostname 127.0.0.1 --port 3100",
-    url: `${baseURL}/api/health`,
+    // Playwright needs process liveness, not a claim that a local demo is ready
+    // for production. `/api/health` intentionally stays 503 unless a hosted
+    // playground or connected schema has passed its deployment gates.
+    url: `${baseURL}/sign-in`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {

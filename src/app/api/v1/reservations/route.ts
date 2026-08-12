@@ -16,6 +16,7 @@ import {
   configuredReservationDeliveryAdapters,
 } from "@/lib/reservations/delivery-readiness.server";
 import { assertPublicReservationInventoryEnabled } from "@/lib/reservations/public-booking-policy.server";
+import { scheduleReservationMessageDelivery } from "@/lib/reservations/message-delivery-trigger.server";
 
 const createSchema = z
   .object({
@@ -112,6 +113,12 @@ export async function POST(request: Request) {
       input.phone,
     );
     const configuredAdapters = configuredReservationDeliveryAdapters();
+    if (!configuredAdapters.includes("email"))
+      throw new BookingApiError(
+        503,
+        "confirmation_email_unavailable",
+        "Reservation confirmation email is temporarily unavailable. Please call the restaurant.",
+      );
     const admin = createAdminClient();
     await assertApprovedReservationDeliveryChannel(
       admin,
@@ -120,7 +127,7 @@ export async function POST(request: Request) {
       configuredAdapters,
     );
     const { data, error } = await admin.rpc(
-      "service_create_public_reservation",
+      "service_book_public_reservation",
       {
         p_request_id: requestKey,
         p_organization_id: client.organizationId,
@@ -140,22 +147,30 @@ export async function POST(request: Request) {
     if (error?.code === "55000")
       throw new BookingApiError(
         503,
-        "verification_unavailable",
-        "Reservation verification is temporarily unavailable. Please call the restaurant.",
+        "confirmation_email_unavailable",
+        "Reservation confirmation email is temporarily unavailable. Please call the restaurant.",
       );
-    if (error) rpcFailure(error, "The reservation could not be held.");
-    const hold = data as {
-      holdId: string;
-      holdExpiresAt: string;
+    if (error) {
+      console.error("public_reservation_create_rpc_error", {
+        requestId,
+        code: error.code,
+        message: error.message,
+      });
+      rpcFailure(error, "The reservation could not be booked.");
+    }
+    const reservation = data as {
+      reservationId: string;
+      status: "confirmed";
       replayed: boolean;
       deliveryState: unknown;
     };
+    scheduleReservationMessageDelivery(request);
     return bookingApiResponse(
       {
         data: {
-          holdId: hold.holdId,
-          holdExpiresAt: hold.holdExpiresAt,
-          deliveryState: hold.deliveryState,
+          reservationId: reservation.reservationId,
+          status: reservation.status,
+          deliveryState: reservation.deliveryState,
         },
       },
       { status: 201 },
@@ -249,6 +264,7 @@ export async function PATCH(request: Request) {
       } as never,
     );
     if (error) rpcFailure(error, "The reservation could not be modified.");
+    scheduleReservationMessageDelivery(request);
     return bookingApiResponse({ data, requestId });
   } catch (error) {
     if (error instanceof z.ZodError)
@@ -296,6 +312,7 @@ export async function DELETE(request: Request) {
       } as never,
     );
     if (error) rpcFailure(error, "The reservation could not be cancelled.");
+    scheduleReservationMessageDelivery(request);
     return bookingApiResponse({ data, requestId });
   } catch (error) {
     if (error instanceof z.ZodError)

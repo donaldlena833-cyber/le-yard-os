@@ -102,7 +102,7 @@ All 116 public base tables have both `ENABLE ROW LEVEL SECURITY` and `FORCE ROW 
 
 `user_invitations` stores a one-way server-generated correlation hash, expiration, role, and intended location IDs. The actionable one-time token remains exclusively inside Supabase Auth. The database never stores an existing or recoverable password. Owners/admins initiate an invitation through a server action; after Supabase Auth creates the invited identity, `provision_user_invitation` atomically creates the pending tenant/location membership and linked employee record. The invitee follows the one-time link, chooses their own password, and `accept_my_invitation` activates only the explicitly scoped tenant membership matching their authenticated email.
 
-Production owner accounts are intentionally not seeded. Donald's and Maris's real email addresses must be supplied and approved before the bootstrap operation. `seed.sql` uses only `example.invalid` identities and a conspicuous local-only password.
+Production owner accounts are intentionally not seeded. The two approved owners' real email addresses and display names must be supplied and approved before the bootstrap operation. `seed.sql` uses only `example.invalid` identities and a conspicuous local-only password.
 
 ## Tip pool calculation
 
@@ -150,6 +150,8 @@ Employee-document uploads use a five-part organization/location/employee path. A
 ## Integrations and AI
 
 Toast and Resy are represented by `integration_connections` adapters. The default adapter is manual/CSV and the application does not depend on live credentials. Sync jobs record direction, cursor, retry state, attempts, record-level results, and an append-only event history.
+
+Toast Labor is the authoritative source for attendance. `service_ingest_pos_time_entry` is a service-role-only, replay-safe boundary keyed by connection and Toast time-entry GUID. It rejects same-version/different-payload replays, ignores stale versions, preserves provider deletion markers, and replaces imported break facts without allowing browser writes. Employee mapping uses an explicit Toast identifier in `employee_number` or `payroll_reference`, then a unique email fallback; job mapping uses `job_roles.code`, then a unique normalized title fallback. Ambiguous mappings fail closed and leave record-level sync evidence.
 
 `income_sales_checks` is the provider-neutral latest-state sales fact used by the Income snapshot. Raw rows and external IDs are service-role only. `ingest_income_sales_check` supplies replay/stale-version protection, while `income_operating_snapshot` returns an exact-capability, location-scoped aggregate of live sales, labor accrual, recorded day costs, closeout evidence, and hourly planning signals.
 
@@ -208,7 +210,7 @@ The latest security migration revokes public-schema function execution from `PUB
 
 1. Create separate Supabase projects for development/preview and production.
 2. Apply migrations through CI with a reviewed database URL; never expose that URL or the service-role key to the browser.
-3. Obtain and verify Donald's and Maris's email addresses, review the dry-run plan, and use `npm run bootstrap:owners -- --config /absolute/path/to/approved-bootstrap.json --execute` with its one-time plan confirmation. Do not manually insert Auth users or Owner memberships.
+3. Obtain and verify both approved owners' email addresses and display names, review the dry-run plan, and use `npm run bootstrap:owners -- --config /absolute/path/to/approved-bootstrap.json --execute` with its one-time plan confirmation. Do not manually insert Auth users or Owner memberships.
 4. Configure SMTP, approved redirect URLs, password policy, leaked-password protection, and MFA recovery procedures.
 5. Confirm private bucket limits and allowed MIME types, then test signed URL expiry.
 6. Configure platform point-in-time recovery/backups as approved, record backup evidence in `backup_runs`, and perform a restore drill.

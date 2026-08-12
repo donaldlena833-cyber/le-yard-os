@@ -90,7 +90,7 @@ function OrganizationPanel() {
       </section>
 
       <section>
-        <SectionHeading title="Owner accounts" detail="Owners currently use password-only access. Passwords are never retrievable by the app." />
+        <SectionHeading title="Owner accounts" detail="MFA can be enabled for Owner and Admin access when the deployment is ready. Passwords are never retrievable by the app." />
         <div className="border-y border-[var(--line)]">
           {owners.map((owner, index) => (
             <div key={owner.id} className="flex items-center gap-3 border-t border-[var(--line)] py-4 first:border-0">

@@ -89,7 +89,7 @@ test("opens the booking and waitlist workflows from the host stand", async ({
   await page.getByRole("button", { name: "Close guest context" }).click();
 
   await showReservationView(page, "Floor");
-  await expect(page.getByRole("heading", { name: "Floor now" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Floor plan" })).toBeVisible();
   await expect(
     page.getByTitle(/^Table 10 · 4 seats · available now/),
   ).toBeVisible();
@@ -141,7 +141,7 @@ test("a future book never borrows the current physical floor for seating", async
 }) => {
   await openWorkspace(page, "/reservations?date=2099-08-10", serviceDate);
   await showReservationView(page, "Floor");
-  await expect(page.getByRole("heading", { name: "Floor now" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Floor plan" })).toBeVisible();
   await expect(
     page.getByText(/current physical floor while you review/i),
   ).toBeVisible();

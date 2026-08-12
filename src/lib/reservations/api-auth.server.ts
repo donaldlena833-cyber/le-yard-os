@@ -262,5 +262,10 @@ export function bookingApiResponse(body: unknown, init: ResponseInit = {}) {
 
 export function bookingApiFailure(error: unknown, requestId: string) {
   if (error instanceof BookingApiError) return bookingApiResponse({ error: { code: error.code, message: error.message, requestId } }, { status: error.status });
+  console.error("booking_api_internal_error", {
+    requestId,
+    name: error instanceof Error ? error.name : "UnknownError",
+    message: error instanceof Error ? error.message : "Unknown booking error",
+  });
   return bookingApiResponse({ error: { code: "internal_error", message: "The booking service could not complete the request.", requestId } }, { status: 500 });
 }

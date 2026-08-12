@@ -11,6 +11,10 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
+const businessDate = new Date().toISOString().slice(0, 10);
+const nextBusinessDate = new Date(Date.parse(`${businessDate}T00:00:00Z`) + 86_400_000)
+  .toISOString()
+  .slice(0, 10);
 
 const ids = {
   organization: "20000000-0000-4000-8000-000000000001",
@@ -103,7 +107,7 @@ try {
     ) values (
       $1::uuid, $2::uuid, $3::uuid, 'Night service', array[0,1,2,3,4,5,6],
       time '17:00', time '03:00', 90, 15, 20, 1, 10,
-      date '2026-08-10', true, true, '2026-08-10T12:00:00Z', $4::uuid
+      date '${businessDate}', true, true, '${businessDate}T12:00:00Z', $4::uuid
     )`,
     [ids.period, ids.organization, ids.location, ids.owner],
   );
@@ -112,14 +116,14 @@ try {
   await db.exec("set role authenticated");
   const initial = (
     await db.query(
-      "select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '2026-08-10')",
+      `select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '${businessDate}')`,
       [ids.organization, ids.location],
     )
   ).rows;
   if (
     initial.length !== 1 || initial[0].servicePeriodId !== ids.period ||
-    initial[0].startsAt.toISOString() !== "2026-08-10T21:00:00.000Z" ||
-    initial[0].endsAt.toISOString() !== "2026-08-11T07:00:00.000Z"
+    initial[0].startsAt.toISOString() !== `${businessDate}T21:00:00.000Z` ||
+    initial[0].endsAt.toISOString() !== `${nextBusinessDate}T07:00:00.000Z`
   ) {
     throw new Error(`Overnight materialization is wrong: ${JSON.stringify(initial)}`);
   }
@@ -128,7 +132,7 @@ try {
   await db.query(
     `select public.configure_service_shift_exception(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,'closure',
-      '2026-08-10T23:00:00Z','2026-08-11T00:00:00Z',
+      '${businessDate}T23:00:00Z','${nextBusinessDate}T00:00:00Z',
       null,null,null,null,'Private event closure',true
     )`,
     [ids.closure, ids.organization, ids.location, shiftId],
@@ -136,7 +140,7 @@ try {
   await db.query(
     `select public.configure_service_shift_exception(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,'pacing_override',
-      '2026-08-11T00:00:00Z','2026-08-11T01:00:00Z',
+      '${nextBusinessDate}T00:00:00Z','${nextBusinessDate}T01:00:00Z',
       30,2,null,null,'Reduced kitchen pacing',true
     )`,
     [ids.pacing, ids.organization, ids.location, shiftId],
@@ -144,7 +148,7 @@ try {
   const bufferResult = await db.query(
     `select public.configure_service_shift_exception(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,'buffer_override',
-      '2026-08-10T21:00:00Z','2026-08-11T07:00:00Z',
+      '${businessDate}T21:00:00Z','${nextBusinessDate}T07:00:00Z',
       null,null,30,45,'Opening and close buffers',true
     ) result`,
     [ids.buffer, ids.organization, ids.location, shiftId],
@@ -152,7 +156,7 @@ try {
   const replay = await db.query(
     `select public.configure_service_shift_exception(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,'buffer_override',
-      '2026-08-10T21:00:00Z','2026-08-11T07:00:00Z',
+      '${businessDate}T21:00:00Z','${nextBusinessDate}T07:00:00Z',
       null,null,30,45,'Opening and close buffers',true
     ) result`,
     [ids.buffer, ids.organization, ids.location, shiftId],
@@ -162,7 +166,7 @@ try {
   }
   const snapshot = (
     await db.query(
-      "select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '2026-08-10')",
+      `select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '${businessDate}')`,
       [ids.organization, ids.location],
     )
   ).rows[0];
@@ -173,7 +177,7 @@ try {
   await db.exec("reset role");
   await expectError(
     () => db.query(
-      "select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'2026-08-10T23:15:00Z',90,2)",
+      `select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'${businessDate}T23:15:00Z',90,2)`,
       [ids.organization, ids.location],
     ),
     "23514",
@@ -189,12 +193,12 @@ try {
   }
   await db.exec("reset role");
   await db.query(
-    "select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'2026-08-10T23:15:00Z',90,2)",
+    `select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'${businessDate}T23:15:00Z',90,2)`,
     [ids.organization, ids.location],
   );
   await expectError(
     () => db.query(
-      "select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'2026-08-10T21:00:00Z',90,2)",
+      `select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'${businessDate}T21:00:00Z',90,2)`,
       [ids.organization, ids.location],
     ),
     "23514",
@@ -202,7 +206,7 @@ try {
   );
   await expectError(
     () => db.query(
-      "select private.assert_reservation_pacing($1::uuid,$2::uuid,'2026-08-11T00:15:00Z',3,null,null)",
+      `select private.assert_reservation_pacing($1::uuid,$2::uuid,'${nextBusinessDate}T00:15:00Z',3,null,null)`,
       [ids.organization, ids.location],
     ),
     "23P01",
@@ -216,7 +220,7 @@ try {
   await db.exec("set role authenticated");
   await expectError(
     () => db.query(
-      "select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '2026-08-10')",
+      `select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '${businessDate}')`,
       [ids.organization, ids.location],
     ),
     "23514",
@@ -232,7 +236,7 @@ try {
   await db.exec("set role authenticated");
   await expectError(
     () => db.query(
-      "select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '2026-08-10')",
+      `select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '${businessDate}')`,
       [ids.organization, ids.location],
     ),
     "42501",

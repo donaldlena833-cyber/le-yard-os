@@ -60,7 +60,7 @@ export async function loadPublicAvailability(
 ) {
   assertPublicReservationInventoryEnabled(options);
   const admin = createAdminClient();
-  const reservationRpc = admin.rpc as unknown as (
+  const reservationRpc = admin.rpc.bind(admin) as unknown as (
     name: string,
     args: Record<string, unknown>,
   ) => Promise<{

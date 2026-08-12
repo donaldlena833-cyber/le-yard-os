@@ -19,16 +19,18 @@ const mocks = vi.hoisted(() => ({
   cancelReservation: vi.fn(),
   loadLifecycleHead: vi.fn(),
   modifyReservation: vi.fn(),
+  moveTable: vi.fn(),
   saveReservation: vi.fn(),
   saveWaitlist: vi.fn(),
   seatWaitlist: vi.fn(),
   setTableStatus: vi.fn(),
   transitionReservation: vi.fn(),
   transitionWaitlist: vi.fn(),
+  refresh: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), refresh: mocks.refresh }),
 }));
 
 vi.mock("@/app/actions/workflows/reservations", () => ({
@@ -36,6 +38,7 @@ vi.mock("@/app/actions/workflows/reservations", () => ({
   cancelReservationAction: mocks.cancelReservation,
   loadReservationLifecycleHeadAction: mocks.loadLifecycleHead,
   modifyReservationAction: mocks.modifyReservation,
+  moveReservationTableAction: mocks.moveTable,
   saveReservationWithGuestAction: mocks.saveReservation,
   saveWaitlistEntryAction: mocks.saveWaitlist,
   seatWaitlistEntryAction: mocks.seatWaitlist,
@@ -98,6 +101,7 @@ function renderHost(
   businessDate = currentDate,
   configurationReady = true,
   customize?: (model: ReturnType<typeof createDemoReservationModel>) => void,
+  mode: WorkspaceContextValue["mode"] = "live",
 ) {
   const model = createDemoReservationModel(businessDate, permissions);
   model.configuration.ready = configurationReady;
@@ -106,6 +110,7 @@ function renderHost(
     <ReservationsWorkspace
       workspace={{
         ...workspace,
+        mode,
         capabilities: [
           ...(permissions.view ? (["reservations.view"] as const) : []),
           ...(permissions.operate ? (["reservations.operate"] as const) : []),
@@ -121,6 +126,35 @@ function renderHost(
 }
 
 describe("reservation host capability affordances", () => {
+  it("keeps touch floor editing behind configuration access", () => {
+    renderHost({
+      view: true,
+      operate: true,
+      override: false,
+      configure: false,
+    });
+    expect(screen.getByRole("button", { name: "Edit floor" })).toHaveProperty(
+      "disabled",
+      true,
+    );
+
+    cleanup();
+    renderHost(
+      { view: true, operate: true, override: false, configure: true },
+      currentDate,
+      true,
+      undefined,
+      "demo",
+    );
+    const edit = screen.getByRole("button", { name: "Edit floor" });
+    expect(edit).toHaveProperty("disabled", false);
+    fireEvent.click(edit);
+    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(
+      screen.getByText(/Drag any table with a finger or pointer/i),
+    ).toBeTruthy();
+  });
+
   it("keeps view-only workflows readable and explains disabled mutations", () => {
     renderHost({
       view: true,
@@ -146,7 +180,7 @@ describe("reservation host capability affordances", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Nora Example/ }));
     expect(
-      screen.getByRole("button", { name: "Suggest table" }),
+      screen.getByRole("button", { name: "Assign table" }),
     ).toHaveProperty("disabled", true);
     expect(screen.getByRole("button", { name: "Arrive" })).toHaveProperty(
       "disabled",
@@ -283,6 +317,113 @@ describe("reservation host capability affordances", () => {
     expect(mocks.transitionReservation).toHaveBeenCalledWith(
       expect.objectContaining({ targetStatus: "no_show" }),
     );
+  });
+
+  it("updates the selected reservation in place before background reconciliation", async () => {
+    mocks.transitionReservation.mockResolvedValue({
+      ok: true,
+      persisted: true,
+      mode: "live",
+      data: {},
+    });
+    renderHost({
+      view: true,
+      operate: true,
+      override: false,
+      configure: false,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Nora Example/ }));
+    expect(
+      screen
+        .getByRole("group", { name: "Reservation workspace view" })
+        .querySelector('[data-state="active"]')?.textContent,
+    ).toContain("Service");
+
+    fireEvent.click(screen.getByRole("button", { name: "Arrive" }));
+
+    await waitFor(() =>
+      expect(mocks.transitionReservation).toHaveBeenCalledOnce(),
+    );
+    expect(screen.getByRole("button", { name: "Seat" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Nora Example" })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("group", { name: "Reservation workspace view" })
+        .querySelector('[data-state="active"]')?.textContent,
+    ).toContain("Service");
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("inspects floor tables by default and assigns only after explicit mode", async () => {
+    mocks.assignTables.mockResolvedValue({
+      ok: true,
+      persisted: true,
+      mode: "live",
+      data: {},
+    });
+    renderHost({
+      view: true,
+      operate: true,
+      override: false,
+      configure: false,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Nora Example/ }));
+    fireEvent.click(screen.getByTitle(/^Table 1 ·/));
+    expect(mocks.assignTables).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Needs reset" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Nora Example/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Assign table" }));
+    expect(
+      screen.getByText(/Assignment mode · choose a table for Nora Example/i),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByTitle(/^Table 1 ·/));
+
+    await waitFor(() => expect(mocks.assignTables).toHaveBeenCalledOnce());
+    expect(mocks.assignTables).toHaveBeenCalledWith(
+      expect.objectContaining({ tableIds: ["demo-table-1"] }),
+    );
+  });
+
+  it("keeps demo reservation, table, and waitlist success states truthful", () => {
+    renderHost(
+      {
+        view: true,
+        operate: true,
+        override: true,
+        configure: true,
+      },
+      currentDate,
+      true,
+      undefined,
+      "demo",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Nora Example/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Arrive" }));
+    expect(screen.getByRole("button", { name: "Seat" })).toBeTruthy();
+    expect(mocks.transitionReservation).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Assign table" }));
+    fireEvent.click(screen.getByTitle(/^Table 1 ·/));
+    expect(
+      screen.getByRole("button", { name: /Nora Example/ }).textContent,
+    ).toContain("Table 1");
+    expect(mocks.assignTables).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close guest context" }));
+    fireEvent.click(screen.getByTitle(/^Table 3 ·/));
+    fireEvent.click(screen.getByRole("button", { name: "Needs reset" }));
+    expect(screen.getByTitle(/^Table 3 · 2 seats · needs reset now/)).toBeTruthy();
+    expect(mocks.setTableStatus).not.toHaveBeenCalled();
+
+    expect(screen.getByText("Jamie Lee · 2")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Seat now" })[0]!);
+    expect(screen.queryByText("Jamie Lee · 2")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Jamie Lee" })).toBeTruthy();
+    expect(mocks.seatWaitlist).not.toHaveBeenCalled();
   });
 
   it("renders an explicit denial when no reservation capability is present", () => {

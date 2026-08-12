@@ -170,6 +170,13 @@ export const setReservationTableStatusInputSchema = z.object({
   reservationId: nullableUuid,
 });
 
+export const moveReservationTableInputSchema = z.object({
+  requestId: uuid,
+  tableId: uuid,
+  positionX: z.number().min(0).max(1),
+  positionY: z.number().min(0).max(1),
+});
+
 export const installReservationDraftInputSchema = z.object({
   requestId: uuid,
   locationId: uuid,
@@ -286,6 +293,9 @@ export type SeatWaitlistEntryInput = z.infer<
 >;
 export type SetReservationTableStatusInput = z.infer<
   typeof setReservationTableStatusInputSchema
+>;
+export type MoveReservationTableInput = z.infer<
+  typeof moveReservationTableInputSchema
 >;
 export type InstallReservationDraftInput = z.infer<
   typeof installReservationDraftInputSchema

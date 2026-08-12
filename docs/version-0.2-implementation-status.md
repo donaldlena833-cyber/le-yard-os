@@ -124,7 +124,7 @@ Initial tracked status document created:
 
 ## Exact Verification Results
 
-### 2026-08-09 password-only Owner and manual costing follow-up
+### 2026-08-09 Owner MFA and manual costing follow-up
 
 - Added forward migration `20260809142645_password_only_owners_and_direct_inventory_costs.sql`.
 - Owner authorization now accepts authenticated AAL1 password sessions while preserving organization, location, role, capability, RLS, idempotency, audit, and final-owner protections. Existing MFA factors remain optional and are not deleted.
@@ -132,7 +132,7 @@ Initial tracked status document created:
 - Added Kitchen Setup authoring for cost per compatible unit and opening stock. Opening stock reuses the full-count workflow and requires independent approval before changing the ledger.
 - Updated the visual tokens to a lighter off-white canvas with quieter borders, flatter shadows, and reduced paper texture.
 - `npm run types:database` — PASS: 121 tables, 3 views, 201 functions, and 16 enums.
-- `npm run test:capabilities:pglite` — PASS: direct-cost create/replay, changed replay rejection, cross-location denial, audit evidence, Chef capability, and password-only Owner authorization.
+- `npm run test:capabilities:pglite` — PASS: direct-cost create/replay, changed replay rejection, cross-location denial, audit evidence, Chef capability, and Owner authorization. Connected Owner/Admin MFA is implemented as an opt-in deployment gate.
 - `npm run test:function-grants:pglite` — PASS: 201 public functions with deny-by-default execution and explicit client/service boundaries.
 - `npm run verify` — PASS: lint, generated database contract check, TypeScript, 431/431 unit tests across 77 files, all nine portable integration/security verifiers, and the optimized Next.js production build.
 - `npm run test:e2e` — 49/50 passed in one desktop/mobile run; one mobile `/guests` request hit a transient Next development-server JSON parse 500. The exact failed accessibility test was rerun immediately and passed 1/1 with no code change.
@@ -170,3 +170,11 @@ Initial tracked status document created:
 - UI-polish browser review — PASS in the in-app browser: Today, Kitchen, Inventory, shell navigation, and the command palette were visually inspected; the desktop inventory document had no horizontal overflow and the command palette opened, focused, closed with Escape, and returned control correctly.
 - Focused UI tests — PASS: 4/4 shared primitive tests and 12/12 live-inventory interaction tests.
 - `npm run verify` after the UI/UX polish — PASS: lint, 121-table generated database contract check, TypeScript, 430/430 unit tests across 77 files, all nine portable integration/security verifiers, and the optimized Next.js production build.
+
+### 2026-08-13 reservations, remembered sessions, and Toast Labor
+
+- Walk-in creation now excludes physically unavailable tables from immediate suggestions and retries a raced PostgreSQL exclusion conflict without the stale table assignment. Scheduled/phone reservations retain strict conflict behavior.
+- Connected document traffic is canonicalized to `NEXT_PUBLIC_APP_URL` before Supabase Auth runs, keeping the selected 8-hour or 30-day session in one host-only cookie jar across deployment aliases.
+- Added forward migration `20260813144236_toast_labor_time_entry_sync.sql` with provider identities, deletion markers, a location-safe sync-health read, and a service-role-only replay-safe Toast time-entry/break ingestion command.
+- Added a protected Toast Labor worker, read-only connected/demo Time Clock surfaces, fail-closed employee/job mappings, provider freshness, and durable row outcomes. Production activation still requires approved credentials and a scheduler calling the canonical origin.
+- Verification: generated contract PASS (139 tables, 3 views, 262 functions, 16 enums); portable migration/Toast replay checks PASS; TypeScript PASS; unit suite PASS (756 tests across 134 files); production build PASS.

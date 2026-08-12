@@ -18,6 +18,10 @@ const workerUrl = new URL(
 
 const originalResendKey = process.env.RESEND_API_KEY;
 const originalReservationFrom = process.env.RESERVATION_EMAIL_FROM;
+const originalReservationReplyTo = process.env.RESERVATION_EMAIL_REPLY_TO;
+const originalReservationPublicSiteUrl = process.env.RESERVATION_PUBLIC_SITE_URL;
+const originalReservationLinkSigningSecret =
+  process.env.RESERVATION_LINK_SIGNING_SECRET;
 const originalSmsEnabled = process.env.RESERVATION_SMS_DELIVERY_ENABLED;
 const originalTwilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
 const originalTwilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
@@ -30,6 +34,17 @@ afterEach(() => {
   if (originalReservationFrom === undefined)
     delete process.env.RESERVATION_EMAIL_FROM;
   else process.env.RESERVATION_EMAIL_FROM = originalReservationFrom;
+  if (originalReservationReplyTo === undefined)
+    delete process.env.RESERVATION_EMAIL_REPLY_TO;
+  else process.env.RESERVATION_EMAIL_REPLY_TO = originalReservationReplyTo;
+  if (originalReservationPublicSiteUrl === undefined)
+    delete process.env.RESERVATION_PUBLIC_SITE_URL;
+  else process.env.RESERVATION_PUBLIC_SITE_URL = originalReservationPublicSiteUrl;
+  if (originalReservationLinkSigningSecret === undefined)
+    delete process.env.RESERVATION_LINK_SIGNING_SECRET;
+  else
+    process.env.RESERVATION_LINK_SIGNING_SECRET =
+      originalReservationLinkSigningSecret;
   if (originalSmsEnabled === undefined)
     delete process.env.RESERVATION_SMS_DELIVERY_ENABLED;
   else process.env.RESERVATION_SMS_DELIVERY_ENABLED = originalSmsEnabled;
@@ -134,13 +149,15 @@ describe("reservation maintenance worker", () => {
   it("captures a bounded provider message ID for outbox completion", async () => {
     process.env.RESEND_API_KEY = "resend-test";
     process.env.RESERVATION_EMAIL_FROM = "reservations@leyard.example";
+    process.env.RESERVATION_EMAIL_REPLY_TO = "donaldlena833@gmail.com";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "email_123" }), { status: 200 }),
+      );
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify({ id: "email_123" }), { status: 200 }),
-        ),
+      fetchMock,
     );
     await expect(
       sendReservationOutboxMessage({
@@ -161,6 +178,57 @@ describe("reservation maintenance worker", () => {
         messageCreatedAt: "2026-08-10T01:00:00.000Z",
       }),
     ).resolves.toEqual({ state: "sent", providerMessageId: "email_123" });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject(
+      {
+        from: "reservations@leyard.example",
+        reply_to: "donaldlena833@gmail.com",
+        to: ["ada@example.com"],
+      },
+    );
+  });
+
+  it("sends a clean confirmation email without exposing the internal code", async () => {
+    process.env.RESEND_API_KEY = "resend-test";
+    process.env.RESERVATION_EMAIL_FROM = "reservations@leyard.example";
+    process.env.RESERVATION_PUBLIC_SITE_URL = "https://www.leyard.example";
+    process.env.RESERVATION_LINK_SIGNING_SECRET = "s".repeat(48);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ id: "email_confirmed" }), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      sendReservationOutboxMessage({
+        messageId: "11111111-1111-4111-8111-111111111111",
+        organizationId: "22222222-2222-4222-8222-222222222222",
+        locationId: "33333333-3333-4333-8333-333333333333",
+        reservationId: "44444444-4444-4444-8444-444444444444",
+        bookingHoldId: null,
+        channel: "email",
+        templateKey: "reservation_confirmed",
+        guestName: "Ada",
+        email: "ada@example.com",
+        phone: null,
+        publicCode: "LY-1234",
+        reservedAt: "2026-08-12T23:00:00.000Z",
+        offerExpiresAt: null,
+        holdExpiresAt: null,
+        messageCreatedAt: "2026-08-10T01:00:00.000Z",
+      }),
+    ).resolves.toEqual({ state: "sent", providerMessageId: "email_confirmed" });
+
+    const payload = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as {
+      subject: string;
+      html: string;
+    };
+    expect(payload.subject).toBe("Your table at Le Yard is booked");
+    expect(payload.html).toContain("Your table is booked.");
+    expect(payload.html).toContain("Date &amp; time");
+    expect(payload.html).toContain("View or manage reservation");
+    expect(payload.html).not.toContain("LY-1234");
+    expect(payload.html.toLowerCase()).not.toContain("confirmation number");
   });
 
   it("returns not configured without calling Twilio when SMS is disabled", async () => {

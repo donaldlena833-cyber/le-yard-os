@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const compatibilityMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/20260812171801_realtime_identity_broadcast_compatibility.sql",
+  ),
+  "utf8",
+);
 const todayWorkspace = readFileSync(
   join(
     process.cwd(),
@@ -19,7 +26,7 @@ const todayWorkspace = readFileSync(
 
 describe("reservation Realtime payload boundary", () => {
   it("broadcasts scoped identity only and requires an exact reservation capability", () => {
-    const functionBody = migration.match(
+    const functionBody = compatibilityMigration.match(
       /create or replace function public\.broadcast_reservation_change\(\)[\s\S]*?\n\$\$;/,
     )?.[0];
     expect(functionBody).toBeTruthy();
@@ -27,9 +34,11 @@ describe("reservation Realtime payload boundary", () => {
       /jsonb_build_object\([\s\S]*?'id'[\s\S]*?'organization_id'[\s\S]*?'location_id'/,
     );
     expect(functionBody).toMatch(
-      /realtime\.broadcast_changes\(\$1,\$2,\$3,\$4,\$5,\$6,\$7\)[\s\S]*new_identity,[\s\S]*old_identity/,
+      /realtime\.send\(\$1,\$2,\$3,\$4\)[\s\S]*broadcast_payload/,
     );
-    expect(functionBody).not.toMatch(/new_record|old_record|raw_payload/);
+    expect(functionBody).not.toMatch(/raw_payload/);
+    expect(functionBody).toMatch(/'record', new_identity/);
+    expect(functionBody).toMatch(/'old_record', old_identity/);
 
     const policy = migration.match(
       /create policy le_yard_reservation_broadcast_read[\s\S]*?\n\s*\$policy\$/,

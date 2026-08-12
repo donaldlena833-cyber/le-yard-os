@@ -1,0 +1,50 @@
+name: Protected production release
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: Path to an approved release manifest
+        required: true
+        default: release/release-manifest.json
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: protected-production-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate approved release
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require main or immutable tag
+        run: |
+          test "${GITHUB_REF_NAME}" = "main" || [[ "${GITHUB_REF_TYPE}" = "tag" ]]
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+      - name: Validate release manifest
+        run: node scripts/validate-release-manifest.mjs "${{ inputs.manifest }}"
+      - name: Verify repository migration head
+        run: |
+          expected=$(node -e 'const fs=require("fs"); const p=fs.readdirSync("supabase/migrations").filter(x=>x.endsWith(".sql")).sort().at(-1); process.stdout.write(p.match(/^([0-9]{14})_/)[1])')
+          declared=$(node -e 'const fs=require("fs"); const p=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(p.migrationHead)' "${{ inputs.manifest }}")
+          test "$expected" = "$declared"
+      - name: Verify connected health before deployment
+        env:
+          HEALTH_URL: ${{ secrets.RELEASE_PREFLIGHT_HEALTH_URL }}
+        run: |
+          test -n "$HEALTH_URL"
+          status=$(curl --silent --show-error --output /tmp/health.json --write-out '%{http_code}' --max-time 10 "$HEALTH_URL")
+          test "$status" = "200"
+          grep -q '"status":"ready"' /tmp/health.json
+      - name: Deployment handoff
+        run: |
+          echo "Validation passed. Vercel production promotion is intentionally a protected environment action."

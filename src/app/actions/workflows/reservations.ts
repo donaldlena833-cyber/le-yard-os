@@ -9,6 +9,7 @@ import {
   configureServiceShiftExceptionInputSchema,
   installReservationDraftInputSchema,
   modifyReservationInputSchema,
+  moveReservationTableInputSchema,
   reservationLifecycleHeadInputSchema,
   saveReservationInputSchema,
   saveReservationWithGuestInputSchema,
@@ -27,6 +28,7 @@ import {
   installReservationDraft,
   loadReservationLifecycleHead,
   modifyReservation,
+  moveReservationTable,
   saveReservation,
   saveReservationWithGuest,
   saveWaitlistEntry,
@@ -204,6 +206,17 @@ export async function setReservationTableStatusAction(input: unknown) {
     schema: setReservationTableStatusInputSchema,
     input,
     run: setReservationTableStatus,
+  });
+  refreshOnSuccess(result);
+  return result;
+}
+
+export async function moveReservationTableAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "reservation.table_move",
+    schema: moveReservationTableInputSchema,
+    input,
+    run: moveReservationTable,
   });
   refreshOnSuccess(result);
   return result;

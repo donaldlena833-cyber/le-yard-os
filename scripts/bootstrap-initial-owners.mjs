@@ -129,18 +129,20 @@ async function main() {
   const configPath = resolve(process.cwd(), args[configIndex + 1]);
   const rawConfig = JSON.parse(await readFile(configPath, "utf8"));
   const config = bootstrapConfigSchema.parse(rawConfig);
-  const donaldEmail = emailSchema.parse(requiredEnvironment("OWNER_DONALD_EMAIL"));
-  const marisEmail = emailSchema.parse(requiredEnvironment("OWNER_MARIS_EMAIL"));
-  if (donaldEmail === marisEmail) throw new Error("Donald and Maris must use distinct Owner emails.");
+  const ownerOneEmail = emailSchema.parse(requiredEnvironment("OWNER_1_EMAIL"));
+  const ownerTwoEmail = emailSchema.parse(requiredEnvironment("OWNER_2_EMAIL"));
+  const ownerOneDisplayName = requiredEnvironment("OWNER_1_DISPLAY_NAME");
+  const ownerTwoDisplayName = requiredEnvironment("OWNER_2_DISPLAY_NAME");
+  if (ownerOneEmail === ownerTwoEmail) throw new Error("Owner 1 and Owner 2 must use distinct emails.");
 
   const canonicalConfig = JSON.stringify(config);
   const seed = createHash("sha256")
-    .update(`${canonicalConfig}\u001f${donaldEmail}\u001f${marisEmail}`)
+    .update(`${canonicalConfig}\u001f${ownerOneEmail}\u001f${ownerTwoEmail}`)
     .digest("hex");
   const requestId = stableUuid(seed, "bootstrap-request");
   const organizationId = stableUuid(seed, "organization");
-  const donaldEmployeeId = stableUuid(seed, "donald-employee");
-  const marisEmployeeId = stableUuid(seed, "maris-employee");
+  const ownerOneEmployeeId = stableUuid(seed, "owner-one-employee");
+  const ownerTwoEmployeeId = stableUuid(seed, "owner-two-employee");
   const locations = config.locations.map((location, index) => ({
     id: stableUuid(seed, `location-${index}-${location.code}`),
     ...location,
@@ -159,8 +161,8 @@ async function main() {
     organization: config.organization,
     locations,
     owners: [
-      { displayName: "Donald", email: donaldEmail, role: "owner" },
-      { displayName: "Maris", email: marisEmail, role: "owner" },
+      { displayName: ownerOneDisplayName, email: ownerOneEmail, role: "owner" },
+      { displayName: ownerTwoDisplayName, email: ownerTwoEmail, role: "owner" },
     ],
     confirmation: requiredConfirmation,
   };
@@ -192,8 +194,8 @@ async function main() {
   if (organizationError) throw new Error(`Could not inspect bootstrap state: ${organizationError.message}`);
 
   const ownerSpecs = [
-    { key: "donald", displayName: "Donald", email: donaldEmail, employeeId: donaldEmployeeId },
-    { key: "maris", displayName: "Maris", email: marisEmail, employeeId: marisEmployeeId },
+    { key: "owner-one", displayName: ownerOneDisplayName, email: ownerOneEmail, employeeId: ownerOneEmployeeId },
+    { key: "owner-two", displayName: ownerTwoDisplayName, email: ownerTwoEmail, employeeId: ownerTwoEmployeeId },
   ];
   const existingByEmail = new Map(authUsers.map((user) => [user.email?.toLowerCase(), user]));
 
@@ -261,8 +263,8 @@ async function main() {
     const tokenHash = (label) => createHmac("sha256", secretKey)
       .update(`${requestId}\u001f${label}`)
       .digest("hex");
-    const donald = ownerUsers.find((owner) => owner.key === "donald");
-    const maris = ownerUsers.find((owner) => owner.key === "maris");
+    const ownerOne = ownerUsers.find((owner) => owner.key === "owner-one");
+    const ownerTwo = ownerUsers.find((owner) => owner.key === "owner-two");
     const { data: bootstrappedOrganizationId, error: bootstrapError } = await admin.rpc("bootstrap_initial_tenant", {
       p_request_id: requestId,
       p_organization_id: organizationId,
@@ -271,16 +273,16 @@ async function main() {
       p_timezone: config.organization.timezone,
       p_currency_code: config.organization.currencyCode,
       p_locations: locations,
-      p_donald_user_id: donald.user.id,
-      p_donald_email: donald.email,
-      p_donald_display_name: donald.displayName,
-      p_donald_employee_id: donald.employeeId,
-      p_donald_token_hash: tokenHash("donald"),
-      p_maris_user_id: maris.user.id,
-      p_maris_email: maris.email,
-      p_maris_display_name: maris.displayName,
-      p_maris_employee_id: maris.employeeId,
-      p_maris_token_hash: tokenHash("maris"),
+      p_donald_user_id: ownerOne.user.id,
+      p_donald_email: ownerOne.email,
+      p_donald_display_name: ownerOne.displayName,
+      p_donald_employee_id: ownerOne.employeeId,
+      p_donald_token_hash: tokenHash("owner-one"),
+      p_maris_user_id: ownerTwo.user.id,
+      p_maris_email: ownerTwo.email,
+      p_maris_display_name: ownerTwo.displayName,
+      p_maris_employee_id: ownerTwo.employeeId,
+      p_maris_token_hash: tokenHash("owner-two"),
       p_expires_at: expiresAt,
     });
     if (bootstrapError || bootstrappedOrganizationId !== organizationId) {

@@ -136,6 +136,38 @@ function expiredConnectedSessionResponse(
   );
 }
 
+function canonicalizeConnectedOrigin(
+  request: NextRequest,
+  appUrl: string,
+): NextResponse | null {
+  const canonicalOrigin = new URL(appUrl).origin;
+  if (request.nextUrl.origin === canonicalOrigin) return null;
+
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    !request.nextUrl.pathname.startsWith("/api/")
+  ) {
+    return NextResponse.redirect(
+      new URL(
+        `${request.nextUrl.pathname}${request.nextUrl.search}`,
+        canonicalOrigin,
+      ),
+    );
+  }
+
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      { error: "Use the canonical Le Yard OS origin." },
+      { status: 421 },
+    );
+  }
+
+  return new NextResponse("Use the canonical Le Yard OS origin.", {
+    status: 421,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
 function updatePlaygroundSession(
   request: NextRequest,
   appUrl: string,
@@ -251,6 +283,18 @@ export async function updateSession(
     }
     return forwardRequest(request, additionalRequestHeaders);
   }
+
+  // Supabase and the explicit device deadline both use host-only cookies.
+  // Sending a user between a Vercel alias, generated deployment URL, and the
+  // canonical app origin therefore looks like a logout even though their
+  // provider session is still valid. Canonicalize before Auth so sign-in and
+  // every later visit share exactly one cookie jar. Never replay a mutation
+  // across origins.
+  const canonicalResponse = canonicalizeConnectedOrigin(
+    request,
+    runtime.appUrl!,
+  );
+  if (canonicalResponse) return canonicalResponse;
 
   const { url, publishableKey } = requireSupabasePublicEnv();
   const authCookiesPresent = request.cookies

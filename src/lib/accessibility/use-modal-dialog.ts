@@ -73,6 +73,9 @@ export function useModalDialog({
     document.body.style.overflow = "hidden";
 
     const focusInitial = window.requestAnimationFrame(() => {
+      if (dialog.contains(document.activeElement) && document.activeElement !== dialog) {
+        return;
+      }
       const initial = dialog.querySelector<HTMLElement>(initialFocusSelector)
         ?? dialog.querySelector<HTMLElement>(focusableSelector)
         ?? dialog;

@@ -185,7 +185,7 @@ async function deliverReservationMessages(request: Request) {
     );
 
   const admin = createAdminClient();
-  const rpc = admin.rpc as unknown as ReservationRpc;
+  const rpc = admin.rpc.bind(admin) as unknown as ReservationRpc;
   const now = new Date();
   let scopes: Array<{ organizationId: string; locationId: string }>;
   try {

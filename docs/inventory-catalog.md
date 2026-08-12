@@ -28,4 +28,4 @@ Run the focused portable verifier with:
 npm run test:inventory-catalog:pglite
 ```
 
-It applies all forward migrations in an isolated PGlite database and proves Owner/Admin and capability boundaries, password-only Owner authorization, direct-cost replay/location isolation, cross-tenant resource denial, history preservation, audit evidence, and direct-DML revocation. Migration 020 remains frozen; password-only access and direct costs are added by migration `20260809142645_password_only_owners_and_direct_inventory_costs.sql`. The consolidated generated database contract includes this catalog surface.
+It applies all forward migrations in an isolated PGlite database and proves Owner/Admin and capability boundaries, direct-cost replay/location isolation, cross-tenant resource denial, history preservation, audit evidence, and direct-DML revocation. Migration 020 remains frozen; direct costs are added by migration `20260809142645_password_only_owners_and_direct_inventory_costs.sql`. Connected Owner/Admin MFA is an opt-in deployment gate and remains deferred until enrollment/recovery is ready. The consolidated generated database contract includes this catalog surface.

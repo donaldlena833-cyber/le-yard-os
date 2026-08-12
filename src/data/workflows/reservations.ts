@@ -1,6 +1,11 @@
 import "server-only";
 
-import { assertFound, throwDatabaseError, WorkflowError } from "../errors";
+import {
+  assertFound,
+  isExclusionViolation,
+  throwDatabaseError,
+  WorkflowError,
+} from "../errors";
 import type { WorkflowContext } from "../execute";
 import type {
   ApproveReservationDraftInput,
@@ -9,6 +14,7 @@ import type {
   ConfigureServiceShiftExceptionInput,
   InstallReservationDraftInput,
   ModifyReservationInput,
+  MoveReservationTableInput,
   ReservationLifecycleHeadInput,
   RevokeServiceShiftExceptionInput,
   SaveReservationInput,
@@ -185,7 +191,7 @@ export async function saveReservationWithGuest(
   { supabase }: WorkflowContext,
   input: SaveReservationWithGuestInput,
 ) {
-  const { data, error } = await supabase.rpc("save_reservation_with_guest", {
+  const args = {
     p_request_id: input.requestId,
     p_location_id: input.locationId,
     p_display_name: input.displayName,
@@ -197,7 +203,26 @@ export async function saveReservationWithGuest(
     p_special_requests: input.specialRequests,
     p_source: input.source,
     p_table_ids: input.tableIds,
-  });
+  };
+  let { data, error } = await supabase.rpc("save_reservation_with_guest", args);
+
+  // A table suggestion is a convenience for a walk-in, not permission to
+  // lose the guest record when another host commits that table first. The
+  // failed RPC is fully rolled back, including its idempotency claim, so the
+  // same command can be retried safely without the stale suggestion. The
+  // database exclusion constraint remains authoritative and the walk-in lands
+  // in the book unassigned for a host to place from the fresh floor state.
+  if (
+    error &&
+    input.source === "walk_in" &&
+    input.tableIds.length > 0 &&
+    isExclusionViolation(error)
+  ) {
+    ({ data, error } = await supabase.rpc("save_reservation_with_guest", {
+      ...args,
+      p_table_ids: [],
+    }));
+  }
   if (error) throwDatabaseError(error, "The reservation could not be saved.");
   return assertFound(data, "The saved reservation was not returned.");
 }
@@ -359,4 +384,18 @@ export async function setReservationTableStatus(
   });
   if (error) throwDatabaseError(error, "The table status could not be saved.");
   return assertFound(data, "The table status was not returned.");
+}
+
+export async function moveReservationTable(
+  { supabase }: WorkflowContext,
+  input: MoveReservationTableInput,
+) {
+  const { data, error } = await supabase.rpc("move_reservation_table", {
+    p_request_id: input.requestId,
+    p_table_id: input.tableId,
+    p_position_x: input.positionX,
+    p_position_y: input.positionY,
+  });
+  if (error) throwDatabaseError(error, "The table position could not be saved.");
+  return assertFound(data, "The moved table was not returned.");
 }

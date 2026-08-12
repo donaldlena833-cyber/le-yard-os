@@ -8,7 +8,7 @@ import { GET } from "@/app/api/health/route";
 
 describe("health route", () => {
   it("returns a generic 503 for invalid connected configuration", async () => {
-    const response = GET();
+  const response = await GET();
     const body = await response.json();
 
     expect(response.status).toBe(503);

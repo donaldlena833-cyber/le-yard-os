@@ -1,6 +1,6 @@
 # Owner runbook
 
-This runbook is for Donald and Maris as Owner accounts. It distinguishes normal restaurant operation from changes that need a deliberate policy, security, or production decision.
+This runbook is for the two approved Owner accounts. It distinguishes normal restaurant operation from changes that need a deliberate policy, security, or production decision.
 
 ## Public Vercel Production playground
 
@@ -42,7 +42,7 @@ Retention is the rule for how long each kind of record is kept before archival o
 2. In Settings, assign the Executive Chef job role only the location-scoped operational capabilities it needs. Do not promote the Chef to Admin.
 3. Open Kitchen/Inventory Setup and add real units, categories, items, per-unit costs, opening stock, pars, and draft recipes. Add vendors and purchase packs only when the real purchasing records are available. Do not copy synthetic demo values.
 4. Open Service Control to test a running-low event, restore it with a compensating event, add a Manager Log handoff, publish a pre-shift, and acknowledge it as an employee.
-5. Verify `/time-clock` with an employee and a manager. Punch correction approval boundaries remain independent of kitchen capabilities.
+5. Verify `/time-clock` with an employee and a manager. Confirm there are no local punch controls, the Toast freshness stamp is visible, and corrections are directed back to Toast POS.
 6. Review the explicit function-grant verifier output before migration approval. Do not grant browser execution to trigger-only or service-only functions.
 
 Service Control is internal. It does not change Toast menu availability, send email/push, or invent reservation data. Production rollout still requires the normal connected acceptance gate and separate deployment authorization.
@@ -51,8 +51,8 @@ Service Control is internal. It does not change Toast menu availability, send em
 
 Do not bootstrap the live tenant until both owners approve all items below:
 
-- [ ] Donald's verified work email
-- [ ] Maris's verified work email
+- [ ] Owner 1's verified work email and approved display name
+- [ ] Owner 2's verified work email and approved display name
 - [ ] organization and restaurant names
 - [ ] confirm the owner-supplied Ninth Avenue address plus every location phone, timezone, service period, and any additional location
 - [ ] logo/brand assets and approved product name
@@ -71,7 +71,7 @@ The application must not infer these inputs from demo content or from the tempor
 1. Apply reviewed migrations to an empty production Supabase application database.
 2. Confirm open signup is disabled, SMTP works, and callback URLs point to the production HTTPS origin.
 3. Copy `docs/owner-bootstrap.example.json` to an access-controlled, untracked path and replace every placeholder with the signed-off organization and location details.
-4. Set `OWNER_DONALD_EMAIL` and `OWNER_MARIS_EMAIL` to the two verified work emails. Set connected Supabase/Vercel environment values, but do not set the confirmation yet.
+4. Set `OWNER_1_EMAIL`, `OWNER_1_DISPLAY_NAME`, `OWNER_2_EMAIL`, and `OWNER_2_DISPLAY_NAME` to the two verified owners. Set connected Supabase/Vercel environment values, but do not set the confirmation yet.
 5. Run `npm run bootstrap:owners -- --config /absolute/path/to/approved-bootstrap.json`. This is a dry run: it validates the complete plan, derives stable identifiers, makes no network calls, and prints a plan-bound confirmation.
 6. Both owners review the exact organization, locations, emails, timezones, currency, and generated identifiers. Set `LE_YARD_BOOTSTRAP_CONFIRM` to the emitted value only after approval.
 7. Run the same command with `--execute`. It refuses demo/local origins, verifies an empty application database, sends two Supabase Auth invitations, and atomically creates the tenant plus two pending Owner memberships through a service-only database function. It never creates or prints a password.

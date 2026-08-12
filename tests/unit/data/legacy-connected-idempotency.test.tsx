@@ -15,7 +15,6 @@ import {
   finalizeManualCsvImportAction,
 } from "@/app/actions/workflows/integrations";
 import { claimLiveOpenShiftAction } from "@/app/actions/workflows/live-schedule";
-import { clockInAction } from "@/app/actions/workflows/time";
 import { LiveGuestsWorkspace } from "@/components/guests/live-guests-workspace";
 import { LiveIntegrationsWorkspace } from "@/components/integrations/live-integrations-workspace";
 import { LiveScheduleWorkspace } from "@/components/schedule/live-schedule-workspace";
@@ -103,16 +102,6 @@ vi.mock("@/app/actions/workflows/live-schedule", () => ({
 vi.mock("@/app/actions/workflows/schedule", () => ({
   acknowledgeShiftAction: vi.fn(),
   publishScheduleAction: vi.fn(),
-}));
-
-vi.mock("@/app/actions/workflows/time", () => ({
-  approveTimeCorrectionAction: vi.fn(),
-  clockInAction: vi.fn(),
-  clockOutAction: vi.fn(),
-  endBreakAction: vi.fn(),
-  recordMissedTimeEntryAction: vi.fn(),
-  requestTimeCorrectionAction: vi.fn(),
-  startBreakAction: vi.fn(),
 }));
 
 const organizationId = "20000000-0000-4000-8000-000000000001";
@@ -231,7 +220,7 @@ describe("legacy connected mutation idempotency", () => {
     expect(changed.requestId).not.toBe(first.requestId);
   });
 
-  it("keeps clock-in retries stable, changes with the selected role, and rotates after success", async () => {
+  it("keeps connected timekeeping read-only because Toast POS owns punches", () => {
     const model: LiveTimeClockModel = {
       date: "2026-08-02",
       timeZone: "America/New_York",
@@ -246,57 +235,24 @@ describe("legacy connected mutation idempotency", () => {
       recentEntries: [],
       roster: [],
       corrections: [],
+      posSource: {
+        provider: "toast",
+        connectionStatus: "connected",
+        lastSyncedAt: "2026-08-02T12:00:00.000Z",
+        lastJobStatus: "succeeded",
+        lastJobCompletedAt: "2026-08-02T12:00:00.000Z",
+        stale: false,
+      },
     };
-    vi.mocked(clockInAction).mockResolvedValue(retryFailure);
     render(
       <LiveTimeClockWorkspace
         workspace={workspace}
         result={{ ok: true, data: model }}
       />,
     );
-
-    const clockIn = screen.getByRole("button", { name: "Clock in" });
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(1));
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(2));
-    const first = vi.mocked(clockInAction).mock.calls[0][0] as {
-      requestId: string;
-    };
-    const retry = vi.mocked(clockInAction).mock.calls[1][0] as {
-      requestId: string;
-    };
-    expect(retry.requestId).toBe(first.requestId);
-
-    fireEvent.change(screen.getByLabelText("Job code"), {
-      target: { value: secondRoleId },
-    });
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(3));
-    const changed = vi.mocked(clockInAction).mock.calls[2][0] as {
-      requestId: string;
-    };
-    expect(changed.requestId).not.toBe(first.requestId);
-
-    vi.mocked(clockInAction).mockResolvedValue({
-      ok: true,
-      persisted: true,
-      mode: "live",
-      data: {},
-    } as never);
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(4));
-    const successfulRetry = vi.mocked(clockInAction).mock.calls[3][0] as {
-      requestId: string;
-    };
-    expect(successfulRetry.requestId).toBe(changed.requestId);
-
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(5));
-    const afterSuccess = vi.mocked(clockInAction).mock.calls[4][0] as {
-      requestId: string;
-    };
-    expect(afterSuccess.requestId).not.toBe(successfulRetry.requestId);
+    expect(screen.queryByRole("button", { name: "Clock in" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clock out" })).toBeNull();
+    expect(screen.getByText("Punch on the Toast POS")).toBeTruthy();
   });
 
   it("reuses an open-shift claim ID until success and then rotates it", async () => {

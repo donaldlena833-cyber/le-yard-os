@@ -1,6 +1,18 @@
 "use client";
 
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  type DragEndEvent,
+  type DragMoveEvent,
+  type DragStartEvent,
+  useDraggable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
   AlertTriangle,
   Ban,
   CalendarPlus,
@@ -10,6 +22,7 @@ import {
   Circle,
   Clock3,
   MessageSquareText,
+  Move,
   Plus,
   PencilLine,
   Share2,
@@ -28,8 +41,10 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react";
 import {
+  moveReservationTableAction,
   saveReservationWithGuestAction,
   saveWaitlistEntryAction,
   seatWaitlistEntryAction,
@@ -51,7 +66,6 @@ import { InlineNotice } from "@/components/ui/inline-notice";
 import { Modal } from "@/components/ui/modal";
 import { ReadState } from "@/components/ui/read-state";
 import {
-  Metric,
   PageFrame,
   PageHeader,
   SectionHeading,
@@ -78,6 +92,7 @@ import {
 } from "@/lib/reservations/floor-projection";
 import type {
   ReservationHostModel,
+  ReservationFloorTableSummary,
   ReservationInventoryAllocationSummary,
   ReservationPhysicalTableState,
   ReservationStatus,
@@ -93,17 +108,22 @@ import { cn, formatMoney } from "@/lib/utils";
 type BookMode = "reservation" | "walk_in";
 const noReservationPostgresBindings = [] as const;
 const reservationBroadcastEvents = ["INSERT", "UPDATE", "DELETE"] as const;
+const assignableReservationStatuses = new Set<ReservationStatus>([
+  "booked",
+  "confirmed",
+  "arrived",
+]);
 const fieldClass =
   "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base outline-none focus:border-[var(--accent)] sm:text-sm";
 const stateStyles: Record<ReservationPhysicalTableState, string> = {
   available:
-    "border-[var(--line-strong)] bg-[var(--paper-strong)] text-[var(--ink)]",
+    "border-[#ded8ca] bg-[#f8f4e9] text-[#1c1d1a]",
   occupied:
-    "border-[color-mix(in_srgb,var(--positive)_40%,var(--line))] bg-[var(--positive-soft)] text-[var(--positive)]",
+    "border-[#94c0a0] bg-[#d6ead9] text-[#1e5f39]",
   needs_reset:
-    "border-[color-mix(in_srgb,var(--warning)_40%,var(--line))] bg-[var(--warning-soft)] text-[var(--warning)]",
+    "border-[#d4ae69] bg-[#f4dfae] text-[#73501f]",
   blocked:
-    "border-[var(--line-strong)] bg-[var(--canvas-strong)] text-[var(--ink-faint)] opacity-65",
+    "border-[#5c5e58] bg-[#3d3f3a] text-[#aaa99f] opacity-75",
 };
 
 function availabilityTables(
@@ -227,6 +247,75 @@ function Dialog({
   );
 }
 
+function DraggableFloorTable({
+  table,
+  editing,
+  occupyingReservation,
+  isSelectedInterval,
+  isSelected,
+  onActivate,
+}: {
+  table: ReservationFloorTableSummary;
+  editing: boolean;
+  occupyingReservation: ReservationSummary | null;
+  isSelectedInterval: boolean;
+  isSelected: boolean;
+  onActivate: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({
+      id: table.id,
+      disabled: !editing,
+    });
+  const dragTransform = transform
+    ? ` translate3d(${transform.x}px, ${transform.y}px, 0)`
+    : "";
+
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      title={
+        editing
+          ? `Move table ${table.label}`
+          : `Table ${table.label} · ${table.maxCapacity} seats · ${table.state.replaceAll("_", " ")} now${isSelectedInterval ? " · assigned to selected interval" : ""}`
+      }
+      onClick={() => {
+        if (!editing) onActivate();
+      }}
+      {...(editing ? attributes : {})}
+      {...(editing ? listeners : {})}
+      className={cn(
+        "absolute z-10 flex min-h-11 min-w-11 items-center justify-center border text-xs font-bold shadow-[0_8px_20px_rgba(0,0,0,.16)] transition-[box-shadow,filter] duration-150 focus:z-30 focus:outline-none focus:ring-2 focus:ring-[#d2a24b]",
+        table.shape === "round" ? "rounded-full" : "rounded-[10px]",
+        stateStyles[table.state],
+        !editing && "hover:z-20 hover:brightness-[1.04]",
+        editing && "cursor-grab touch-none ring-1 ring-white/25 active:cursor-grabbing",
+        isDragging && "z-40 scale-[1.03] shadow-[0_18px_36px_rgba(0,0,0,.42)]",
+        isSelectedInterval && "ring-2 ring-[#d2a24b] ring-offset-2 ring-offset-[#191b18]",
+        isSelected && "ring-2 ring-white ring-offset-2 ring-offset-[#191b18]",
+      )}
+      style={{
+        left: `${table.x * 100}%`,
+        top: `${table.y * 100}%`,
+        width: `${Math.max(table.width * 100, 8)}%`,
+        height: `${Math.max(table.height * 100, 7)}%`,
+        transform: `translate(-50%, -50%) rotate(${table.rotation}deg)${dragTransform}`,
+      }}
+    >
+      <span>{table.label}</span>
+      {editing ? (
+        <Move className="absolute right-1 top-1 size-3 opacity-55" />
+      ) : null}
+      {occupyingReservation ? (
+        <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-[#20221f] text-[8px] text-[#f8f4e9]">
+          {occupyingReservation.partySize}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 function FloorPlan({
   model,
   selected,
@@ -235,6 +324,8 @@ function FloorPlan({
   onAssignTable,
   selectedTableId,
   canAssignTables,
+  editing,
+  onMoveTable,
 }: {
   model: ReservationHostModel;
   selected: ReservationSummary | null;
@@ -243,71 +334,134 @@ function FloorPlan({
   onAssignTable: (id: string) => void;
   selectedTableId: string | null;
   canAssignTables: boolean;
+  editing: boolean;
+  onMoveTable: (tableId: string, positionX: number, positionY: number) => void;
 }) {
+  const floorRef = useRef<HTMLDivElement>(null);
+  const [guidePosition, setGuidePosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 100, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor),
+  );
+
+  function projectedPosition(event: DragMoveEvent | DragEndEvent) {
+    const table = model.floorNow.tables.find(
+      (entry) => entry.id === String(event.active.id),
+    );
+    const bounds = floorRef.current?.getBoundingClientRect();
+    if (!table || !bounds) return null;
+    const halfWidth = Math.max(table.width, 0.08) / 2;
+    const halfHeight = Math.max(table.height, 0.07) / 2;
+    return {
+      x: Math.max(
+        halfWidth,
+        Math.min(1 - halfWidth, table.x + event.delta.x / bounds.width),
+      ),
+      y: Math.max(
+        halfHeight,
+        Math.min(1 - halfHeight, table.y + event.delta.y / bounds.height),
+      ),
+    };
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    const table = model.floorNow.tables.find(
+      (entry) => entry.id === String(event.active.id),
+    );
+    if (table) setGuidePosition({ x: table.x, y: table.y });
+  }
+
+  function handleDragMove(event: DragMoveEvent) {
+    setGuidePosition(projectedPosition(event));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const position = projectedPosition(event);
+    setGuidePosition(null);
+    if (!position) return;
+    onMoveTable(
+      String(event.active.id),
+      Math.round(position.x * 1_000) / 1_000,
+      Math.round(position.y * 1_000) / 1_000,
+    );
+  }
+
   return (
-    <div className="relative mx-auto aspect-[3/4] w-full max-w-[560px] overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--canvas-strong)] shadow-[0_1px_0_rgba(255,255,255,.7)_inset]">
-      <div className="absolute inset-x-[8%] top-[3%] h-[14%] rounded-[18px] border border-dashed border-[var(--line-strong)] bg-[var(--paper)]/35">
-        <span className="absolute left-3 top-2 text-[9px] font-semibold uppercase tracking-[.16em] text-[var(--ink-faint)]">
-          Entry · register
-        </span>
-      </div>
-      <div className="absolute bottom-[2%] left-[6%] top-[20%] w-[23%] rounded-[18px] border border-dashed border-[var(--line)] bg-[var(--paper)]/20">
-        <span className="absolute bottom-3 left-3 text-[9px] font-semibold uppercase tracking-[.16em] text-[var(--ink-faint)] [writing-mode:vertical-rl]">
-          Service lane
-        </span>
-      </div>
-      <div className="absolute inset-x-[32%] bottom-[2%] top-[20%] rounded-[22px] border border-[var(--line)] bg-[var(--paper)]/25" />
-      {model.floorNow.tables.map((table) => {
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setGuidePosition(null)}
+    >
+      <div
+        ref={floorRef}
+        className={cn(
+          "relative mx-auto aspect-[3/4] w-full overflow-hidden rounded-[22px] border border-[#343630] bg-[#191b18] shadow-[inset_0_1px_0_rgba(255,255,255,.05),0_18px_45px_rgba(25,27,24,.14)] sm:aspect-[16/10]",
+          editing && "ring-2 ring-[#d2a24b]/70 ring-offset-2",
+        )}
+      >
+        <div className="absolute inset-x-[4%] top-[5%] h-[16%] rounded-[16px] border border-dashed border-[#484b44] bg-white/[.025]">
+          <span className="absolute left-3 top-2 text-[9px] font-semibold uppercase tracking-[.18em] text-[#888b82]">
+            Entry · host stand
+          </span>
+        </div>
+        <div className="absolute bottom-[6%] left-[4%] top-[26%] w-[19%] rounded-[16px] border border-dashed border-[#3f423c] bg-white/[.018]">
+          <span className="absolute bottom-3 left-3 text-[9px] font-semibold uppercase tracking-[.18em] text-[#73766f] [writing-mode:vertical-rl]">
+            Service lane
+          </span>
+        </div>
+        <div className="absolute bottom-[6%] left-[27%] right-[4%] top-[26%] rounded-[18px] border border-[#343730] bg-white/[.012]" />
+        {guidePosition ? (
+          <>
+            <div
+              className="pointer-events-none absolute inset-y-0 z-30 w-px bg-[#d2a24b]/60"
+              style={{ left: `${guidePosition.x * 100}%` }}
+            />
+            <div
+              className="pointer-events-none absolute inset-x-0 z-30 h-px bg-[#d2a24b]/60"
+              style={{ top: `${guidePosition.y * 100}%` }}
+            />
+          </>
+        ) : null}
+        {model.floorNow.tables.map((table) => {
         const occupyingReservation = table.occupyingReservationId
           ? model.reservations.find(
               (entry) => entry.id === table.occupyingReservationId,
-            )
+            ) ?? null
           : null;
         const isSelectedInterval = Boolean(
           selected?.tableIds.includes(table.id),
         );
         return (
-          <button
+          <DraggableFloorTable
             key={table.id}
-            type="button"
-            title={`Table ${table.label} · ${table.maxCapacity} seats · ${table.state.replaceAll("_", " ")} now${isSelectedInterval ? " · assigned to selected interval" : ""}`}
-            onClick={() =>
+            table={table}
+            editing={editing}
+            occupyingReservation={occupyingReservation}
+            isSelectedInterval={isSelectedInterval}
+            isSelected={selectedTableId === table.id}
+            onActivate={() =>
               selected && canAssignTables
                 ? onAssignTable(table.id)
                 : occupyingReservation
                   ? onSelectReservation(occupyingReservation.id)
                   : onSelectTable(table.id)
             }
-            className={cn(
-              "absolute z-10 flex min-h-11 min-w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center border text-xs font-bold shadow-sm transition duration-150 hover:z-20 hover:scale-105 focus:z-20 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]",
-              table.shape === "round" ? "rounded-full" : "rounded-[10px]",
-              stateStyles[table.state],
-              isSelectedInterval &&
-                "ring-2 ring-[var(--ink)] ring-offset-2 ring-offset-[var(--canvas-strong)]",
-              selectedTableId === table.id &&
-                "ring-2 ring-[var(--accent)] ring-offset-2 ring-offset-[var(--canvas-strong)]",
-            )}
-            style={{
-              left: `${table.x * 100}%`,
-              top: `${table.y * 100}%`,
-              width: `${Math.max(table.width * 100, 9)}%`,
-              height: `${Math.max(table.height * 100, 6)}%`,
-              rotate: `${table.rotation}deg`,
-            }}
-          >
-            <span>{table.label}</span>
-            {occupyingReservation ? (
-              <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-[var(--ink)] text-[8px] text-[var(--paper)]">
-                {occupyingReservation.partySize}
-              </span>
-            ) : null}
-          </button>
+          />
         );
-      })}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-[var(--line)] bg-[var(--paper-strong)]/90 px-3 py-1 text-[9px] font-semibold uppercase tracking-[.14em] text-[var(--ink-faint)] backdrop-blur">
-        Floor now · verify on site
+        })}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-white/10 bg-[#242622]/90 px-3 py-1 text-[9px] font-semibold uppercase tracking-[.14em] text-[#a6a89f] backdrop-blur">
+          {editing ? "Drag tables · positions save automatically" : "Floor now · verify on site"}
+        </div>
       </div>
-    </div>
+    </DndContext>
   );
 }
 
@@ -319,9 +473,27 @@ export function ReservationsWorkspace({
   result: LiveReadResult<ReservationHostModel>;
 }) {
   const router = useRouter();
-  const model = result.ok ? result.data : null;
+  const incomingModel = result.ok ? result.data : null;
+  const [modelState, setModelState] = useState(() => ({
+    source: incomingModel,
+    value: incomingModel,
+  }));
+  const [isReconciling, startReconciliation] = useTransition();
+  if (modelState.source !== incomingModel) {
+    setModelState({ source: incomingModel, value: incomingModel });
+  }
+  const model =
+    modelState.source === incomingModel ? modelState.value : incomingModel;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+  const [assignmentMode, setAssignmentMode] = useState(false);
+  const [layoutEditing, setLayoutEditing] = useState(false);
+  const [movingTableId, setMovingTableId] = useState<string | null>(null);
+  const [lastTableMove, setLastTableMove] = useState<{
+    tableId: string;
+    label: string;
+    from: { x: number; y: number };
+  } | null>(null);
   const [filter, setFilter] = useState<
     "all" | "upcoming" | "arrived" | "seated"
   >("all");
@@ -392,12 +564,193 @@ export function ReservationsWorkspace({
     locationId: workspace.activeLocation.id,
   });
 
+  function updateModel(
+    update: (current: ReservationHostModel) => ReservationHostModel,
+  ) {
+    setModelState((current) =>
+      current.value
+        ? { ...current, value: update(current.value) }
+        : current,
+    );
+  }
+
+  function reconcileInBackground() {
+    startReconciliation(() => router.refresh());
+  }
+
+  function updateReservationStatus(
+    reservationId: string,
+    status: ReservationStatus,
+  ) {
+    updateModel((current) => {
+      const reservation = current.reservations.find(
+        (entry) => entry.id === reservationId,
+      );
+      if (!reservation) return current;
+      const tableIds = new Set(reservation.tableIds);
+      const tables = current.floorNow.tables.map((table) => {
+        if (!tableIds.has(table.id)) return table;
+        if (status === "seated") {
+          return {
+            ...table,
+            state: "occupied" as const,
+            occupyingReservationId: reservationId,
+          };
+        }
+        if (status === "completed" && table.occupyingReservationId === reservationId) {
+          return {
+            ...table,
+            state: "needs_reset" as const,
+            occupyingReservationId: null,
+          };
+        }
+        return table;
+      });
+      return {
+        ...current,
+        reservations: current.reservations.map((entry) =>
+          entry.id === reservationId ? { ...entry, status } : entry,
+        ),
+        floorNow: { ...current.floorNow, tables },
+      };
+    });
+  }
+
+  function updateReservationTables(
+    reservationId: string,
+    tableIds: string[],
+  ) {
+    updateModel((current) => {
+      const labels = tableIds
+        .map(
+          (tableId) =>
+            current.floorNow.tables.find((table) => table.id === tableId)?.label,
+        )
+        .filter((label): label is string => Boolean(label));
+      return {
+        ...current,
+        reservations: current.reservations.map((entry) =>
+          entry.id === reservationId
+            ? {
+                ...entry,
+                tableIds,
+                tableLabel: labels.length ? labels.join(" + ") : null,
+              }
+            : entry,
+        ),
+      };
+    });
+  }
+
+  function updatePhysicalTableStatus(
+    tableId: string,
+    status: ReservationPhysicalTableState,
+    reservationId: string | null,
+  ) {
+    updateModel((current) => ({
+      ...current,
+      floorNow: {
+        ...current.floorNow,
+        tables: current.floorNow.tables.map((table) =>
+          table.id === tableId
+            ? {
+                ...table,
+                state: status,
+                occupyingReservationId:
+                  status === "occupied"
+                    ? reservationId
+                    : status === "available"
+                      ? null
+                      : table.occupyingReservationId,
+                lastChangedAt: new Date().toISOString(),
+              }
+            : table,
+        ),
+      },
+    }));
+  }
+
+  function updateTablePosition(
+    tableId: string,
+    positionX: number,
+    positionY: number,
+  ) {
+    updateModel((current) => ({
+      ...current,
+      floorNow: {
+        ...current.floorNow,
+        tables: current.floorNow.tables.map((table) =>
+          table.id === tableId
+            ? { ...table, x: positionX, y: positionY }
+            : table,
+        ),
+      },
+    }));
+  }
+
+  async function moveTable(
+    tableId: string,
+    positionX: number,
+    positionY: number,
+    recordUndo = true,
+  ) {
+    if (!model?.permissions.configure) {
+      setMessage("Moving floor tables requires reservation configuration access.");
+      return;
+    }
+    const table = model.floorNow.tables.find((entry) => entry.id === tableId);
+    if (!table || (table.x === positionX && table.y === positionY)) return;
+    const previous = { x: table.x, y: table.y };
+    updateTablePosition(tableId, positionX, positionY);
+    setMovingTableId(tableId);
+    setMessage(`Table ${table.label} moved. Saving position…`);
+    if (workspace.mode === "demo") {
+      setMovingTableId(null);
+      if (recordUndo)
+        setLastTableMove({ tableId, label: table.label, from: previous });
+      setMessage(`Table ${table.label} moved. Position saved.`);
+      return;
+    }
+    const payload = { tableId, positionX, positionY };
+    const scope = `reservation-table-move-${tableId}`;
+    const response = await moveReservationTableAction({
+      ...payload,
+      requestId: requestIdFor(scope, payload),
+    });
+    setMovingTableId(null);
+    if (!response.ok) {
+      updateTablePosition(tableId, previous.x, previous.y);
+      if (recordUndo) setLastTableMove(null);
+      setMessage(response.message);
+      return;
+    }
+    rotateRequestId(scope);
+    if (recordUndo)
+      setLastTableMove({ tableId, label: table.label, from: previous });
+    setMessage(`Table ${table.label} moved. Position saved.`);
+    reconcileInBackground();
+  }
+
+  function beginTableAssignment() {
+    if (!selected) return;
+    if (!assignableReservationStatuses.has(selected.status)) {
+      setMessage(
+        "Only booked, confirmed, or arrived reservations can use ordinary table assignment.",
+      );
+      return;
+    }
+    setAssignmentMode(true);
+    setSelectedTableId(null);
+    setMessage(`Choose a table for ${selected.guest.displayName}, or use best fit.`);
+    showMobileView("floor");
+  }
+
   function showMobileView(view: "book" | "floor" | "service") {
     setMobileView(view);
     if (
       typeof window === "undefined" ||
       typeof window.matchMedia !== "function" ||
-      !window.matchMedia("(max-width: 1279px)").matches
+      !window.matchMedia("(max-width: 1023px)").matches
     )
       return;
     window.requestAnimationFrame(() =>
@@ -463,6 +816,7 @@ export function ReservationsWorkspace({
       return;
     }
     if (workspace.mode === "demo") {
+      updateReservationStatus(selected.id, targetStatus);
       setMessage(
         `Demo: ${selected.guest.displayName} moved to ${targetStatus.replaceAll("_", " ")}.`,
       );
@@ -479,7 +833,8 @@ export function ReservationsWorkspace({
     setMessage(response.ok ? "Reservation updated." : response.message);
     if (response.ok) {
       rotateRequestId(`reservation-transition-${selected.id}`);
-      router.refresh();
+      updateReservationStatus(selected.id, targetStatus);
+      reconcileInBackground();
     }
   }
 
@@ -488,9 +843,18 @@ export function ReservationsWorkspace({
       setMessage("Table assignment requires reservation operating access.");
       return;
     }
-    if (!selected || workspace.mode === "demo") {
-      if (selected)
-        setMessage(`Demo: ${label} assigned to ${selected.guest.displayName}.`);
+    if (!selected) return;
+    if (selected.status === "seated") {
+      setAssignmentMode(false);
+      setMessage(
+        "A seated party cannot be reassigned without an atomic physical table move.",
+      );
+      return;
+    }
+    if (workspace.mode === "demo") {
+      updateReservationTables(selected.id, tableIds);
+      setAssignmentMode(false);
+      setMessage(`Demo: ${label} assigned to ${selected.guest.displayName}.`);
       return;
     }
     const payload = {
@@ -507,7 +871,9 @@ export function ReservationsWorkspace({
     setMessage(response.ok ? "Table assignment saved." : response.message);
     if (response.ok) {
       rotateRequestId(`reservation-assign-${selected.id}`);
-      router.refresh();
+      updateReservationTables(selected.id, tableIds);
+      setAssignmentMode(false);
+      reconcileInBackground();
     }
   }
 
@@ -556,11 +922,12 @@ export function ReservationsWorkspace({
       ),
       now: readyModel.floorNow.observedAt,
     });
-    if (!suggestions[0]) {
+    const suggestion = suggestions[0];
+    if (!suggestion) {
       setMessage("No approved table or combination is available.");
       return;
     }
-    await assignTables(suggestions[0].tableIds, suggestions[0].label);
+    await assignTables(suggestion.tableIds, suggestion.label);
   }
 
   async function setTableStatus(status: ReservationPhysicalTableState) {
@@ -574,6 +941,11 @@ export function ReservationsWorkspace({
       return;
     }
     if (workspace.mode === "demo") {
+      updatePhysicalTableStatus(
+        selectedTable.id,
+        status,
+        status === "occupied" ? selectedTable.occupyingReservationId : null,
+      );
       setMessage(
         `Demo: table ${selectedTable.label} moved to ${status.replaceAll("_", " ")}.`,
       );
@@ -604,7 +976,12 @@ export function ReservationsWorkspace({
     );
     if (response.ok) {
       rotateRequestId(scope);
-      router.refresh();
+      updatePhysicalTableStatus(
+        selectedTable.id,
+        status,
+        status === "occupied" ? selectedTable.occupyingReservationId : null,
+      );
+      reconcileInBackground();
     }
   }
 
@@ -674,7 +1051,10 @@ export function ReservationsWorkspace({
       partySize,
       startsAt: tentative,
       durationMinutes,
-      tables: availabilityTables(readyModel),
+      tables: availabilityTables(
+        readyModel,
+        bookMode === "walk_in" ? "immediate" : "interval",
+      ),
       combinations: readyModel.combinations,
       allocations: availabilityAllocations(
         readyModel.intervalInventory.allocations,
@@ -701,12 +1081,16 @@ export function ReservationsWorkspace({
     });
     setBusy(false);
     setMessage(
-      response.ok ? "Reservation saved and table suggested." : response.message,
+      response.ok
+        ? bookMode === "walk_in"
+          ? "Walk-in added. Assign or adjust the table from the current floor when ready."
+          : "Reservation saved and table suggested."
+        : response.message,
     );
     if (response.ok) {
       rotateRequestId(reservationScope);
       setBookMode(null);
-      router.refresh();
+      reconcileInBackground();
     }
   }
 
@@ -750,7 +1134,7 @@ export function ReservationsWorkspace({
     if (response.ok) {
       rotateRequestId("waitlist-create");
       setWaitlistOpen(false);
-      router.refresh();
+      reconcileInBackground();
     }
   }
 
@@ -767,6 +1151,12 @@ export function ReservationsWorkspace({
       return;
     }
     if (workspace.mode === "demo") {
+      updateModel((current) => ({
+        ...current,
+        waitlist: current.waitlist.map((entry) =>
+          entry.id === entryId ? { ...entry, status: targetStatus } : entry,
+        ),
+      }));
       setMessage(`Demo: waitlist guest moved to ${targetStatus}.`);
       return;
     }
@@ -785,7 +1175,13 @@ export function ReservationsWorkspace({
     );
     if (response.ok) {
       rotateRequestId(scope);
-      router.refresh();
+      updateModel((current) => ({
+        ...current,
+        waitlist: current.waitlist.map((entry) =>
+          entry.id === entryId ? { ...entry, status: targetStatus } : entry,
+        ),
+      }));
+      reconcileInBackground();
     }
   }
 
@@ -811,19 +1207,111 @@ export function ReservationsWorkspace({
       ),
       now: readyModel.floorNow.observedAt,
     });
-    if (!suggestions[0]) {
+    const suggestion = suggestions[0];
+    if (!suggestion) {
       setMessage(
         "No approved table or combination is available for this party right now.",
       );
       return;
     }
     if (workspace.mode === "demo") {
-      setMessage(`Demo: party seated at ${suggestions[0].label}.`);
+      const reservationId = `demo-reservation-${entryId}`;
+      updateModel((current) => {
+        const entry = current.waitlist.find((item) => item.id === entryId);
+        if (!entry) return current;
+        const startsAt = current.floorNow.observedAt;
+        const endsAt = new Date(
+          new Date(startsAt).valueOf() + durationMinutes * 60_000,
+        ).toISOString();
+        const labels = suggestion.tableIds
+          .map(
+            (tableId) =>
+              current.floorNow.tables.find((table) => table.id === tableId)
+                ?.label,
+          )
+          .filter((label): label is string => Boolean(label));
+        const allocations = suggestion.tableIds.map((tableId) => ({
+          id: `demo-allocation-${entryId}-${tableId}`,
+          tableId,
+          reservationId,
+          startsAt,
+          endsAt,
+          expiresAt: null,
+          state: "committed" as const,
+        }));
+        return {
+          ...current,
+          reservations: [
+            ...current.reservations,
+            {
+              id: reservationId,
+              version: 1,
+              startsAt,
+              durationMinutes,
+              partySize: entry.partySize,
+              status: "seated" as const,
+              source: "walk_in",
+              bookingChannel: "staff",
+              tableLabel: labels.join(" + "),
+              tableIds: suggestion.tableIds,
+              specialRequests: entry.notes,
+              policyEvidenceCaptured: false,
+              lastRevision: null,
+              guest: {
+                id: null,
+                displayName: entry.displayName,
+                email: null,
+                phone: null,
+                vip: false,
+                allergies: null,
+                preferences: null,
+                visitCount: 0,
+                lifetimeSpendCents: 0,
+              },
+            },
+          ],
+          waitlist: current.waitlist.filter((item) => item.id !== entryId),
+          floorNow: {
+            ...current.floorNow,
+            tables: current.floorNow.tables.map((table) =>
+              suggestion.tableIds.includes(table.id)
+                ? {
+                    ...table,
+                    state: "occupied" as const,
+                    occupyingReservationId: reservationId,
+                    lastChangedAt: startsAt,
+                  }
+                : table,
+            ),
+            activeAllocations: [
+              ...current.floorNow.activeAllocations,
+              ...allocations,
+            ],
+          },
+          intervalInventory: {
+            ...current.intervalInventory,
+            allocations: [
+              ...current.intervalInventory.allocations,
+              ...allocations,
+            ],
+          },
+          metrics: {
+            ...current.metrics,
+            covers: current.metrics.covers + entry.partySize,
+            seated: current.metrics.seated + entry.partySize,
+            waitlist: Math.max(0, current.metrics.waitlist - 1),
+          },
+        };
+      });
+      setSelectedId(reservationId);
+      setSelectedTableId(null);
+      showMobileView("service");
+      setMessage(`Demo: party seated at ${suggestion.label}.`);
       return;
     }
     const payload = {
       waitlistEntryId: entryId,
-      tableIds: suggestions[0].tableIds,
+      tableIds: suggestion.tableIds,
       durationMinutes,
     };
     const scope = `waitlist-seat-${entryId}`;
@@ -835,12 +1323,16 @@ export function ReservationsWorkspace({
     setBusy(false);
     setMessage(
       response.ok
-        ? `Party seated at ${suggestions[0].label}.`
+        ? `Party seated at ${suggestion.label}.`
         : response.message,
     );
     if (response.ok) {
       rotateRequestId(scope);
-      router.refresh();
+      updateModel((current) => ({
+        ...current,
+        waitlist: current.waitlist.filter((entry) => entry.id !== entryId),
+      }));
+      reconcileInBackground();
     }
   }
 
@@ -917,7 +1409,10 @@ export function ReservationsWorkspace({
           </>
         }
       />
-      <RealtimeSyncStatus {...realtime} />
+      <RealtimeSyncStatus
+        {...realtime}
+        isRefreshing={realtime.isRefreshing || isReconciling}
+      />
 
       {message ? (
         <div
@@ -925,14 +1420,38 @@ export function ReservationsWorkspace({
           className="mt-4 flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3 text-sm"
         >
           <span>{message}</span>
-          <button
-            type="button"
-            onClick={() => setMessage("")}
-            aria-label="Dismiss reservation notice"
-            className="focus-ring -m-2 flex size-11 shrink-0 items-center justify-center rounded-lg"
-          >
-            <X className="size-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {lastTableMove ? (
+              <Button
+                variant="quiet"
+                size="sm"
+                disabled={Boolean(movingTableId)}
+                onClick={() => {
+                  const move = lastTableMove;
+                  setLastTableMove(null);
+                  void moveTable(
+                    move.tableId,
+                    move.from.x,
+                    move.from.y,
+                    false,
+                  );
+                }}
+              >
+                Undo
+              </Button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setMessage("");
+                setLastTableMove(null);
+              }}
+              aria-label="Dismiss reservation notice"
+              className="focus-ring -m-2 flex size-11 shrink-0 items-center justify-center rounded-lg"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
       ) : null}
       {!canOperate ? (
@@ -987,34 +1506,30 @@ export function ReservationsWorkspace({
           ) : null}
         </div>
       ) : null}
-      <div className="mt-4 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric
-          label="Booked covers"
-          value={String(model.metrics.covers)}
-          detail="Excludes holds and cancellations"
-        />
-        <Metric
-          label="Seated"
-          value={String(model.metrics.seated)}
-          detail={`${model.metrics.remaining} covers remaining`}
-        />
-        <Metric
-          label="Waitlist"
-          value={String(model.metrics.waitlist)}
-          detail="Active and notified"
-        />
-        <Metric
-          label="Online"
-          value={model.configuration.onlineBookingEnabled ? "Live" : "Off"}
-          detail={
-            model.configuration.messagingEnabled
-              ? "Guest messaging on"
-              : "Messaging off"
-          }
-        />
+      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-4 py-3 text-xs">
+        <span className="font-semibold text-[var(--ink)]">
+          {model.metrics.covers} covers
+        </span>
+        <span className="text-[var(--ink-faint)]">
+          {model.metrics.seated} seated · {model.metrics.remaining} remaining
+        </span>
+        <span className="text-[var(--ink-faint)]">
+          {model.metrics.waitlist} waitlist
+        </span>
+        <span className="ml-auto flex items-center gap-2 text-[var(--ink-faint)]">
+          <span
+            className={cn(
+              "size-2 rounded-full",
+              model.configuration.onlineBookingEnabled
+                ? "bg-[var(--positive)]"
+                : "bg-[var(--ink-faint)]",
+            )}
+          />
+          Online booking {model.configuration.onlineBookingEnabled ? "live" : "off"}
+        </span>
       </div>
 
-      <div ref={mobileViewAnchorRef} className="scroll-mt-20 xl:hidden">
+      <div ref={mobileViewAnchorRef} className="scroll-mt-20 lg:hidden">
         <ViewSwitcher
           value={mobileView}
           onValueChange={showMobileView}
@@ -1043,11 +1558,14 @@ export function ReservationsWorkspace({
         />
       </div>
 
-      <div className="mt-4 grid gap-6 xl:mt-7 xl:grid-cols-[minmax(270px,.85fr)_minmax(400px,1.2fr)_minmax(210px,.65fr)]">
+      <div className="mt-4 grid gap-5 lg:mt-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <section
           id="reservation-book-region"
           aria-label="Reservation day book"
-          className={cn("min-w-0", mobileView !== "book" && "hidden xl:block")}
+          className={cn(
+            "min-w-0 lg:row-span-2",
+            mobileView !== "book" && "hidden lg:block",
+          )}
         >
           <SectionHeading
             eyebrow="Day book"
@@ -1093,6 +1611,7 @@ export function ReservationsWorkspace({
                 onClick={() => {
                   setSelectedId(reservation.id);
                   setSelectedTableId(null);
+                  setAssignmentMode(false);
                   showMobileView("service");
                 }}
                 className={cn(
@@ -1145,15 +1664,40 @@ export function ReservationsWorkspace({
         <section
           id="reservation-floor-region"
           aria-label="Reservation floor"
-          className={cn("min-w-0", mobileView !== "floor" && "hidden xl:block")}
+          className={cn("min-w-0", mobileView !== "floor" && "hidden lg:block")}
         >
           <SectionHeading
-            eyebrow="Physical room"
-            title="Floor now"
+            eyebrow="Dining room"
+            title="Floor plan"
             detail={
-              selected
+              layoutEditing
+                ? "Drag any table with a finger or pointer. Every move saves automatically."
+                : assignmentMode && selected
+                ? `Assignment mode · choose a table for ${selected.guest.displayName}, or cancel below.`
+                : selected
                 ? `The outline shows ${selected.guest.displayName}’s selected interval; table color still means physical state now.`
                 : "Table colors show observed physical state, never future availability."
+            }
+            action={
+              <Button
+                variant={layoutEditing ? "accent" : "secondary"}
+                size="sm"
+                disabled={Boolean(movingTableId) || !model.permissions.configure}
+                aria-describedby={configurationDescription}
+                onClick={() => {
+                  setLayoutEditing((current) => !current);
+                  setAssignmentMode(false);
+                  setSelectedTableId(null);
+                  setMessage(
+                    layoutEditing
+                      ? "Floor editing finished."
+                      : "Floor editing on. Drag a table to move it.",
+                  );
+                }}
+              >
+                {layoutEditing ? <Check className="size-4" /> : <Move className="size-4" />}
+                {layoutEditing ? "Done" : "Edit floor"}
+              </Button>
             }
           />
           <FloorPlan
@@ -1163,15 +1707,57 @@ export function ReservationsWorkspace({
             onSelectReservation={(reservationId) => {
               setSelectedId(reservationId);
               setSelectedTableId(null);
+              setAssignmentMode(false);
               showMobileView("service");
             }}
             onSelectTable={(tableId) => {
               setSelectedTableId(tableId);
               setSelectedId(null);
+              setAssignmentMode(false);
             }}
             onAssignTable={assignTable}
-            canAssignTables={canOperate}
+            canAssignTables={Boolean(
+              canOperate &&
+                assignmentMode &&
+                selected &&
+                assignableReservationStatuses.has(selected.status),
+            )}
+            editing={layoutEditing}
+            onMoveTable={moveTable}
           />
+          {assignmentMode && selected ? (
+            <InlineNotice
+              tone="info"
+              title={`Assign a table to ${selected.guest.displayName}`}
+              className="mt-3"
+            >
+              <p>
+                Choose one available table on the floor, or let the exact-interval
+                inventory select the best approved fit.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={assignBestFit}
+                >
+                  Use best fit
+                </Button>
+                <Button
+                  size="sm"
+                  variant="quiet"
+                  disabled={busy}
+                  onClick={() => {
+                    setAssignmentMode(false);
+                    setMessage("Table assignment cancelled.");
+                  }}
+                >
+                  Cancel assignment
+                </Button>
+              </div>
+            </InlineNotice>
+          ) : null}
           <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-[10px] leading-4 text-[var(--ink-faint)]">
             <strong className="text-[var(--ink-soft)]">
               Observed {timeLabel(model.floorNow.observedAt, model.timeZone)}.
@@ -1265,8 +1851,8 @@ export function ReservationsWorkspace({
           id="reservation-service-region"
           aria-label="Reservation service context"
           className={cn(
-            "min-w-0",
-            mobileView !== "service" && "hidden xl:block",
+            "min-w-0 lg:col-start-2",
+            mobileView !== "service" && "hidden lg:block",
           )}
         >
           <SectionHeading eyebrow="Service pulse" title="Pacing & context" />
@@ -1321,7 +1907,10 @@ export function ReservationsWorkspace({
                 <Button
                   size="icon"
                   variant="quiet"
-                  onClick={() => setSelectedId(null)}
+                  onClick={() => {
+                    setSelectedId(null);
+                    setAssignmentMode(false);
+                  }}
                   aria-label="Close guest context"
                 >
                   <X className="size-4" />
@@ -1383,7 +1972,7 @@ export function ReservationsWorkspace({
                   "reservation.arrive": () => transition("arrived"),
                   "reservation.seat": () => transition("seated"),
                   "reservation.complete": () => transition("completed"),
-                  "reservation.suggest_table": assignBestFit,
+                  "reservation.suggest_table": beginTableAssignment,
                   "reservation.share": shareReservation,
                   "reservation.no_show": () => setNoShowConfirmOpen(true),
                 }}
@@ -1773,7 +2362,7 @@ export function ReservationsWorkspace({
           onClose={() => setEditReservationTarget(null)}
           onCompleted={(nextMessage) => {
             setMessage(nextMessage);
-            router.refresh();
+            reconcileInBackground();
           }}
         />
       ) : null}
@@ -1787,7 +2376,8 @@ export function ReservationsWorkspace({
           onClose={() => setCancelReservationTarget(null)}
           onCompleted={(nextMessage) => {
             setMessage(nextMessage);
-            router.refresh();
+            updateReservationStatus(cancellationReservation.id, "cancelled");
+            reconcileInBackground();
           }}
         />
       ) : null}

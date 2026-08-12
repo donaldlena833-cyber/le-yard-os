@@ -206,11 +206,11 @@ describe("public reservation API contracts", () => {
     expect(mocks.availability).not.toHaveBeenCalled();
   });
 
-  it("creates a scoped hold with server adapter channels and returns only hold state", async () => {
+  it("creates a confirmed reservation with server adapter channels and returns only safe state", async () => {
     mocks.rpc.mockResolvedValueOnce({
       data: {
-        holdId: "44444444-4444-4444-8444-444444444444",
-        holdExpiresAt: "2026-08-12T22:15:00.000Z",
+        reservationId: "44444444-4444-4444-8444-444444444444",
+        status: "confirmed",
         deliveryState: { email: "queued" },
         replayed: false,
         publicCode: "must-not-leak",
@@ -239,13 +239,13 @@ describe("public reservation API contracts", () => {
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({
       data: {
-        holdId: "44444444-4444-4444-8444-444444444444",
-        holdExpiresAt: "2026-08-12T22:15:00.000Z",
+        reservationId: "44444444-4444-4444-8444-444444444444",
+        status: "confirmed",
         deliveryState: { email: "queued" },
       },
     });
     expect(mocks.rpc).toHaveBeenCalledWith(
-      "service_create_public_reservation",
+      "service_book_public_reservation",
       expect.objectContaining({
         p_organization_id: client.organizationId,
         p_location_id: client.locationId,
@@ -406,7 +406,7 @@ describe("public reservation API contracts", () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it("maps a locked delivery-readiness race to verification unavailable", async () => {
+  it("maps a locked delivery-readiness race to confirmation email unavailable", async () => {
     mocks.rpc.mockResolvedValueOnce({
       data: null,
       error: { code: "55000" },
@@ -432,7 +432,7 @@ describe("public reservation API contracts", () => {
     );
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({
-      error: { code: "verification_unavailable" },
+      error: { code: "confirmation_email_unavailable" },
     });
   });
 

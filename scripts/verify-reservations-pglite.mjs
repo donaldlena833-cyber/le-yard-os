@@ -448,6 +448,60 @@ try {
     isActive: true,
     approved: true,
   });
+  const movedFloorTable = (
+    await db.query(
+      `select public.move_reservation_table(
+        $1::uuid, $2::uuid, 0.24, 0.27
+      ) as result`,
+      ["d2100000-0000-4000-8000-000000000001", ids.table],
+    )
+  ).rows[0].result;
+  if (
+    movedFloorTable.id !== ids.table ||
+    Number(movedFloorTable.positionX) !== 0.24 ||
+    Number(movedFloorTable.positionY) !== 0.27 ||
+    movedFloorTable.replayed
+  ) {
+    throw new Error(
+      `Authorized floor-table move failed: ${JSON.stringify(movedFloorTable)}`,
+    );
+  }
+  const replayedFloorTableMove = (
+    await db.query(
+      `select public.move_reservation_table(
+        $1::uuid, $2::uuid, 0.24, 0.27
+      ) as result`,
+      ["d2100000-0000-4000-8000-000000000001", ids.table],
+    )
+  ).rows[0].result;
+  if (!replayedFloorTableMove.replayed) {
+    throw new Error("Floor-table move did not replay idempotently");
+  }
+  await assumeUser(ids.employee);
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.move_reservation_table(
+          $1::uuid, $2::uuid, 0.3, 0.3
+        )`,
+        ["d2100000-0000-4000-8000-000000000002", ids.table],
+      ),
+    "42501",
+    "floor-table move without reservations.configure",
+  );
+  await assumeUser(ids.otherTenantOwner);
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.move_reservation_table(
+          $1::uuid, $2::uuid, 0.3, 0.3
+        )`,
+        ["d2100000-0000-4000-8000-000000000003", ids.table],
+      ),
+    "42501",
+    "cross-tenant floor-table move",
+  );
+  await assumeUser(ids.owner);
   await configure(ids.period, "service_period.save", {
     name: "Dinner",
     daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
@@ -542,6 +596,21 @@ try {
   ).rows[0].result;
   if (seated.status !== "seated")
     throw new Error("Seating transition did not persist");
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select public.assign_reservation_tables(
+          $1::uuid, $2::uuid, array[$3::uuid], null
+        )`,
+        [
+          "d4100000-0000-4000-8000-000000000005",
+          ids.staffReservation,
+          ids.otherTable,
+        ],
+      ),
+    "23514",
+    "non-atomic seated table reassignment",
+  );
   const completed = (
     await db.query(
       "select public.transition_reservation($1::uuid, $2::uuid, 'completed', null) as result",

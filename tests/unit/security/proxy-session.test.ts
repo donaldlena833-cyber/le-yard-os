@@ -190,6 +190,29 @@ describe("session proxy", () => {
     expect(createServerClient).not.toHaveBeenCalled();
   });
 
+  it("keeps connected sessions on the canonical cookie origin", async () => {
+    const documentResponse = await updateSession(
+      new NextRequest(
+        "https://generated-deployment.example.com/sign-in?next=%2Freports",
+      ),
+    );
+    expect(documentResponse.status).toBe(307);
+    expect(documentResponse.headers.get("location")).toBe(
+      "https://ops.example.com/sign-in?next=%2Freports",
+    );
+
+    const apiResponse = await updateSession(
+      new NextRequest(
+        "https://generated-deployment.example.com/api/exports/reports",
+      ),
+    );
+    expect(apiResponse.status).toBe(421);
+    await expect(apiResponse.json()).resolves.toEqual({
+      error: "Use the canonical Le Yard OS origin.",
+    });
+    expect(createServerClient).not.toHaveBeenCalled();
+  });
+
   it("requires a valid session for every playground document and API", async () => {
     state.runtime = {
       ready: true,

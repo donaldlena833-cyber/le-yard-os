@@ -21,7 +21,7 @@ This is the tracked implementation record for the Le Yard OS expansion mission. 
 ## Implementation decisions
 
 - Preserve organization roles as the security and administration ceiling; add operational capabilities beneath them.
-- Owners retain every capability. Admins retain broad operational capabilities. As of the August 9 rollout follow-up, password-authenticated Owner sessions are sufficient and MFA is optional; all tenant, location, role, replay, and audit boundaries remain in force.
+- Owners retain every capability. Admins retain broad operational capabilities. Connected Owner and Admin MFA is implemented as an opt-in deployment gate and remains deferred until enrollment/recovery is ready; all tenant, location, role, replay, and audit boundaries remain in force.
 - Effective capabilities are actor-derived from current job-role assignments at a location, plus optional user grants/denials. A matching user denial wins over grants. Inactive or out-of-date assignments do not authorize.
 - Capability assignment rows are deactivated/effective-dated rather than deleted. Direct authenticated DML is revoked; audited, idempotent commands manage assignments.
 - Capability checks will be enforced in both the server data layer and PostgreSQL commands. UI visibility is an affordance, not a security boundary.

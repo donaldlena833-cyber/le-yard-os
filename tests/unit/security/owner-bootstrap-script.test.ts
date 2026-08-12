@@ -50,8 +50,10 @@ function runBootstrap(config: unknown, extraEnvironment: Record<string, string> 
       encoding: "utf8",
       env: {
         ...process.env,
-        OWNER_DONALD_EMAIL: "donald@north-river.test",
-        OWNER_MARIS_EMAIL: "maris@north-river.test",
+        OWNER_1_EMAIL: "owner-one@north-river.test",
+        OWNER_1_DISPLAY_NAME: "Owner One",
+        OWNER_2_EMAIL: "owner-two@north-river.test",
+        OWNER_2_DISPLAY_NAME: "Owner Two",
         ...extraEnvironment,
       },
     },
@@ -70,8 +72,8 @@ describe("initial Owner bootstrap CLI", () => {
     expect(firstPlan).toEqual(secondPlan);
     expect(firstPlan.mode).toBe("dry-run");
     expect(firstPlan.owners).toEqual([
-      { displayName: "Donald", email: "donald@north-river.test", role: "owner" },
-      { displayName: "Maris", email: "maris@north-river.test", role: "owner" },
+      { displayName: "Owner One", email: "owner-one@north-river.test", role: "owner" },
+      { displayName: "Owner Two", email: "owner-two@north-river.test", role: "owner" },
     ]);
     expect(firstPlan.confirmation).toMatch(/^bootstrap:[0-9a-f]{20}$/);
   });

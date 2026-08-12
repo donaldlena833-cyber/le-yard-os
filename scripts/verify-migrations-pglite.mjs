@@ -2688,6 +2688,140 @@ try {
   }
   process.stdout.write("PASS tenant-bound manual imports and exact-idempotent integration retries\n");
 
+  // Toast Labor imports are service-only, provider-versioned, and replay-safe.
+  await db.exec(`
+    reset role;
+    set role service_role;
+    select set_config('request.jwt.claims', '{"role":"service_role"}', false);
+  `);
+  const firstToastImport = await db.query(`
+    select public.service_ingest_pos_time_entry(
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      'd0200000-0000-4000-8000-000000000001',
+      'toast-time-entry-1', '2026-08-13T20:00:00Z', repeat('a', 64),
+      '50000000-0000-4000-8000-000000000005',
+      '40000000-0000-4000-8000-000000000001', null,
+      '2026-08-13T18:00:00Z', null, false, null,
+      '[{"externalId":"toast-break-1","startedAt":"2026-08-13T19:00:00Z","endedAt":"2026-08-13T19:15:00Z","isPaid":false}]'::jsonb
+    ) as result
+  `);
+  const replayedToastImport = await db.query(`
+    select public.service_ingest_pos_time_entry(
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      'd0200000-0000-4000-8000-000000000001',
+      'toast-time-entry-1', '2026-08-13T20:00:00Z', repeat('a', 64),
+      '50000000-0000-4000-8000-000000000005',
+      '40000000-0000-4000-8000-000000000001', null,
+      '2026-08-13T18:00:00Z', null, false, null,
+      '[{"externalId":"toast-break-1","startedAt":"2026-08-13T19:00:00Z","endedAt":"2026-08-13T19:15:00Z","isPaid":false}]'::jsonb
+    ) as result
+  `);
+  const completedToastImport = await db.query(`
+    select public.service_ingest_pos_time_entry(
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      'd0200000-0000-4000-8000-000000000001',
+      'toast-time-entry-1', '2026-08-13T22:00:00Z', repeat('b', 64),
+      '50000000-0000-4000-8000-000000000005',
+      '40000000-0000-4000-8000-000000000001', null,
+      '2026-08-13T18:00:00Z', '2026-08-13T21:30:00Z', false, null,
+      '[]'::jsonb
+    ) as result
+  `);
+  await expectDatabaseError(
+    `select public.service_ingest_pos_time_entry(
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      'd0200000-0000-4000-8000-000000000001',
+      'toast-time-entry-1', '2026-08-13T22:00:00Z', repeat('c', 64),
+      '50000000-0000-4000-8000-000000000005',
+      '40000000-0000-4000-8000-000000000001', null,
+      '2026-08-13T18:00:00Z', '2026-08-13T21:30:00Z', false, null,
+      '[]'::jsonb
+    )`,
+    "40001",
+    "conflicting Toast source version",
+  );
+  await db.exec(`
+    reset role;
+    select set_config('request.jwt.claims', '{}', false);
+  `);
+  const toastFacts = (await db.query(`
+    select
+      entry.status,
+      entry.source,
+      entry.source_provider,
+      entry.clocked_out_at,
+      count(time_break.id)::integer as visible_breaks
+    from public.time_entries entry
+    left join public.time_breaks time_break
+      on time_break.time_entry_id = entry.id
+     and time_break.source_deleted_at is null
+    where entry.integration_connection_id = 'd0200000-0000-4000-8000-000000000001'
+      and entry.external_id = 'toast-time-entry-1'
+    group by entry.id
+  `)).rows[0];
+  if (
+    firstToastImport.rows[0].result.status !== "created" ||
+    replayedToastImport.rows[0].result.status !== "unchanged" ||
+    completedToastImport.rows[0].result.status !== "updated" ||
+    toastFacts.status !== "submitted" ||
+    toastFacts.source !== "import" ||
+    toastFacts.source_provider !== "toast" ||
+    !toastFacts.clocked_out_at ||
+    toastFacts.visible_breaks !== 0
+  ) {
+    throw new Error(`Toast Labor ingest failed: ${JSON.stringify({
+      first: firstToastImport.rows[0],
+      replay: replayedToastImport.rows[0],
+      completed: completedToastImport.rows[0],
+      facts: toastFacts,
+    })}`);
+  }
+  process.stdout.write("PASS service-only replay-safe Toast Labor time entry ingestion\n");
+
+  // The read-only attendance mirror exposes only bounded sync freshness to an
+  // authenticated employee at their assigned location. The SECURITY DEFINER
+  // function must still fail closed for every other location and tenant.
+  await db.exec(`
+    reset role;
+    set role authenticated;
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000005","role":"authenticated","aal":"aal1"}',
+      false
+    );
+  `);
+  const toastSyncScope = (await db.query(`
+    select
+      (select count(*)::integer
+       from public.get_pos_labor_sync_status(
+         '30000000-0000-4000-8000-000000000001'
+       )) as assigned_location_rows,
+      (select count(*)::integer
+       from public.get_pos_labor_sync_status(
+         '30000000-0000-4000-8000-000000000002'
+       )) as unassigned_location_rows,
+      (select count(*)::integer
+       from public.get_pos_labor_sync_status(
+         '30000000-0000-4000-8000-000000000003'
+       )) as cross_tenant_rows
+  `)).rows[0];
+  if (
+    toastSyncScope.assigned_location_rows !== 1 ||
+    toastSyncScope.unassigned_location_rows !== 0 ||
+    toastSyncScope.cross_tenant_rows !== 0
+  ) {
+    throw new Error(
+      `Toast Labor sync-status scope failed: ${JSON.stringify(toastSyncScope)}`,
+    );
+  }
+  process.stdout.write(
+    "PASS bounded same-location Toast Labor sync-status access\n",
+  );
+
   // 014: report completion is one service-only atomic transition across the
   // report run and export row, with exact replay and conflicting replay checks.
   await db.exec(`

@@ -14,6 +14,7 @@ import {
   verifyReservationLinkToken,
 } from "@/lib/reservations/link-token.server";
 import { configuredReservationDeliveryAdapters } from "@/lib/reservations/delivery-readiness.server";
+import { scheduleReservationMessageDelivery } from "@/lib/reservations/message-delivery-trigger.server";
 
 const schema = z
   .object({ verificationToken: z.string().min(80).max(2_048) })
@@ -106,6 +107,7 @@ export async function POST(request: Request) {
         "verification_unavailable",
         "Reservation verification is temporarily unavailable. Please call the restaurant.",
       );
+    scheduleReservationMessageDelivery(request);
     return bookingApiResponse({
       data: {
         status: confirmed.status,

@@ -6996,6 +6996,9 @@ export type Database = {
           "notes": string | null
           "created_at": string
           "updated_at": string
+          "integration_connection_id": string | null
+          "external_id": string | null
+          "source_deleted_at": string | null
         }
         Insert: {
           "id"?: string
@@ -7008,6 +7011,9 @@ export type Database = {
           "notes"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "integration_connection_id"?: string | null
+          "external_id"?: string | null
+          "source_deleted_at"?: string | null
         }
         Update: {
           "id"?: string
@@ -7020,8 +7026,17 @@ export type Database = {
           "notes"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "integration_connection_id"?: string | null
+          "external_id"?: string | null
+          "source_deleted_at"?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "time_breaks_integration_connection_fkey"
+            columns: ["organization_id","integration_connection_id"]
+            referencedRelation: "integration_connections"
+            referencedColumns: ["organization_id","id"]
+          },
           {
             foreignKeyName: "time_breaks_organization_id_time_entry_id_fkey"
             columns: ["organization_id","time_entry_id"]
@@ -7051,6 +7066,12 @@ export type Database = {
           "created_at": string
           "updated_at": string
           "review_note": string | null
+          "integration_connection_id": string | null
+          "source_provider": Database["public"]["Enums"]["integration_provider"] | null
+          "external_id": string | null
+          "external_modified_at": string | null
+          "source_payload_hash": string | null
+          "source_deleted_at": string | null
         }
         Insert: {
           "id"?: string
@@ -7072,6 +7093,12 @@ export type Database = {
           "created_at"?: string
           "updated_at"?: string
           "review_note"?: string | null
+          "integration_connection_id"?: string | null
+          "source_provider"?: Database["public"]["Enums"]["integration_provider"] | null
+          "external_id"?: string | null
+          "external_modified_at"?: string | null
+          "source_payload_hash"?: string | null
+          "source_deleted_at"?: string | null
         }
         Update: {
           "id"?: string
@@ -7093,8 +7120,20 @@ export type Database = {
           "created_at"?: string
           "updated_at"?: string
           "review_note"?: string | null
+          "integration_connection_id"?: string | null
+          "source_provider"?: Database["public"]["Enums"]["integration_provider"] | null
+          "external_id"?: string | null
+          "external_modified_at"?: string | null
+          "source_payload_hash"?: string | null
+          "source_deleted_at"?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "time_entries_integration_connection_fkey"
+            columns: ["organization_id","integration_connection_id"]
+            referencedRelation: "integration_connections"
+            referencedColumns: ["organization_id","id"]
+          },
           {
             foreignKeyName: "time_entries_organization_id_employee_id_fkey"
             columns: ["organization_id","employee_id"]
@@ -8928,6 +8967,12 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["employee_documents"]["Row"]
       };
+      "get_pos_labor_sync_status": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: { "provider": Database["public"]["Enums"]["integration_provider"] | null; "connection_status": string | null; "last_synced_at": string | null; "last_job_status": Database["public"]["Enums"]["job_status"] | null; "last_job_completed_at": string | null }[]
+      };
       "guard_active_owner_count": {
         Args: Record<PropertyKey, never>
         Returns: unknown
@@ -9232,6 +9277,15 @@ export type Database = {
           "p_special_requests": string | null
           "p_table_ids": string[] | null
           "p_reason": string | null
+        }
+        Returns: Json
+      };
+      "move_reservation_table": {
+        Args: {
+          "p_request_id": string | null
+          "p_table_id": string | null
+          "p_position_x": number | null
+          "p_position_y": number | null
         }
         Returns: Json
       };
@@ -9885,6 +9939,24 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_book_public_reservation": {
+        Args: {
+          "p_request_id": string | null
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_reserved_at": string | null
+          "p_duration_minutes": number | null
+          "p_party_size": number | null
+          "p_first_name": string | null
+          "p_last_name": string | null
+          "p_email": string | null
+          "p_phone": string | null
+          "p_special_requests": string | null
+          "p_table_ids": string[] | null
+          "p_available_channels": string[] | null
+        }
+        Returns: Json
+      };
       "service_cancel_public_reservation": {
         Args: {
           "p_request_id": string | null
@@ -10081,6 +10153,25 @@ export type Database = {
         }
         Returns: { "id": string | null; "preferences": string | null; "allergies": string | null; "notes": string | null; "lifetime_spend_cents": number | null }[]
       };
+      "service_ingest_pos_time_entry": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_connection_id": string | null
+          "p_external_id": string | null
+          "p_external_modified_at": string | null
+          "p_payload_hash": string | null
+          "p_employee_id": string | null
+          "p_job_role_id": string | null
+          "p_scheduled_shift_id": string | null
+          "p_clocked_in_at": string | null
+          "p_clocked_out_at": string | null
+          "p_auto_clocked_out": boolean | null
+          "p_source_deleted_at": string | null
+          "p_breaks"?: Json | null
+        }
+        Returns: Json
+      };
       "service_merge_guests": {
         Args: {
           "p_request_id": string | null
@@ -10159,6 +10250,10 @@ export type Database = {
           "p_business_date": string | null
         }
         Returns: { "shiftId": string | null; "servicePeriodId": string | null; "name": string | null; "businessDate": string | null; "startsAt": string | null; "endsAt": string | null; "defaultDurationMinutes": number | null; "pacingIntervalMinutes": number | null; "pacingCoverLimit": number | null; "minPartySize": number | null; "maxPartySize": number | null; "onlineEnabled": boolean | null; "status": string | null; "configurationState": string | null; "exceptions": Json | null }[]
+      };
+      "service_runtime_schema_contract": {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       };
       "service_save_guest": {
         Args: {
@@ -10718,6 +10813,7 @@ export const DatabaseObjectNames = {
       "end_time_break",
       "enforce_owner_role_assignment",
       "finalize_employee_document",
+      "get_pos_labor_sync_status",
       "guard_active_owner_count",
       "guard_chat_message_scope",
       "guard_chat_read_position",
@@ -10776,6 +10872,7 @@ export const DatabaseObjectNames = {
       "mark_channel_read",
       "merge_guests",
       "modify_reservation",
+      "move_reservation_table",
       "notification_type_is_supported",
       "offer_shift_swap",
       "org_role",
@@ -10840,6 +10937,7 @@ export const DatabaseObjectNames = {
       "service_add_guest_note",
       "service_begin_reservation_message_delivery",
       "service_begin_reservation_push_delivery",
+      "service_book_public_reservation",
       "service_cancel_public_reservation",
       "service_claim_booking_rate_limit",
       "service_claim_reservation_message_outbox",
@@ -10860,6 +10958,7 @@ export const DatabaseObjectNames = {
       "service_guest_sensitive_metrics",
       "service_guest_sensitive_notes",
       "service_guest_sensitive_profiles",
+      "service_ingest_pos_time_entry",
       "service_merge_guests",
       "service_modify_public_reservation",
       "service_record_guest_consent",
@@ -10868,6 +10967,7 @@ export const DatabaseObjectNames = {
       "service_reservation_lifecycle_head",
       "service_reservation_pacing_snapshot",
       "service_reservation_shift_snapshot",
+      "service_runtime_schema_contract",
       "service_save_guest",
       "set_chat_channel_archived",
       "set_delivery_receipt_link",

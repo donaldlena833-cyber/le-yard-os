@@ -24,6 +24,7 @@ import {
 import { readWorkspacePreference } from "@/lib/auth/workspace-preference.server";
 import { localDateKey } from "@/data/read-models/local-time";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
+import { requiresOwnerMfaGate } from "@/lib/auth/mfa";
 import { createClient } from "@/lib/supabase/server";
 import {
   DEMO_CAPABILITY_TEMPLATES,
@@ -36,7 +37,7 @@ export type WorkspaceSessionResolution =
   | { status: "ready"; context: WorkspaceContextValue }
   | { status: "unauthenticated" }
   | {
-      status: "no_access" | "no_location" | "configuration_error" | "data_error";
+      status: "no_access" | "no_location" | "configuration_error" | "data_error" | "mfa_required";
       identity?: { displayName: string; email: string | null };
     };
 
@@ -378,26 +379,33 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
   }
   const capabilities = normalizeOperationalCapabilities(capabilityResult.data);
 
-  return {
-    status: "ready",
-    context: {
-      mode: "live",
-      identity: {
-        userId,
-        displayName: identity.displayName,
-        email,
-        aal: normalizeAssuranceLevel(claims.aal),
-      },
-      organization: scope.organization,
-      activeLocation: scope.activeLocation,
-      locations: scope.locations,
-      availableWorkspaces: toWorkspaceChoices(scopes),
-      membershipId: scope.membership.id,
-      role: scope.membership.role,
-      organizationWide:
-        scope.membership.role === "owner" || scope.membership.role === "admin",
-      capabilities,
-      ...jobContext,
+  const resolvedContext: WorkspaceContextValue = {
+    mode: "live",
+    identity: {
+      userId,
+      displayName: identity.displayName,
+      email,
+      aal: normalizeAssuranceLevel(claims.aal),
     },
+    organization: scope.organization,
+    activeLocation: scope.activeLocation,
+    locations: scope.locations,
+    availableWorkspaces: toWorkspaceChoices(scopes),
+    membershipId: scope.membership.id,
+    role: scope.membership.role,
+    organizationWide:
+      scope.membership.role === "owner" || scope.membership.role === "admin",
+    capabilities,
+    ...jobContext,
   };
+
+  if (process.env.LE_YARD_REQUIRE_MANAGEMENT_MFA === "true" && requiresOwnerMfaGate({
+    mode: resolvedContext.mode,
+    role: resolvedContext.role,
+    identity: resolvedContext.identity,
+  })) {
+    return { status: "mfa_required", identity };
+  }
+
+  return { status: "ready", context: resolvedContext };
 }
