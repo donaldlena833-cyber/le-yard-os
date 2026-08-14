@@ -1,0 +1,88 @@
+name: Disposable PostgreSQL backup restore drill
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-restore-drill-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  synthetic-postgres-restore:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BACKUP_RESTORE_CONTROL_DATABASE_URL: postgres://postgres@127.0.0.1:55439/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Initialize isolated runner paths
+        run: |
+          {
+            echo "RESTORE_DRILL_DIRECTORY=$RUNNER_TEMP/le-yard-backup-restore-drill"
+            echo "RESTORE_DRILL_PGDATA=$RUNNER_TEMP/le-yard-backup-restore-pg17"
+            echo "BACKUP_RESTORE_PGDATA=$RUNNER_TEMP/le-yard-backup-restore-pg17"
+          } >> "$GITHUB_ENV"
+      - name: Install PostgreSQL 17 from the signed upstream repository
+        run: |
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          curl --fail --silent --show-error \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo tee /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc >/dev/null
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-17 postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: Verify PostgreSQL client version
+        run: /usr/lib/postgresql/17/bin/pg_dump --version
+      - name: Start a runner-local PostgreSQL 17 cluster
+        run: |
+          initdb -D "$RESTORE_DRILL_PGDATA" -A trust -U postgres --no-locale
+          pg_ctl -D "$RESTORE_DRILL_PGDATA" \
+            -l "$RESTORE_DRILL_DIRECTORY-postgres.log" \
+            -o "-p 55439 -h 127.0.0.1 -k $RUNNER_TEMP" start
+          pg_isready -h 127.0.0.1 -p 55439 -U postgres -d postgres
+      - run: npm ci
+      - name: Create one-run archive provenance key
+        run: |
+          RESTORE_DRILL_PROVENANCE_KEY=$(openssl rand -hex 32)
+          echo "::add-mask::$RESTORE_DRILL_PROVENANCE_KEY"
+          echo "BACKUP_RESTORE_PROVENANCE_KEY=$RESTORE_DRILL_PROVENANCE_KEY" >> "$GITHUB_ENV"
+      - name: Create the isolated synthetic backup fixture
+        run: >-
+          npm run backup:restore-drill:create-fixture --
+          --artifact "$RESTORE_DRILL_DIRECTORY/le-yard-synthetic.dump"
+          --manifest "$RESTORE_DRILL_DIRECTORY/le-yard-synthetic.manifest.json"
+      - name: Restore and verify the supplied fixture
+        run: >-
+          npm run backup:restore-drill:verify --
+          --artifact "$RESTORE_DRILL_DIRECTORY/le-yard-synthetic.dump"
+          --manifest "$RESTORE_DRILL_DIRECTORY/le-yard-synthetic.manifest.json"
+          --evidence-directory "$RESTORE_DRILL_DIRECTORY/evidence"
+      - name: Stop the runner-local database
+        if: always()
+        run: |
+          if [ -x /usr/lib/postgresql/17/bin/pg_ctl ] \
+            && [ -d "$RESTORE_DRILL_PGDATA" ] \
+            && /usr/lib/postgresql/17/bin/pg_ctl -D "$RESTORE_DRILL_PGDATA" status; then
+            /usr/lib/postgresql/17/bin/pg_ctl \
+              -D "$RESTORE_DRILL_PGDATA" stop -m fast
+          fi
+      - name: Retain non-secret restore evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-restore-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/le-yard-backup-restore-drill/evidence/*.json
+            ${{ runner.temp }}/le-yard-backup-restore-drill/le-yard-synthetic.manifest.json
+          if-no-files-found: warn
+          retention-days: 30

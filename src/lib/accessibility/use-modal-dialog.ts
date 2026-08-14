@@ -39,15 +39,19 @@ function hideOutsideTree(overlay: HTMLElement): InertSnapshot[] {
 }
 
 export function useModalDialog({
+  active = true,
   dialogRef,
   overlayRef,
   onClose,
   initialFocusSelector = "[autofocus], [data-modal-initial]",
+  returnFocusTarget,
 }: {
+  active?: boolean;
   dialogRef: RefObject<HTMLElement | null>;
   overlayRef: RefObject<HTMLElement | null>;
   onClose: () => void;
   initialFocusSelector?: string;
+  returnFocusTarget?: HTMLElement | null;
 }) {
   const onCloseRef = useRef(onClose);
 
@@ -56,22 +60,26 @@ export function useModalDialog({
   }, [onClose]);
 
   useEffect(() => {
+    if (!active) return;
     const dialog = dialogRef.current;
     const overlay = overlayRef.current;
     if (!dialog || !overlay) return;
 
-    const returnTarget = document.activeElement instanceof HTMLElement
+    const returnTarget = returnFocusTarget ?? (document.activeElement instanceof HTMLElement
       ? document.activeElement
-      : null;
+      : null);
     const previousOverflow = document.body.style.overflow;
     const outsideSnapshots = hideOutsideTree(overlay);
     document.body.style.overflow = "hidden";
 
     const focusInitial = window.requestAnimationFrame(() => {
+      if (dialog.contains(document.activeElement) && document.activeElement !== dialog) {
+        return;
+      }
       const initial = dialog.querySelector<HTMLElement>(initialFocusSelector)
         ?? dialog.querySelector<HTMLElement>(focusableSelector)
         ?? dialog;
-      initial.focus();
+      initial.focus({ preventScroll: true });
     });
 
     function onKeyDown(event: KeyboardEvent) {
@@ -87,7 +95,7 @@ export function useModalDialog({
       ).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
       if (!focusable.length) {
         event.preventDefault();
-        dialog!.focus();
+        dialog!.focus({ preventScroll: true });
         return;
       }
 
@@ -96,10 +104,10 @@ export function useModalDialog({
       const active = document.activeElement;
       if (event.shiftKey && (active === first || !dialog!.contains(active))) {
         event.preventDefault();
-        last.focus();
+        last.focus({ preventScroll: true });
       } else if (!event.shiftKey && (active === last || !dialog!.contains(active))) {
         event.preventDefault();
-        first.focus();
+        first.focus({ preventScroll: true });
       }
     }
 
@@ -113,7 +121,7 @@ export function useModalDialog({
         if (snapshot.ariaHidden === null) snapshot.element.removeAttribute("aria-hidden");
         else snapshot.element.setAttribute("aria-hidden", snapshot.ariaHidden);
       }
-      if (returnTarget?.isConnected) returnTarget.focus();
+      if (returnTarget?.isConnected) returnTarget.focus({ preventScroll: true });
     };
-  }, [dialogRef, initialFocusSelector, overlayRef]);
+  }, [active, dialogRef, initialFocusSelector, overlayRef, returnFocusTarget]);
 }

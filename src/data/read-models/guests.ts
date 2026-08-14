@@ -107,6 +107,8 @@ export interface LiveGuestDuplicateProfile {
 export interface LiveGuestsModel {
   search: string;
   currencyCode: string;
+  contactContextAuthorized?: boolean;
+  sensitiveContextAuthorized?: boolean;
   guests: LiveGuest[];
   metrics: {
     activeProfiles: number;
@@ -134,6 +136,39 @@ type DuplicateRow = {
   visit_count: number;
   lifetime_spend_cents: number;
   source: string;
+};
+
+type OperationalGuestRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  display_name: string;
+  email: string | null;
+  phone: string | null;
+  birthday: string | null;
+  vip: boolean;
+  first_visit_at: string | null;
+  last_visit_at: string | null;
+  visit_count: number;
+  source: string;
+};
+
+type SensitiveGuestRow = {
+  id: string;
+  preferences: string | null;
+  allergies: string | null;
+  notes: string | null;
+  lifetime_spend_cents: number;
+};
+
+type SensitiveGuestNoteRow = {
+  id: string;
+  guest_id: string;
+  location_id: string | null;
+  note: string;
+  is_sensitive: boolean;
+  author_id: string;
+  created_at: string;
 };
 
 function duplicateProfile(row: DuplicateRow): LiveGuestDuplicateProfile {
@@ -216,30 +251,18 @@ export async function loadLiveGuests(
   workspace: WorkspaceContextValue,
   search = "",
 ): Promise<LiveReadResult<LiveGuestsModel>> {
-  if (workspace.role === "employee") return readFailure("Management access is required.");
-
   try {
     const supabase = await createClient();
     const organizationId = workspace.organization.id;
     const locationId = workspace.activeLocation.id;
     const normalizedSearch = search.trim().slice(0, 120);
     const now = new Date().toISOString();
-
-    let guestQuery = supabase
-      .from("guests")
-      .select(
-        "id, first_name, last_name, display_name, email, phone, birthday, vip, preferences, allergies, notes, first_visit_at, last_visit_at, visit_count, lifetime_spend_cents, source",
-      )
-      .eq("organization_id", organizationId)
-      .is("merged_into_id", null)
-      .order("last_visit_at", { ascending: false, nullsFirst: false })
-      .limit(250);
-    if (normalizedSearch) {
-      guestQuery = guestQuery.textSearch("search_vector", normalizedSearch, {
-        config: "simple",
-        type: "websearch",
-      });
-    }
+    const contactContextAuthorized = workspace.capabilities.includes(
+      "guest.manage",
+    );
+    const sensitiveContextAuthorized = workspace.capabilities.includes(
+      "guest.sensitive_notes.view",
+    );
 
     const [
       guestResult,
@@ -252,7 +275,12 @@ export async function loadLiveGuests(
       locationResult,
       organizationResult,
     ] = await Promise.all([
-      guestQuery,
+      supabase.rpc("service_guest_profiles", {
+        p_organization_id: organizationId,
+        p_location_id: locationId,
+        p_query: normalizedSearch || null,
+        p_limit: 250,
+      }),
       supabase
         .from("guests")
         .select("id", { count: "exact", head: true })
@@ -264,13 +292,12 @@ export async function loadLiveGuests(
         .eq("organization_id", organizationId)
         .is("merged_into_id", null)
         .eq("vip", true),
-      supabase
-        .from("guests")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .is("merged_into_id", null)
-        .not("allergies", "is", null)
-        .neq("allergies", ""),
+      sensitiveContextAuthorized
+        ? supabase.rpc("service_guest_sensitive_metrics", {
+            p_organization_id: organizationId,
+            p_location_id: locationId,
+          })
+        : Promise.resolve({ data: [], error: null }),
       supabase
         .from("reservations")
         .select("id", { count: "exact", head: true })
@@ -278,16 +305,12 @@ export async function loadLiveGuests(
         .eq("location_id", locationId)
         .gte("reserved_at", now)
         .in("status", ["booked", "confirmed"]),
-      supabase
-        .from("guests")
-        .select(
-          "id, display_name, email, phone, vip, last_visit_at, visit_count, lifetime_spend_cents, source",
-        )
-        .eq("organization_id", organizationId)
-        .is("merged_into_id", null)
-        .or("phone.not.is.null,email.not.is.null")
-        .order("id")
-        .limit(1_001),
+      supabase.rpc("service_guest_profiles", {
+        p_organization_id: organizationId,
+        p_location_id: locationId,
+        p_query: null,
+        p_limit: 1000,
+      }),
       supabase
         .from("guest_tags")
         .select("id, name, color")
@@ -318,21 +341,59 @@ export async function loadLiveGuests(
       return readFailure();
     }
 
-    const guests = guestResult.data ?? [];
+    const guests = (guestResult.data ?? []) as OperationalGuestRow[];
     const guestIds = guests.map((guest) => guest.id);
+    const duplicateBase = (duplicateBaseResult.data ?? []) as OperationalGuestRow[];
+    const sensitiveIds = [
+      ...new Set([...guestIds, ...duplicateBase.map((guest) => guest.id)]),
+    ];
+    const sensitiveResult =
+      sensitiveContextAuthorized && sensitiveIds.length
+        ? await supabase.rpc("service_guest_sensitive_profiles", {
+            p_organization_id: organizationId,
+            p_location_id: locationId,
+            p_guest_ids: sensitiveIds,
+          })
+        : { data: [], error: null };
+    if (sensitiveResult.error) return readFailure();
+    const sensitiveByGuestId = new Map(
+      ((sensitiveResult.data ?? []) as SensitiveGuestRow[]).map((guest) => [
+        guest.id,
+        guest,
+      ]),
+    );
+    const duplicateRows: DuplicateRow[] = duplicateBase
+      .filter((guest) => guest.phone || guest.email)
+      .map((guest) => ({
+        id: guest.id,
+        display_name: guest.display_name,
+        email: guest.email,
+        phone: guest.phone,
+        vip: guest.vip,
+        last_visit_at: guest.last_visit_at,
+        visit_count: guest.visit_count,
+        lifetime_spend_cents:
+          sensitiveByGuestId.get(guest.id)?.lifetime_spend_cents ?? 0,
+        source: guest.source,
+      }));
+    const profilesWithAllergies = Number(
+      allergyCountResult.data?.[0]?.profiles_with_allergies ?? 0,
+    );
     if (!guestIds.length) {
       return readSuccess({
         search: normalizedSearch,
         currencyCode: organizationResult.data.currency_code,
+        contactContextAuthorized,
+        sensitiveContextAuthorized,
         guests: [],
         metrics: {
           activeProfiles: profileCountResult.count ?? 0,
           vipProfiles: vipCountResult.count ?? 0,
-          profilesWithAllergies: allergyCountResult.count ?? 0,
+          profilesWithAllergies,
           upcomingReservations: reservationCountResult.count ?? 0,
         },
-        duplicateCandidates: duplicateCandidates(duplicateBaseResult.data ?? []),
-        duplicateScopeLimited: (duplicateBaseResult.data?.length ?? 0) > 1_000,
+        duplicateCandidates: duplicateCandidates(duplicateRows),
+        duplicateScopeLimited: duplicateBase.length >= 1_000,
       });
     }
 
@@ -345,43 +406,57 @@ export async function loadLiveGuests(
       visitResult,
       reservationResult,
     ] = await Promise.all([
-      supabase
-        .from("guest_locations")
-        .select("guest_id, visit_count, spend_cents")
-        .eq("organization_id", organizationId)
-        .eq("location_id", locationId)
-        .in("guest_id", guestIds),
-      supabase
-        .from("guest_contacts")
-        .select("id, guest_id, contact_type, label, value, is_primary, verified_at")
-        .eq("organization_id", organizationId)
-        .in("guest_id", guestIds),
+      contactContextAuthorized
+        ? supabase
+            .from("guest_locations")
+            .select("guest_id, visit_count")
+            .eq("organization_id", organizationId)
+            .eq("location_id", locationId)
+            .in("guest_id", guestIds)
+        : Promise.resolve({ data: [], error: null }),
+      contactContextAuthorized
+        ? supabase
+            .from("guest_contacts")
+            .select(
+              "id, guest_id, contact_type, label, value, is_primary, verified_at",
+            )
+            .eq("organization_id", organizationId)
+            .in("guest_id", guestIds)
+        : Promise.resolve({ data: [], error: null }),
       supabase
         .from("guest_tag_assignments")
         .select("guest_id, tag_id")
         .eq("organization_id", organizationId)
         .in("guest_id", guestIds),
-      supabase
-        .from("guest_notes")
-        .select("id, guest_id, location_id, note, is_sensitive, author_id, created_at")
-        .eq("organization_id", organizationId)
-        .in("guest_id", guestIds)
-        .order("created_at", { ascending: false })
-        .limit(750),
-      supabase
-        .from("guest_consents")
-        .select("id, guest_id, channel, status, captured_at, revoked_at, source")
-        .eq("organization_id", organizationId)
-        .in("guest_id", guestIds)
-        .order("captured_at", { ascending: false })
-        .limit(750),
-      supabase
-        .from("guest_visits")
-        .select("id, guest_id, location_id, visited_at, party_size, covers, spend_cents, source, notes")
-        .eq("organization_id", organizationId)
-        .in("guest_id", guestIds)
-        .order("visited_at", { ascending: false })
-        .limit(1_000),
+      sensitiveContextAuthorized
+        ? supabase.rpc("service_guest_sensitive_notes", {
+            p_organization_id: organizationId,
+            p_location_id: locationId,
+            p_guest_ids: guestIds,
+          })
+        : Promise.resolve({ data: [], error: null }),
+      contactContextAuthorized
+        ? supabase
+            .from("guest_consents")
+            .select(
+              "id, guest_id, channel, status, captured_at, revoked_at, source",
+            )
+            .eq("organization_id", organizationId)
+            .in("guest_id", guestIds)
+            .order("captured_at", { ascending: false })
+            .limit(750)
+        : Promise.resolve({ data: [], error: null }),
+      sensitiveContextAuthorized
+        ? supabase
+            .from("guest_visits")
+            .select(
+              "id, guest_id, location_id, visited_at, party_size, covers, spend_cents, source, notes",
+            )
+            .eq("organization_id", organizationId)
+            .in("guest_id", guestIds)
+            .order("visited_at", { ascending: false })
+            .limit(1_000)
+        : Promise.resolve({ data: [], error: null }),
       supabase
         .from("reservations")
         .select("id, guest_id, location_id, reserved_at, party_size, status, table_label, special_requests, source")
@@ -402,9 +477,8 @@ export async function loadLiveGuests(
       return readFailure();
     }
 
-    const authorIds = [
-      ...new Set((noteResult.data ?? []).map((note) => note.author_id)),
-    ];
+    const sensitiveNotes = (noteResult.data ?? []) as SensitiveGuestNoteRow[];
+    const authorIds = [...new Set(sensitiveNotes.map((note) => note.author_id))];
     const profileResult = authorIds.length
       ? await supabase
           .from("profiles")
@@ -430,16 +504,31 @@ export async function loadLiveGuests(
     return readSuccess({
       search: normalizedSearch,
       currencyCode: organizationResult.data.currency_code,
+      contactContextAuthorized,
+      sensitiveContextAuthorized,
       metrics: {
         activeProfiles: profileCountResult.count ?? 0,
         vipProfiles: vipCountResult.count ?? 0,
-        profilesWithAllergies: allergyCountResult.count ?? 0,
+        profilesWithAllergies,
         upcomingReservations: reservationCountResult.count ?? 0,
       },
-      duplicateCandidates: duplicateCandidates(duplicateBaseResult.data ?? []),
-      duplicateScopeLimited: (duplicateBaseResult.data?.length ?? 0) > 1_000,
+      duplicateCandidates: duplicateCandidates(duplicateRows),
+      duplicateScopeLimited: duplicateBase.length >= 1_000,
       guests: guests.map((guest) => {
         const locationSummary = guestLocations.get(guest.id);
+        const sensitive = sensitiveByGuestId.get(guest.id);
+        const currentLocationSpendCents = sensitiveContextAuthorized
+          ? (visitResult.data ?? [])
+              .filter(
+                (visit) =>
+                  visit.guest_id === guest.id &&
+                  visit.location_id === locationId,
+              )
+              .reduce(
+                (total, visit) => total + Number(visit.spend_cents ?? 0),
+                0,
+              )
+          : 0;
         return {
           id: guest.id,
           firstName: guest.first_name,
@@ -449,16 +538,16 @@ export async function loadLiveGuests(
           phone: guest.phone,
           birthday: guest.birthday,
           vip: guest.vip,
-          preferences: guest.preferences,
-          allergies: guest.allergies,
-          notes: guest.notes,
+          preferences: sensitive?.preferences ?? null,
+          allergies: sensitive?.allergies ?? null,
+          notes: sensitive?.notes ?? null,
           firstVisitAt: guest.first_visit_at,
           lastVisitAt: guest.last_visit_at,
           visitCount: guest.visit_count,
-          lifetimeSpendCents: Number(guest.lifetime_spend_cents),
+          lifetimeSpendCents: Number(sensitive?.lifetime_spend_cents ?? 0),
           source: guest.source,
           currentLocationVisits: locationSummary?.visit_count ?? 0,
-          currentLocationSpendCents: Number(locationSummary?.spend_cents ?? 0),
+          currentLocationSpendCents,
           contacts: (contactResult.data ?? [])
             .filter((contact) => contact.guest_id === guest.id)
             .map((contact) => ({
@@ -484,7 +573,7 @@ export async function loadLiveGuests(
             .map((assignment) => tags.get(assignment.tag_id))
             .filter((tag): tag is NonNullable<typeof tag> => Boolean(tag))
             .map((tag) => ({ id: tag.id, name: tag.name, color: tag.color })),
-          guestNotes: (noteResult.data ?? [])
+          guestNotes: sensitiveNotes
             .filter((note) => note.guest_id === guest.id)
             .map((note) => ({
               id: note.id,

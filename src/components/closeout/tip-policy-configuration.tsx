@@ -79,7 +79,7 @@ function canApprove(
   ) {
     return false;
   }
-  if (workspace.role === "owner") return workspace.identity.aal === "aal2";
+  if (workspace.role === "owner") return true;
   return workspace.role === "admin";
 }
 
@@ -296,17 +296,12 @@ export function TipPolicyConfiguration({
       </div>
 
       {!model.roles.length ? (
-        <p className="mt-4 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-[10px] leading-4 text-[var(--warning)]">
+        <p className="mt-4 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]">
           <CircleAlert className="mt-0.5 size-4 shrink-0" />Create active job roles in Team before authoring eligibility rules.
         </p>
       ) : null}
-      {workspace.role === "owner" && workspace.identity.aal !== "aal2" ? (
-        <p className="mt-4 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-[10px] leading-4 text-[var(--warning)]">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0" />Complete MFA verification before changing or approving financial policy.
-        </p>
-      ) : null}
       {pageNotice ? (
-        <p role="status" className="mt-4 rounded-xl bg-[var(--canvas)] px-4 py-3 text-[10px]">
+        <p role="status" className="mt-4 rounded-xl bg-[var(--canvas)] px-4 py-3 text-xs">
           {pageNotice}
         </p>
       ) : null}
@@ -341,22 +336,22 @@ export function TipPolicyConfiguration({
                 </div>
               </div>
               <h3 className="mt-5 text-sm font-semibold">{policy.name}</h3>
-              <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+              <p className="mt-1 text-xs text-[var(--ink-faint)]">
                 {policy.locationName}{latest ? ` · version ${latest.version}` : ""}
               </p>
               {policy.description ? (
-                <p className="mt-3 text-[10px] leading-4 text-[var(--ink-soft)]">
+                <p className="mt-3 text-xs leading-4 text-[var(--ink-soft)]">
                   {policy.description}
                 </p>
               ) : null}
               {latest ? (
-                <div className="mt-4 border-y border-[var(--line)] py-3 text-[9px] leading-4 text-[var(--ink-faint)]">
+                <div className="mt-4 border-y border-[var(--line)] py-3 text-xs leading-4 text-[var(--ink-faint)]">
                   <p>{sentenceCase(latest.distributionMethod)} · effective {latest.effectiveFrom}{latest.effectiveTo ? ` through ${latest.effectiveTo}` : " onward"}</p>
                   <p>{sourcesLabel(latest.closeoutSources)} · {latest.rules.filter((rule) => rule.eligible).length} eligible roles</p>
                   <p>{latest.approvedAt ? `Approved by ${latest.approvedBy}` : `Drafted by ${latest.createdBy}`}</p>
                 </div>
               ) : (
-                <p className="mt-4 border-y border-[var(--line)] py-4 text-[10px] text-[var(--warning)]">
+                <p className="mt-4 border-y border-[var(--line)] py-4 text-xs text-[var(--warning)]">
                   No rule version has been authored.
                 </p>
               )}
@@ -415,7 +410,7 @@ export function TipPolicyConfiguration({
                   !version.approvedAt &&
                   version.createdByUserId === workspace.identity.userId,
               ) ? (
-                <p className="mt-3 text-[9px] text-[var(--warning)]">
+                <p className="mt-3 text-xs text-[var(--warning)]">
                   A different authorized person must approve your draft.
                 </p>
               ) : null}
@@ -426,7 +421,7 @@ export function TipPolicyConfiguration({
           <div className="rounded-[20px] border border-dashed border-[var(--line-strong)] p-8 text-center lg:col-span-2">
             <Scale className="mx-auto size-5 text-[var(--ink-faint)]" />
             <h3 className="mt-3 text-sm font-semibold">No tip policy configured</h3>
-            <p className="mx-auto mt-2 max-w-md text-[10px] leading-4 text-[var(--ink-faint)]">
+            <p className="mx-auto mt-2 max-w-md text-xs leading-4 text-[var(--ink-faint)]">
               An Owner or Admin must record the restaurant&apos;s actual sources, eligibility, weights, and effective dates. The app will not infer them.
             </p>
           </div>
@@ -464,7 +459,7 @@ export function TipPolicyConfiguration({
                       ? `Edit ${dialog.policy.name} v${dialog.version.version}`
                       : `New ${dialog.policy.name} revision`}
                 </h2>
-                <p id={descriptionId} className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">
+                <p id={descriptionId} className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
                   {dialog.kind === "policy"
                     ? "Name and scope the policy. Rule versions are authored separately."
                     : "Record explicit sources, effective dates, and role eligibility. Another person must approve."}
@@ -489,7 +484,7 @@ export function TipPolicyConfiguration({
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="sm:col-span-2">
-                    <span className="mb-1.5 block text-[10px] font-semibold">Policy name</span>
+                    <span className="mb-1.5 block text-xs font-semibold">Policy name</span>
                     <input
                       data-initial-focus
                       required
@@ -500,7 +495,7 @@ export function TipPolicyConfiguration({
                     />
                   </label>
                   <label>
-                    <span className="mb-1.5 block text-[10px] font-semibold">Scope</span>
+                    <span className="mb-1.5 block text-xs font-semibold">Scope</span>
                     <select
                       name="scope"
                       disabled={Boolean(dialog.policy)}
@@ -515,7 +510,7 @@ export function TipPolicyConfiguration({
                       <option value="organization">All locations</option>
                     </select>
                   </label>
-                  <label className="flex h-11 items-center gap-3 self-end rounded-xl border border-[var(--line)] px-3 text-[10px] font-semibold">
+                  <label className="flex h-11 items-center gap-3 self-end rounded-xl border border-[var(--line)] px-3 text-xs font-semibold">
                     <input
                       name="isActive"
                       type="checkbox"
@@ -525,7 +520,7 @@ export function TipPolicyConfiguration({
                     Active for policy authoring
                   </label>
                   <label className="sm:col-span-2">
-                    <span className="mb-1.5 block text-[10px] font-semibold">Description</span>
+                    <span className="mb-1.5 block text-xs font-semibold">Description</span>
                     <textarea
                       name="description"
                       rows={4}
@@ -536,7 +531,7 @@ export function TipPolicyConfiguration({
                   </label>
                 </div>
                 {dialogNotice ? (
-                  <p role="alert" className="mt-5 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-[10px] text-[var(--danger)]">
+                  <p role="alert" className="mt-5 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-xs text-[var(--danger)]">
                     {dialogNotice}
                   </p>
                 ) : null}
@@ -556,7 +551,7 @@ export function TipPolicyConfiguration({
               >
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label>
-                    <span className="mb-1.5 block text-[10px] font-semibold">Distribution method</span>
+                    <span className="mb-1.5 block text-xs font-semibold">Distribution method</span>
                     <select
                       data-initial-focus
                       required
@@ -573,11 +568,11 @@ export function TipPolicyConfiguration({
                       <option value="weighted_hours">Weighted hours</option>
                     </select>
                   </label>
-                  <span className="rounded-xl bg-[var(--canvas)] p-3 text-[9px] leading-4 text-[var(--ink-faint)]">
+                  <span className="rounded-xl bg-[var(--canvas)] p-3 text-xs leading-4 text-[var(--ink-faint)]">
                     Largest-remainder cent allocation is fixed. Weighted hours multiply each eligible hour by its role points; Le Yard&apos;s current basis is 10 for servers and bartenders, 6 for support staff. Points-only policies are not available for payroll-support runs.
                   </span>
                   <label>
-                    <span className="mb-1.5 block text-[10px] font-semibold">Effective from</span>
+                    <span className="mb-1.5 block text-xs font-semibold">Effective from</span>
                     <input
                       required
                       type="date"
@@ -587,7 +582,7 @@ export function TipPolicyConfiguration({
                     />
                   </label>
                   <label>
-                    <span className="mb-1.5 block text-[10px] font-semibold">Effective through <span className="font-normal text-[var(--ink-faint)]">optional</span></span>
+                    <span className="mb-1.5 block text-xs font-semibold">Effective through <span className="font-normal text-[var(--ink-faint)]">optional</span></span>
                     <input
                       type="date"
                       name="effectiveTo"
@@ -599,14 +594,14 @@ export function TipPolicyConfiguration({
 
                 <fieldset className="mt-6">
                   <legend className="text-xs font-semibold">Distributable closeout sources</legend>
-                  <p className="mt-1 text-[9px] text-[var(--ink-faint)]">Service charges remain separate unless you explicitly include them.</p>
+                  <p className="mt-1 text-xs text-[var(--ink-faint)]">Service charges remain separate unless you explicitly include them.</p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-3">
                     {[
                       ["card_tips", "Card tips"],
                       ["cash_tips", "Cash tips"],
                       ["service_charges", "Service charges"],
                     ].map(([value, label]) => (
-                      <label key={value} className="flex h-11 items-center gap-3 rounded-xl border border-[var(--line)] px-3 text-[10px] font-semibold">
+                      <label key={value} className="flex h-11 items-center gap-3 rounded-xl border border-[var(--line)] px-3 text-xs font-semibold">
                         <input
                           name={`source:${value}`}
                           type="checkbox"
@@ -621,7 +616,7 @@ export function TipPolicyConfiguration({
 
                 <fieldset className="mt-7">
                   <legend className="text-xs font-semibold">Job-role eligibility</legend>
-                  <p className="mt-1 text-[9px] text-[var(--ink-faint)]">Nothing is preselected for a new version. Record the restaurant&apos;s approved policy explicitly.</p>
+                  <p className="mt-1 text-xs text-[var(--ink-faint)]">Nothing is preselected for a new version. Record the restaurant&apos;s approved policy explicitly.</p>
                   <div className="mt-3 overflow-hidden rounded-[16px] border border-[var(--line)]">
                     {model.roles.map((role) => {
                       const existing = dialog.version?.rules.find(
@@ -636,10 +631,10 @@ export function TipPolicyConfiguration({
                               defaultChecked={existing?.eligible ?? false}
                               className="mt-0.5 size-4 accent-[var(--accent)]"
                             />
-                            <span><span className="block text-[10px] font-semibold">{role.name}</span><span className="mt-1 block text-[9px] text-[var(--ink-faint)]">{role.code}</span></span>
+                            <span><span className="block text-xs font-semibold">{role.name}</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">{role.code}</span></span>
                           </label>
                           <label>
-                            <span className="mb-1 block text-[9px] text-[var(--ink-faint)]">Tip points</span>
+                            <span className="mb-1 block text-xs text-[var(--ink-faint)]">Tip points</span>
                             <input
                               name={`points:${role.id}`}
                               type="number"
@@ -653,7 +648,7 @@ export function TipPolicyConfiguration({
                             />
                           </label>
                           <label>
-                            <span className="mb-1 block text-[9px] text-[var(--ink-faint)]">Minimum minutes</span>
+                            <span className="mb-1 block text-xs text-[var(--ink-faint)]">Minimum minutes</span>
                             <input
                               name={`minimum:${role.id}`}
                               type="number"
@@ -672,7 +667,7 @@ export function TipPolicyConfiguration({
                 </fieldset>
 
                 {dialogNotice ? (
-                  <p role="alert" className="mt-5 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-[10px] text-[var(--danger)]">
+                  <p role="alert" className="mt-5 rounded-xl bg-[var(--danger-soft)] px-4 py-3 text-xs text-[var(--danger)]">
                     {dialogNotice}
                   </p>
                 ) : null}

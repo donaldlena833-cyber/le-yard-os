@@ -6,6 +6,7 @@ import { isLiveReportKind, loadLiveReport } from "@/data/read-models/reports";
 import { addIsoDays, isIsoCalendarDate } from "@/data/read-models/shared";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { isDemoMode } from "@/lib/env";
+import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Reports" };
 
@@ -26,6 +27,7 @@ export default async function ReportsPage({
   if (isDemoMode) return <ReportsWorkspace />;
   const resolution = await resolveWorkspaceSession();
   if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  requireWorkspaceRouteAccess("/reports", resolution.context);
   const params = await searchParams;
   const requestedKind = first(params.type);
   const kind = isLiveReportKind(requestedKind) ? requestedKind : "labor";

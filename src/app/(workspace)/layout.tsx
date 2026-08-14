@@ -1,7 +1,6 @@
 import { LockKeyhole, LogOut, MapPinOff, ShieldAlert } from "lucide-react";
 import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions/auth";
-import { OwnerMfaGate } from "@/components/auth/owner-mfa-gate";
 import { WorkspaceProvider } from "@/components/providers/workspace-provider";
 import { AppShell } from "@/components/shell/app-shell";
 import { BrandMark } from "@/components/ui/brand-mark";
@@ -10,7 +9,6 @@ import {
   resolveWorkspaceSession,
   type WorkspaceSessionResolution,
 } from "@/lib/auth/workspace-session";
-import { requiresOwnerMfaGate } from "@/lib/auth/mfa";
 
 function WorkspaceAccessState({
   resolution,
@@ -42,9 +40,16 @@ function WorkspaceAccessState({
     data_error: {
       icon: ShieldAlert,
       eyebrow: "Workspace unavailable",
-      title: "Tenant access could not be verified",
+      title: "Workspace data could not be loaded",
       detail:
-        "Le Yard OS could not safely resolve your organization and location. Try again, then contact an owner if this continues.",
+        "Your sign-in succeeded, but Le Yard OS could not load the authorized workspace records. Try again, then sign out and back in if this continues.",
+    },
+    mfa_required: {
+      icon: ShieldAlert,
+      eyebrow: "Additional verification",
+      title: "Multi-factor authentication required",
+      detail:
+        "Owner and Admin workspace access requires a verified MFA session. Complete the MFA challenge, then sign in again.",
     },
   }[resolution.status];
   const Icon = content.icon;
@@ -95,16 +100,6 @@ export default async function WorkspaceLayout({
 
   if (resolution.status !== "ready") {
     return <WorkspaceAccessState resolution={resolution} />;
-  }
-
-  if (requiresOwnerMfaGate(resolution.context)) {
-    return (
-      <OwnerMfaGate
-        displayName={resolution.context.identity.displayName}
-        email={resolution.context.identity.email}
-        organizationName={resolution.context.organization.name}
-      />
-    );
   }
 
   return (

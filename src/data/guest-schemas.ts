@@ -12,6 +12,7 @@ export const saveGuestInputSchema = z
   .object({
     requestId: uuid,
     organizationId: uuid,
+    locationId: uuid,
     guestId: uuid.nullable().optional(),
     firstName: nullableText(120),
     lastName: nullableText(120),
@@ -31,7 +32,7 @@ export const addGuestNoteInputSchema = z
     requestId: uuid,
     organizationId: uuid,
     guestId: uuid,
-    locationId: uuid.nullable().optional(),
+    locationId: uuid,
     note: z.string().trim().min(1).max(10_000),
     sensitive: z.boolean().default(false),
   })
@@ -41,6 +42,7 @@ export const recordGuestConsentInputSchema = z
   .object({
     requestId: uuid,
     organizationId: uuid,
+    locationId: uuid,
     guestId: uuid,
     channel: z.enum(["email", "sms", "phone", "profiling", "other"]),
     status: z.enum(["granted", "revoked"]),
@@ -52,6 +54,7 @@ export const mergeGuestInputSchema = z
   .object({
     requestId: uuid,
     organizationId: uuid,
+    locationId: uuid,
     sourceGuestId: uuid,
     targetGuestId: uuid,
     matchScore: z.number().finite().min(0).max(1).nullable().optional(),

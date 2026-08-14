@@ -62,7 +62,7 @@ export function InvitePasswordForm({ organizationId }: { organizationId: string 
         />
       </label>
 
-      <div className="grid gap-2 text-[10px] text-[var(--ink-faint)] sm:grid-cols-3">
+      <div className="grid gap-2 text-xs text-[var(--ink-faint)] sm:grid-cols-3">
         {["12+ characters", "Upper & lowercase", "At least one number"].map((rule) => (
           <span key={rule} className="flex items-center gap-1.5">
             <Check className="size-3 text-[var(--positive)]" /> {rule}

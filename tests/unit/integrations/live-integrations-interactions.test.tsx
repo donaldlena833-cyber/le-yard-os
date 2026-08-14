@@ -68,6 +68,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "40000000-0000-4000-8000-000000000001",
   role: "admin",
   organizationWide: true,
+  capabilities: [],
 };
 
 const model: LiveIntegrationsModel = {
@@ -86,6 +87,33 @@ const model: LiveIntegrationsModel = {
 };
 
 describe("connected integration import interactions", () => {
+  it("opens provider evidence in a labelled, dismissible drawer", async () => {
+    render(
+      <LiveIntegrationsWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", {
+      name: "Toast integration details",
+    });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const drawer = await screen.findByRole("dialog", { name: "Toast" });
+    expect(drawer.textContent).toContain("Credential material is intentionally absent");
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Close integration details" }),
+      );
+    });
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Toast" })).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("validates locally, signs privately, and sends only resource-scoped input", async () => {
     const objectPath = `${workspace.organization.id}/${workspace.activeLocation.id}/imports/50000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000001-sales.csv` as PrivateObjectPath;
     vi.mocked(createManualCsvUploadUrlAction).mockResolvedValue({

@@ -102,7 +102,7 @@ function MemberRow({
             <ShieldCheck className="size-3.5 text-[var(--accent)]" aria-label="Owner" />
           ) : null}
         </span>
-        <span className="mt-1 block truncate text-[10px] text-[var(--ink-faint)]">
+        <span className="mt-1 block truncate text-xs text-[var(--ink-faint)]">
           {member.jobRoles.map((role) => role.name).join(" · ") || roleLabel[member.role]}
           {locationNames.length ? ` · ${locationNames.join(", ")}` : " · Organization-wide"}
         </span>
@@ -134,7 +134,7 @@ function PrivateProfileState({ member }: { member: LiveTeamMember }) {
         </span>
         <div>
           <h4 className="text-sm font-semibold">{notConfigured ? "Employee profile not configured" : "Private employee profile"}</h4>
-          <p className="mt-1 max-w-2xl text-[10px] leading-4 text-[var(--ink-faint)]">
+          <p className="mt-1 max-w-2xl text-xs leading-4 text-[var(--ink-faint)]">
             {notConfigured
               ? "No employee operations record is visible for this account yet. Availability, time off, certifications, emergency contacts, and documents will appear after provisioning."
               : "Availability, time off, certifications, emergency contacts, and documents are limited to the employee and authorized management. This session has directory-only access."}
@@ -218,10 +218,10 @@ function LiveTeamContent({
         <div>
           <div className="flex items-center gap-2">
             <StatusPill tone="positive" dot>{activeCount} active</StatusPill>
-            <span className="text-[10px] text-[var(--ink-faint)]">Live · {workspace.organization.name}</span>
+            <span className="text-xs text-[var(--ink-faint)]">Live · {workspace.organization.name}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Your whole team, in one place</h2>
-          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">Directory, operational profiles, private records, and account access from the connected tenant.</p>
+          <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Directory, operational profiles, private records, and account access from the connected tenant.</p>
         </div>
         {canAdminister ? (
           <Button variant="accent" onClick={() => setInviteOpen(true)} disabled={!canInvite}>
@@ -251,14 +251,14 @@ function LiveTeamContent({
               <label className="relative">
                 <span className="sr-only">Filter by role</span>
                 <Filter className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" />
-                <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as "all" | AppRole)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-2 pl-9 text-[10px]">
+                <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as "all" | AppRole)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-2 pl-9 text-xs">
                   <option value="all">All access roles</option>
                   {Object.entries(roleLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label>
                 <span className="sr-only">Filter by location</span>
-                <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[10px]">
+                <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs">
                   <option value="all">All locations</option>
                   {workspace.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
                 </select>
@@ -280,7 +280,7 @@ function LiveTeamContent({
               <div className="px-5 py-14 text-center">
                 <Search className="mx-auto size-5 text-[var(--ink-faint)]" />
                 <p className="mt-3 text-xs font-semibold">No people match</p>
-                <p className="mt-1 text-[10px] text-[var(--ink-faint)]">Try another search or filter.</p>
+                <p className="mt-1 text-xs text-[var(--ink-faint)]">Try another search or filter.</p>
               </div>
             ) : null}
           </div>
@@ -300,11 +300,11 @@ function LiveTeamContent({
                         <StatusPill tone={selected.membershipStatus === "active" ? "positive" : selected.membershipStatus === "invited" ? "warning" : "danger"}>{selected.membershipStatus}</StatusPill>
                         {selected.detailAccess === "self" ? <StatusPill tone="accent">Your profile</StatusPill> : null}
                       </div>
-                      <p className="mt-1 text-[11px] text-[var(--ink-faint)]">{selected.jobRoles.map((role) => role.name).join(" · ") || "No active job assignment visible"}</p>
+                      <p className="mt-1 text-[13px] text-[var(--ink-faint)]">{selected.jobRoles.map((role) => role.name).join(" · ") || "No active job assignment visible"}</p>
                     </div>
                   </div>
                 </div>
-                <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[10px] text-[var(--ink-faint)]">
+                <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-[var(--ink-faint)]">
                   {selected.email ? <span className="flex items-center gap-1.5"><Mail className="size-3.5" />{selected.email}</span> : null}
                   {selected.phone ? <span className="flex items-center gap-1.5"><Phone className="size-3.5" />{selected.phone}</span> : null}
                   <span className="flex items-center gap-1.5"><MapPin className="size-3.5" />{selected.locationIds.map((id) => workspace.locations.find((location) => location.id === id)?.name).filter(Boolean).join(" · ") || "Organization-wide / no explicit assignment"}</span>
@@ -330,16 +330,16 @@ function LiveTeamContent({
                       <input type="hidden" name="membershipId" value={selected.membershipId} />
                       <input type="hidden" name="intent" value="update_access" />
                       <label>
-                        <span className="mb-1.5 block text-[10px] font-semibold">Access role</span>
-                        <select name="role" defaultValue={selected.role} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[10px]">
+                        <span className="mb-1.5 block text-xs font-semibold">Access role</span>
+                        <select name="role" defaultValue={selected.role} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs">
                           {Object.entries(roleLabel).filter(([role]) => workspace.role === "owner" || role !== "owner").map(([role, label]) => <option key={role} value={role}>{label}</option>)}
                         </select>
                       </label>
                       <fieldset>
-                        <legend className="mb-2 text-[10px] font-semibold">Location access</legend>
+                        <legend className="mb-2 text-xs font-semibold">Location access</legend>
                         <div className="space-y-2">
                           {workspace.locations.map((location) => (
-                            <label key={location.id} className="flex items-center gap-2 rounded-xl bg-[var(--canvas)] px-3 py-2.5 text-[10px]">
+                            <label key={location.id} className="flex items-center gap-2 rounded-xl bg-[var(--canvas)] px-3 py-2.5 text-xs">
                               <input type="checkbox" name="locationIds" value={location.id} defaultChecked={selected.locationIds.includes(location.id)} className="size-4 accent-[var(--accent)]" />
                               {location.name}
                             </label>
@@ -349,7 +349,7 @@ function LiveTeamContent({
                       <Button type="submit" variant="secondary" size="sm" disabled={pending} className="w-full">{pending ? "Saving…" : "Save role & locations"}</Button>
                     </form>
                   ) : (
-                    <div className="flex items-start gap-3 rounded-2xl bg-[var(--canvas)] p-4 text-[10px] leading-4 text-[var(--ink-faint)]">
+                    <div className="flex items-start gap-3 rounded-2xl bg-[var(--canvas)] p-4 text-xs leading-4 text-[var(--ink-faint)]">
                       <LockKeyhole className="mt-0.5 size-4 shrink-0" />
                       <span>{selected.userId === workspace.identity.userId ? "Your own access is protected from self-service changes." : selected.role === "owner" && workspace.role !== "owner" ? "Only an owner can change another owner’s access." : "Owner or admin access is required to manage accounts."}</span>
                     </div>
@@ -365,13 +365,13 @@ function LiveTeamContent({
                     </form>
                   ) : null}
                   {state.status !== "idle" ? (
-                    <p role="status" aria-live="polite" className={cn("mt-3 rounded-xl px-3 py-2.5 text-[10px]", state.status === "success" ? "bg-[var(--positive-soft)] text-[var(--positive)]" : "bg-[var(--danger-soft)] text-[var(--danger)]")}>{state.message}</p>
+                    <p role="status" aria-live="polite" className={cn("mt-3 rounded-xl px-3 py-2.5 text-xs", state.status === "success" ? "bg-[var(--positive-soft)] text-[var(--positive)]" : "bg-[var(--danger-soft)] text-[var(--danger)]")}>{state.message}</p>
                   ) : null}
                 </section>
               </div>
 
               {selected.detailAccess === "self" || selected.detailAccess === "management" ? (
-                <div className="mx-5 mb-5 flex items-start gap-3 rounded-2xl bg-[var(--accent-soft)]/35 px-4 py-3 text-[10px] leading-4 text-[var(--ink-soft)] sm:mx-7 sm:mb-7">
+                <div className="mx-5 mb-5 flex items-start gap-3 rounded-2xl bg-[var(--accent-soft)]/35 px-4 py-3 text-xs leading-4 text-[var(--ink-soft)] sm:mx-7 sm:mb-7">
                   {selected.detailAccess === "self" ? <HeartHandshake className="mt-0.5 size-3.5 shrink-0 text-[var(--accent-strong)]" /> : <CalendarClock className="mt-0.5 size-3.5 shrink-0 text-[var(--accent-strong)]" />}
                   <span>{selected.detailAccess === "self" ? "This is your private operational profile. Other employees cannot open these records." : "This profile contains private employee records returned only within your authorized management scope."}</span>
                 </div>
@@ -381,7 +381,7 @@ function LiveTeamContent({
             <div className="flex min-h-[500px] flex-col items-center justify-center px-6 text-center">
               <UserRoundPlus className="size-6 text-[var(--ink-faint)]" />
               <p className="mt-4 text-sm font-semibold">No team records yet</p>
-              <p className="mt-1 max-w-sm text-[10px] leading-4 text-[var(--ink-faint)]">Invite the first teammate when the approved owner account is ready.</p>
+              <p className="mt-1 max-w-sm text-xs leading-4 text-[var(--ink-faint)]">Invite the first teammate when the approved owner account is ready.</p>
             </div>
           )}
         </aside>

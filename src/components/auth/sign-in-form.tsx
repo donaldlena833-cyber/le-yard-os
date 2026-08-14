@@ -3,10 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
-import {
-  signInAction,
-  type AuthActionState,
-} from "@/app/actions/auth";
+import { signInAction, type AuthActionState } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 
 const initialState: AuthActionState = { status: "idle" };
@@ -45,7 +42,11 @@ export function SignInForm({
           name="identifier"
           type="text"
           autoComplete="username"
-          placeholder={playgroundMode ? "Your preview username" : "donaldlena or you@leyard.com"}
+          placeholder={
+            playgroundMode
+              ? "Your preview username"
+              : "donaldlena or you@leyard.com"
+          }
           className="h-12 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-4 text-sm outline-none transition-colors placeholder:text-[var(--ink-faint)] hover:border-[var(--line-strong)] focus:border-[var(--accent)]"
         />
       </label>
@@ -71,13 +72,40 @@ export function SignInForm({
             onClick={() => setShowPassword((value) => !value)}
             className="focus-ring absolute inset-y-0 right-1 flex w-10 items-center justify-center rounded-lg text-[var(--ink-faint)]"
           >
-            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            {showPassword ? (
+              <EyeOff className="size-4" />
+            ) : (
+              <Eye className="size-4" />
+            )}
           </button>
         </span>
       </label>
 
+      {playgroundMode || !demoMode ? (
+        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3.5 py-3">
+          <input
+            type="checkbox"
+            name="remember"
+            value="30-days"
+            className="mt-0.5 size-4 shrink-0 accent-[var(--accent-strong)]"
+          />
+          <span>
+            <span className="block text-xs font-semibold text-[var(--ink-soft)]">
+              Keep me logged in for 30 days
+            </span>
+            <span className="mt-1 block text-[10px] leading-4 text-[var(--ink-faint)]">
+              Use this only on a private device. Otherwise, this device signs
+              out after 8 hours.
+            </span>
+          </span>
+        </label>
+      ) : null}
+
       {state.status === "error" ? (
-        <p role="alert" className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger)]">
+        <p
+          role="alert"
+          className="rounded-xl bg-[var(--danger-soft)] px-3 py-2.5 text-xs font-medium text-[var(--danger)]"
+        >
           {state.message}
         </p>
       ) : null}
@@ -85,7 +113,7 @@ export function SignInForm({
       <SubmitButton />
 
       {demoMode && !playgroundMode ? (
-        <p className="text-center text-[10px] leading-4 text-[var(--ink-faint)]">
+        <p className="text-center text-xs leading-4 text-[var(--ink-faint)]">
           Local demo mode accepts any non-empty sign-in values.
         </p>
       ) : null}

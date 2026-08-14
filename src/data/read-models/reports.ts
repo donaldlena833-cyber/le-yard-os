@@ -1123,7 +1123,7 @@ async function buildInventoryReport(
   const range = broadTimestampRange(base.filters);
   const query = base.supabase
     .from("item_price_history")
-    .select("id, inventory_item_id, vendor_id, unit_id, unit_price_cents, effective_at, source_type, created_at")
+    .select("id, inventory_item_id, vendor_id, unit_id, price_quantity, unit_price_cents, effective_at, source_type, created_at")
     .eq("organization_id", base.organizationId)
     .gte("effective_at", range.start)
     .lte("effective_at", range.end)
@@ -1139,9 +1139,13 @@ async function buildInventoryReport(
         candidate.vendor_id === row.vendor_id &&
         candidate.unit_id === row.unit_id,
     );
-    const delta = older ? Number(row.unit_price_cents) - Number(older.unit_price_cents) : null;
-    const percentage = older && Number(older.unit_price_cents)
-      ? (delta! / Number(older.unit_price_cents)) * 100
+    const unitCost = Number(row.unit_price_cents) / Number(row.price_quantity);
+    const olderUnitCost = older
+      ? Number(older.unit_price_cents) / Number(older.price_quantity)
+      : null;
+    const delta = olderUnitCost === null ? null : unitCost - olderUnitCost;
+    const percentage = olderUnitCost
+      ? (delta! / olderUnitCost) * 100
       : null;
     return { row, delta, percentage };
   });
@@ -1174,9 +1178,9 @@ async function buildInventoryReport(
         cells: {
           effective: row.effective_at,
           item: base.items.get(row.inventory_item_id) ?? "Inventory item",
-          vendor: base.vendors.get(row.vendor_id) ?? "Vendor",
+          vendor: row.vendor_id ? base.vendors.get(row.vendor_id) ?? "Vendor" : "Direct cost",
           unit: base.units.get(row.unit_id) ?? "unit",
-          price: money(Number(row.unit_price_cents)),
+          price: money(Number(row.unit_price_cents) / Number(row.price_quantity)),
           change: delta == null || percentage == null
             ? "No prior in range"
             : `${delta >= 0 ? "+" : ""}${money(delta)} (${percentage.toFixed(1)}%)`,

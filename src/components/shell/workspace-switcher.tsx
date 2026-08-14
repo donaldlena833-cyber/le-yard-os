@@ -81,7 +81,7 @@ export function WorkspaceSwitcher({
           <span className="block truncate text-xs font-semibold text-white">
             {workspace.activeLocation.name}
           </span>
-          <span className="mt-0.5 block truncate text-[10px] text-white/55">
+          <span className="mt-0.5 block truncate text-xs text-white/55">
             {workspace.organization.name}
           </span>
         </span>
@@ -123,7 +123,7 @@ export function WorkspaceSwitcher({
       <p
         aria-live="polite"
         className={cn(
-          "px-2 text-[9px] leading-4 text-[#f0b6ac]",
+          "px-2 text-xs leading-4 text-[#f0b6ac]",
           message ? "mt-1" : "sr-only",
         )}
       >

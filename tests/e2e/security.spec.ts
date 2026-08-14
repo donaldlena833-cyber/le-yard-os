@@ -18,6 +18,30 @@ test("keeps the synthetic demo workspace available without a live MFA challenge"
         : "Primary navigation",
     }),
   ).toBeVisible();
+  const notificationTrigger = page.getByRole("button", {
+    name: "Open notifications",
+    exact: true,
+  });
+  await notificationTrigger.click();
+  const notifications = page.getByRole("dialog", { name: "Notifications" });
+  await expect(notifications).toBeVisible();
+  await expect(notificationTrigger).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(notifications).toBeHidden();
+  await expect(notificationTrigger).toBeFocused();
+
+  if (isMobileProject(testInfo)) {
+    const openNavigation = page.getByRole("button", { name: "Open navigation" });
+    await openNavigation.click();
+    const drawer = page.getByRole("dialog", { name: "Le Yard OS" });
+    await expect(drawer).toBeVisible();
+    await expect(
+      drawer.getByRole("button", { name: "Close navigation" }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
+    await expect(openNavigation).toBeFocused();
+  }
   await expectNoViewportOverflow(page);
 });
 
@@ -67,4 +91,19 @@ test("completes the demo-safe authenticator enrollment control", async ({ page }
   await expect(page.getByText("Authenticator already enrolled", { exact: true })).toBeVisible();
   await expect(page.getByText("Demo MFA enrollment verified locally.", { exact: true })).toBeVisible();
   await expectNoViewportOverflow(page);
+});
+
+test("restores Time Clock instead of redirecting to Vendors", async ({ page }) => {
+  await openWorkspace(page, "/time-clock", "Time clock");
+  await expect(page).toHaveURL(/\/time-clock$/);
+  await expect(page.getByRole("heading", { name: "Time Clock", exact: true })).toBeVisible();
+});
+
+test("opens the realtime service-control surface", async ({ page }) => {
+  await openWorkspace(page, "/service", "Service control");
+  await expect(page.getByText("Steak frites", { exact: true })).toBeVisible();
+  await expect(page.getByText("Internal status only; Toast is not changed.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: "No unresolved handoffs." }),
+  ).toBeVisible();
 });

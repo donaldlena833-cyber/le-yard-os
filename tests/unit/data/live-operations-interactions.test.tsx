@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acknowledgeSopAction,
   createTaskAction,
   startChecklistRunAction,
+  transitionTaskAction,
 } from "@/app/actions/workflows/operations";
 import { LiveTasksWorkspace } from "@/components/tasks/live-tasks-workspace";
 import type { LiveOperationsModel } from "@/data/read-models/operations";
@@ -76,6 +84,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "40000000-0000-4000-8000-000000000001",
   role: "employee",
   organizationWide: false,
+  capabilities: [],
 };
 
 const model: LiveOperationsModel = {
@@ -164,7 +173,8 @@ const model: LiveOperationsModel = {
       id: "a0000000-0000-4000-8000-000000000001",
       incidentType: "equipment",
       occurredAt: "2026-08-01T15:00:00.000Z",
-      description: "A small appliance stopped during setup. It was unplugged and moved away from service.",
+      description:
+        "A small appliance stopped during setup. It was unplugged and moved away from service.",
       severity: "medium",
       status: "investigating",
       reportedBy: "Connected Employee",
@@ -180,13 +190,12 @@ const model: LiveOperationsModel = {
 const marisEmployeeId = "50000000-0000-4000-8000-000000000002";
 const managementModel: LiveOperationsModel = {
   ...model,
-  assignees: [
-    ...model.assignees,
-    { id: marisEmployeeId, name: "Maris" },
-  ],
+  assignees: [...model.assignees, { id: marisEmployeeId, name: "Maris" }],
 };
 
-function managementWorkspace(role: "owner" | "admin" | "manager"): WorkspaceContextValue {
+function managementWorkspace(
+  role: "owner" | "admin" | "manager",
+): WorkspaceContextValue {
   return {
     ...workspace,
     role,
@@ -200,6 +209,86 @@ function managementWorkspace(role: "owner" | "admin" | "manager"): WorkspaceCont
 }
 
 describe("connected Operations review interactions", () => {
+  it("reveals task evidence on demand and opens the selected named transition", async () => {
+    vi.mocked(transitionTaskAction).mockResolvedValue({
+      ok: true,
+      persisted: true,
+      mode: "live",
+      data: {
+        id: "a4000000-0000-4000-8000-000000000001",
+        status: "completed",
+        completedAt: "2026-08-01T16:30:00.000Z",
+      },
+    });
+    const assignedTask: LiveOperationsModel["tasks"][number] = {
+      id: "a4000000-0000-4000-8000-000000000001",
+      title: "Verify dining room handoff",
+      description: "Confirm every section has a named closer.",
+      status: "open",
+      priority: "high",
+      assignedEmployeeId: model.currentEmployeeId,
+      assigneeName: "Connected Employee",
+      dueAt: "2026-08-01T17:00:00.000Z",
+      completedAt: null,
+      completedByName: null,
+      createdAt: "2026-08-01T15:00:00.000Z",
+      sourceType: "manual",
+    };
+
+    render(
+      <LiveTasksWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: { ...model, tasks: [assignedTask] } }}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Confirm every section has a named closer."),
+    ).toBeNull();
+    const disclosure = screen.getByRole("button", {
+      name: "Show details for Verify dining room handoff",
+    });
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(disclosure);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      screen.getByText("Confirm every section has a named closer."),
+    ).toBeTruthy();
+
+    const actions = screen.getByRole("group", {
+      name: "Actions for Verify dining room handoff",
+    });
+    expect(within(actions).getByRole("button", { name: "Start" })).toBeTruthy();
+    expect(within(actions).getByRole("button", { name: "Block" })).toBeTruthy();
+    expect(
+      within(actions).getByRole("button", { name: "Complete" }),
+    ).toBeTruthy();
+    expect(
+      within(actions).queryByRole("button", { name: "Cancel" }),
+    ).toBeNull();
+
+    fireEvent.click(within(actions).getByRole("button", { name: "Complete" }));
+    const dialog = screen.getByRole("dialog", { name: "Update task" });
+    expect(
+      (within(dialog).getByLabelText("Next status") as HTMLSelectElement).value,
+    ).toBe("completed");
+    fireEvent.change(within(dialog).getByLabelText("Transition note"), {
+      target: { value: "Closing handoff confirmed." },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Update task" }),
+    );
+
+    await waitFor(() => expect(transitionTaskAction).toHaveBeenCalledOnce());
+    expect(transitionTaskAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: assignedTask.id,
+        status: "completed",
+        note: "Closing handoff confirmed.",
+      }),
+    );
+  });
+
   it.each(["owner", "admin", "manager"] as const)(
     "offers the verified location roster to an MFA-ready %s",
     (role) => {
@@ -212,8 +301,14 @@ describe("connected Operations review interactions", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Create task" }));
       const dialog = screen.getByRole("dialog", { name: "Create task" });
-      expect(within(dialog).getByRole("option", { name: "Connected Employee (you)" })).toBeTruthy();
-      expect(within(dialog).getByRole("option", { name: "Maris" })).toBeTruthy();
+      expect(
+        within(dialog).getByRole("option", {
+          name: "Connected Employee (you)",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(dialog).getByRole("option", { name: "Maris" }),
+      ).toBeTruthy();
     },
   );
 
@@ -243,7 +338,9 @@ describe("connected Operations review interactions", () => {
     fireEvent.change(within(dialog).getByLabelText("Assignment"), {
       target: { value: marisEmployeeId },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create task" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Create task" }),
+    );
 
     await waitFor(() => expect(createTaskAction).toHaveBeenCalledOnce());
     expect(createTaskAction).toHaveBeenCalledWith(
@@ -304,13 +401,22 @@ describe("connected Operations review interactions", () => {
         startedAt: "2026-08-01T16:00:00.000Z",
       },
     });
-    render(<LiveTasksWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
+    render(
+      <LiveTasksWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /Checklists/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Start run" }));
     const dialog = screen.getByRole("dialog", { name: "Start checklist" });
     expect(within(dialog).queryByLabelText("Assignment")).toBeNull();
-    expect(within(dialog).getByText("This run will be assigned to your active employee profile.")).toBeTruthy();
+    expect(
+      within(dialog).getByText(
+        "This run will be assigned to your active employee profile.",
+      ),
+    ).toBeTruthy();
     fireEvent.change(within(dialog).getByLabelText("Template"), {
       target: { value: model.checklistTemplates[0].id },
     });
@@ -323,14 +429,29 @@ describe("connected Operations review interactions", () => {
   });
 
   it("shows immutable checklist evidence without enabling completion", async () => {
-    render(<LiveTasksWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
+    render(
+      <LiveTasksWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /Checklists/ }));
 
-    expect((await screen.findAllByText("Opening room check")).length).toBeGreaterThan(0);
-    expect((await screen.findByText(/Response ·/)).textContent).toContain("Yes");
+    expect(
+      (await screen.findAllByText("Opening room check")).length,
+    ).toBeGreaterThan(0);
+    expect((await screen.findByText(/Response ·/)).textContent).toContain(
+      "Yes",
+    );
     expect(await screen.findByText("Evidence locked")).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Complete run" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Complete run",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 
   it("shows only the published SOP version and records acknowledgement through the server action", async () => {
@@ -343,12 +464,23 @@ describe("connected Operations review interactions", () => {
         acknowledgedAt: "2026-08-01T16:00:00.000Z",
       },
     });
-    render(<LiveTasksWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
+    render(
+      <LiveTasksWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /SOPs/ }));
 
-    expect((await screen.findAllByText("Guest arrival procedure")).length).toBeGreaterThan(0);
-    expect(await screen.findByText("Welcome the guest and verify the reservation details.")).toBeTruthy();
+    expect(
+      (await screen.findAllByText("Guest arrival procedure")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      await screen.findByText(
+        "Welcome the guest and verify the reservation details.",
+      ),
+    ).toBeTruthy();
     const acknowledge = screen.getByRole("button", { name: "Acknowledge v3" });
     expect((acknowledge as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(acknowledge);
@@ -357,7 +489,12 @@ describe("connected Operations review interactions", () => {
   });
 
   it("keeps incident details concealed until an authorized record is selected", async () => {
-    render(<LiveTasksWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
+    render(
+      <LiveTasksWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("tab", { name: /Incidents/ }));
     expect(await screen.findByText("Details stay concealed")).toBeTruthy();

@@ -1,6 +1,6 @@
 # Owner runbook
 
-This runbook is for Donald and Maris as Owner accounts. It distinguishes normal restaurant operation from changes that need a deliberate policy, security, or production decision.
+This runbook is for the two approved Owner accounts. It distinguishes normal restaurant operation from changes that need a deliberate policy, security, or production decision.
 
 ## Public Vercel Production playground
 
@@ -9,8 +9,8 @@ The approved playground is for product familiarization, usability testing, and d
 - Create or use only a new Le Yard OS Vercel project rooted at this directory. Do not link, deploy over, or change the existing public restaurant website.
 - In Vercel Production scope, use `NEXT_PUBLIC_DEMO_MODE=true` and the exact `LE_YARD_PLAYGROUND_MODE=production-playground`. Vercel must supply `VERCEL_ENV=production`; never set that platform variable yourself.
 - The canonical Vercel Production URL is public and must be treated as discoverable. The application-level two-Owner login remains mandatory, and unauthenticated workspace/API requests must fail closed.
-- Store exactly two temporary Owner principals as usernames plus salted scrypt password hashes. Never store plaintext passwords in source control, local environment files, Vercel variables, commands, logs, tickets, or messages.
-- Keep a newly generated signing secret and the hashed registry in Vercel's sensitive Production environment scope. The resulting signed, `HttpOnly`, `Secure`, `SameSite=Lax` session expires after eight hours.
+- Store the four required temporary principals as usernames plus salted scrypt password hashes. Never store plaintext passwords in source control, local environment files, Vercel variables, commands, logs, tickets, or messages.
+- Keep a newly generated signing secret and the hashed registry in Vercel's sensitive Production environment scope. The resulting signed, `HttpOnly`, `Secure`, `SameSite=Lax` session expires after eight hours by default, or after 30 days only when the user explicitly selects the private-device option.
 - Treat these as custom playground identities, not Supabase Auth accounts. They do not prove MFA, production invitation delivery, tenant RLS, or shared data persistence.
 - Treat every operational record as mock data. Changes reset and are not reliably shared between owners; do not enter employee, guest, payroll, receipt, vendor, or other confidential restaurant data.
 - Do not rely on the URL being unadvertised, robots directives, or the per-instance login throttle as the only security boundary. Keep use limited to the two owners; broader testing requires Vercel Deployment Protection or an approved durable rate-limiting service first.
@@ -36,12 +36,23 @@ Do not approve or publish these settings until both owners and the appropriate p
 
 Retention is the rule for how long each kind of record is kept before archival or deletion: receipts, employee documents, guest/consent data, audit history, exports, and backups may need different periods. Retention is currently unset. That means Le Yard OS performs no policy-driven automatic deletion; it does not mean every platform copy is guaranteed to exist forever, nor does it establish the correct legal period. A future decision must name the record class, duration, deletion/archival action, backup handling, legal holds, and approving owner.
 
+## Version 0.2 kitchen and service setup
+
+1. In a local or approved nonproduction Supabase project, apply the forward migrations and run `npm run test:integration`.
+2. In Settings, assign the Executive Chef job role only the location-scoped operational capabilities it needs. Do not promote the Chef to Admin.
+3. Open Kitchen/Inventory Setup and add real units, categories, items, per-unit costs, opening stock, pars, and draft recipes. Add vendors and purchase packs only when the real purchasing records are available. Do not copy synthetic demo values.
+4. Open Service Control to test a running-low event, restore it with a compensating event, add a Manager Log handoff, publish a pre-shift, and acknowledge it as an employee.
+5. Verify `/time-clock` with an employee and a manager. Confirm there are no local punch controls, the Toast freshness stamp is visible, and corrections are directed back to Toast POS.
+6. Review the explicit function-grant verifier output before migration approval. Do not grant browser execution to trigger-only or service-only functions.
+
+Service Control is internal. It does not change Toast menu availability, send email/push, or invent reservation data. Production rollout still requires the normal connected acceptance gate and separate deployment authorization.
+
 ## Production launch gate
 
 Do not bootstrap the live tenant until both owners approve all items below:
 
-- [ ] Donald's verified work email
-- [ ] Maris's verified work email
+- [ ] Owner 1's verified work email and approved display name
+- [ ] Owner 2's verified work email and approved display name
 - [ ] organization and restaurant names
 - [ ] confirm the owner-supplied Ninth Avenue address plus every location phone, timezone, service period, and any additional location
 - [ ] logo/brand assets and approved product name
@@ -60,12 +71,12 @@ The application must not infer these inputs from demo content or from the tempor
 1. Apply reviewed migrations to an empty production Supabase application database.
 2. Confirm open signup is disabled, SMTP works, and callback URLs point to the production HTTPS origin.
 3. Copy `docs/owner-bootstrap.example.json` to an access-controlled, untracked path and replace every placeholder with the signed-off organization and location details.
-4. Set `OWNER_DONALD_EMAIL` and `OWNER_MARIS_EMAIL` to the two verified work emails. Set connected Supabase/Vercel environment values, but do not set the confirmation yet.
+4. Set `OWNER_1_EMAIL`, `OWNER_1_DISPLAY_NAME`, `OWNER_2_EMAIL`, and `OWNER_2_DISPLAY_NAME` to the two verified owners. Set connected Supabase/Vercel environment values, but do not set the confirmation yet.
 5. Run `npm run bootstrap:owners -- --config /absolute/path/to/approved-bootstrap.json`. This is a dry run: it validates the complete plan, derives stable identifiers, makes no network calls, and prints a plan-bound confirmation.
 6. Both owners review the exact organization, locations, emails, timezones, currency, and generated identifiers. Set `LE_YARD_BOOTSTRAP_CONFIRM` to the emitted value only after approval.
 7. Run the same command with `--execute`. It refuses demo/local origins, verifies an empty application database, sends two Supabase Auth invitations, and atomically creates the tenant plus two pending Owner memberships through a service-only database function. It never creates or prints a password.
-8. Unset `LE_YARD_BOOTSTRAP_CONFIRM`. Each owner opens their own one-time link, sets their own password, and enrolls and verifies an authenticator factor.
-9. Confirm both active Owner memberships and AAL2 administrative access. Verify neither account can view the other's password or authenticator secret.
+8. Unset `LE_YARD_BOOTSTRAP_CONFIRM`. Each owner opens their own one-time link and sets their own password. Optional MFA may be enrolled later without blocking workspace access.
+9. Confirm both active Owner memberships and password-authenticated administrative access. Verify neither account can view the other's password or optional authenticator secret.
 10. Configure approved job codes and operating policies only from the signed-off launch sheet.
 11. Invite a non-owner test user, verify role/location isolation, then suspend the test account.
 

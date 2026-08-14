@@ -7,7 +7,6 @@ import {
   throwDatabaseError,
   WorkflowError,
 } from "../errors";
-import { requireLocationManagement } from "../policy";
 import { requireActorEmployee } from "../resources";
 import type {
   AcknowledgeShiftInput,
@@ -16,7 +15,7 @@ import type {
 import type { WorkflowContext } from "../execute";
 
 export async function publishSchedule(
-  { supabase, actor }: WorkflowContext,
+  { supabase }: WorkflowContext,
   input: PublishScheduleInput,
 ) {
   const { data, error } = await supabase
@@ -27,8 +26,6 @@ export async function publishSchedule(
 
   if (error) throwDatabaseError(error, "The schedule could not be loaded.");
   const schedule = assertFound(data, "The schedule was not found.");
-  requireLocationManagement(actor, schedule.organization_id, schedule.location_id);
-
   if (schedule.status === "published") {
     return {
       id: schedule.id,
@@ -157,4 +154,3 @@ export async function acknowledgeShift(
     alreadyApplied: false,
   };
 }
-

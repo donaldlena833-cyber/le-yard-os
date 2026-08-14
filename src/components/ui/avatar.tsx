@@ -32,7 +32,7 @@ export function Avatar({
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full font-semibold tracking-[-0.03em] ring-2 ring-[var(--paper)]",
         palette[index % palette.length],
-        size === "sm" && "size-7 text-[10px]",
+        size === "sm" && "size-7 text-xs",
         size === "md" && "size-9 text-xs",
         size === "lg" && "size-12 text-sm",
         className,

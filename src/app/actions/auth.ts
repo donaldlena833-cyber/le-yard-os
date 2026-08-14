@@ -15,6 +15,7 @@ import { isSupabaseAuthCookieName } from "@/lib/auth/session-cookies";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import {
   PLAYGROUND_PASSWORD_MINIMUM_LENGTH,
+  PLAYGROUND_REMEMBERED_SESSION_TTL_SECONDS,
   PLAYGROUND_SESSION_COOKIE,
   PLAYGROUND_SESSION_TTL_SECONDS,
   authenticatePlaygroundUser,
@@ -23,6 +24,13 @@ import {
 import { PlaygroundLoginRateLimiter } from "@/lib/auth/playground-login-rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { defaultWorkspacePath } from "@/lib/app-surface";
+import {
+  CONNECTED_SESSION_DEADLINE_COOKIE,
+  connectedSessionCookieOptions,
+  sessionDeadlineValue,
+  sessionTtlSeconds,
+} from "@/lib/auth/session-duration";
 
 export type AuthActionState = {
   status: "idle" | "error" | "success";
@@ -33,6 +41,7 @@ const signInSchema = z.object({
   identifier: z.string().trim().min(1).max(320),
   password: z.string().min(1).max(256),
   next: z.string().optional(),
+  rememberFor30Days: z.boolean(),
 });
 const playgroundPasswordCandidateSchema = z
   .string()
@@ -55,15 +64,21 @@ export async function signInAction(
     identifier: formData.get("identifier"),
     password: formData.get("password"),
     next: formData.get("next") || undefined,
+    rememberFor30Days: formData.get("remember") === "30-days",
   });
 
   if (!parsed.success) {
-    return { status: "error", message: "Enter a valid username or email and password." };
+    return {
+      status: "error",
+      message: "Enter a valid username or email and password.",
+    };
   }
 
   const runtime = getServerRuntimeConfiguration();
   if (runtime.mode === "demo" && runtime.playground) {
-    if (!playgroundPasswordCandidateSchema.safeParse(parsed.data.password).success) {
+    if (
+      !playgroundPasswordCandidateSchema.safeParse(parsed.data.password).success
+    ) {
       return {
         status: "error",
         message: "The username or password did not match.",
@@ -86,9 +101,17 @@ export async function signInAction(
       parsed.data.identifier,
       parsed.data.password,
     );
-    const token = principal ? issuePlaygroundSessionToken(principal) : null;
+    const sessionTtlSeconds = parsed.data.rememberFor30Days
+      ? PLAYGROUND_REMEMBERED_SESSION_TTL_SECONDS
+      : PLAYGROUND_SESSION_TTL_SECONDS;
+    const token = principal
+      ? issuePlaygroundSessionToken(principal, sessionTtlSeconds)
+      : null;
     if (!principal || !token) {
-      return { status: "error", message: "The username or password did not match." };
+      return {
+        status: "error",
+        message: "The username or password did not match.",
+      };
     }
 
     const cookieStore = await cookies();
@@ -97,14 +120,14 @@ export async function signInAction(
       secure: true,
       sameSite: "lax",
       path: "/",
-      maxAge: PLAYGROUND_SESSION_TTL_SECONDS,
+      maxAge: sessionTtlSeconds,
       priority: "high",
     });
-    redirect(safeInternalRedirect(parsed.data.next));
+    redirect(safeInternalRedirect(parsed.data.next, defaultWorkspacePath));
   }
 
   if (isDemoMode && runtime.ready) {
-    redirect(safeInternalRedirect(parsed.data.next));
+    redirect(safeInternalRedirect(parsed.data.next, defaultWorkspacePath));
   }
 
   // Le Yard's connected tenant accepts the same short usernames as the
@@ -116,20 +139,35 @@ export async function signInAction(
     : `${identifier}@le-yard.local`;
   const email = z.string().email().safeParse(emailValue);
   if (!email.success) {
-    return { status: "error", message: "Enter a valid username or email and password." };
+    return {
+      status: "error",
+      message: "Enter a valid username or email and password.",
+    };
   }
 
-  const supabase = await createClient();
+  const connectedSessionTtl = sessionTtlSeconds(
+    parsed.data.rememberFor30Days,
+  );
+  const supabase = await createClient({ cookieMaxAge: connectedSessionTtl });
   const { error } = await supabase.auth.signInWithPassword({
     email: email.data,
     password: parsed.data.password,
   });
 
   if (error) {
-    return { status: "error", message: "The username or password did not match." };
+    return {
+      status: "error",
+      message: "The username or password did not match.",
+    };
   }
 
-  redirect(safeInternalRedirect(parsed.data.next));
+  const cookieStore = await cookies();
+  cookieStore.set(
+    CONNECTED_SESSION_DEADLINE_COOKIE,
+    sessionDeadlineValue(connectedSessionTtl),
+    connectedSessionCookieOptions(connectedSessionTtl),
+  );
+  redirect(safeInternalRedirect(parsed.data.next, defaultWorkspacePath));
 }
 
 export async function signOutAction() {
@@ -146,6 +184,10 @@ export async function signOutAction() {
     expires: new Date(0),
     priority: "high",
   });
+  cookieStore.set(CONNECTED_SESSION_DEADLINE_COOKIE, "", {
+    ...connectedSessionCookieOptions(0),
+    expires: new Date(0),
+  });
 
   if (runtime.mode === "connected") {
     try {
@@ -159,7 +201,8 @@ export async function signOutAction() {
     // A failed provider call must not leave this browser authenticated while
     // the UI claims sign-out succeeded. Expire only Supabase auth cookies.
     cookieStore.getAll().forEach((cookie) => {
-      if (isSupabaseAuthCookieName(cookie.name)) cookieStore.delete(cookie.name);
+      if (isSupabaseAuthCookieName(cookie.name))
+        cookieStore.delete(cookie.name);
     });
   }
 
@@ -189,7 +232,10 @@ export async function setInvitedUserPasswordAction(
 
   const parsedOrganizationId = z.string().uuid().safeParse(organizationId);
   if (!parsedOrganizationId.success) {
-    return { status: "error", message: "This invitation is missing its organization scope." };
+    return {
+      status: "error",
+      message: "This invitation is missing its organization scope.",
+    };
   }
 
   const supabase = await createClient();
@@ -203,13 +249,17 @@ export async function setInvitedUserPasswordAction(
     return { status: "error", message: error.message };
   }
 
-  const { error: activationError } = await supabase.rpc("accept_my_invitation", {
-    p_organization_id: parsedOrganizationId.data,
-  });
+  const { error: activationError } = await supabase.rpc(
+    "accept_my_invitation",
+    {
+      p_organization_id: parsedOrganizationId.data,
+    },
+  );
   if (activationError) {
     return {
       status: "error",
-      message: "Your password was saved, but tenant access could not be activated. Ask an owner to review the invitation.",
+      message:
+        "Your password was saved, but tenant access could not be activated. Ask an owner to review the invitation.",
     };
   }
 
@@ -237,7 +287,10 @@ export async function inviteUserAction(
   });
 
   if (!parsed.success) {
-    return { status: "error", message: "Review the invite details and try again." };
+    return {
+      status: "error",
+      message: "Review the invite details and try again.",
+    };
   }
 
   if (isDemoMode) {
@@ -248,8 +301,14 @@ export async function inviteUserAction(
   }
 
   const workspaceResolution = await resolveWorkspaceSession();
-  if (workspaceResolution.status !== "ready" || workspaceResolution.context.mode !== "live") {
-    return { status: "error", message: "Your active organization could not be verified." };
+  if (
+    workspaceResolution.status !== "ready" ||
+    workspaceResolution.context.mode !== "live"
+  ) {
+    return {
+      status: "error",
+      message: "Your active organization could not be verified.",
+    };
   }
 
   const workspace = workspaceResolution.context;
@@ -266,16 +325,18 @@ export async function inviteUserAction(
     };
   }
 
-  if (workspace.role === "owner" && workspace.identity.aal !== "aal2") {
-    return { status: "error", message: "Complete MFA before inviting or assigning users." };
-  }
-
   const supabase = await createClient();
 
   const normalizedEmail = parsed.data.email.toLowerCase();
   const locationIds = parsed.data.locationId ? [parsed.data.locationId] : [];
-  if (["manager", "employee"].includes(parsed.data.role) && locationIds.length === 0) {
-    return { status: "error", message: "Managers and employees need a location assignment." };
+  if (
+    ["manager", "employee"].includes(parsed.data.role) &&
+    locationIds.length === 0
+  ) {
+    return {
+      status: "error",
+      message: "Managers and employees need a location assignment.",
+    };
   }
 
   if (parsed.data.locationId) {
@@ -283,79 +344,119 @@ export async function inviteUserAction(
       (candidate) => candidate.id === parsed.data.locationId,
     );
     if (!location || location.organizationId !== organizationId) {
-      return { status: "error", message: "Choose an active location in this organization." };
+      return {
+        status: "error",
+        message: "Choose an active location in this organization.",
+      };
     }
   }
 
-  const [{ data: pendingInvitation }, { data: existingEmployee }] = await Promise.all([
-    supabase
-      .from("user_invitations")
-      .select("id")
-      .eq("organization_id", organizationId)
-      .eq("email", normalizedEmail)
-      .is("accepted_at", null)
-      .is("revoked_at", null)
-      .maybeSingle(),
-    supabase
-      .from("employees")
-      .select("id")
-      .eq("organization_id", organizationId)
-      .eq("email", normalizedEmail)
-      .maybeSingle(),
-  ]);
+  const [{ data: pendingInvitation }, { data: existingEmployee }] =
+    await Promise.all([
+      supabase
+        .from("user_invitations")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("email", normalizedEmail)
+        .is("accepted_at", null)
+        .is("revoked_at", null)
+        .maybeSingle(),
+      supabase
+        .from("employees")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("email", normalizedEmail)
+        .maybeSingle(),
+    ]);
   if (pendingInvitation || existingEmployee) {
-    return { status: "error", message: "This person already has access or a pending invitation." };
+    return {
+      status: "error",
+      message: "This person already has access or a pending invitation.",
+    };
   }
 
   const tracking = createInvitationTracking();
 
   const admin = createAdminClient();
-  const { data: invited, error } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-    data: {
-      display_name: parsed.data.fullName,
-      requested_role: parsed.data.role,
-      organization_id: organizationId,
-      location_ids: locationIds,
-      invited_by: userId,
+  const { data: invited, error } = await admin.auth.admin.inviteUserByEmail(
+    normalizedEmail,
+    {
+      data: {
+        display_name: parsed.data.fullName,
+        requested_role: parsed.data.role,
+        organization_id: organizationId,
+        location_ids: locationIds,
+        invited_by: userId,
+      },
+      redirectTo: invitationCallbackUrl(
+        publicEnv.NEXT_PUBLIC_APP_URL,
+        organizationId,
+      ),
     },
-    redirectTo: invitationCallbackUrl(publicEnv.NEXT_PUBLIC_APP_URL, organizationId),
-  });
+  );
 
   if (error || !invited.user) {
-    return { status: "error", message: "The invitation could not be sent. Check the email or existing access." };
+    return {
+      status: "error",
+      message:
+        "The invitation could not be sent. Check the email or existing access.",
+    };
   }
 
-  const { error: metadataError } = await admin.auth.admin.updateUserById(invited.user.id, {
-    app_metadata: {
-      ...invited.user.app_metadata,
-      pending_organization_id: organizationId,
-      pending_role: parsed.data.role,
-      invited_by: userId,
+  const { error: metadataError } = await admin.auth.admin.updateUserById(
+    invited.user.id,
+    {
+      app_metadata: {
+        ...invited.user.app_metadata,
+        pending_organization_id: organizationId,
+        pending_role: parsed.data.role,
+        invited_by: userId,
+      },
     },
-  });
+  );
 
   if (metadataError) {
     await admin.auth.admin.deleteUser(invited.user.id);
-    return { status: "error", message: "The invitation could not be securely scoped. No account was provisioned." };
+    return {
+      status: "error",
+      message:
+        "The invitation could not be securely scoped. No account was provisioned.",
+    };
   }
 
-  const { error: provisioningError } = await supabase.rpc("provision_user_invitation", {
-    p_auth_user_id: invited.user.id,
-    p_organization_id: organizationId,
-    p_email: normalizedEmail,
-    p_display_name: parsed.data.fullName,
-    p_role: parsed.data.role,
-    p_location_ids: locationIds,
-    p_token_hash: tracking.tokenHash,
-    p_expires_at: tracking.expiresAt,
-    p_employee_id: tracking.employeeId,
-  });
+  const { error: provisioningError } = await supabase.rpc(
+    "provision_user_invitation",
+    {
+      p_auth_user_id: invited.user.id,
+      p_organization_id: organizationId,
+      p_email: normalizedEmail,
+      p_display_name: parsed.data.fullName,
+      p_role: parsed.data.role,
+      p_location_ids: locationIds,
+      p_token_hash: tracking.tokenHash,
+      p_expires_at: tracking.expiresAt,
+      p_employee_id: tracking.employeeId,
+    },
+  );
 
   if (provisioningError) {
     await admin.auth.admin.deleteUser(invited.user.id);
-    await admin.from("user_invitations").delete().eq("organization_id", organizationId).eq("token_hash", tracking.tokenHash);
-    await admin.from("employees").delete().eq("organization_id", organizationId).eq("id", tracking.employeeId).eq("employment_status", "invited");
-    return { status: "error", message: "The invitation could not be provisioned atomically. No access was granted." };
+    await admin
+      .from("user_invitations")
+      .delete()
+      .eq("organization_id", organizationId)
+      .eq("token_hash", tracking.tokenHash);
+    await admin
+      .from("employees")
+      .delete()
+      .eq("organization_id", organizationId)
+      .eq("id", tracking.employeeId)
+      .eq("employment_status", "invited");
+    return {
+      status: "error",
+      message:
+        "The invitation could not be provisioned atomically. No access was granted.",
+    };
   }
 
   return {

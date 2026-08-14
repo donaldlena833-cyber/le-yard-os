@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+import { btree_gist } from "@electric-sql/pglite/contrib/btree_gist";
 
 const root = process.cwd();
 const migrationsDirectory = join(root, "supabase", "migrations");
@@ -91,7 +92,7 @@ const bootstrap = `
   grant select, insert, update, delete on storage.objects to authenticated;
 `;
 
-const db = new PGlite({ extensions: { pgcrypto, pg_trgm } });
+const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
 
 function indent(lines, spaces) {
   const prefix = " ".repeat(spaces);
@@ -132,6 +133,7 @@ function mapPgType(formatted, enumNames) {
     normalized === "interval" ||
     normalized === "inet" ||
     normalized === "cidr" ||
+    normalized === "tstzrange" ||
     normalized === "tsvector" ||
     normalized === "bytea"
   ) {
@@ -202,7 +204,7 @@ function renderView(name, columns, enumNames) {
   return lines;
 }
 
-function renderFunction(fn, args, enumNames, relationKinds) {
+function renderFunction(fn, args, outputs, enumNames, relationKinds) {
   const lines = [`${JSON.stringify(fn.proname)}: {`];
   if (args.length === 0) {
     lines.push("  Args: Record<PropertyKey, never>");
@@ -217,7 +219,11 @@ function renderFunction(fn, args, enumNames, relationKinds) {
 
   const returnRelation = relationKinds.get(fn.return_name);
   let returns;
-  if (fn.return_schema === "public" && returnRelation) {
+  if (outputs.length > 0) {
+    returns = `{ ${outputs
+      .map((output) => property(output.arg_name, `${mapPgType(output.formatted, enumNames)} | null`))
+      .join("; ")} }`;
+  } else if (fn.return_schema === "public" && returnRelation) {
     const group = returnRelation === "view" ? "Views" : "Tables";
     returns = `Database["public"]["${group}"][${JSON.stringify(fn.return_name)}]["Row"]`;
   } else {
@@ -249,7 +255,15 @@ try {
     await db.exec(await readFile(join(migrationsDirectory, file), "utf8"));
   }
 
-  const [enumResult, relationResult, columnResult, foreignKeyResult, functionResult, argumentResult] =
+  const [
+    enumResult,
+    relationResult,
+    columnResult,
+    foreignKeyResult,
+    functionResult,
+    argumentResult,
+    functionOutputResult,
+  ] =
     await Promise.all([
       db.query(`
         select type.typname as enum_name, enum.enumlabel as enum_value
@@ -333,6 +347,19 @@ try {
         where namespace.nspname = 'public' and procedure.prokind = 'f'
         order by procedure.oid, argument.ordinality
       `),
+      db.query(`
+        select procedure.oid::text, output.ordinality,
+          coalesce(procedure.proargnames[output.ordinality],
+            'column_' || output.ordinality::text) as arg_name,
+          format_type(procedure.proallargtypes[output.ordinality], null) as formatted
+        from pg_proc procedure
+        join pg_namespace namespace on namespace.oid = procedure.pronamespace
+        cross join lateral generate_subscripts(procedure.proallargtypes, 1)
+          output(ordinality)
+        where namespace.nspname = 'public' and procedure.prokind = 'f'
+          and procedure.proargmodes[output.ordinality] in ('o', 't')
+        order by procedure.oid, output.ordinality
+      `),
     ]);
 
   const enums = new Map();
@@ -367,6 +394,12 @@ try {
     args.push(row);
     argumentsByFunction.set(row.oid, args);
   }
+  const outputsByFunction = new Map();
+  for (const row of functionOutputResult.rows) {
+    const outputs = outputsByFunction.get(row.oid) ?? [];
+    outputs.push(row);
+    outputsByFunction.set(row.oid, outputs);
+  }
 
   const tableEntries = [];
   const viewEntries = [];
@@ -381,7 +414,13 @@ try {
     }
   }
   const functionEntries = functionResult.rows.map((fn) =>
-    renderFunction(fn, argumentsByFunction.get(fn.oid) ?? [], enumNames, relationKinds),
+    renderFunction(
+      fn,
+      argumentsByFunction.get(fn.oid) ?? [],
+      outputsByFunction.get(fn.oid) ?? [],
+      enumNames,
+      relationKinds,
+    ),
   );
 
   const lines = [

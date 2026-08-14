@@ -20,6 +20,7 @@ describe("guest workflow schemas", () => {
       saveGuestInputSchema.safeParse({
         requestId: ids.request,
         organizationId: ids.organization,
+        locationId: ids.location,
         guestId: null,
         firstName: "Avery",
         lastName: "Guest",
@@ -39,6 +40,7 @@ describe("guest workflow schemas", () => {
     const parsed = saveGuestInputSchema.safeParse({
       requestId: ids.request,
       organizationId: ids.organization,
+      locationId: ids.location,
       displayName: "",
       email: "not-an-email",
       vip: false,
@@ -63,6 +65,7 @@ describe("guest workflow schemas", () => {
     const base = {
       requestId: ids.request,
       organizationId: ids.organization,
+      locationId: ids.location,
       guestId: ids.guest,
       channel: "email",
       evidenceNote: "Confirmed in person",
@@ -75,6 +78,7 @@ describe("guest workflow schemas", () => {
     const valid = {
       requestId: ids.request,
       organizationId: ids.organization,
+      locationId: ids.location,
       sourceGuestId: ids.guest,
       targetGuestId: ids.targetGuest,
       matchScore: 0.97,

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://le-yard.example/schemas/release-manifest-v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["releaseId", "commitSha", "migrationHead", "projects", "flags", "approvals"],
+  "properties": {
+    "releaseId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,80}$" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "commitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "migrationHead": { "type": "string", "pattern": "^[0-9]{14}$" },
+    "schemaContractVersion": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "projects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "site", "reserve", "host"],
+      "properties": {
+        "os": { "$ref": "#/$defs/deployment" },
+        "site": { "$ref": "#/$defs/deployment" },
+        "reserve": { "$ref": "#/$defs/deployment" },
+        "host": { "$ref": "#/$defs/deployment" }
+      }
+    },
+    "supabaseProjectFingerprint": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "flags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publicBooking", "email", "sms", "push"],
+      "properties": {
+        "publicBooking": { "type": "boolean" },
+        "email": { "type": "boolean" },
+        "sms": { "type": "boolean" },
+        "push": { "type": "boolean" }
+      }
+    },
+    "floorRevision": { "type": ["string", "null"] },
+    "ownerRevision": { "type": ["string", "null"] },
+    "backupEvidenceId": { "type": ["string", "null"] },
+    "approvals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewed", "stagingAccepted", "managedRecoveryAccepted"],
+      "properties": {
+        "reviewed": { "type": "boolean" },
+        "stagingAccepted": { "type": "boolean" },
+        "managedRecoveryAccepted": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "commitSha", "deploymentId"],
+      "properties": {
+        "project": { "type": "string", "minLength": 1 },
+        "commitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "deploymentId": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

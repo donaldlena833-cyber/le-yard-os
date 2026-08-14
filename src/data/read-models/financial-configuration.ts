@@ -150,8 +150,7 @@ export async function loadTipPolicyConfiguration(
 
     return readSuccess({
       canAuthor:
-        (workspace.role === "admin" || workspace.role === "owner") &&
-        (workspace.role !== "owner" || workspace.identity.aal === "aal2"),
+        workspace.role === "admin" || workspace.role === "owner",
       roles: (roleResult.data ?? []).map((role) => ({
         id: role.id,
         name: role.name,

@@ -16,7 +16,25 @@ test("filters, changes, validates, and exports a source-backed report", async ({
       .getByRole("combobox", { name: "Report view", exact: true })
       .selectOption("inventory_variance");
   } else {
-    await page.getByRole("tab", { name: "Inventory variance", exact: true }).click();
+    const laborTab = page.getByRole("tab", { name: "Labor", exact: true });
+    await laborTab.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(
+      page.getByRole("tab", { name: "Attendance", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+
+    const inventoryVarianceTab = page.getByRole("tab", {
+      name: "Inventory variance",
+      exact: true,
+    });
+    await inventoryVarianceTab.click();
+    await expect(inventoryVarianceTab).toHaveAttribute(
+      "aria-controls",
+      "demo-report-views-panel-inventory_variance",
+    );
+    await expect(
+      page.getByRole("tabpanel", { name: "Inventory variance" }),
+    ).toBeVisible();
   }
 
   await expect(

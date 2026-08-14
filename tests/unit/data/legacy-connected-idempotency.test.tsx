@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { saveGuestAction } from "@/app/actions/workflows/guests";
 import {
@@ -8,7 +15,6 @@ import {
   finalizeManualCsvImportAction,
 } from "@/app/actions/workflows/integrations";
 import { claimLiveOpenShiftAction } from "@/app/actions/workflows/live-schedule";
-import { clockInAction } from "@/app/actions/workflows/time";
 import { LiveGuestsWorkspace } from "@/components/guests/live-guests-workspace";
 import { LiveIntegrationsWorkspace } from "@/components/integrations/live-integrations-workspace";
 import { LiveScheduleWorkspace } from "@/components/schedule/live-schedule-workspace";
@@ -98,16 +104,6 @@ vi.mock("@/app/actions/workflows/schedule", () => ({
   publishScheduleAction: vi.fn(),
 }));
 
-vi.mock("@/app/actions/workflows/time", () => ({
-  approveTimeCorrectionAction: vi.fn(),
-  clockInAction: vi.fn(),
-  clockOutAction: vi.fn(),
-  endBreakAction: vi.fn(),
-  recordMissedTimeEntryAction: vi.fn(),
-  requestTimeCorrectionAction: vi.fn(),
-  startBreakAction: vi.fn(),
-}));
-
 const organizationId = "20000000-0000-4000-8000-000000000001";
 const locationId = "30000000-0000-4000-8000-000000000001";
 const employeeId = "40000000-0000-4000-8000-000000000001";
@@ -136,6 +132,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "80000000-0000-4000-8000-000000000001",
   role: "admin",
   organizationWide: true,
+  capabilities: [],
 };
 
 const retryFailure = {
@@ -195,23 +192,35 @@ describe("legacy connected mutation idempotency", () => {
     const dialog = screen.getByRole("dialog", { name: "Add guest" });
     const displayName = within(dialog).getByLabelText("Display name");
     fireEvent.change(displayName, { target: { value: "Taylor Guest" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create profile" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Create profile" }),
+    );
     await waitFor(() => expect(saveGuestAction).toHaveBeenCalledTimes(1));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create profile" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Create profile" }),
+    );
     await waitFor(() => expect(saveGuestAction).toHaveBeenCalledTimes(2));
 
-    const first = vi.mocked(saveGuestAction).mock.calls[0][0] as { requestId: string };
-    const retry = vi.mocked(saveGuestAction).mock.calls[1][0] as { requestId: string };
+    const first = vi.mocked(saveGuestAction).mock.calls[0][0] as {
+      requestId: string;
+    };
+    const retry = vi.mocked(saveGuestAction).mock.calls[1][0] as {
+      requestId: string;
+    };
     expect(retry.requestId).toBe(first.requestId);
 
     fireEvent.change(displayName, { target: { value: "Taylor Updated" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Create profile" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Create profile" }),
+    );
     await waitFor(() => expect(saveGuestAction).toHaveBeenCalledTimes(3));
-    const changed = vi.mocked(saveGuestAction).mock.calls[2][0] as { requestId: string };
+    const changed = vi.mocked(saveGuestAction).mock.calls[2][0] as {
+      requestId: string;
+    };
     expect(changed.requestId).not.toBe(first.requestId);
   });
 
-  it("keeps clock-in retries stable, changes with the selected role, and rotates after success", async () => {
+  it("keeps connected timekeeping read-only because Toast POS owns punches", () => {
     const model: LiveTimeClockModel = {
       date: "2026-08-02",
       timeZone: "America/New_York",
@@ -226,40 +235,24 @@ describe("legacy connected mutation idempotency", () => {
       recentEntries: [],
       roster: [],
       corrections: [],
+      posSource: {
+        provider: "toast",
+        connectionStatus: "connected",
+        lastSyncedAt: "2026-08-02T12:00:00.000Z",
+        lastJobStatus: "succeeded",
+        lastJobCompletedAt: "2026-08-02T12:00:00.000Z",
+        stale: false,
+      },
     };
-    vi.mocked(clockInAction).mockResolvedValue(retryFailure);
-    render(<LiveTimeClockWorkspace workspace={workspace} result={{ ok: true, data: model }} />);
-
-    const clockIn = screen.getByRole("button", { name: "Clock in" });
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(1));
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(2));
-    const first = vi.mocked(clockInAction).mock.calls[0][0] as { requestId: string };
-    const retry = vi.mocked(clockInAction).mock.calls[1][0] as { requestId: string };
-    expect(retry.requestId).toBe(first.requestId);
-
-    fireEvent.change(screen.getByLabelText("Job code"), { target: { value: secondRoleId } });
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(3));
-    const changed = vi.mocked(clockInAction).mock.calls[2][0] as { requestId: string };
-    expect(changed.requestId).not.toBe(first.requestId);
-
-    vi.mocked(clockInAction).mockResolvedValue({
-      ok: true,
-      persisted: true,
-      mode: "live",
-      data: {},
-    } as never);
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(4));
-    const successfulRetry = vi.mocked(clockInAction).mock.calls[3][0] as { requestId: string };
-    expect(successfulRetry.requestId).toBe(changed.requestId);
-
-    fireEvent.click(clockIn);
-    await waitFor(() => expect(clockInAction).toHaveBeenCalledTimes(5));
-    const afterSuccess = vi.mocked(clockInAction).mock.calls[4][0] as { requestId: string };
-    expect(afterSuccess.requestId).not.toBe(successfulRetry.requestId);
+    render(
+      <LiveTimeClockWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Clock in" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Clock out" })).toBeNull();
+    expect(screen.getByText("Punch on the Toast POS")).toBeTruthy();
   });
 
   it("reuses an open-shift claim ID until success and then rotates it", async () => {
@@ -278,6 +271,7 @@ describe("legacy connected mutation idempotency", () => {
       ],
       timeZone: "America/New_York",
       canManage: false,
+      canPublish: false,
       selfEmployeeId: employeeId,
       schedule: {
         id: scheduleId,
@@ -312,16 +306,33 @@ describe("legacy connected mutation idempotency", () => {
       swaps: [],
     };
     vi.mocked(claimLiveOpenShiftAction).mockResolvedValue(retryFailure);
-    render(<LiveScheduleWorkspace workspace={workspace} model={{ ok: true, data: model }} />);
+    render(
+      <LiveScheduleWorkspace
+        workspace={workspace}
+        model={{ ok: true, data: model }}
+      />,
+    );
 
-    const claim = screen.getByRole("button", { name: "Claim" });
+    const claim = screen.getAllByRole("button", {
+      name: "Claim open shift",
+    })[0]!;
     fireEvent.click(claim);
-    await waitFor(() => expect(claimLiveOpenShiftAction).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect((claim as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() =>
+      expect(claimLiveOpenShiftAction).toHaveBeenCalledTimes(1),
+    );
+    await waitFor(() =>
+      expect((claim as HTMLButtonElement).disabled).toBe(false),
+    );
     fireEvent.click(claim);
-    await waitFor(() => expect(claimLiveOpenShiftAction).toHaveBeenCalledTimes(2));
-    const first = vi.mocked(claimLiveOpenShiftAction).mock.calls[0][0] as { requestId: string };
-    const retry = vi.mocked(claimLiveOpenShiftAction).mock.calls[1][0] as { requestId: string };
+    await waitFor(() =>
+      expect(claimLiveOpenShiftAction).toHaveBeenCalledTimes(2),
+    );
+    const first = vi.mocked(claimLiveOpenShiftAction).mock.calls[0][0] as {
+      requestId: string;
+    };
+    const retry = vi.mocked(claimLiveOpenShiftAction).mock.calls[1][0] as {
+      requestId: string;
+    };
     expect(retry.requestId).toBe(first.requestId);
 
     vi.mocked(claimLiveOpenShiftAction).mockResolvedValue({
@@ -330,18 +341,28 @@ describe("legacy connected mutation idempotency", () => {
       mode: "live",
       data: {},
     } as never);
-    await waitFor(() => expect((claim as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() =>
+      expect((claim as HTMLButtonElement).disabled).toBe(false),
+    );
     fireEvent.click(claim);
-    await waitFor(() => expect(claimLiveOpenShiftAction).toHaveBeenCalledTimes(3));
-    const successfulRetry = vi.mocked(claimLiveOpenShiftAction).mock.calls[2][0] as {
+    await waitFor(() =>
+      expect(claimLiveOpenShiftAction).toHaveBeenCalledTimes(3),
+    );
+    const successfulRetry = vi.mocked(claimLiveOpenShiftAction).mock
+      .calls[2][0] as {
       requestId: string;
     };
     expect(successfulRetry.requestId).toBe(first.requestId);
 
-    await waitFor(() => expect((claim as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() =>
+      expect((claim as HTMLButtonElement).disabled).toBe(false),
+    );
     fireEvent.click(claim);
-    await waitFor(() => expect(claimLiveOpenShiftAction).toHaveBeenCalledTimes(4));
-    const afterSuccess = vi.mocked(claimLiveOpenShiftAction).mock.calls[3][0] as {
+    await waitFor(() =>
+      expect(claimLiveOpenShiftAction).toHaveBeenCalledTimes(4),
+    );
+    const afterSuccess = vi.mocked(claimLiveOpenShiftAction).mock
+      .calls[3][0] as {
       requestId: string;
     };
     expect(afterSuccess.requestId).not.toBe(successfulRetry.requestId);
@@ -357,23 +378,39 @@ describe("legacy connected mutation idempotency", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
-    const dialog = screen.getByRole("dialog", { name: "Validate and queue CSV" });
-    const input = dialog.querySelector('input[type="file"]') as HTMLInputElement;
+    const dialog = screen.getByRole("dialog", {
+      name: "Validate and queue CSV",
+    });
+    const input = dialog.querySelector(
+      'input[type="file"]',
+    ) as HTMLInputElement;
     const content = "business_date,net_sales\n2026-08-01,1250.45\n";
     const firstFile = new File([content], "sales.csv", { type: "text/csv" });
     Object.defineProperty(firstFile, "text", { value: async () => content });
     fireEvent.change(input, { target: { files: [firstFile] } });
-    expect(await screen.findByText(/1 row passed local validation/)).toBeTruthy();
+    expect(
+      await screen.findByText(/1 row passed local validation/),
+    ).toBeTruthy();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Queue import" }));
-    await waitFor(() => expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(1));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Queue import" }));
-    await waitFor(() => expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(2));
-    const first = vi.mocked(createManualCsvUploadUrlAction).mock.calls[0][0] as {
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Queue import" }),
+    );
+    await waitFor(() =>
+      expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(1),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Queue import" }),
+    );
+    await waitFor(() =>
+      expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(2),
+    );
+    const first = vi.mocked(createManualCsvUploadUrlAction).mock
+      .calls[0][0] as {
       requestId: string;
       uploadId: string;
     };
-    const retry = vi.mocked(createManualCsvUploadUrlAction).mock.calls[1][0] as {
+    const retry = vi.mocked(createManualCsvUploadUrlAction).mock
+      .calls[1][0] as {
       requestId: string;
       uploadId: string;
     };
@@ -381,13 +418,22 @@ describe("legacy connected mutation idempotency", () => {
     expect(retry.uploadId).toBe(first.uploadId);
     expect(finalizeManualCsvImportAction).not.toHaveBeenCalled();
 
-    const changedFile = new File([content], "sales-corrected.csv", { type: "text/csv" });
+    const changedFile = new File([content], "sales-corrected.csv", {
+      type: "text/csv",
+    });
     Object.defineProperty(changedFile, "text", { value: async () => content });
     fireEvent.change(input, { target: { files: [changedFile] } });
-    await waitFor(() => expect(screen.getByText(/1 row passed local validation/)).toBeTruthy());
-    fireEvent.click(within(dialog).getByRole("button", { name: "Queue import" }));
-    await waitFor(() => expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(3));
-    const changed = vi.mocked(createManualCsvUploadUrlAction).mock.calls[2][0] as {
+    await waitFor(() =>
+      expect(screen.getByText(/1 row passed local validation/)).toBeTruthy(),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Queue import" }),
+    );
+    await waitFor(() =>
+      expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(3),
+    );
+    const changed = vi.mocked(createManualCsvUploadUrlAction).mock
+      .calls[2][0] as {
       requestId: string;
       uploadId: string;
     };
@@ -412,7 +458,10 @@ describe("legacy connected mutation idempotency", () => {
         upsert: false,
       },
     } as never);
-    mocks.uploadToSignedUrl.mockResolvedValue({ data: { path: objectPath }, error: null });
+    mocks.uploadToSignedUrl.mockResolvedValue({
+      data: { path: objectPath },
+      error: null,
+    });
     vi.mocked(finalizeManualCsvImportAction)
       .mockResolvedValueOnce(retryFailure)
       .mockResolvedValue({
@@ -440,37 +489,58 @@ describe("legacy connected mutation idempotency", () => {
     let dialog = screen.getByRole("dialog", { name: "Validate and queue CSV" });
     let input = dialog.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
-    expect(await screen.findByText(/1 row passed local validation/)).toBeTruthy();
+    expect(
+      await screen.findByText(/1 row passed local validation/),
+    ).toBeTruthy();
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Queue import" }));
-    await waitFor(() => expect(finalizeManualCsvImportAction).toHaveBeenCalledTimes(1));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Queue import" }),
+    );
+    await waitFor(() =>
+      expect(finalizeManualCsvImportAction).toHaveBeenCalledTimes(1),
+    );
     expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(1);
     expect(mocks.uploadToSignedUrl).toHaveBeenCalledTimes(1);
-    const failedFinalize = vi.mocked(finalizeManualCsvImportAction).mock.calls[0][0] as {
+    const failedFinalize = vi.mocked(finalizeManualCsvImportAction).mock
+      .calls[0][0] as {
       requestId: string;
       uploadId: string;
     };
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Queue import" }));
-    await waitFor(() => expect(finalizeManualCsvImportAction).toHaveBeenCalledTimes(2));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Queue import" }),
+    );
+    await waitFor(() =>
+      expect(finalizeManualCsvImportAction).toHaveBeenCalledTimes(2),
+    );
     expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(1);
     expect(mocks.uploadToSignedUrl).toHaveBeenCalledTimes(1);
-    const successfulRetry = vi.mocked(finalizeManualCsvImportAction).mock.calls[1][0] as {
+    const successfulRetry = vi.mocked(finalizeManualCsvImportAction).mock
+      .calls[1][0] as {
       requestId: string;
       uploadId: string;
     };
     expect(successfulRetry.requestId).toBe(failedFinalize.requestId);
     expect(successfulRetry.uploadId).toBe(failedFinalize.uploadId);
-    expect(await screen.findByText(/queued for server-side import review/)).toBeTruthy();
+    expect(
+      await screen.findByText(/queued for server-side import review/),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
     dialog = screen.getByRole("dialog", { name: "Validate and queue CSV" });
     input = dialog.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(input, { target: { files: [file] } });
-    expect(await screen.findByText(/1 row passed local validation/)).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Queue import" }));
-    await waitFor(() => expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(2));
-    const afterSuccess = vi.mocked(createManualCsvUploadUrlAction).mock.calls[1][0] as {
+    expect(
+      await screen.findByText(/1 row passed local validation/),
+    ).toBeTruthy();
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Queue import" }),
+    );
+    await waitFor(() =>
+      expect(createManualCsvUploadUrlAction).toHaveBeenCalledTimes(2),
+    );
+    const afterSuccess = vi.mocked(createManualCsvUploadUrlAction).mock
+      .calls[1][0] as {
       requestId: string;
       uploadId: string;
     };

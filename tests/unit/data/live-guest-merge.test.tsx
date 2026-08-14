@@ -2,9 +2,13 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mergeGuestAction } from "@/app/actions/workflows/guests";
+import {
+  mergeGuestAction,
+  saveGuestAction,
+} from "@/app/actions/workflows/guests";
 import { LiveGuestsWorkspace } from "@/components/guests/live-guests-workspace";
 import type {
+  LiveGuest,
   LiveGuestDuplicateProfile,
   LiveGuestsModel,
 } from "@/data/read-models/guests";
@@ -85,6 +89,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "60000000-0000-4000-8000-000000000001",
   role: "owner",
   organizationWide: true,
+  capabilities: [],
 };
 
 function duplicateProfile(
@@ -141,7 +146,151 @@ function model(): LiveGuestsModel {
   };
 }
 
+function restrictedGuest(): LiveGuest {
+  return {
+    id: sourceId,
+    firstName: "Sensitive",
+    lastName: "Guest",
+    displayName: "Sensitive Guest",
+    email: "private@example.invalid",
+    phone: "+1 212 555 0199",
+    birthday: "1990-01-01",
+    vip: false,
+    preferences: "Quiet table",
+    allergies: "Shellfish",
+    notes: "Hospitality context",
+    firstVisitAt: null,
+    lastVisitAt: "2026-07-20T22:00:00.000Z",
+    visitCount: 3,
+    lifetimeSpendCents: 25_000,
+    source: "manual",
+    currentLocationVisits: 2,
+    currentLocationSpendCents: 20_000,
+    contacts: [
+      {
+        id: requestId,
+        type: "email",
+        label: "primary",
+        value: "private@example.invalid",
+        primary: true,
+        verifiedAt: null,
+      },
+    ],
+    consents: [],
+    tags: [],
+    guestNotes: [],
+    visits: [
+      {
+        id: targetId,
+        locationName: "Private Dining",
+        timeZone: "America/New_York",
+        visitedAt: "2026-07-20T22:00:00.000Z",
+        partySize: 2,
+        covers: 2,
+        spendCents: 12_345,
+        source: "toast",
+        notes: "Sensitive visit evidence",
+      },
+    ],
+    reservations: [],
+  };
+}
+
 describe("connected CRM guest merge review", () => {
+  it("keeps contact data and management actions out of a sensitive-only workspace", () => {
+    const restricted = model();
+    restricted.contactContextAuthorized = false;
+    restricted.sensitiveContextAuthorized = true;
+    restricted.duplicateCandidates = [];
+    restricted.guests = [restrictedGuest()];
+
+    render(
+      <LiveGuestsWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: restricted }}
+        initialSearch=""
+      />,
+    );
+
+    expect(
+      screen.getByPlaceholderText("Search name, allergy, preference, or note"),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/Contact restricted/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("private@example.invalid")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add guest" })).toBeNull();
+
+    fireEvent.click(screen.getAllByText("Sensitive Guest")[0]);
+    expect(
+      screen.getByText(
+        "Contact and consent context requires guest management access.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Record consent" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add note" })).toBeNull();
+    expect(screen.queryByText("private@example.invalid")).toBeNull();
+  });
+
+  it("keeps spend and visit evidence out of a contact-only workspace", () => {
+    const restricted = model();
+    restricted.contactContextAuthorized = true;
+    restricted.sensitiveContextAuthorized = false;
+    restricted.duplicateCandidates = [];
+    restricted.guests = [restrictedGuest()];
+
+    render(
+      <LiveGuestsWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: restricted }}
+        initialSearch=""
+      />,
+    );
+
+    fireEvent.click(screen.getAllByText("Sensitive Guest")[0]);
+    expect(screen.queryByText("Visit history")).toBeNull();
+    expect(screen.queryByText("Sensitive visit evidence")).toBeNull();
+    expect(
+      screen.getByText(
+        "Hospitality context is restricted to staff with sensitive guest access.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add note" })).toBeNull();
+  });
+
+  it("surfaces a database-sensitive-scope denial instead of claiming an update", async () => {
+    const sensitive = model();
+    sensitive.contactContextAuthorized = true;
+    sensitive.sensitiveContextAuthorized = true;
+    sensitive.duplicateCandidates = [];
+    sensitive.guests = [restrictedGuest()];
+    vi.mocked(saveGuestAction).mockResolvedValue({
+      ok: false,
+      persisted: false,
+      code: "forbidden",
+      message: "Sensitive guest changes require access at every linked location.",
+    });
+
+    render(
+      <LiveGuestsWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: sensitive }}
+        initialSearch=""
+      />,
+    );
+
+    fireEvent.click(screen.getAllByText("Sensitive Guest")[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Allergies"), {
+      target: { value: "Shellfish and sesame" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await screen.findByText(
+      "Sensitive guest changes require access at every linked location.",
+    );
+    expect(screen.queryByText("Guest profile updated.")).toBeNull();
+  });
+
   it("requires a survivor choice and explicit confirmation before calling the atomic merge", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(requestId);
     vi.mocked(mergeGuestAction).mockResolvedValue({
@@ -193,6 +342,7 @@ describe("connected CRM guest merge review", () => {
       expect(mergeGuestAction).toHaveBeenCalledWith({
         requestId,
         organizationId,
+        locationId,
         sourceGuestId: sourceId,
         targetGuestId: targetId,
         matchScore: 1,
@@ -203,5 +353,61 @@ describe("connected CRM guest merge review", () => {
       });
       expect(mocks.refresh).toHaveBeenCalled();
     });
+  });
+
+  it("retains the merge request id after a transient response failure", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(requestId);
+    vi.mocked(mergeGuestAction)
+      .mockResolvedValueOnce({
+        ok: false,
+        persisted: false,
+        code: "database",
+        message: "The response was interrupted.",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        persisted: true,
+        mode: "live",
+        data: {
+          id: requestId,
+          sourceGuestId: sourceId,
+          targetGuestId: targetId,
+          mergedAt: "2026-08-01T20:00:00.000Z",
+          alreadyApplied: true,
+        },
+      });
+
+    render(
+      <LiveGuestsWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model() }}
+        initialSearch=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Review matches" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep Alex Survivor" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /I reviewed both profiles and chose the correct survivor/,
+      }),
+    );
+    const mergeButton = screen.getByRole("button", {
+      name: "Merge into Alex Survivor",
+    });
+    fireEvent.click(mergeButton);
+
+    await screen.findByText("The response was interrupted.");
+    fireEvent.click(mergeButton);
+
+    await waitFor(() => expect(mergeGuestAction).toHaveBeenCalledTimes(2));
+    expect(mergeGuestAction).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ requestId }),
+    );
+    expect(mergeGuestAction).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ requestId }),
+    );
   });
 });

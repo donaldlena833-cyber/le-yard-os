@@ -36,6 +36,8 @@ export interface LiveTimeEntry {
   clockedInLabel: string;
   clockedOutLabel: string | null;
   status: string;
+  source: string;
+  sourceProvider: string | null;
   breaks: LiveTimeBreak[];
   paidBreakMinutes: number;
   unpaidBreakMinutes: number;
@@ -98,6 +100,14 @@ export interface LiveTimeClockModel {
   recentEntries: LiveTimeEntry[];
   roster: LiveRosterRow[];
   corrections: LiveTimeCorrection[];
+  posSource: {
+    provider: "toast";
+    connectionStatus: string;
+    lastSyncedAt: string | null;
+    lastJobStatus: string | null;
+    lastJobCompletedAt: string | null;
+    stale: boolean;
+  };
 }
 
 type EntryRow = {
@@ -108,6 +118,8 @@ type EntryRow = {
   clocked_in_at: string;
   clocked_out_at: string | null;
   status: string;
+  source: string;
+  source_provider: string | null;
 };
 
 type BreakRow = {
@@ -170,7 +182,7 @@ export async function loadLiveTimeClock(
     const broadStart = new Date(nowMs - 36 * 60 * 60 * 1_000).toISOString();
     const broadEnd = new Date(nowMs + 48 * 60 * 60 * 1_000).toISOString();
 
-    const [employeeResult, scheduleResult] = await Promise.all([
+    const [employeeResult, scheduleResult, syncStatusResult] = await Promise.all([
       supabase
         .from("employees")
         .select("id, display_name")
@@ -186,8 +198,11 @@ export async function loadLiveTimeClock(
         .eq("status", "published")
         .order("week_start", { ascending: false })
         .limit(8),
+      supabase.rpc("get_pos_labor_sync_status", { p_location_id: locationId }),
     ]);
-    if (employeeResult.error || scheduleResult.error) return readFailure();
+    if (employeeResult.error || scheduleResult.error || syncStatusResult.error) {
+      return readFailure();
+    }
 
     const employee = employeeResult.data;
     const scheduleIds = (scheduleResult.data ?? []).map((schedule) => schedule.id);
@@ -208,10 +223,11 @@ export async function loadLiveTimeClock(
           ? supabase
               .from("time_entries")
               .select(
-                "id, employee_id, job_role_id, scheduled_shift_id, clocked_in_at, clocked_out_at, status",
+                "id, employee_id, job_role_id, scheduled_shift_id, clocked_in_at, clocked_out_at, status, source, source_provider",
               )
               .eq("organization_id", organizationId)
               .eq("employee_id", employee.id)
+              .is("source_deleted_at", null)
               .order("clocked_in_at", { ascending: false })
               .limit(16)
           : emptyResult,
@@ -231,10 +247,11 @@ export async function loadLiveTimeClock(
           ? supabase
               .from("time_entries")
               .select(
-                "id, employee_id, job_role_id, scheduled_shift_id, clocked_in_at, clocked_out_at, status",
+                "id, employee_id, job_role_id, scheduled_shift_id, clocked_in_at, clocked_out_at, status, source, source_provider",
               )
               .eq("organization_id", organizationId)
               .eq("location_id", locationId)
+              .is("source_deleted_at", null)
               .or(`clocked_in_at.gte.${broadStart},clocked_out_at.is.null`)
               .order("clocked_in_at", { ascending: false })
               .limit(160)
@@ -274,9 +291,10 @@ export async function loadLiveTimeClock(
       const { data: correctionEntries, error: correctionEntryError } = await supabase
         .from("time_entries")
         .select(
-          "id, employee_id, job_role_id, scheduled_shift_id, clocked_in_at, clocked_out_at, status",
+          "id, employee_id, job_role_id, scheduled_shift_id, clocked_in_at, clocked_out_at, status, source, source_provider",
         )
         .eq("organization_id", organizationId)
+        .is("source_deleted_at", null)
         .in("id", missingCorrectionEntryIds);
       if (correctionEntryError) return readFailure();
       for (const entry of (correctionEntries ?? []) as EntryRow[]) {
@@ -307,6 +325,7 @@ export async function loadLiveTimeClock(
             .from("time_breaks")
             .select("id, time_entry_id, started_at, ended_at, is_paid")
             .eq("organization_id", organizationId)
+            .is("source_deleted_at", null)
             .in("time_entry_id", entryIds)
             .order("started_at")
         : emptyResult,
@@ -378,6 +397,8 @@ export async function loadLiveTimeClock(
           ? formatLocalTime(entry.clocked_out_at, timeZone)
           : null,
         status: entry.status,
+        source: entry.source,
+        sourceProvider: entry.source_provider,
         breaks: entryBreaks,
         paidBreakMinutes,
         unpaidBreakMinutes,
@@ -450,6 +471,8 @@ export async function loadLiveTimeClock(
     const assignedRoleIds = new Set(
       (assignmentResult.data ?? []).map((assignment) => assignment.job_role_id),
     );
+    const syncStatus = syncStatusResult.data?.[0] ?? null;
+    const lastSyncedAt = syncStatus?.last_synced_at ?? null;
     return readSuccess({
       date,
       timeZone,
@@ -506,6 +529,15 @@ export async function loadLiveTimeClock(
           },
         ];
       }),
+      posSource: {
+        provider: "toast",
+        connectionStatus: syncStatus?.connection_status ?? "not_configured",
+        lastSyncedAt,
+        lastJobStatus: syncStatus?.last_job_status ?? null,
+        lastJobCompletedAt: syncStatus?.last_job_completed_at ?? null,
+        stale:
+          !lastSyncedAt || nowMs - new Date(lastSyncedAt).getTime() > 15 * 60_000,
+      },
     });
   } catch {
     return readFailure();

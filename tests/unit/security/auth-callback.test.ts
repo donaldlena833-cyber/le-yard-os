@@ -60,5 +60,8 @@ describe("authentication callback boundary", () => {
     expect(response.headers.get("location")).toBe(
       "https://preview.example.com/reports",
     );
+    expect(
+      response.cookies.get("__Host-le-yard-session-deadline")?.value,
+    ).toMatch(/^\d{10}$/);
   });
 });

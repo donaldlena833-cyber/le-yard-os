@@ -59,5 +59,10 @@ export function requiresOwnerMfaGate({
   role: AppRole;
   identity: { aal: AssuranceLevel };
 }): boolean {
-  return mode === "live" && role === "owner" && identity.aal !== "aal2";
+  return (
+    process.env.LE_YARD_REQUIRE_MANAGEMENT_MFA === "true" &&
+    mode === "live" &&
+    (role === "owner" || role === "admin") &&
+    identity.aal !== "aal2"
+  );
 }

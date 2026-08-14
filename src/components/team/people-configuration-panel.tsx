@@ -41,12 +41,12 @@ type AssignmentEditor =
   | { kind: "end"; assignment: LiveJobAssignment };
 
 const fieldClass =
-  "focus-ring h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[10px] placeholder:text-[var(--ink-faint)]";
+  "focus-ring h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs placeholder:text-[var(--ink-faint)]";
 
 function canConfigurePeople(workspace: WorkspaceContextValue) {
   return (
     workspace.role === "admin" ||
-    (workspace.role === "owner" && workspace.identity.aal === "aal2")
+    workspace.role === "owner"
   );
 }
 
@@ -82,10 +82,10 @@ function Field({
 }) {
   return (
     <label>
-      <span className="mb-1.5 block text-[10px] font-semibold">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold">{label}</span>
       {children}
       {hint ? (
-        <span className="mt-1.5 block text-[9px] leading-4 text-[var(--ink-faint)]">
+        <span className="mt-1.5 block text-xs leading-4 text-[var(--ink-faint)]">
           {hint}
         </span>
       ) : null}
@@ -100,7 +100,7 @@ function InlineNotice({ notice }: { notice: Notice | null }) {
       role="status"
       aria-live="polite"
       className={cn(
-        "mt-3 rounded-xl px-3 py-2.5 text-[10px]",
+        "mt-3 rounded-xl px-3 py-2.5 text-xs",
         notice.tone === "success"
           ? "bg-[var(--positive-soft)] text-[var(--positive)]"
           : "bg-[var(--danger-soft)] text-[var(--danger)]",
@@ -243,7 +243,7 @@ export function JobRoleConfigurationPanel({
                     )}
                     <h3 className="truncate text-xs font-semibold">{role.name}</h3>
                   </div>
-                  <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+                  <p className="mt-1 text-xs text-[var(--ink-faint)]">
                     {role.code}
                     {role.department ? ` · ${role.department}` : ""}
                   </p>
@@ -252,7 +252,7 @@ export function JobRoleConfigurationPanel({
                   {role.active ? "Active" : "Inactive"}
                 </StatusPill>
               </div>
-              <p className="mt-3 text-[9px] text-[var(--ink-soft)]">
+              <p className="mt-3 text-xs text-[var(--ink-soft)]">
                 {role.isTipped ? `${role.defaultTipPoints} default tip points` : "Not tip eligible"}
               </p>
               {role.active ? (
@@ -284,7 +284,7 @@ export function JobRoleConfigurationPanel({
         <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] px-5 py-7 text-center">
           <BriefcaseBusiness className="mx-auto size-5 text-[var(--ink-faint)]" />
           <p className="mt-3 text-xs font-semibold">Start with your real job roles</p>
-          <p className="mx-auto mt-1 max-w-xl text-[10px] leading-4 text-[var(--ink-faint)]">
+          <p className="mx-auto mt-1 max-w-xl text-xs leading-4 text-[var(--ink-faint)]">
             Roles connect employees to schedules, clock activity, and future tip-pool rules.
             Add the first definition using your approved title, code, and tip eligibility.
           </p>
@@ -307,7 +307,7 @@ export function JobRoleConfigurationPanel({
               }}
             >
               <h3 className="text-sm font-semibold">Deactivate {editedRole.name}?</h3>
-              <p className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">
+              <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
                 Active and future employee assignments must be ended first. Historical records
                 remain intact.
               </p>
@@ -357,7 +357,7 @@ export function JobRoleConfigurationPanel({
                 <h3 className="text-sm font-semibold">
                   {editedRole ? `Edit ${editedRole.name}` : "Create a job role"}
                 </h3>
-                <p className="mt-1 text-[10px] text-[var(--ink-faint)]">
+                <p className="mt-1 text-xs text-[var(--ink-faint)]">
                   Tip points are configuration evidence, not a finalized tip policy.
                 </p>
               </div>
@@ -412,7 +412,7 @@ export function JobRoleConfigurationPanel({
                     className={fieldClass}
                   />
                 </Field>
-                <label className="flex items-center gap-3 self-end rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-[10px]">
+                <label className="flex items-center gap-3 self-end rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-xs">
                   <input
                     name="isTipped"
                     type="checkbox"
@@ -421,7 +421,7 @@ export function JobRoleConfigurationPanel({
                   />
                   <span>
                     <span className="block font-semibold">Tip eligible</span>
-                    <span className="mt-0.5 block text-[9px] text-[var(--ink-faint)]">
+                    <span className="mt-0.5 block text-xs text-[var(--ink-faint)]">
                       Used only after an approved tip-pool rule references it.
                     </span>
                   </span>
@@ -541,15 +541,15 @@ export function EmployeeJobAssignmentPanel({
       />
 
       {!member.employeeId ? (
-        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] p-4 text-[10px] leading-4 text-[var(--ink-faint)]">
+        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] p-4 text-xs leading-4 text-[var(--ink-faint)]">
           Provision this account’s employee operations record before assigning a job role.
         </div>
       ) : !activeRoles.length ? (
-        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] p-4 text-[10px] leading-4 text-[var(--ink-faint)]">
+        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] p-4 text-xs leading-4 text-[var(--ink-faint)]">
           Create an active job role in the Team setup catalog before assigning this employee.
         </div>
       ) : !locations.length ? (
-        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] p-4 text-[10px] leading-4 text-[var(--ink-faint)]">
+        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] p-4 text-xs leading-4 text-[var(--ink-faint)]">
           Give this account a verified location relationship before assigning a job role.
         </div>
       ) : member.jobAssignments.length ? (
@@ -563,11 +563,11 @@ export function EmployeeJobAssignmentPanel({
               >
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[10px] font-semibold">{assignment.roleName}</p>
+                    <p className="text-xs font-semibold">{assignment.roleName}</p>
                     {assignment.isPrimary ? <StatusPill tone="accent">Primary</StatusPill> : null}
                     {!roleActive ? <StatusPill tone="neutral">Historical role</StatusPill> : null}
                   </div>
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[9px] text-[var(--ink-faint)]">
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--ink-faint)]">
                     <span className="flex items-center gap-1">
                       <MapPin className="size-3" /> {assignment.locationName}
                     </span>
@@ -606,7 +606,7 @@ export function EmployeeJobAssignmentPanel({
           })}
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] p-4 text-[10px] leading-4 text-[var(--ink-faint)]">
+        <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--canvas)] p-4 text-xs leading-4 text-[var(--ink-faint)]">
           No job assignments are on file. Choose an approved role, verified location, and
           effective date to add the first one.
         </div>
@@ -632,7 +632,7 @@ export function EmployeeJobAssignmentPanel({
               }}
             >
               <h3 className="text-sm font-semibold">End {editedAssignment.roleName}</h3>
-              <p className="mt-1 text-[10px] text-[var(--ink-faint)]">
+              <p className="mt-1 text-xs text-[var(--ink-faint)]">
                 Record the approved last effective date. Historical evidence remains available.
               </p>
               <div className="mt-4 max-w-xs">
@@ -695,7 +695,7 @@ export function EmployeeJobAssignmentPanel({
                 <h3 className="text-sm font-semibold">
                   {editedAssignment ? `Edit ${editedAssignment.roleName}` : "Assign a job role"}
                 </h3>
-                <p className="mt-1 flex items-center gap-1.5 text-[9px] leading-4 text-[var(--ink-faint)]">
+                <p className="mt-1 flex items-center gap-1.5 text-xs leading-4 text-[var(--ink-faint)]">
                   <ShieldCheck className="size-3.5 shrink-0" /> Hourly rate evidence is private and
                   will not be shown back in this profile.
                 </p>
@@ -749,7 +749,7 @@ export function EmployeeJobAssignmentPanel({
                   />
                 </Field>
                 {editedAssignment ? (
-                  <label className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-[10px] sm:col-span-2">
+                  <label className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-xs sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={changePrivateRate}
@@ -758,7 +758,7 @@ export function EmployeeJobAssignmentPanel({
                     />
                     <span>
                       <span className="block font-semibold">Change private hourly rate</span>
-                      <span className="mt-0.5 block text-[9px] text-[var(--ink-faint)]">
+                      <span className="mt-0.5 block text-xs text-[var(--ink-faint)]">
                         Leave off to preserve the stored value without reading it.
                       </span>
                     </span>
@@ -781,7 +781,7 @@ export function EmployeeJobAssignmentPanel({
                     />
                   </Field>
                 ) : null}
-                <label className="flex items-center gap-3 self-end rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-[10px]">
+                <label className="flex items-center gap-3 self-end rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-xs">
                   <input
                     name="isPrimary"
                     type="checkbox"

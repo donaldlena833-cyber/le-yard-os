@@ -5,9 +5,9 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 
-export const PLAYGROUND_SESSION_COOKIE =
-  "__Host-le-yard-playground-session";
+export const PLAYGROUND_SESSION_COOKIE = "__Host-le-yard-playground-session";
 export const PLAYGROUND_SESSION_TTL_SECONDS = 8 * 60 * 60;
+export const PLAYGROUND_REMEMBERED_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 export const PLAYGROUND_PASSWORD_MINIMUM_LENGTH = 9;
 
 export type PlaygroundPrincipalId = "donald" | "maris" | "irini" | "mateo";
@@ -54,9 +54,18 @@ interface PlaygroundSessionPayload {
   exp: number;
 }
 
-const PRINCIPALS: readonly PlaygroundPrincipalId[] = ["donald", "maris", "irini", "mateo"];
+const PRINCIPALS: readonly PlaygroundPrincipalId[] = [
+  "donald",
+  "maris",
+  "irini",
+  "mateo",
+];
 const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{1,62}[a-z0-9])?$/;
 const HASH_PREFIX = "scrypt-v1";
+const ALLOWED_SESSION_TTLS = new Set([
+  PLAYGROUND_SESSION_TTL_SECONDS,
+  PLAYGROUND_REMEMBERED_SESSION_TTL_SECONDS,
+]);
 const SCRYPT_OPTIONS = {
   N: 16_384,
   r: 8,
@@ -113,14 +122,18 @@ function parsePasswordHash(
 ): { salt: Buffer; digest: Buffer } | null {
   const parts = encoded.split("$");
   if (parts.length !== 3 || parts[0] !== HASH_PREFIX) return null;
-  if (!/^[A-Za-z0-9_-]+$/.test(parts[1]!) || !/^[A-Za-z0-9_-]+$/.test(parts[2]!)) {
+  if (
+    !/^[A-Za-z0-9_-]+$/.test(parts[1]!) ||
+    !/^[A-Za-z0-9_-]+$/.test(parts[2]!)
+  ) {
     return null;
   }
 
   try {
     const salt = Buffer.from(parts[1]!, "base64url");
     const digest = Buffer.from(parts[2]!, "base64url");
-    if (salt.length < 16 || salt.length > 64 || digest.length !== 64) return null;
+    if (salt.length < 16 || salt.length > 64 || digest.length !== 64)
+      return null;
     if (salt.toString("base64url") !== parts[1]) return null;
     if (digest.toString("base64url") !== parts[2]) return null;
     return { salt, digest };
@@ -137,7 +150,8 @@ function parseUsers(value: string): readonly PlaygroundUser[] | null {
     return null;
   }
 
-  if (!Array.isArray(decoded) || decoded.length !== PRINCIPALS.length) return null;
+  if (!Array.isArray(decoded) || decoded.length !== PRINCIPALS.length)
+    return null;
 
   const users: PlaygroundUser[] = [];
   for (const candidate of decoded) {
@@ -218,7 +232,8 @@ export function assessPlaygroundAuthConfiguration(
   if (!rawUsers) issues.push("playground_users_missing");
   else if (!users) issues.push("playground_users_invalid");
 
-  const ready = enabled && issues.length === 0 && Boolean(sessionSecret && users);
+  const ready =
+    enabled && issues.length === 0 && Boolean(sessionSecret && users);
   return {
     enabled,
     ready,
@@ -238,7 +253,9 @@ export function createPlaygroundPasswordHash(
     );
   }
   if (salt.length < 16 || salt.length > 64) {
-    throw new Error("Playground password salts must be between 16 and 64 bytes.");
+    throw new Error(
+      "Playground password salts must be between 16 and 64 bytes.",
+    );
   }
 
   const digest = scryptSync(password, salt, 64, SCRYPT_OPTIONS);
@@ -274,7 +291,9 @@ export function authenticatePlaygroundCredentials(
     return null;
   }
 
-  return user && actual.length === expected.length && timingSafeEqual(actual, expected)
+  return user &&
+    actual.length === expected.length &&
+    timingSafeEqual(actual, expected)
     ? user.principal
     : null;
 }
@@ -287,24 +306,29 @@ export function createPlaygroundSessionToken(
   configuration: PlaygroundAuthConfiguration,
   principal: PlaygroundPrincipalId,
   nowSeconds = Math.floor(Date.now() / 1_000),
+  ttlSeconds = PLAYGROUND_SESSION_TTL_SECONDS,
 ): string {
   if (!configuration.users.some((user) => user.principal === principal)) {
     throw new Error("Unknown playground principal.");
+  }
+  if (!ALLOWED_SESSION_TTLS.has(ttlSeconds)) {
+    throw new Error("Unsupported playground session duration.");
   }
 
   const payload: PlaygroundSessionPayload = {
     v: 1,
     sub: principal,
     iat: nowSeconds,
-    exp: nowSeconds + PLAYGROUND_SESSION_TTL_SECONDS,
+    exp: nowSeconds + ttlSeconds,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString(
     "base64url",
   );
   const signingInput = `v1.${encodedPayload}`;
-  const signature = signToken(signingInput, configuration.sessionSecret).toString(
-    "base64url",
-  );
+  const signature = signToken(
+    signingInput,
+    configuration.sessionSecret,
+  ).toString("base64url");
   return `${signingInput}.${signature}`;
 }
 
@@ -349,9 +373,7 @@ export function verifyPlaygroundSessionToken(
 
   let payload: unknown;
   try {
-    payload = JSON.parse(
-      Buffer.from(parts[1]!, "base64url").toString("utf8"),
-    );
+    payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8"));
   } catch {
     return null;
   }
@@ -364,7 +386,7 @@ export function verifyPlaygroundSessionToken(
     issuedAt > nowSeconds + 60 ||
     expiresAt <= nowSeconds ||
     expiresAt <= issuedAt ||
-    expiresAt - issuedAt !== PLAYGROUND_SESSION_TTL_SECONDS ||
+    !ALLOWED_SESSION_TTLS.has(expiresAt - issuedAt) ||
     !configuration.users.some((user) => user.principal === principal)
   ) {
     return null;

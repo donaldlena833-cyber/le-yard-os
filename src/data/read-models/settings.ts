@@ -1,6 +1,10 @@
 import "server-only";
 
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import {
+  isOperationalCapability,
+  type OperationalCapability,
+} from "@/lib/permissions/capabilities";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database.generated";
 import { readFailure, readSuccess, type LiveReadResult } from "./shared";
@@ -97,6 +101,28 @@ export interface LiveSettingsModel {
   notificationPreferences: LiveNotificationPreference[];
   pushSubscriptions: LivePushSubscription[];
   expenseCategories: LiveExpenseCategory[];
+  capabilityDefinitions: Array<{
+    key: OperationalCapability;
+    domain: string;
+    label: string;
+    description: string;
+  }>;
+  jobRoles: Array<{
+    id: string;
+    name: string;
+    code: string;
+    department: string | null;
+    active: boolean;
+  }>;
+  jobRoleCapabilities: Array<{
+    id: string;
+    jobRoleId: string;
+    capabilityKey: OperationalCapability;
+    locationId: string | null;
+    effectiveFrom: string;
+    effectiveTo: string | null;
+    active: boolean;
+  }>;
   canManage: boolean;
 }
 
@@ -129,6 +155,9 @@ export async function loadLiveSettings(
       notificationPreferenceResult,
       pushSubscriptionResult,
       expenseCategoryResult,
+      capabilityDefinitionResult,
+      jobRoleResult,
+      jobRoleCapabilityResult,
     ] = await Promise.all([
       supabase
         .from("organizations")
@@ -195,6 +224,23 @@ export async function loadLiveSettings(
         .select("id, name, accounting_code, is_active")
         .eq("organization_id", organizationId)
         .order("name"),
+      supabase
+        .from("capability_definitions")
+        .select("capability_key, domain, label, description")
+        .eq("is_active", true)
+        .order("domain")
+        .order("capability_key"),
+      supabase
+        .from("job_roles")
+        .select("id, name, code, department, is_active")
+        .eq("organization_id", organizationId)
+        .order("department")
+        .order("name"),
+      supabase
+        .from("job_role_capabilities")
+        .select("id, job_role_id, capability_key, location_id, effective_from, effective_to, is_active")
+        .eq("organization_id", organizationId)
+        .order("effective_from", { ascending: false }),
     ]);
     if (
       organizationResult.error ||
@@ -209,6 +255,9 @@ export async function loadLiveSettings(
       notificationPreferenceResult.error ||
       pushSubscriptionResult.error ||
       expenseCategoryResult.error ||
+      capabilityDefinitionResult.error ||
+      jobRoleResult.error ||
+      jobRoleCapabilityResult.error ||
       !organizationResult.data
     ) {
       return readFailure("Tenant settings could not be loaded safely. Try again.");
@@ -313,6 +362,32 @@ export async function loadLiveSettings(
         accountingCode: category.accounting_code,
         active: category.is_active,
       })),
+      capabilityDefinitions: (capabilityDefinitionResult.data ?? []).flatMap((definition) =>
+        isOperationalCapability(definition.capability_key) ? [{
+          key: definition.capability_key,
+          domain: definition.domain,
+          label: definition.label,
+          description: definition.description,
+        }] : [],
+      ),
+      jobRoles: (jobRoleResult.data ?? []).map((jobRole) => ({
+        id: jobRole.id,
+        name: jobRole.name,
+        code: jobRole.code,
+        department: jobRole.department,
+        active: jobRole.is_active,
+      })),
+      jobRoleCapabilities: (jobRoleCapabilityResult.data ?? []).flatMap((assignment) =>
+        isOperationalCapability(assignment.capability_key) ? [{
+          id: assignment.id,
+          jobRoleId: assignment.job_role_id,
+          capabilityKey: assignment.capability_key,
+          locationId: assignment.location_id,
+          effectiveFrom: assignment.effective_from,
+          effectiveTo: assignment.effective_to,
+          active: assignment.is_active,
+        }] : [],
+      ),
       canManage: workspace.role === "owner" || workspace.role === "admin",
     });
   } catch {

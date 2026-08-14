@@ -41,7 +41,7 @@ export default async function InvitePage({
           </p>
           <p className="flex items-start gap-2 text-[9px] leading-4 text-[var(--ink-faint)]">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-[var(--positive)]" />
-            Owners must enroll MFA after their first sign-in; other roles may opt in.
+            Password access is sufficient during this rollout; any role may optionally enroll MFA.
           </p>
         </div>
       </section>

@@ -1,0 +1,19 @@
+{
+  "releaseId": "replace-me",
+  "createdAt": "2026-08-11T00:00:00.000Z",
+  "commitSha": "0000000000000000000000000000000000000000",
+  "migrationHead": "00000000000000",
+  "schemaContractVersion": "runtime-schema-v1",
+  "projects": {
+    "os": { "project": "le-yard-os", "commitSha": "0000000000000000000000000000000000000000", "deploymentId": "replace-me" },
+    "site": { "project": "le-yard", "commitSha": "0000000000000000000000000000000000000000", "deploymentId": "replace-me" },
+    "reserve": { "project": "le-yard-reserve", "commitSha": "0000000000000000000000000000000000000000", "deploymentId": "replace-me" },
+    "host": { "project": "le-yard-host", "commitSha": "0000000000000000000000000000000000000000", "deploymentId": "replace-me" }
+  },
+  "supabaseProjectFingerprint": null,
+  "flags": { "publicBooking": false, "email": false, "sms": false, "push": false },
+  "floorRevision": null,
+  "ownerRevision": null,
+  "backupEvidenceId": null,
+  "approvals": { "reviewed": false, "stagingAccepted": false, "managedRecoveryAccepted": false }
+}

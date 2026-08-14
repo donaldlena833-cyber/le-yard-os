@@ -1,20 +1,245 @@
+"use client";
+
 import {
   AlertCircle,
   ArrowRight,
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
+  LayoutDashboard,
   Megaphone,
   PackageSearch,
   UsersRound,
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Avatar } from "@/components/ui/avatar";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
-import type { LiveTodayModel } from "@/data/read-models/today";
+import type {
+  ServiceDayException,
+  ServiceDayNowAction,
+  ServiceDaySnapshot,
+} from "@/data/read-models/service-day-snapshot";
+import type { LiveServiceControlModel } from "@/data/read-models/service-control";
+import type { LiveReadResult } from "@/data/read-models/shared";
+import type { TodayReservationSlice } from "@/lib/actions/today-reservation-slice";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+  type RealtimeInvalidationResult,
+} from "@/lib/realtime/use-realtime-invalidation";
+
+const todayRealtimeBindings = [
+  { table: "service_shifts", scope: "location" },
+  { table: "shift_closeouts", scope: "location" },
+  { table: "inventory_counts", scope: "location" },
+  { table: "tasks", scope: "organization" },
+  { table: "time_entries", scope: "location" },
+  { table: "time_breaks", scope: "organization" },
+  { table: "service_availability_events", scope: "location" },
+  { table: "manager_log_entries", scope: "location" },
+  { table: "preshifts", scope: "location" },
+  { table: "preshift_acknowledgements", scope: "location" },
+  { table: "employee_job_roles", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
+
+const noTodayReservationPostgresBindings = [] as const;
+const todayReservationBroadcastEvents = ["INSERT", "UPDATE", "DELETE"] as const;
+
+function combineRealtimeState(
+  ...sources: readonly RealtimeInvalidationResult[]
+): RealtimeInvalidationResult {
+  const active = sources.filter((source) => source.state !== "disabled");
+  const priority = ["offline", "reconnecting", "connecting", "live"] as const;
+  return {
+    state:
+      priority.find((state) => active.some((source) => source.state === state)) ??
+      "disabled",
+    isRefreshing: active.some((source) => source.isRefreshing),
+  };
+}
+
+const phaseLabel = {
+  pre_service: "Pre-service",
+  in_service: "In service",
+  post_service: "Post-service",
+  off_hours: "Off hours",
+} as const;
+
+function snapshotLabel(value: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
+export function HostServiceNow({
+  slice,
+  action,
+  exceptions,
+}: {
+  slice: TodayReservationSlice;
+  action: ServiceDayNowAction;
+  exceptions: readonly ServiceDayException[];
+}) {
+  const visibleExceptions = exceptions.slice(0, 4);
+
+  return (
+    <section
+      aria-labelledby="host-service-now-title"
+      className="mt-5 border-y border-[var(--line)] py-5"
+    >
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusPill tone={slice.servicePhase === "in_service" ? "positive" : "neutral"} dot={slice.servicePhase === "in_service"}>
+              {phaseLabel[slice.servicePhase]}
+            </StatusPill>
+            <span className="text-xs font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">
+              Host / service
+            </span>
+          </div>
+          <h3 id="host-service-now-title" className="mt-3 text-xl font-semibold tracking-[-0.04em]">
+            <span className="sr-only">Host service</span>{" "}Now
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-[var(--ink-soft)]">
+            {slice.covers} covers · {slice.seated} seated · {slice.reservationCount} reservations
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">
+            {slice.serviceName} · {slice.serviceWindow} · snapshot at{" "}
+            <time dateTime={slice.freshness.observedAt}>
+              {snapshotLabel(slice.freshness.observedAt, slice.timeZone)}
+            </time>
+          </p>
+        </div>
+        <Link
+          href={action.destination}
+          data-analytics-name={action.analyticsName}
+          data-offline-policy={action.offlinePolicy}
+          className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-[#171a17] transition-[background-color,transform] hover:-translate-y-px hover:bg-[var(--accent-strong)] hover:text-white motion-reduce:transform-none"
+        >
+          <LayoutDashboard className="size-4" />
+          {action.label}
+        </Link>
+      </div>
+
+      <div className="mt-5 border-t border-[var(--line)]">
+        {visibleExceptions.length ? (
+          <ul aria-label="Service exceptions" className="divide-y divide-[var(--line)]">
+            {visibleExceptions.map((exception) => (
+              <li key={exception.id}>
+                <Link
+                  href={exception.destination}
+                  className="focus-ring flex min-h-11 items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-[var(--paper)]"
+                >
+                  <AlertCircle className={exception.urgency === "urgent" || exception.urgency === "critical" ? "size-4 shrink-0 text-[var(--danger)]" : "size-4 shrink-0 text-[var(--warning)]"} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold">{exception.label}</span>
+                    <span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">{exception.detail}</span>
+                  </span>
+                  <span className="numeric flex min-w-7 items-center justify-center rounded-full bg-[var(--canvas-strong)] px-2 py-1 text-xs font-semibold" aria-label={`${exception.count} items`}>
+                    {exception.count}
+                  </span>
+                  <ArrowRight className="size-3.5 shrink-0 text-[var(--ink-faint)]" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="flex min-h-11 items-center gap-3 px-2 py-3 text-xs text-[var(--positive)]">
+            <CheckCircle2 className="size-4" /> No service exceptions in this snapshot.
+          </div>
+        )}
+        {slice.pendingHoldCount ? (
+          <p className="border-t border-[var(--line)] px-2 py-3 text-xs leading-4 text-[var(--ink-faint)]">
+            {slice.pendingHoldCount} pending guest verification hold{slice.pendingHoldCount === 1 ? " is" : "s are"} tracked in snapshot freshness. {slice.pendingHoldCount === 1 ? "It is" : "They are"} not assigned as a staff exception.
+          </p>
+        ) : null}
+        <p className="border-t border-[var(--line)] px-2 pt-3 text-xs leading-4 text-[var(--ink-faint)]">
+          Snapshot freshness: {slice.freshness.maxAgeSeconds}s. Refresh before acting on older service data. Internal operations only; this does not enable public booking.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function ReservationNowResult({
+  snapshot,
+}: {
+  snapshot: ServiceDaySnapshot;
+}) {
+  const result = snapshot.reservationSlice;
+  if (!result) return null;
+  if (result.ok && snapshot.nowAction) {
+    return (
+      <HostServiceNow
+        slice={result.data}
+        action={snapshot.nowAction}
+        exceptions={snapshot.orderedExceptions}
+      />
+    );
+  }
+  if (result.ok) return null;
+  return (
+    <section role="status" className="mt-5 flex min-h-11 items-center gap-3 border-y border-[var(--line)] px-2 py-3 text-xs text-[var(--ink-faint)]">
+      <AlertCircle className="size-4 shrink-0 text-[var(--warning)]" />
+      <span className="min-w-0 flex-1">Reservation exceptions could not be refreshed. Open the service book before acting.</span>
+      <Link href={`/reservations?date=${snapshot.scope.businessDate}`} className="focus-ring inline-flex min-h-11 items-center rounded-xl px-3 font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">
+        Open book
+      </Link>
+    </section>
+  );
+}
+
+function SnapshotStatus({
+  snapshot,
+  realtimeSupported,
+}: {
+  snapshot: ServiceDaySnapshot;
+  realtimeSupported: boolean;
+}) {
+  const unavailable = snapshot.sourceFreshness.filter(
+    (source) => source.state === "unavailable",
+  ).length;
+  const available = snapshot.sourceFreshness.filter(
+    (source) => source.state === "fresh",
+  ).length;
+  const providerLabel = snapshot.providerHealth.state.replaceAll("_", " ");
+  return (
+    <section
+      aria-label="Service day snapshot status"
+      className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-[var(--line)] px-2 py-3 text-xs text-[var(--ink-faint)]"
+    >
+      <StatusPill tone={unavailable ? "warning" : "neutral"}>
+        {unavailable ? `${unavailable} snapshot read unavailable` : `${available} snapshot reads fresh`}
+      </StatusPill>
+      <span>
+        Snapshot at{" "}
+        <time dateTime={snapshot.observedAt}>
+          {snapshotLabel(snapshot.observedAt, snapshot.today.timeZone)}
+        </time>
+      </span>
+      <span>
+        Realtime: {realtimeSupported ? "scoped invalidation" : "snapshot only"}
+      </span>
+      <span>Provider sync evidence: {providerLabel}</span>
+      <span className="sr-only">{snapshot.realtime.detail}</span>
+    </section>
+  );
+}
+
+function ServiceStatusSummary({ result }: { result: LiveReadResult<LiveServiceControlModel> }) {
+  if (!result.ok) return null;
+  const unavailable = result.data.availability.filter((item) => item.status === "eighty_sixed" || item.status === "running_low");
+  const published = result.data.preshifts.find((preshift) => preshift.status === "published");
+  if (!unavailable.length && !published) return null;
+  return <section className="mt-5 flex flex-wrap items-center gap-3 rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3.5 shadow-[var(--shadow-card)]"><span className="flex size-10 items-center justify-center rounded-xl bg-[var(--warning-soft)] text-[var(--warning)]"><AlertCircle className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Service status</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">{unavailable.length ? unavailable.map((item) => `${item.subjectLabel}: ${item.status === "eighty_sixed" ? "86" : "running low"}`).join(" · ") : "No current 86 items"}{published ? ` · ${published.servicePeriod.replaceAll("_", " ")} pre-shift published` : ""}</span></span><Link href="/service" className="focus-ring inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">Open service</Link></section>;
+}
 
 function dollars(cents: number, currencyCode: string): string {
   return new Intl.NumberFormat("en-US", {
@@ -47,11 +272,14 @@ function shiftDateLabel(value: string, timeZone: string): string {
 
 function EmployeeTodayWorkspace({
   workspace,
-  data,
+  snapshot,
+  realtime,
 }: {
   workspace: WorkspaceContextValue;
-  data: LiveTodayModel;
+  snapshot: ServiceDaySnapshot;
+  realtime: RealtimeInvalidationResult;
 }) {
+  const data = snapshot.today;
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
   const openShifts = data.shifts.filter((shift) => shift.isOpen);
   const ownShifts = data.shifts.filter(
@@ -60,7 +288,7 @@ function EmployeeTodayWorkspace({
 
   return (
     <PageFrame>
-      <section className="relative overflow-hidden rounded-[26px] bg-[var(--graphite)] px-5 py-7 text-white sm:px-8">
+      <section className="relative overflow-hidden rounded-[30px] border border-white/[0.08] bg-[var(--graphite)] px-5 py-7 text-white shadow-[var(--shadow-raised)] sm:px-8 sm:py-9">
         <div className="absolute inset-0 workspace-grid opacity-20" />
         <div className="relative flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
           <div>
@@ -75,12 +303,19 @@ function EmployeeTodayWorkspace({
             </p>
           </div>
           <div className="border-t border-white/10 pt-5 lg:border-0 lg:pt-0 lg:text-right">
-            <p className="text-[9px] tracking-[0.14em] text-white/50 uppercase">Today</p>
+            <p className="text-xs tracking-[0.14em] text-white/50 uppercase">Today</p>
             <p className="numeric mt-2 text-xl font-medium">{data.date}</p>
-            <p className="mt-1 text-[9px] text-white/45">{data.timeZone}</p>
+            <p className="mt-1 text-xs text-white/45">{data.timeZone}</p>
           </div>
         </div>
       </section>
+      <SnapshotStatus
+        snapshot={snapshot}
+        realtimeSupported={workspace.mode === "live"}
+      />
+      <RealtimeSyncStatus {...realtime} />
+      <ServiceStatusSummary result={snapshot.serviceControl} />
+      <ReservationNowResult snapshot={snapshot} />
 
       <div className="mt-8 grid gap-9 xl:grid-cols-[1.2fr_.8fr]">
         <section>
@@ -94,7 +329,7 @@ function EmployeeTodayWorkspace({
               </Link>
             }
           />
-          <div className="overflow-hidden border-y border-[var(--line)]">
+          <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             {openShifts.map((shift, index) => (
               <div key={shift.id} className="flex flex-wrap items-center gap-4 border-b border-[var(--line)] px-3 py-4 last:border-0">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
@@ -102,9 +337,9 @@ function EmployeeTodayWorkspace({
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold">{shiftDateLabel(shift.startsAt, data.timeZone)} · {shift.jobName}</p>
-                  <p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.startLabel}–{shift.endLabel} · Covers appear when Resy is connected.</p>
+                  <p className="mt-1 text-xs text-[var(--ink-faint)]">{shift.startLabel}–{shift.endLabel} · Covers appear when Resy is connected.</p>
                 </div>
-                <Link href="/schedule" className="focus-ring inline-flex min-h-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[10px] font-semibold text-[var(--ink)] transition-[background,transform,border-color] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)]">
+                <Link href="/schedule" className="focus-ring inline-flex min-h-8 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs font-semibold text-[var(--ink)] transition-[background,transform,border-color] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)]">
                   View shift
                 </Link>
                 {index === 0 ? <StatusPill tone="warning">Needs approval</StatusPill> : null}
@@ -114,7 +349,7 @@ function EmployeeTodayWorkspace({
               <div className="px-5 py-10 text-center">
                 <CalendarDays className="mx-auto size-5 text-[var(--ink-faint)]" />
                 <p className="mt-3 text-xs font-semibold">No open shifts right now</p>
-                <p className="mt-1 text-[10px] text-[var(--ink-faint)]">Check the schedule for releases or swaps.</p>
+                <p className="mt-1 text-xs text-[var(--ink-faint)]">Check the schedule for releases or swaps.</p>
               </div>
             ) : null}
           </div>
@@ -127,18 +362,18 @@ function EmployeeTodayWorkspace({
               {ownShifts.map((shift) => (
                 <Link key={shift.id} href="/schedule" className="focus-ring flex items-center gap-3 px-3 py-4 transition-colors hover:bg-[var(--paper)]">
                   <Avatar name={shift.employeeName} index={0} />
-                  <span className="min-w-0 flex-1"><span className="block text-xs font-semibold">{shiftDateLabel(shift.startsAt, data.timeZone)}</span><span className="mt-1 block text-[10px] text-[var(--ink-faint)]">{shift.startLabel}–{shift.endLabel} · {shift.jobName}</span></span>
+                  <span className="min-w-0 flex-1"><span className="block text-xs font-semibold">{shiftDateLabel(shift.startsAt, data.timeZone)}</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">{shift.startLabel}–{shift.endLabel} · {shift.jobName}</span></span>
                   <ArrowRight className="size-3.5 text-[var(--ink-faint)]" />
                 </Link>
               ))}
-              {!ownShifts.length ? <div className="px-4 py-8 text-center text-[10px] text-[var(--ink-faint)]">No published shift is assigned to you today.</div> : null}
+              {!ownShifts.length ? <div className="px-4 py-8 text-center text-xs text-[var(--ink-faint)]">No published shift is assigned to you today.</div> : null}
             </div>
           </section>
 
           <section>
             <SectionHeading eyebrow="Pay" title="Earnings" detail="Approved Toast hours and tip runs appear by Friday payday." />
-            <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] p-4">
-              <div className="flex items-start gap-3"><WalletCards className="mt-0.5 size-4 text-[var(--accent-strong)]" /><p className="text-[11px] leading-5 text-[var(--ink-faint)]">No live paystub is available yet. Nothing is estimated before hours and tips are approved.</p></div>
+            <div className="rounded-[22px] border border-dashed border-[var(--line-strong)] bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-card)]">
+              <div className="flex items-start gap-3"><WalletCards className="mt-0.5 size-4 text-[var(--accent-strong)]" /><p className="text-[13px] leading-5 text-[var(--ink-faint)]">No live paystub is available yet. Nothing is estimated before hours and tips are approved.</p></div>
               <Link href="/earnings" className="focus-ring mt-4 inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open earnings <ArrowRight className="size-3" /></Link>
             </div>
           </section>
@@ -147,11 +382,11 @@ function EmployeeTodayWorkspace({
 
       <section className="mt-9">
         <SectionHeading eyebrow="Team messages" title="Announcements" detail="Messages shared with the team." />
-        <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
+        <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
           {data.announcements.map((announcement) => (
-            <div key={announcement.id} className="flex items-start gap-3 px-3 py-4"><Megaphone className="mt-0.5 size-4 text-[var(--accent-strong)]" /><div><p className="text-xs leading-5">{announcement.body}</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">{announcement.authorName}</p></div></div>
+            <div key={announcement.id} className="flex items-start gap-3 px-3 py-4"><Megaphone className="mt-0.5 size-4 text-[var(--accent-strong)]" /><div><p className="text-xs leading-5">{announcement.body}</p><p className="mt-1 text-xs text-[var(--ink-faint)]">{announcement.authorName}</p></div></div>
           ))}
-          {!data.announcements.length ? <div className="px-4 py-8 text-center text-[10px] text-[var(--ink-faint)]">No announcements yet.</div> : null}
+          {!data.announcements.length ? <div className="px-4 py-8 text-center text-xs text-[var(--ink-faint)]">No announcements yet.</div> : null}
         </div>
         <Link href="/messages" className="focus-ring mt-3 inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open messages <ArrowRight className="size-3" /></Link>
       </section>
@@ -161,11 +396,14 @@ function EmployeeTodayWorkspace({
 
 function ChefTodayWorkspace({
   workspace,
-  data,
+  snapshot,
+  realtime,
 }: {
   workspace: WorkspaceContextValue;
-  data: LiveTodayModel;
+  snapshot: ServiceDaySnapshot;
+  realtime: RealtimeInvalidationResult;
 }) {
+  const data = snapshot.today;
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "Chef";
   const kitchenShifts = data.shifts.filter((shift) => {
     const roleText = `${shift.jobName} ${shift.department ?? ""}`;
@@ -174,7 +412,7 @@ function ChefTodayWorkspace({
 
   return (
     <PageFrame>
-      <section className="relative overflow-hidden rounded-[26px] bg-[var(--graphite)] px-5 py-7 text-white sm:px-8">
+      <section className="relative overflow-hidden rounded-[30px] border border-white/[0.08] bg-[var(--graphite)] px-5 py-7 text-white shadow-[var(--shadow-raised)] sm:px-8 sm:py-9">
         <div className="absolute inset-0 workspace-grid opacity-20" />
         <div className="relative flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
           <div>
@@ -182,57 +420,87 @@ function ChefTodayWorkspace({
             <h2 className="mt-5 text-[clamp(2rem,4vw,3.75rem)] leading-none font-medium tracking-[-0.06em]">Good afternoon, {firstName}.</h2>
             <p className="mt-4 max-w-xl text-sm leading-6 text-white/55">Back-of-house schedule, recipes, vendor pricing, and kitchen messages.</p>
           </div>
-          <div className="border-t border-white/10 pt-5 lg:border-0 lg:pt-0 lg:text-right"><p className="text-[9px] tracking-[0.14em] text-white/50 uppercase">Kitchen shifts today</p><p className="numeric mt-2 text-xl font-medium">{kitchenShifts.length}</p><p className="mt-1 text-[9px] text-white/45">Published schedule</p></div>
+          <div className="border-t border-white/10 pt-5 lg:border-0 lg:pt-0 lg:text-right"><p className="text-xs tracking-[0.14em] text-white/50 uppercase">Kitchen shifts today</p><p className="numeric mt-2 text-xl font-medium">{kitchenShifts.length}</p><p className="mt-1 text-xs text-white/45">Published schedule</p></div>
         </div>
       </section>
+      <SnapshotStatus
+        snapshot={snapshot}
+        realtimeSupported={workspace.mode === "live"}
+      />
+      <RealtimeSyncStatus {...realtime} />
+      <ServiceStatusSummary result={snapshot.serviceControl} />
+      <ReservationNowResult snapshot={snapshot} />
 
       <div className="mt-8 grid gap-9 xl:grid-cols-[1.2fr_.8fr]">
         <section>
-          <SectionHeading eyebrow="Back of house" title="Kitchen schedule" detail="Only kitchen roles are shown in this view." action={<Link href="/schedule" className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">Edit schedule <ArrowRight className="size-3" /></Link>} />
-          <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
-            {kitchenShifts.map((shift, index) => <div key={shift.id} className="flex items-center gap-3 px-3 py-4"><Avatar name={shift.employeeName} index={index} /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{shift.employeeName}</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">{shift.jobName} · {shift.startLabel}–{shift.endLabel}</p></div><StatusPill tone={shift.isOpen ? "warning" : "neutral"}>{shift.isOpen ? "Open" : "Published"}</StatusPill></div>)}
-            {!kitchenShifts.length ? <div className="px-5 py-10 text-center"><UsersRound className="mx-auto size-5 text-[var(--ink-faint)]" /><p className="mt-3 text-xs font-semibold">No kitchen shifts published today</p><p className="mt-1 text-[10px] text-[var(--ink-faint)]">Create or publish the BOH schedule when you are ready.</p></div> : null}
+          <SectionHeading eyebrow="Back of house" title="Kitchen schedule" detail="Published BOH coverage for today." action={<Link href="/schedule" className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">Edit schedule <ArrowRight className="size-3" /></Link>} />
+          <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
+            {kitchenShifts.map((shift, index) => <div key={shift.id} className="flex items-center gap-3 px-3 py-4"><Avatar name={shift.employeeName} index={index} /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{shift.employeeName}</p><p className="mt-1 text-xs text-[var(--ink-faint)]">{shift.jobName} · {shift.startLabel}–{shift.endLabel}</p></div><StatusPill tone={shift.isOpen ? "warning" : "neutral"}>{shift.isOpen ? "Open" : "Published"}</StatusPill></div>)}
+            {!kitchenShifts.length ? <div className="px-5 py-10 text-center"><UsersRound className="mx-auto size-5 text-[var(--ink-faint)]" /><p className="mt-3 text-xs font-semibold">No kitchen shifts published today</p><p className="mt-1 text-xs text-[var(--ink-faint)]">Create or publish the BOH schedule when you are ready.</p></div> : null}
           </div>
         </section>
 
         <aside>
           <SectionHeading eyebrow="Kitchen tools" title="Recipes & vendors" detail="Keep portion specs and current purchase prices close to service." />
           <div className="space-y-3">
-            <Link href="/kitchen" className="focus-ring flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 transition-[background,transform,border-color] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)]"><ClipboardCheck className="size-4 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold">Recipes & portion cost</span><span className="mt-1 block text-[10px] text-[var(--ink-faint)]">Edit ingredients, weights, and measured costs.</span></span><ArrowRight className="size-3.5 text-[var(--ink-faint)]" /></Link>
-            <Link href="/vendors" className="focus-ring flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 transition-[background,transform,border-color] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)]"><PackageSearch className="size-4 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1"><span className="block text-xs font-semibold">Vendors & prices</span><span className="mt-1 block text-[10px] text-[var(--ink-faint)]">Review current food purchasing costs.</span></span><ArrowRight className="size-3.5 text-[var(--ink-faint)]" /></Link>
+            <Link href="/kitchen" className="focus-ring flex items-center gap-3 rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)] transition-[background,transform,border-color,box-shadow] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)] hover:shadow-[var(--shadow-raised)]"><ClipboardCheck className="size-4 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Recipes & portion cost</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">Edit ingredients, weights, and measured costs.</span></span><ArrowRight className="size-3.5 text-[var(--ink-faint)]" /></Link>
+            <Link href="/vendors" className="focus-ring flex items-center gap-3 rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)] transition-[background,transform,border-color,box-shadow] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)] hover:shadow-[var(--shadow-raised)]"><PackageSearch className="size-4 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Vendors & prices</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">Review current food purchasing costs.</span></span><ArrowRight className="size-3.5 text-[var(--ink-faint)]" /></Link>
           </div>
         </aside>
       </div>
 
-      <section className="mt-9"><SectionHeading eyebrow="Team messages" title="Kitchen announcements" detail="Messages shared with the team." /><div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{data.announcements.map((announcement) => <div key={announcement.id} className="flex items-start gap-3 px-3 py-4"><Megaphone className="mt-0.5 size-4 text-[var(--accent-strong)]" /><div><p className="text-xs leading-5">{announcement.body}</p><p className="mt-1 text-[9px] text-[var(--ink-faint)]">{announcement.authorName}</p></div></div>)}{!data.announcements.length ? <div className="px-4 py-8 text-center text-[10px] text-[var(--ink-faint)]">No kitchen announcements yet.</div> : null}</div><Link href="/messages" className="focus-ring mt-3 inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open messages <ArrowRight className="size-3" /></Link></section>
+      <section className="mt-9"><SectionHeading eyebrow="Team messages" title="Kitchen announcements" detail="Messages shared with the team." /><div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{data.announcements.map((announcement) => <div key={announcement.id} className="flex items-start gap-3 px-3 py-4"><Megaphone className="mt-0.5 size-4 text-[var(--accent-strong)]" /><div><p className="text-xs leading-5">{announcement.body}</p><p className="mt-1 text-xs text-[var(--ink-faint)]">{announcement.authorName}</p></div></div>)}{!data.announcements.length ? <div className="px-4 py-8 text-center text-xs text-[var(--ink-faint)]">No kitchen announcements yet.</div> : null}</div><Link href="/messages" className="focus-ring mt-3 inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open messages <ArrowRight className="size-3" /></Link></section>
     </PageFrame>
   );
 }
 
 export function LiveTodayWorkspace({
   workspace,
-  model,
+  snapshot,
 }: {
   workspace: WorkspaceContextValue;
-  model: { ok: true; data: LiveTodayModel } | { ok: false; message: string };
+  snapshot: LiveReadResult<ServiceDaySnapshot>;
 }) {
-  if (!model.ok) return <ErrorState message={model.message} />;
-  const data = model.data;
-  if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} data={data} />;
-  if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} data={data} />;
+  const operationalRealtime = useRealtimeInvalidation({
+    enabled: workspace.mode === "live" && snapshot.ok,
+    channelName: `today:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: todayRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
+  const reservationRealtime = useRealtimeInvalidation({
+    enabled:
+      workspace.mode === "live" &&
+      snapshot.ok &&
+      snapshot.data.reservationSlice?.ok === true,
+    channelName: `reservations:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: noTodayReservationPostgresBindings,
+    broadcastEvents: todayReservationBroadcastEvents,
+    privateChannel: true,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
+  const realtime = combineRealtimeState(
+    operationalRealtime,
+    reservationRealtime,
+  );
+  if (!snapshot.ok) return <ErrorState message={snapshot.message} />;
+  const data = snapshot.data.today;
+  if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} snapshot={snapshot.data} realtime={realtime} />;
+  if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} snapshot={snapshot.data} realtime={realtime} />;
   const firstName = workspace.identity.displayName.split(" ")[0];
 
   return (
     <PageFrame>
-      <section className="relative overflow-hidden rounded-[26px] bg-[var(--graphite)] px-5 py-7 text-white sm:px-8">
+      <section className="relative overflow-hidden rounded-[30px] border border-white/[0.08] bg-[var(--graphite)] px-5 py-7 text-white shadow-[var(--shadow-raised)] sm:px-8 sm:py-9">
         <div className="absolute inset-0 workspace-grid opacity-20" />
         <div className="relative flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill tone="positive" dot className="bg-white/[0.08] text-[#93d0ad]">
-                Live · {workspace.activeLocation.name}
+                Connected · {workspace.activeLocation.name}
               </StatusPill>
-              <span className="text-[10px] text-white/55">Tenant-scoped operations</span>
+              <span className="text-xs text-white/55">Tenant-scoped operations</span>
             </div>
             <h2 className="mt-5 text-[clamp(2rem,4vw,3.75rem)] leading-none font-medium tracking-[-0.06em]">
               Welcome back, {firstName}.
@@ -244,18 +512,26 @@ export function LiveTodayWorkspace({
             </p>
           </div>
           <div className="border-t border-white/10 pt-5 lg:border-0 lg:pt-0 lg:text-right">
-            <p className="text-[9px] tracking-[0.14em] text-white/50 uppercase">Business date</p>
+            <p className="text-xs tracking-[0.14em] text-white/50 uppercase">Business date</p>
             <p className="numeric mt-2 text-xl font-medium">{data.date}</p>
-            <p className="mt-1 text-[9px] text-white/45">{data.timeZone}</p>
+            <p className="mt-1 text-xs text-white/45">{data.timeZone}</p>
           </div>
         </div>
       </section>
+      <SnapshotStatus
+        snapshot={snapshot.data}
+        realtimeSupported={workspace.mode === "live"}
+      />
+      <RealtimeSyncStatus {...realtime} />
+      <ServiceStatusSummary result={snapshot.data.serviceControl} />
+      <ReservationNowResult snapshot={snapshot.data} />
 
-      <section aria-label="Today’s live metrics" className="grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-b border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric label="Scheduled" value={String(data.scheduledCount)} detail={`${data.openShiftCount} open for coverage`} />
-        <Metric label="Coverage" value={String(Math.max(0, data.scheduledCount - data.openShiftCount))} detail={`${data.openShiftCount} open for coverage`} />
-        <Metric label="Open tasks" value={String(data.openTaskCount)} detail="Visible in your access scope" />
+      <section aria-label="Today’s live metrics" className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Scheduled" value={String(data.scheduledCount)} detail={`${data.openShiftCount} open for coverage`} />
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Coverage" value={String(Math.max(0, data.scheduledCount - data.openShiftCount))} detail={`${data.openShiftCount} open for coverage`} />
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Open tasks" value={String(data.openTaskCount)} detail="Visible in your access scope" />
         <Metric
+          className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]"
           label="Closeout"
           value={data.closeout ? dollars(data.closeout.netSalesCents, data.currencyCode) : "Not filed"}
           detail={data.closeout ? `${data.closeout.covers} covers · ${data.closeout.status}` : "No live sales summary yet"}
@@ -270,17 +546,17 @@ export function LiveTodayWorkspace({
             detail="Latest published schedule for this business week"
             action={<Link href="/schedule" className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open schedule <ArrowRight className="size-3" /></Link>}
           />
-          <div className="overflow-hidden border-y border-[var(--line)]">
+          <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             {data.shifts.map((shift, index) => (
               <div key={shift.id} className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-[var(--line)] px-3 py-3.5 last:border-0 sm:grid-cols-[1fr_120px_120px]">
                 <span className="flex min-w-0 items-center gap-3">
                   <Avatar name={shift.employeeName} index={index} />
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-semibold">{shift.employeeName}</span>
-                    <span className="mt-1 block truncate text-[10px] text-[var(--ink-faint)]">{shift.jobName}</span>
+                    <span className="mt-1 block truncate text-xs text-[var(--ink-faint)]">{shift.jobName}</span>
                   </span>
                 </span>
-                <span className="numeric hidden text-[10px] text-[var(--ink-faint)] sm:block">{shift.startLabel}–{shift.endLabel}</span>
+                <span className="numeric hidden text-xs text-[var(--ink-faint)] sm:block">{shift.startLabel}–{shift.endLabel}</span>
                 <span className="flex justify-end">
                   <StatusPill tone={shift.isOpen ? "warning" : "neutral"} dot={false}>
                     {shift.isOpen ? "Open" : shift.status.replaceAll("_", " ")}
@@ -292,27 +568,27 @@ export function LiveTodayWorkspace({
               <div className="px-5 py-12 text-center">
                 <UsersRound className="mx-auto size-5 text-[var(--ink-faint)]" />
                 <p className="mt-3 text-xs font-semibold">No visible shifts today</p>
-                <p className="mt-1 text-[10px] text-[var(--ink-faint)]">Publish a schedule or check another business date.</p>
+                <p className="mt-1 text-xs text-[var(--ink-faint)]">Publish a schedule or check another business date.</p>
               </div>
             ) : null}
           </div>
 
           <section className="mt-9">
             <SectionHeading eyebrow="Accountability" title="Open tasks" detail="No completion is inferred from missing data" />
-            <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
+            <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
               {data.tasks.map((task) => (
                 <div key={task.id} className="flex items-start gap-3 px-2 py-4">
                   <ClipboardCheck className="mt-0.5 size-4 text-[var(--ink-faint)]" />
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-semibold">{task.title}</p>
-                    <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+                    <p className="mt-1 text-xs text-[var(--ink-faint)]">
                       {task.assigneeName ?? "Unassigned"}{task.dueAt ? ` · due ${new Intl.DateTimeFormat("en-US", { timeZone: data.timeZone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(task.dueAt))}` : " · no due time"}
                     </p>
                   </div>
                   <StatusPill tone={task.priority === "urgent" ? "danger" : task.status === "blocked" ? "warning" : "neutral"}>{task.status.replaceAll("_", " ")}</StatusPill>
                 </div>
               ))}
-              {!data.tasks.length ? <div className="px-5 py-9 text-center text-[10px] text-[var(--ink-faint)]">No open tasks are visible in this location scope.</div> : null}
+              {!data.tasks.length ? <div className="px-5 py-9 text-center text-xs text-[var(--ink-faint)]">No open tasks are visible in this location scope.</div> : null}
             </div>
           </section>
         </section>
@@ -320,19 +596,19 @@ export function LiveTodayWorkspace({
         <aside className="space-y-9">
           <section>
             <SectionHeading eyebrow="Team messages" title="Announcements" detail="Latest messages you are allowed to read" />
-            <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
+            <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] px-4 shadow-[var(--shadow-card)]">
               {data.announcements.map((announcement) => (
                 <div key={announcement.id} className="py-4">
                   <div className="flex items-start gap-3">
                     <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Megaphone className="size-3.5" /></span>
                     <div>
-                      <p className="text-[11px] leading-5">{announcement.body}</p>
-                      <p className="mt-2 text-[9px] text-[var(--ink-faint)]">{announcement.authorName} · {new Intl.DateTimeFormat("en-US", { timeZone: data.timeZone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(announcement.createdAt))}</p>
+                      <p className="text-[13px] leading-5">{announcement.body}</p>
+                      <p className="mt-2 text-xs text-[var(--ink-faint)]">{announcement.authorName} · {new Intl.DateTimeFormat("en-US", { timeZone: data.timeZone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(announcement.createdAt))}</p>
                     </div>
                   </div>
                 </div>
               ))}
-              {!data.announcements.length ? <div className="px-4 py-9 text-center text-[10px] text-[var(--ink-faint)]">No live announcements yet.</div> : null}
+              {!data.announcements.length ? <div className="px-4 py-9 text-center text-xs text-[var(--ink-faint)]">No live announcements yet.</div> : null}
             </div>
             <Link href="/messages" className="focus-ring mt-3 inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open messages <ArrowRight className="size-3" /></Link>
           </section>
@@ -342,14 +618,14 @@ export function LiveTodayWorkspace({
             <div className="space-y-3">
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4">
                 <div className="flex items-center gap-3"><ClipboardCheck className="size-4 text-[var(--accent-strong)]" /><p className="text-xs font-semibold">Today’s closeout</p></div>
-                <p className="mt-3 text-[10px] leading-4 text-[var(--ink-faint)]">{data.closeout ? `${data.closeout.status} · ${dollars(data.closeout.netSalesCents, data.currencyCode)} net sales · ${data.closeout.covers} covers` : "No closeout has been filed for this business date."}</p>
+                <p className="mt-3 text-xs leading-4 text-[var(--ink-faint)]">{data.closeout ? `${data.closeout.status} · ${dollars(data.closeout.netSalesCents, data.currencyCode)} net sales · ${data.closeout.covers} covers` : "No closeout has been filed for this business date."}</p>
               </div>
               <div className="rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4">
                 <div className="flex items-center gap-3"><PackageSearch className="size-4 text-[var(--accent-strong)]" /><p className="text-xs font-semibold">Inventory review</p></div>
-                <p className="mt-3 text-[10px] leading-4 text-[var(--ink-faint)]">{data.pendingInventoryCounts ? `${data.pendingInventoryCounts} count${data.pendingInventoryCounts === 1 ? "" : "s"} await review.` : "No inventory counts await review."} {data.configuredParLevels ? `${data.configuredParLevels} inventory item${data.configuredParLevels === 1 ? " has" : "s have"} a current par configuration.` : "No par records are visible; below-par status cannot be calculated."}</p>
+                <p className="mt-3 text-xs leading-4 text-[var(--ink-faint)]">{data.pendingInventoryCounts ? `${data.pendingInventoryCounts} count${data.pendingInventoryCounts === 1 ? "" : "s"} await review.` : "No inventory counts await review."} {data.configuredParLevels ? `${data.configuredParLevels} inventory item${data.configuredParLevels === 1 ? " has" : "s have"} a current par configuration.` : "No par records are visible; below-par status cannot be calculated."}</p>
               </div>
               {!data.openShiftCount && !data.pendingInventoryCounts ? (
-                <div className="flex items-start gap-2 rounded-2xl bg-[var(--positive-soft)] px-4 py-3 text-[10px] leading-4 text-[var(--positive)]"><CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />No visible staffing or inventory-review exceptions.</div>
+                <div className="flex items-start gap-2 rounded-2xl bg-[var(--positive-soft)] px-4 py-3 text-xs leading-4 text-[var(--positive)]"><CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />No visible staffing or inventory-review exceptions.</div>
               ) : null}
             </div>
           </section>

@@ -1,6 +1,9 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
-import { isPublicRequestPath } from "@/lib/auth/public-paths";
+import {
+  isPreAuthenticationRequestPath,
+  isPublicRequestPath,
+} from "@/lib/auth/public-paths";
 import { safeInternalRedirect } from "@/lib/auth/safe-redirect";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
 import { requireSupabasePublicEnv } from "@/lib/env";
@@ -8,6 +11,17 @@ import {
   PLAYGROUND_SESSION_COOKIE,
   readPlaygroundSessionToken,
 } from "@/lib/auth/playground-auth.server";
+import {
+  CONNECTED_SESSION_DEADLINE_COOKIE,
+  STANDARD_SESSION_TTL_SECONDS,
+  connectedSessionCookieOptions,
+  sessionSecondsRemaining,
+} from "@/lib/auth/session-duration";
+import { isSupabaseAuthCookieName } from "@/lib/auth/session-cookies";
+import {
+  defaultWorkspacePath,
+  isRequestPathAllowedForAppSurface,
+} from "@/lib/app-surface";
 
 interface PendingCookie {
   name: string;
@@ -71,6 +85,87 @@ function securePlaygroundResponse(
     });
   }
   return response;
+}
+
+function expireConnectedSession(
+  request: NextRequest,
+  response: NextResponse,
+): NextResponse {
+  request.cookies.getAll().forEach((cookie) => {
+    if (!isSupabaseAuthCookieName(cookie.name)) return;
+    response.cookies.set(cookie.name, "", {
+      path: "/",
+      sameSite: "lax",
+      secure: true,
+      maxAge: 0,
+      expires: new Date(0),
+    });
+  });
+  response.cookies.set(CONNECTED_SESSION_DEADLINE_COOKIE, "", {
+    ...connectedSessionCookieOptions(0),
+    expires: new Date(0),
+  });
+  return response;
+}
+
+function expiredConnectedSessionResponse(
+  request: NextRequest,
+  appUrl: string,
+): NextResponse {
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return expireConnectedSession(
+      request,
+      NextResponse.json(
+        { error: "Your session expired. Sign in again." },
+        { status: 401 },
+      ),
+    );
+  }
+  const signInUrl = new URL("/sign-in", appUrl);
+  signInUrl.searchParams.set("notice", "session_expired");
+  signInUrl.searchParams.set(
+    "next",
+    safeInternalRedirect(
+      `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      defaultWorkspacePath,
+    ),
+  );
+  return expireConnectedSession(
+    request,
+    NextResponse.redirect(signInUrl),
+  );
+}
+
+function canonicalizeConnectedOrigin(
+  request: NextRequest,
+  appUrl: string,
+): NextResponse | null {
+  const canonicalOrigin = new URL(appUrl).origin;
+  if (request.nextUrl.origin === canonicalOrigin) return null;
+
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    !request.nextUrl.pathname.startsWith("/api/")
+  ) {
+    return NextResponse.redirect(
+      new URL(
+        `${request.nextUrl.pathname}${request.nextUrl.search}`,
+        canonicalOrigin,
+      ),
+    );
+  }
+
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.json(
+      { error: "Use the canonical Le Yard OS origin." },
+      { status: 421 },
+    );
+  }
+
+  return new NextResponse("Use the canonical Le Yard OS origin.", {
+    status: 421,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
 }
 
 function updatePlaygroundSession(
@@ -166,6 +261,18 @@ export async function updateSession(
     return configurationUnavailable(request);
   }
 
+  if (!isRequestPathAllowedForAppSurface(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL(defaultWorkspacePath, runtime.appUrl!));
+  }
+
+  // Connected release attestation must execute before a test runner reads any
+  // user password or sends an Auth request. The exact internal route owns a
+  // stronger Preview/commit/HMAC/private-marker contract, so it bypasses only
+  // session initialization—not runtime readiness or route-level attestation.
+  if (isPreAuthenticationRequestPath(request.nextUrl.pathname)) {
+    return forwardRequest(request, additionalRequestHeaders);
+  }
+
   if (runtime.mode === "demo") {
     if (runtime.playground) {
       return updatePlaygroundSession(
@@ -177,7 +284,28 @@ export async function updateSession(
     return forwardRequest(request, additionalRequestHeaders);
   }
 
+  // Supabase and the explicit device deadline both use host-only cookies.
+  // Sending a user between a Vercel alias, generated deployment URL, and the
+  // canonical app origin therefore looks like a logout even though their
+  // provider session is still valid. Canonicalize before Auth so sign-in and
+  // every later visit share exactly one cookie jar. Never replay a mutation
+  // across origins.
+  const canonicalResponse = canonicalizeConnectedOrigin(
+    request,
+    runtime.appUrl!,
+  );
+  if (canonicalResponse) return canonicalResponse;
+
   const { url, publishableKey } = requireSupabasePublicEnv();
+  const authCookiesPresent = request.cookies
+    .getAll()
+    .some((cookie) => isSupabaseAuthCookieName(cookie.name));
+  const sessionRemaining = sessionSecondsRemaining(
+    request.cookies.get(CONNECTED_SESSION_DEADLINE_COOKIE)?.value,
+  );
+  if (authCookiesPresent && sessionRemaining === null) {
+    return expiredConnectedSessionResponse(request, runtime.appUrl!);
+  }
   const pendingCookies = new Map<string, PendingCookie>();
   const pendingHeaders = new Map<string, string>();
 
@@ -193,6 +321,9 @@ export async function updateSession(
 
   let response = forwardRequest(request, additionalRequestHeaders);
   const supabase = createServerClient(url, publishableKey, {
+    cookieOptions: {
+      maxAge: sessionRemaining ?? STANDARD_SESSION_TTL_SECONDS,
+    },
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -215,6 +346,10 @@ export async function updateSession(
 
   const { data } = await supabase.auth.getClaims();
   const isPublicPath = isPublicRequestPath(request.nextUrl.pathname);
+
+  if (data?.claims && sessionRemaining === null) {
+    return expiredConnectedSessionResponse(request, runtime.appUrl!);
+  }
 
   if (!data?.claims && !isPublicPath) {
     const signInUrl = new URL("/sign-in", runtime.appUrl!);

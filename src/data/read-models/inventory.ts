@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { hasAnyCapability, KITCHEN_CAPABILITIES } from "@/lib/permissions/capabilities";
 import { createClient } from "@/lib/supabase/server";
 import { localDateKey, readFailure, readSuccess, type LiveReadResult } from "./shared";
 
@@ -208,6 +209,16 @@ export interface LiveInventoryCatalog {
     isPreferred: boolean;
     isActive: boolean;
   }>;
+  priceHistory?: Array<{
+    id: string;
+    inventoryItemId: string;
+    vendorId: string | null;
+    unitId: string;
+    priceQuantity: number;
+    unitPriceCents: number;
+    effectiveAt: string;
+    sourceType: string | null;
+  }>;
   pars: Array<{
     id: string;
     locationId: string;
@@ -252,7 +263,13 @@ export interface LiveInventoryModel {
 export async function loadLiveInventory(
   workspace: WorkspaceContextValue,
 ): Promise<LiveReadResult<LiveInventoryModel>> {
-  if (workspace.role === "employee") return readFailure("Management access is required.");
+  if (
+    workspace.role !== "owner"
+    && workspace.role !== "admin"
+    && !hasAnyCapability(workspace.capabilities, KITCHEN_CAPABILITIES)
+  ) {
+    return readFailure("A kitchen or inventory capability is required at this location.");
+  }
   try {
     const supabase = await createClient();
     const organizationId = workspace.organization.id;
@@ -375,7 +392,7 @@ export async function loadLiveInventory(
           .order("name"),
         supabase
           .from("item_price_history")
-          .select("inventory_item_id, unit_id, unit_price_cents, effective_at")
+          .select("id, inventory_item_id, vendor_id, unit_id, price_quantity, unit_price_cents, effective_at, source_type")
           .eq("organization_id", organizationId)
           .order("effective_at", { ascending: false })
           .limit(2_000),
@@ -442,6 +459,16 @@ export async function loadLiveInventory(
       last_price_cents: number | null;
       is_preferred: boolean;
       is_active: boolean;
+    }>;
+    const priceRows = (priceResult.data ?? []) as unknown as Array<{
+      id: string;
+      inventory_item_id: string;
+      vendor_id: string | null;
+      unit_id: string;
+      price_quantity: number;
+      unit_price_cents: number;
+      effective_at: string;
+      source_type: string | null;
     }>;
 
     const countIds = (countResult.data ?? []).map((count) => count.id);
@@ -554,7 +581,7 @@ export async function loadLiveInventory(
       string,
       NonNullable<typeof priceResult.data>[number]
     >();
-    for (const price of priceResult.data ?? []) {
+    for (const price of priceRows) {
       const key = `${price.inventory_item_id}:${price.unit_id}`;
       if (!latestPrice.has(key)) latestPrice.set(key, price);
     }
@@ -581,7 +608,7 @@ export async function loadLiveInventory(
         const par = currentPar.get(item.id);
         const price = latestPrice.get(`${item.id}:${item.base_unit_id}`);
         const quantity = Number(movement?.quantity_on_hand ?? 0);
-        const cost = price ? Number(price.unit_price_cents) : null;
+        const cost = price ? Number(price.unit_price_cents) / Number(price.price_quantity) : null;
         const compatibleUnitIds = new Set([item.base_unit_id]);
         for (const conversion of conversionRows) {
           if (!conversion.is_active) continue;
@@ -779,7 +806,7 @@ export async function loadLiveInventory(
           }
           knownCostCents += Math.round(
             Number(ingredient.quantity) *
-              Number(price.unit_price_cents) /
+              (Number(price.unit_price_cents) / Number(price.price_quantity)) /
               (1 - Number(ingredient.waste_factor)),
           );
         }
@@ -852,6 +879,16 @@ export async function loadLiveInventory(
             : Number(vendorItem.last_price_cents),
           isPreferred: vendorItem.is_preferred,
           isActive: vendorItem.is_active,
+        })),
+        priceHistory: priceRows.map((price) => ({
+          id: price.id,
+          inventoryItemId: price.inventory_item_id,
+          vendorId: price.vendor_id,
+          unitId: price.unit_id,
+          priceQuantity: Number(price.price_quantity),
+          unitPriceCents: Number(price.unit_price_cents),
+          effectiveAt: price.effective_at,
+          sourceType: price.source_type,
         })),
         pars: (parResult.data ?? []).map((par) => ({
           id: par.id,

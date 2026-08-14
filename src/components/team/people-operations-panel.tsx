@@ -88,9 +88,9 @@ const requestTone: Record<
 };
 
 const fieldClass =
-  "focus-ring h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[10px] placeholder:text-[var(--ink-faint)]";
+  "focus-ring h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs placeholder:text-[var(--ink-faint)]";
 const areaClass =
-  "focus-ring min-h-24 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-[10px] leading-4 placeholder:text-[var(--ink-faint)]";
+  "focus-ring min-h-24 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-xs leading-4 placeholder:text-[var(--ink-faint)]";
 
 function formatDateOnly(value: string) {
   const date = new Date(`${value}T12:00:00.000Z`);
@@ -169,7 +169,7 @@ function formatFileSize(value: number | null) {
 
 function EmptyRecord({ children }: { children: string }) {
   return (
-    <div className="rounded-xl border border-dashed border-[var(--line)] px-4 py-6 text-center text-[10px] leading-4 text-[var(--ink-faint)]">
+    <div className="rounded-xl border border-dashed border-[var(--line)] px-4 py-6 text-center text-xs leading-4 text-[var(--ink-faint)]">
       {children}
     </div>
   );
@@ -178,7 +178,7 @@ function EmptyRecord({ children }: { children: string }) {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label>
-      <span className="mb-1.5 block text-[10px] font-semibold">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold">{label}</span>
       {children}
     </label>
   );
@@ -302,7 +302,7 @@ function ModalFrame({
             <h3 id={titleId} className="text-base font-semibold tracking-[-0.025em]">
               {title}
             </h3>
-            <p id={descriptionId} className="mt-1 max-w-md text-[10px] leading-4 text-[var(--ink-faint)]">
+            <p id={descriptionId} className="mt-1 max-w-md text-xs leading-4 text-[var(--ink-faint)]">
               {description}
             </p>
           </div>
@@ -361,7 +361,7 @@ export function PeopleOperationsPanel({
   const canManage =
     workspace.role === "admin" ||
     workspace.role === "manager" ||
-    (workspace.role === "owner" && workspace.identity.aal === "aal2");
+    workspace.role === "owner";
   const canEditAvailability = Boolean(member.employeeId && (isSelf || canManage));
   const canSubmitTimeOff = Boolean(member.employeeId && isSelf && member.locationIds.length);
   const canDecideTimeOff = Boolean(member.employeeId && canManage && !isSelf);
@@ -494,7 +494,7 @@ export function PeopleOperationsPanel({
           role="status"
           aria-live="polite"
           className={cn(
-            "lg:col-span-2 rounded-xl px-3 py-2.5 text-[10px]",
+            "lg:col-span-2 rounded-xl px-3 py-2.5 text-xs",
             notice.tone === "success"
               ? "bg-[var(--positive-soft)] text-[var(--positive)]"
               : "bg-[var(--danger-soft)] text-[var(--danger)]",
@@ -522,12 +522,12 @@ export function PeopleOperationsPanel({
             {member.availability.map((rule) => (
               <div key={rule.id} className="grid gap-2 py-3 sm:grid-cols-[100px_minmax(0,1fr)_auto] sm:gap-4">
                 <div>
-                  <p className="text-[10px] font-semibold">{weekdayLabels[rule.weekday] ?? `Day ${rule.weekday}`}</p>
-                  <p className={cn("mt-1 text-[9px]", rule.isAvailable ? "text-[var(--positive)]" : "text-[var(--ink-faint)]")}>
+                  <p className="text-xs font-semibold">{weekdayLabels[rule.weekday] ?? `Day ${rule.weekday}`}</p>
+                  <p className={cn("mt-1 text-xs", rule.isAvailable ? "text-[var(--positive)]" : "text-[var(--ink-faint)]")}>
                     {availabilityWindow(rule)}
                   </p>
                 </div>
-                <div className="text-[9px] leading-4 text-[var(--ink-faint)]">
+                <div className="text-xs leading-4 text-[var(--ink-faint)]">
                   <p>{rule.locationName ?? "All assigned locations"}</p>
                   <p>
                     Effective {formatDateOnly(rule.effectiveFrom)}
@@ -572,16 +572,16 @@ export function PeopleOperationsPanel({
               <article key={request.id} className="rounded-xl border border-[var(--line)] px-3.5 py-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="numeric text-[10px] font-semibold">{formatTimeOffRange(request)}</p>
-                    <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+                    <p className="numeric text-xs font-semibold">{formatTimeOffRange(request)}</p>
+                    <p className="mt-1 text-xs text-[var(--ink-faint)]">
                       {request.locationName ?? "Organization-wide request"}
                     </p>
                   </div>
                   <StatusPill tone={requestTone[request.status]}>{request.status}</StatusPill>
                 </div>
-                {request.reason ? <p className="mt-2 text-[10px] leading-4 text-[var(--ink-soft)]">{request.reason}</p> : null}
+                {request.reason ? <p className="mt-2 text-xs leading-4 text-[var(--ink-soft)]">{request.reason}</p> : null}
                 {request.decisionNote ? (
-                  <p className="mt-2 border-t border-[var(--line)] pt-2 text-[9px] leading-4 text-[var(--ink-faint)]">
+                  <p className="mt-2 border-t border-[var(--line)] pt-2 text-xs leading-4 text-[var(--ink-faint)]">
                     Decision note · {request.decisionNote}
                   </p>
                 ) : null}
@@ -626,7 +626,7 @@ export function PeopleOperationsPanel({
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-[9px] font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Certifications</p>
+              <p className="text-xs font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Certifications</p>
               {canManageReadiness ? (
                 <Button type="button" variant="quiet" size="sm" disabled={busy} aria-label="Add certification" onClick={() => setDialog({ kind: "certification", certification: null })}>
                   <Plus className="size-3.5" /> Add
@@ -641,12 +641,12 @@ export function PeopleOperationsPanel({
                       <BadgeCheck className="size-4" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[10px] font-semibold">{certification.certificationType}</p>
-                      <p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">
+                      <p className="truncate text-xs font-semibold">{certification.certificationType}</p>
+                      <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
                         {certification.issuer ?? "Issuer not recorded"}
                         {certification.credentialNumber ? ` · ${certification.credentialNumber}` : ""}
                       </p>
-                      <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+                      <p className="mt-1 text-xs text-[var(--ink-faint)]">
                         {certification.issuedOn ? `Issued ${formatDateOnly(certification.issuedOn)}` : "Issue date not recorded"}
                         {certification.expiresOn ? ` · Expires ${formatDateOnly(certification.expiresOn)}` : " · No expiry recorded"}
                       </p>
@@ -671,7 +671,7 @@ export function PeopleOperationsPanel({
 
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-[9px] font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Employee documents</p>
+              <p className="text-xs font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Employee documents</p>
               {canManageReadiness && availableLocations.length ? (
                 <Button type="button" variant="quiet" size="sm" disabled={busy} onClick={() => setDialog({ kind: "document-upload" })}>
                   <Upload className="size-3.5" /> Upload
@@ -684,8 +684,8 @@ export function PeopleOperationsPanel({
                   <article key={document.id} className="flex items-center gap-3 rounded-xl border border-[var(--line)] px-3.5 py-3">
                     <FileCheck2 className="size-4 shrink-0 text-[var(--accent-strong)]" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[10px] font-semibold">{document.title}</p>
-                      <p className="mt-1 truncate text-[9px] text-[var(--ink-faint)]">
+                      <p className="truncate text-xs font-semibold">{document.title}</p>
+                      <p className="mt-1 truncate text-xs text-[var(--ink-faint)]">
                         {document.documentType} · {formatFileSize(document.sizeBytes)} · {document.employeeVisible ? "Employee visible" : "Management only"}
                       </p>
                     </div>
@@ -731,7 +731,7 @@ export function PeopleOperationsPanel({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold">{contact.name}</p>
-                    <p className="mt-1 text-[10px] text-[var(--ink-faint)]">{contact.relationship ?? "Relationship not recorded"}</p>
+                    <p className="mt-1 text-xs text-[var(--ink-faint)]">{contact.relationship ?? "Relationship not recorded"}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     {contact.isPrimary ? <StatusPill tone="accent">Primary</StatusPill> : null}
@@ -742,12 +742,12 @@ export function PeopleOperationsPanel({
                     ) : null}
                   </div>
                 </div>
-                <a href={`tel:${contact.phone}`} className="focus-ring mt-3 flex w-fit items-center gap-2 rounded-md text-[10px] font-medium">
+                <a href={`tel:${contact.phone}`} className="focus-ring mt-3 flex w-fit items-center gap-2 rounded-md text-xs font-medium">
                   <Phone className="size-3.5 text-[var(--ink-faint)]" />
                   {contact.phone}
                 </a>
                 {contact.email ? (
-                  <a href={`mailto:${contact.email}`} className="focus-ring mt-2 flex w-fit items-center gap-2 rounded-md text-[10px] text-[var(--ink-soft)]">
+                  <a href={`mailto:${contact.email}`} className="focus-ring mt-2 flex w-fit items-center gap-2 rounded-md text-xs text-[var(--ink-soft)]">
                     <Mail className="size-3.5 text-[var(--ink-faint)]" />
                     {contact.email}
                   </a>
@@ -890,7 +890,7 @@ function PeopleDialog({
             deleteAvailabilityAction({ requestId, ...payload }),
           );
         }}>
-          <div className="px-5 py-6 text-[10px] leading-5 text-[var(--ink-soft)]">The immutable audit log will retain evidence of who removed this rule.</div>
+          <div className="px-5 py-6 text-xs leading-5 text-[var(--ink-soft)]">The immutable audit log will retain evidence of who removed this rule.</div>
           <DialogFooter busy={busy} action="Delete rule" danger onClose={onClose} />
         </form>
       </ModalFrame>
@@ -942,7 +942,7 @@ function PeopleDialog({
             cancelTimeOffAction({ requestId, ...payload }),
           );
         }}>
-          <div className="px-5 py-6 text-[10px] leading-5 text-[var(--ink-soft)]">Only pending, undecided requests can be cancelled. An approved request requires a separate management conversation.</div>
+          <div className="px-5 py-6 text-xs leading-5 text-[var(--ink-soft)]">Only pending, undecided requests can be cancelled. An approved request requires a separate management conversation.</div>
           <DialogFooter busy={busy} action="Cancel request" danger onClose={onClose} />
         </form>
       </ModalFrame>
@@ -966,7 +966,7 @@ function PeopleDialog({
           );
         }}>
           <div className="grid gap-4 px-5 py-5 sm:px-6">
-            <div className="flex items-start gap-3 rounded-xl bg-[var(--canvas)] p-3 text-[10px] leading-4 text-[var(--ink-soft)]"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--accent-strong)]" />The database records you as the independent decision maker and notifies the employee.</div>
+            <div className="flex items-start gap-3 rounded-xl bg-[var(--canvas)] p-3 text-xs leading-4 text-[var(--ink-soft)]"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--accent-strong)]" />The database records you as the independent decision maker and notifies the employee.</div>
             <Field label={dialog.approve ? "Decision note (optional)" : "Decision note (required)"}><textarea name="decisionNote" required={!dialog.approve} maxLength={2_000} className={areaClass} /></Field>
           </div>
           <DialogFooter busy={busy} action={dialog.approve ? "Approve" : "Decline"} danger={!dialog.approve} onClose={onClose} />
@@ -1007,7 +1007,7 @@ function PeopleDialog({
               <Field label="Issued on"><input name="issuedOn" type="date" defaultValue={certification?.issuedOn ?? ""} className={fieldClass} /></Field>
               <Field label="Expires on"><input name="expiresOn" type="date" defaultValue={certification?.expiresOn ?? ""} className={fieldClass} /></Field>
             </div>
-            <label className="flex items-center gap-3 rounded-xl bg-[var(--canvas)] p-3 text-[10px]"><input name="verified" type="checkbox" defaultChecked={Boolean(certification?.verifiedAt)} className="size-4 accent-[var(--accent)]" /><span><span className="font-semibold">Credential evidence verified</span><span className="mt-0.5 block text-[9px] text-[var(--ink-faint)]">Saving records the current manager as verifier.</span></span></label>
+            <label className="flex items-center gap-3 rounded-xl bg-[var(--canvas)] p-3 text-xs"><input name="verified" type="checkbox" defaultChecked={Boolean(certification?.verifiedAt)} className="size-4 accent-[var(--accent)]" /><span><span className="font-semibold">Credential evidence verified</span><span className="mt-0.5 block text-xs text-[var(--ink-faint)]">Saving records the current manager as verifier.</span></span></label>
           </div>
           <DialogFooter busy={busy} action={certification ? "Save certification" : "Add certification"} onClose={onClose} />
         </form>
@@ -1039,7 +1039,7 @@ function PeopleDialog({
           <div className="grid gap-4 px-5 py-5 sm:px-6">
             <div className="grid gap-4 sm:grid-cols-2"><Field label="Name"><input name="name" required maxLength={240} defaultValue={contact?.name ?? ""} className={fieldClass} /></Field><Field label="Relationship"><input name="relationship" maxLength={120} defaultValue={contact?.relationship ?? ""} className={fieldClass} /></Field></div>
             <div className="grid gap-4 sm:grid-cols-2"><Field label="Phone"><input name="phone" type="tel" required maxLength={80} defaultValue={contact?.phone ?? ""} className={fieldClass} /></Field><Field label="Email"><input name="email" type="email" maxLength={320} defaultValue={contact?.email ?? ""} className={fieldClass} /></Field></div>
-            <label className="flex items-center gap-3 rounded-xl bg-[var(--canvas)] p-3 text-[10px]"><input name="isPrimary" type="checkbox" defaultChecked={contact?.isPrimary ?? member.emergencyContacts.length === 0} className="size-4 accent-[var(--accent)]" /><span className="font-semibold">Primary emergency contact</span></label>
+            <label className="flex items-center gap-3 rounded-xl bg-[var(--canvas)] p-3 text-xs"><input name="isPrimary" type="checkbox" defaultChecked={contact?.isPrimary ?? member.emergencyContacts.length === 0} className="size-4 accent-[var(--accent)]" /><span className="font-semibold">Primary emergency contact</span></label>
           </div>
           <DialogFooter busy={busy} action={contact ? "Save contact" : "Add contact"} onClose={onClose} />
         </form>
@@ -1081,8 +1081,8 @@ function PeopleDialog({
           <div className="grid gap-4 px-5 py-5 sm:px-6">
             <Field label="Restaurant scope"><select name="locationId" required defaultValue={locations[0]?.id} className={fieldClass}>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
             <div className="grid gap-4 sm:grid-cols-2"><Field label="Document title"><input name="title" required maxLength={240} className={fieldClass} /></Field><Field label="Document type"><input name="documentType" required maxLength={120} placeholder="Handbook, permit…" className={fieldClass} /></Field></div>
-            <Field label="Private file"><input name="file" type="file" required accept="application/pdf,image/jpeg,image/png,image/webp" className="focus-ring block w-full rounded-xl border border-dashed border-[var(--line)] bg-[var(--canvas)] px-3 py-4 text-[10px] file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--paper-strong)] file:px-3 file:py-2 file:text-[10px] file:font-semibold" /></Field>
-            <label className="flex items-center gap-3 rounded-xl bg-[var(--canvas)] p-3 text-[10px]"><input name="employeeVisible" type="checkbox" defaultChecked className="size-4 accent-[var(--accent)]" /><span><span className="font-semibold">Visible to employee</span><span className="mt-0.5 block text-[9px] text-[var(--ink-faint)]">Turn off only for legitimate management-only records.</span></span></label>
+            <Field label="Private file"><input name="file" type="file" required accept="application/pdf,image/jpeg,image/png,image/webp" className="focus-ring block w-full rounded-xl border border-dashed border-[var(--line)] bg-[var(--canvas)] px-3 py-4 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--paper-strong)] file:px-3 file:py-2 file:text-xs file:font-semibold" /></Field>
+            <label className="flex items-center gap-3 rounded-xl bg-[var(--canvas)] p-3 text-xs"><input name="employeeVisible" type="checkbox" defaultChecked className="size-4 accent-[var(--accent)]" /><span><span className="font-semibold">Visible to employee</span><span className="mt-0.5 block text-xs text-[var(--ink-faint)]">Turn off only for legitimate management-only records.</span></span></label>
           </div>
           <DialogFooter busy={busy} action="Upload document" onClose={onClose} />
         </form>
@@ -1110,7 +1110,7 @@ function PeopleDialog({
         <div className="grid gap-4 px-5 py-5 sm:px-6">
           <Field label="Document title"><input name="title" required maxLength={240} defaultValue={document.title} className={fieldClass} /></Field>
           <Field label="Document type"><input name="documentType" required maxLength={120} defaultValue={document.documentType} className={fieldClass} /></Field>
-          <label className="flex items-center gap-3 rounded-xl bg-[var(--canvas)] p-3 text-[10px]"><input name="employeeVisible" type="checkbox" defaultChecked={document.employeeVisible} className="size-4 accent-[var(--accent)]" /><span className="font-semibold">Visible to employee</span></label>
+          <label className="flex items-center gap-3 rounded-xl bg-[var(--canvas)] p-3 text-xs"><input name="employeeVisible" type="checkbox" defaultChecked={document.employeeVisible} className="size-4 accent-[var(--accent)]" /><span className="font-semibold">Visible to employee</span></label>
         </div>
         <DialogFooter busy={busy} action="Save metadata" onClose={onClose} />
       </form>

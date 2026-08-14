@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { LiveInventoryWorkspace } from "@/components/inventory/live-inventory-workspace";
+import { InventoryCatalogWorkspace } from "@/components/inventory/inventory-catalog-workspace";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 
 vi.mock("next/navigation", () => ({
@@ -42,6 +43,18 @@ const workspace: WorkspaceContextValue = {
   membershipId: "40000000-0000-4000-8000-000000000001",
   role: "manager",
   organizationWide: false,
+  capabilities: [
+    "inventory.count.create",
+    "inventory.count.approve",
+    "inventory.purchase.create",
+    "inventory.receive",
+    "inventory.transfer.create",
+    "inventory.transfer.approve",
+    "inventory.waste.create",
+    "inventory.waste.approve",
+    "inventory.vendor.manage",
+    "recipe.manage",
+  ],
 };
 
 describe("connected Inventory UI", () => {
@@ -70,7 +83,8 @@ describe("connected Inventory UI", () => {
       />,
     );
 
-    expect(markup).toContain("Connected");
+    expect(markup).toContain("Server-backed");
+    expect(markup).toContain("Connecting live updates");
     expect(markup).toContain("Main Dining Room");
     expect(markup).toContain("No tracked inventory yet");
     expect(markup).toContain("No approved count yet");
@@ -89,5 +103,37 @@ describe("connected Inventory UI", () => {
     expect(markup).toContain("Inventory unavailable");
     expect(markup).toContain("Management access is required.");
     expect(markup).not.toContain("Garden Room");
+  });
+
+  it("keeps Chef kitchen setup and draft recipe actions available in an empty catalog", () => {
+    const chef = {
+      ...workspace,
+      capabilities: [
+        "inventory.unit.manage",
+        "inventory.category.manage",
+        "inventory.item.manage",
+        "inventory.vendor.manage",
+        "inventory.price.manage",
+        "inventory.par.manage",
+        "recipe.manage",
+      ],
+    } satisfies WorkspaceContextValue;
+    const markup = renderToStaticMarkup(
+      <InventoryCatalogWorkspace
+        workspace={chef}
+        model={{
+          date: "2026-08-08", timeZone: "America/New_York", currencyCode: "USD",
+          items: [], units: [], locations: [chef.activeLocation], counts: [], vendors: [],
+          orders: [], deliveries: [], waste: [], transfers: [], recipes: [],
+          catalog: { units: [], conversions: [], categories: [], vendors: [], items: [], vendorItems: [], pars: [], recipes: [] },
+        }}
+      />,
+    );
+    expect(markup).toContain("Ready to configure");
+    expect(markup).toContain("Add your first inventory category");
+    expect(markup).toContain("Create a recipe draft now");
+    expect(markup).toContain("Unit costs &amp; opening stock");
+    expect(markup).toContain("Unit cost");
+    expect(markup).toContain("Recipe");
   });
 });

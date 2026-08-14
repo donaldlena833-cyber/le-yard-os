@@ -55,6 +55,7 @@ const workspace: WorkspaceContextValue = {
   membershipId: "40000000-0000-4000-8000-000000000001",
   role: "manager",
   organizationWide: false,
+  capabilities: [],
 };
 
 const emptyModel: LiveOperationsModel = {
@@ -90,7 +91,8 @@ describe("connected Operations UI", () => {
       />,
     );
 
-    expect(markup).toContain("Connected");
+    expect(markup).toContain("Server-backed");
+    expect(markup).toContain("Connecting live updates");
     expect(markup).toContain("Management controls");
     expect(markup).toContain("Main Dining Room");
     expect(markup).toContain("No tasks in this location scope");

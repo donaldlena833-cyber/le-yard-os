@@ -1,0 +1,171 @@
+name: Connected preview release acceptance
+run-name: Connected acceptance for ${{ inputs.commit_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      preview_url:
+        description: Exact HTTPS Vercel Preview origin (no path or query)
+        required: true
+        type: string
+      commit_sha:
+        description: Exact 40-character commit selected as this workflow run's ref
+        required: true
+        type: string
+      confirmation:
+        description: Type RUN CONNECTED RELEASE ACCEPTANCE
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: connected-preview-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    name: Validate immutable release target without secrets
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'donaldlena833-cyber/le-yard-os'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      preview_origin: ${{ steps.contract.outputs.preview_origin }}
+      preview_origin_sha256: ${{ steps.contract.outputs.preview_origin_sha256 }}
+      commit_sha: ${{ steps.contract.outputs.commit_sha }}
+      schema_version: ${{ steps.contract.outputs.schema_version }}
+    steps:
+      - name: Refuse a mutable or mismatched dispatch before checkout
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]
+          [[ "$GITHUB_REPOSITORY" == "donaldlena833-cyber/le-yard-os" ]]
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$REQUESTED_COMMIT" == "$GITHUB_SHA" ]]
+          [[ "$CONFIRMATION" == "RUN CONNECTED RELEASE ACCEPTANCE" ]]
+
+      - name: Check out the exact dispatched commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Bind preview, commit, checkout, and migration head
+        id: contract
+        shell: bash
+        env:
+          CONNECTED_ACCEPTANCE_PREVIEW_URL: ${{ inputs.preview_url }}
+          CONNECTED_ACCEPTANCE_REQUESTED_COMMIT: ${{ inputs.commit_sha }}
+          CONNECTED_ACCEPTANCE_CONFIRMATION: ${{ inputs.confirmation }}
+        run: node scripts/verify-connected-release-workflow-inputs.mjs >> "$GITHUB_OUTPUT"
+
+  acceptance:
+    name: Protected read-only role and location acceptance
+    needs: contract
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'donaldlena833-cyber/le-yard-os' &&
+      needs.contract.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment:
+      name: connected-preview-acceptance
+      url: ${{ needs.contract.outputs.preview_origin }}
+    steps:
+      - name: Check out the exact validated commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.contract.outputs.commit_sha }}
+          persist-credentials: false
+
+      - name: Use supported Node.js
+        uses: actions/setup-node@1e60f620b9541dca151540e0ba4913906600c0b # v4.0.3
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify the local attestation and workflow contracts
+        run: >-
+          npx vitest run
+          tests/unit/security/connected-acceptance-attestation-route.test.ts
+          tests/unit/security/connected-acceptance-preflight.test.ts
+          tests/unit/security/connected-release-workflow.test.ts
+
+      - name: Verify the service-only marker contract portably
+        run: npm run test:connected-attestation:pglite
+
+      - name: Install the connected acceptance browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run signed release acceptance before reading role credentials
+        id: release_acceptance
+        continue-on-error: true
+        run: npm run test:e2e:connected
+        env:
+          PLAYWRIGHT_OUTPUT_DIR: ${{ runner.temp }}/connected-playwright-results
+          E2E_CONNECTED_APP_URL: ${{ needs.contract.outputs.preview_origin }}
+          E2E_CONNECTED_ENVIRONMENT: nonproduction_preview
+          E2E_CONNECTED_ATTESTATION_SECRET: ${{ secrets.CONNECTED_PREVIEW_ATTESTATION_SECRET }}
+          E2E_CONNECTED_TARGET_ID: ${{ vars.CONNECTED_PREVIEW_TARGET_ID }}
+          E2E_CONNECTED_EXPECTED_DEPLOYMENT_COMMIT: ${{ needs.contract.outputs.commit_sha }}
+          E2E_CONNECTED_EXPECTED_SCHEMA_VERSION: ${{ needs.contract.outputs.schema_version }}
+          E2E_CONNECTED_FIXTURE_ID: ${{ vars.CONNECTED_PREVIEW_FIXTURE_ID }}
+          E2E_CONNECTED_FIXTURE_REVISION: ${{ vars.CONNECTED_PREVIEW_FIXTURE_REVISION }}
+          E2E_CONNECTED_EXPECTED_ORGANIZATION_NAME: ${{ vars.CONNECTED_PREVIEW_ORGANIZATION_NAME }}
+          E2E_CONNECTED_EXPECTED_LOCATION_NAME: ${{ vars.CONNECTED_PREVIEW_LOCATION_NAME }}
+          E2E_CONNECTED_OWNER_EMAIL: ${{ secrets.CONNECTED_PREVIEW_OWNER_EMAIL }}
+          E2E_CONNECTED_OWNER_PASSWORD: ${{ secrets.CONNECTED_PREVIEW_OWNER_PASSWORD }}
+          E2E_CONNECTED_MANAGER_EMAIL: ${{ secrets.CONNECTED_PREVIEW_MANAGER_EMAIL }}
+          E2E_CONNECTED_MANAGER_PASSWORD: ${{ secrets.CONNECTED_PREVIEW_MANAGER_PASSWORD }}
+          E2E_CONNECTED_HOST_EMAIL: ${{ secrets.CONNECTED_PREVIEW_HOST_EMAIL }}
+          E2E_CONNECTED_HOST_PASSWORD: ${{ secrets.CONNECTED_PREVIEW_HOST_PASSWORD }}
+          E2E_CONNECTED_VIEW_ONLY_EMAIL: ${{ secrets.CONNECTED_PREVIEW_VIEW_ONLY_EMAIL }}
+          E2E_CONNECTED_VIEW_ONLY_PASSWORD: ${{ secrets.CONNECTED_PREVIEW_VIEW_ONLY_PASSWORD }}
+          E2E_CONNECTED_OPERATE_ONLY_EMAIL: ${{ secrets.CONNECTED_PREVIEW_OPERATE_ONLY_EMAIL }}
+          E2E_CONNECTED_OPERATE_ONLY_PASSWORD: ${{ secrets.CONNECTED_PREVIEW_OPERATE_ONLY_PASSWORD }}
+          E2E_CONNECTED_DENIED_EMAIL: ${{ secrets.CONNECTED_PREVIEW_DENIED_EMAIL }}
+          E2E_CONNECTED_DENIED_PASSWORD: ${{ secrets.CONNECTED_PREVIEW_DENIED_PASSWORD }}
+          E2E_CONNECTED_EXPIRED_EMAIL: ${{ secrets.CONNECTED_PREVIEW_EXPIRED_EMAIL }}
+          E2E_CONNECTED_EXPIRED_PASSWORD: ${{ secrets.CONNECTED_PREVIEW_EXPIRED_PASSWORD }}
+          E2E_CONNECTED_CROSS_LOCATION_EMAIL: ${{ secrets.CONNECTED_PREVIEW_CROSS_LOCATION_EMAIL }}
+          E2E_CONNECTED_CROSS_LOCATION_PASSWORD: ${{ secrets.CONNECTED_PREVIEW_CROSS_LOCATION_PASSWORD }}
+          E2E_CONNECTED_ENABLE_MUTATIONS: "false"
+
+      - name: Write sanitized acceptance evidence
+        if: ${{ always() }}
+        env:
+          EVIDENCE_PREVIEW_ORIGIN: ${{ needs.contract.outputs.preview_origin }}
+          EVIDENCE_SOURCE_COMMIT: ${{ needs.contract.outputs.commit_sha }}
+          EVIDENCE_SCHEMA_MIGRATION_HEAD: ${{ needs.contract.outputs.schema_version }}
+          EVIDENCE_TARGET_ID: ${{ vars.CONNECTED_PREVIEW_TARGET_ID }}
+          EVIDENCE_FIXTURE_ID: ${{ vars.CONNECTED_PREVIEW_FIXTURE_ID }}
+          EVIDENCE_FIXTURE_REVISION: ${{ vars.CONNECTED_PREVIEW_FIXTURE_REVISION }}
+          EVIDENCE_OUTCOME: ${{ steps.release_acceptance.outcome || 'not_run' }}
+        run: >-
+          node scripts/write-connected-acceptance-evidence.mjs
+          "$RUNNER_TEMP/connected-preview-acceptance-evidence.json"
+
+      - name: Upload only non-sensitive evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: connected-preview-acceptance-${{ needs.contract.outputs.commit_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/connected-preview-acceptance-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Preserve the release acceptance result
+        if: ${{ always() && steps.release_acceptance.outcome != 'success' }}
+        run: |
+          echo "::error::Connected preview release acceptance did not pass."
+          exit 1

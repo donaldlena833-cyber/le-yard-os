@@ -7,6 +7,13 @@ describe("public route boundary", () => {
     "/invite",
     "/auth/callback",
     "/api/health",
+    "/api/health/email",
+    "/api/internal/reservation-push",
+    "/api/internal/reservation-messages",
+    "/api/internal/integrations/toast-labor",
+    "/api/internal/connected-acceptance/attest",
+    "/api/v1/availability",
+    "/api/v1/reservations/confirm",
     "/manifest.webmanifest",
     "/offline.html",
     "/sw.js",
@@ -14,10 +21,13 @@ describe("public route boundary", () => {
     expect(isPublicRequestPath(path)).toBe(true);
   });
 
-  it.each(["/today", "/api/exports/reports/csv", "/sign-in-impersonation", "/offline.html.bak"])(
-    "keeps %s protected",
-    (path) => {
-      expect(isPublicRequestPath(path)).toBe(false);
-    },
-  );
+  it.each([
+    "/today",
+    "/api/exports/reports/csv",
+    "/api/v10/availability",
+    "/sign-in-impersonation",
+    "/offline.html.bak",
+  ])("keeps %s protected", (path) => {
+    expect(isPublicRequestPath(path)).toBe(false);
+  });
 });

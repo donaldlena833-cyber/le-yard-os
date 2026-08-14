@@ -50,10 +50,11 @@ function nullable(value: string | null | undefined) {
 }
 
 function canManage(actor: WorkflowContext["actor"], membership: ActorMembership) {
+  void actor;
   return (
     membership.role === "admin" ||
     membership.role === "manager" ||
-    (membership.role === "owner" && actor.aal === "aal2")
+    membership.role === "owner"
   );
 }
 

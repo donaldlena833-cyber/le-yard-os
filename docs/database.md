@@ -34,6 +34,7 @@ Every tenant row carries `organization_id`. Location-owned records also carry `l
 | `202608010021_operations_security_configuration.sql` | Receipt fingerprint custody, verified checklist photos, replay-safe operations, chat-channel setup, expense-category setup, and exact private-bucket limits |
 | `202608010022_financial_retention_configuration.sql` | Owner/Admin tip-policy drafts, independent version approval, and explicit timed or no-auto-delete retention decisions |
 | `202608010023_tip_policy_approval_role_boundary.sql` | Forward-only correction that reserves tip-policy version approval to a different Owner/Admin and rechecks authorization before replay |
+| `20260809032415_fix_recipe_save_authorization_and_variable_scope.sql` | Forward-only repair for Manager/Chef recipe versioning: removes an ambiguous organization variable and enforces `recipe.manage` inside the RPC boundary |
 
 Migrations are forward-only and must be reviewed like application code. Never edit an already-applied migration in a shared environment; add a new timestamped migration.
 
@@ -80,7 +81,7 @@ The diagram is intentionally a domain overview. The migrations are authoritative
 The four application roles are `owner`, `admin`, `manager`, and `employee`.
 
 - Owners and admins can manage users, roles, invitations, locations, integrations, retention configuration, and data exports.
-- Owners must present an Authenticator Assurance Level 2 (`aal2`) JWT for administrative writes. Reads remain available at AAL1 so an owner can reach the MFA setup/recovery experience.
+- Owners currently use an authenticated password session (`aal1` is sufficient) for administrative writes. MFA remains available as an optional Supabase Auth factor; tenant, role, location, capability, replay, and audit boundaries still apply.
 - Managers can operate only locations in `location_memberships`. Tenant-wide resources that are intentionally unified—such as the guest CRM and shared vendor/item catalog—remain management-only.
 - Employees can access their assigned locations, published schedule context, permitted chat channels, assigned tasks/checklists/SOPs, and their own sensitive employee/time/tip records.
 - Suspended and invited memberships grant no tenant access.
@@ -91,13 +92,17 @@ Job-role definitions and employee job assignments are configured only through id
 
 Authorization helpers are `SECURITY DEFINER` functions with empty search paths and `row_security = off`; they only return booleans or the caller's role. This avoids recursive membership policies without exposing rows. Browser code must use only the anon key and a user JWT. The Supabase service-role key is server-only and bypasses RLS.
 
-All 113 public base tables have both `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`, plus at least one explicit policy. `anon` has no grants on public tables.
+Operational authorization is layered beneath organization roles through `capability_definitions`, `job_role_capabilities`, and `user_capability_overrides`. `private.user_has_capability(...)` validates the active membership, active accessible location, effective employee/job-role assignment, effective capability assignment, and optional user override. A matching active user denial wins over grants. Owners and Admins retain full operational capability coverage; capability assignment itself remains an Owner/Admin command. Public helpers expose only the signed-in actor's boolean/effective keys, never another user's effective access.
+
+Capability assignment rows are effective-dated and deactivated rather than deleted. `configure_job_role_capability` and `configure_user_capability_override` are actor-derived, idempotent through `private.operation_requests`, and audited. `configure_operational_inventory_catalog` is the first capability-native write slice: a capable non-Admin Manager can manage items, vendors, vendor packs/prices, and pars only through an authorized location, while units, conversions, category hierarchy, users, credentials, and security settings remain administrative.
+
+All 116 public base tables have both `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY`, plus at least one explicit policy. `anon` has no grants on public tables.
 
 ## User provisioning and passwords
 
 `user_invitations` stores a one-way server-generated correlation hash, expiration, role, and intended location IDs. The actionable one-time token remains exclusively inside Supabase Auth. The database never stores an existing or recoverable password. Owners/admins initiate an invitation through a server action; after Supabase Auth creates the invited identity, `provision_user_invitation` atomically creates the pending tenant/location membership and linked employee record. The invitee follows the one-time link, chooses their own password, and `accept_my_invitation` activates only the explicitly scoped tenant membership matching their authenticated email.
 
-Production owner accounts are intentionally not seeded. Donald's and Maris's real email addresses must be supplied and approved before the bootstrap operation. `seed.sql` uses only `example.invalid` identities and a conspicuous local-only password.
+Production owner accounts are intentionally not seeded. The two approved owners' real email addresses and display names must be supplied and approved before the bootstrap operation. `seed.sql` uses only `example.invalid` identities and a conspicuous local-only password.
 
 ## Tip pool calculation
 
@@ -146,6 +151,10 @@ Employee-document uploads use a five-part organization/location/employee path. A
 
 Toast and Resy are represented by `integration_connections` adapters. The default adapter is manual/CSV and the application does not depend on live credentials. Sync jobs record direction, cursor, retry state, attempts, record-level results, and an append-only event history.
 
+Toast Labor is the authoritative source for attendance. `service_ingest_pos_time_entry` is a service-role-only, replay-safe boundary keyed by connection and Toast time-entry GUID. It rejects same-version/different-payload replays, ignores stale versions, preserves provider deletion markers, and replaces imported break facts without allowing browser writes. Employee mapping uses an explicit Toast identifier in `employee_number` or `payroll_reference`, then a unique email fallback; job mapping uses `job_roles.code`, then a unique normalized title fallback. Ambiguous mappings fail closed and leave record-level sync evidence.
+
+`income_sales_checks` is the provider-neutral latest-state sales fact used by the Income snapshot. Raw rows and external IDs are service-role only. `ingest_income_sales_check` supplies replay/stale-version protection, while `income_operating_snapshot` returns an exact-capability, location-scoped aggregate of live sales, labor accrual, recorded day costs, closeout evidence, and hourly planning signals.
+
 Credential ciphertext lives in `private.integration_credentials`, a non-exposed schema with no `anon` or `authenticated` privileges. Encryption/decryption must happen in a trusted server/database boundary using an externally managed key; encryption keys never belong in PostgreSQL rows.
 
 AI results are stored in `ai_runs` with confidence and record-level `ai_citations`. Payroll exports, tip distributions, punch edits, inventory adjustments, and guest changes can exist only as `ai_action_proposals`. A trigger requires an authenticated human user to decide and apply a proposal. Operational functions separately enforce the human user's permissions.
@@ -171,6 +180,7 @@ npm run types:database:check
 npm run test:db:pglite
 npm run test:people-config:pglite
 npm run test:inventory-catalog:pglite
+npm run test:capabilities:pglite
 npm run test:operations-config:pglite
 npm run test:financial-config:pglite
 ```
@@ -188,11 +198,19 @@ npx supabase db lint --local --schema public --level error --fail-on error
 
 For a linked nonproduction project, require explicit environment confirmation before using `--linked`. Never run seed data against production.
 
+## Version 0.2 operational authoring
+
+The capability catalog now includes precise `inventory.item.manage`, `inventory.category.manage`, and `inventory.unit.manage` keys. `configure_kitchen_foundation` is a narrow location-authorized command for units and categories; the existing capability-native command continues to own items, vendors, packs/prices, and effective-dated pars. Recipe saves remain immutable versions and may be inactive drafts without ingredients.
+
+Service Control adds five forced-RLS tables: `service_availability_events`, `manager_log_entries`, `manager_log_versions`, `preshifts`, and `preshift_acknowledgements`. Availability and acknowledgements are append-only. Manager Log updates append a version snapshot. A published pre-shift cannot be edited; correction requires a new version. Browser roles have `SELECT` only and write through explicitly granted, actor-derived commands.
+
+The latest security migration revokes public-schema function execution from `PUBLIC`, `anon`, and `authenticated`, then restores an explicit browser RPC/policy-helper manifest. Future functions inherit no `PUBLIC` execution. Trigger-only and service-only functions remain unavailable to browser sessions.
+
 ## Production checklist
 
 1. Create separate Supabase projects for development/preview and production.
 2. Apply migrations through CI with a reviewed database URL; never expose that URL or the service-role key to the browser.
-3. Obtain and verify Donald's and Maris's email addresses, review the dry-run plan, and use `npm run bootstrap:owners -- --config /absolute/path/to/approved-bootstrap.json --execute` with its one-time plan confirmation. Do not manually insert Auth users or Owner memberships.
+3. Obtain and verify both approved owners' email addresses and display names, review the dry-run plan, and use `npm run bootstrap:owners -- --config /absolute/path/to/approved-bootstrap.json --execute` with its one-time plan confirmation. Do not manually insert Auth users or Owner memberships.
 4. Configure SMTP, approved redirect URLs, password policy, leaked-password protection, and MFA recovery procedures.
 5. Confirm private bucket limits and allowed MIME types, then test signed URL expiry.
 6. Configure platform point-in-time recovery/backups as approved, record backup evidence in `backup_runs`, and perform a restore drill.

@@ -1,6 +1,6 @@
 # Integration framework
 
-Le Yard OS treats every external system as an adapter behind a stable internal boundary. Core operations work without live Toast or Resy access. Manual CSV is the initial supported transport.
+Le Yard OS treats every external system as an adapter behind a stable internal boundary. Core operations work without live Toast or Resy access. Manual CSV remains the general-purpose transport; Toast Labor has a dedicated read-only API adapter.
 
 ## Adapter contract
 
@@ -16,7 +16,7 @@ The connected read model also omits the public connection's free-form `configura
 
 ## Manual CSV flow
 
-1. An Owner/Admin with the required MFA assurance selects an active location and a supported import contract.
+1. A password-authenticated Owner/Admin selects an active location and a supported import contract.
 2. The browser performs a fast validation pass for UTF-8 CSV structure, normalized unique headers, exact row width, size/row/cell ceilings, required fields, unsafe control bytes, and spreadsheet formulas.
 3. The server authorizes the actor from the session and issues a one-use signed upload for the tenant/location path in the private `imports` bucket.
 4. After upload, the server downloads the exact stored bytes, checks the signed size and path again, repeats validation, and calculates a SHA-256 fingerprint.
@@ -30,9 +30,22 @@ Demo mode remains synthetic. Connected mode reads only persisted connection/job 
 
 ## Toast adapter
 
-Initial intended capability: read sales/closeout source records. Live synchronization is disabled until the restaurant confirms eligible Toast API access, credentials, restaurant GUIDs, permitted locations, rate limits, historical range, and data-processing approval.
+Toast Labor is implemented as the authoritative attendance source. Staff clock in, clock out, and manage breaks on Toast POS. The protected `POST /api/internal/integrations/toast-labor` worker authenticates as a Toast machine client, reads employees, jobs, and time entries modified since the overlapping cursor, then imports punches through a service-only database command. Le Yard OS never writes a punch back to Toast.
 
-The adapter must:
+Each worker invocation requires `Authorization: Bearer <TOAST_LABOR_SYNC_SECRET>` and must target the exact `NEXT_PUBLIC_APP_URL` origin. Schedule it only after configuring every Toast Labor variable in [environment.md](environment.md). The API account needs `labor:read` and employee-read access. The first run looks back seven days; subsequent runs overlap the previous cursor by five minutes and remain within Toast's one-month query limit.
+
+Employee mapping checks `employee_number` and `payroll_reference` for a Toast GUID/external ID, then uses a unique case-insensitive email fallback. Job mapping checks `job_roles.code` for the Toast GUID/external ID, then uses a unique normalized title fallback. The existing employee/job/location assignment trigger remains authoritative. Missing or ambiguous mappings are recorded as failures and never guessed.
+
+The labor adapter:
+
+- stores the Toast connection plus external time-entry and break identities
+- hashes normalized source payloads and rejects same-version/different-fact replays
+- ignores stale provider versions and safely replays identical ones
+- preserves source deletion markers and hides provider-deleted facts from Time Clock
+- records immutable job and row outcomes, degrades health on partial failure, and exposes only sanitized sync status to location members
+- keeps the Time Clock read-only and sends corrections back to Toast POS
+
+Sales/closeout synchronization remains a separate future capability. It is disabled until the restaurant confirms eligible Toast API access, permitted locations, rate limits, historical range, field mapping, and data-processing approval. Any Toast adapter must:
 
 - remain read-only unless separate write access is explicitly approved
 - preserve Toast external IDs for idempotency
@@ -41,11 +54,21 @@ The adapter must:
 - never treat an imported total as an approved closeout or tip distribution
 - retry transient failures with bounded exponential delay and surface permanent errors for review
 
-## Resy adapter
+## Income check-state boundary
 
-Initial intended capability: read reservations and guest/visit context. Live synchronization is disabled until approved integration access is supplied.
+The Income workspace reads a provider-neutral latest-check fact rather than querying a Toast-specific browser model. Only a trusted service-role adapter may call `ingest_income_sales_check`. The command is tenant/location scoped, serializes each external check, rejects stale or conflicting source versions, resolves the restaurant operating date, and stores money in integer cents. Browser roles cannot select raw external check identifiers or execute ingestion.
+
+Until an approved adapter supplies these facts, connected Income renders live revenue and tracked contribution as unavailable—not zero—and continues to show only authoritative internal labor, recorded expense, closeout, received-inventory, waste, and reservation-demand evidence. Reservation covers are never converted into revenue. Received inventory remains a purchasing diagnostic rather than same-day COGS, and tracked contribution is explicitly not accounting profit.
+
+## Reservation writer and future Resy adapter
+
+Le Yard's first-party reservation platform is the intended authoritative writer, not yet the proven live source of truth. Public inventory stays disabled until the owners select exactly one writer for the pilot and shadow reconciliation shows that covers, tables, cancellations, modifications, and availability match the incumbent source. A future Resy adapter may read or reconcile reservations and guest/visit context, but live synchronization is disabled until approved integration access and an independently tested conflict protocol are supplied.
+
+The system must never accept public writes from two reservation sources merely because both adapters are configured. If two-way writing is ever proposed, it requires explicit conflict ownership, external identifiers, replay-safe source bindings, delayed/out-of-order event handling, cancellation and date-swap tests, reconciliation evidence, a kill switch, and separate approval. None of those conditions is currently satisfied.
 
 The adapter must preserve consent provenance and must not infer marketing consent from a reservation. Guest deduplication remains a human-reviewed workflow.
+
+The public Le Yard website is not a Resy adapter. It uses the scoped, versioned Le Yard booking API described in [reservations.md](reservations.md).
 
 ## Payroll/accounting adapters
 

@@ -1,8 +1,11 @@
 import "server-only";
 
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { hasAnyCapability } from "@/lib/permissions/capabilities";
+import { shiftBelongsToResolvedServiceDay } from "@/lib/service-day/business-date";
 import { createClient } from "@/lib/supabase/server";
 import {
+  addIsoDays,
   formatLocalTime,
   localDateKey,
   readFailure,
@@ -10,6 +13,7 @@ import {
   startOfWeekDate,
   type LiveReadResult,
 } from "./shared";
+import { loadLiveServiceDayContext } from "./service-day-context";
 
 export interface LiveTodayShift {
   id: string;
@@ -61,6 +65,22 @@ export interface LiveTodayModel {
   } | null;
   pendingInventoryCounts: number;
   configuredParLevels: number;
+  operatingService?: {
+    source:
+      | "materialized_service_shift"
+      | "reservation_service_period"
+      | "published_shift"
+      | "calendar";
+    name: string | null;
+    startsAt: string | null;
+    endsAt: string | null;
+    state:
+      | "approved"
+      | "internal"
+      | "closed"
+      | "schedule_only"
+      | "unconfigured";
+  };
   currentEmployeeId?: string | null;
 }
 
@@ -76,6 +96,7 @@ type ShiftRow = {
 
 export async function loadLiveToday(
   workspace: WorkspaceContextValue,
+  observedAt = new Date().toISOString(),
 ): Promise<LiveReadResult<LiveTodayModel>> {
   try {
     const supabase = await createClient();
@@ -100,9 +121,28 @@ export async function loadLiveToday(
     if (locationError || organizationError || !location || !organization) return readFailure();
 
     const timeZone = location.timezone;
-    const now = new Date();
-    const date = localDateKey(now, timeZone);
-    const canSeeManagement = workspace.role !== "employee" && workspace.persona !== "chef";
+    const now = new Date(observedAt);
+    const serviceDayResult = await loadLiveServiceDayContext(workspace, observedAt);
+    if (!serviceDayResult.ok || serviceDayResult.data.timeZone !== timeZone) {
+      return readFailure("The operating business date could not be resolved.");
+    }
+    const date = serviceDayResult.data.businessDate;
+    const canReadTasksByRole = workspace.role !== "employee" && workspace.persona !== "chef";
+    const canReadCloseout = hasAnyCapability(workspace.capabilities, [
+      "closeout.create",
+      "closeout.approve",
+      "reports.financial.view",
+    ]);
+    const canReadInventoryCounts = hasAnyCapability(workspace.capabilities, [
+      "inventory.count.create",
+      "inventory.count.approve",
+    ]);
+    const canReadParLevels = hasAnyCapability(workspace.capabilities, [
+      "inventory.par.manage",
+      "inventory.count.create",
+      "inventory.purchase.create",
+      "prep.manage",
+    ]);
     const { data: currentEmployee, error: currentEmployeeError } = await supabase
       .from("employees")
       .select("id")
@@ -119,38 +159,38 @@ export async function loadLiveToday(
       .maybeSingle();
     if (settingsError) return readFailure();
     const weekStart = startOfWeekDate(now, timeZone, settings?.week_starts_on ?? 1);
-    const { data: publishedSchedules, error: publishedScheduleError } = await supabase
-      .from("schedules")
-      .select("id")
-      .eq("organization_id", organizationId)
-      .eq("location_id", locationId)
-      .eq("week_start", weekStart)
-      .eq("status", "published")
-      .order("version", { ascending: false })
-      .limit(1);
-    if (publishedScheduleError) return readFailure();
-    const publishedScheduleId = publishedSchedules?.[0]?.id ?? null;
+    const scheduleWeeks = [addIsoDays(weekStart, -7), weekStart];
+    const publishedScheduleResults = await Promise.all(
+      scheduleWeeks.map((scheduleWeek) =>
+        supabase
+          .from("schedules")
+          .select("id, week_start, version")
+          .eq("organization_id", organizationId)
+          .eq("location_id", locationId)
+          .eq("week_start", scheduleWeek)
+          .eq("status", "published")
+          .order("version", { ascending: false })
+          .order("id")
+          .limit(1),
+      ),
+    );
+    if (publishedScheduleResults.some((result) => result.error)) return readFailure();
+    const publishedScheduleIds = publishedScheduleResults.flatMap((result) =>
+      (result.data ?? []).map((schedule) => schedule.id),
+    );
     const broadStart = new Date(now.getTime() - 36 * 60 * 60 * 1_000).toISOString();
     const broadEnd = new Date(now.getTime() + 48 * 60 * 60 * 1_000).toISOString();
 
-    const [
-      shiftResult,
-      openPunchResult,
-      taskResult,
-      announcementResult,
-      closeoutResult,
-      countResult,
-      parResult,
-    ] = await Promise.all([
-      publishedScheduleId
+    const [shiftResult, openPunchResult] = await Promise.all([
+      publishedScheduleIds.length
         ? supabase
             .from("shifts")
             .select("id, employee_id, job_role_id, starts_at, ends_at, status, is_open")
             .eq("organization_id", organizationId)
             .eq("location_id", locationId)
-            .eq("schedule_id", publishedScheduleId)
-            .gte("starts_at", broadStart)
-            .lte("starts_at", broadEnd)
+            .in("schedule_id", publishedScheduleIds)
+            .lt("starts_at", broadEnd)
+            .gt("ends_at", broadStart)
             .neq("status", "cancelled")
             .order("starts_at")
         : Promise.resolve({ data: [], error: null }),
@@ -160,7 +200,18 @@ export async function loadLiveToday(
         .eq("organization_id", organizationId)
         .eq("location_id", locationId)
         .is("clocked_out_at", null),
-      canSeeManagement
+    ]);
+    if (shiftResult.error || openPunchResult.error) return readFailure();
+    const broadShifts = (shiftResult.data ?? []) as ShiftRow[];
+
+    const [
+      taskResult,
+      announcementResult,
+      closeoutResult,
+      countResult,
+      parResult,
+    ] = await Promise.all([
+      canReadTasksByRole
         ? supabase
             .from("tasks")
             .select("id, title, priority, status, due_at, assigned_employee_id", { count: "exact" })
@@ -178,7 +229,7 @@ export async function loadLiveToday(
         .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(3),
-      canSeeManagement
+      canReadCloseout
         ? supabase
             .from("shift_closeouts")
             .select("status, net_sales_cents, covers, submitted_at")
@@ -188,7 +239,7 @@ export async function loadLiveToday(
             .order("submitted_at", { ascending: false })
             .limit(1)
         : Promise.resolve({ data: [], error: null }),
-      canSeeManagement
+      canReadInventoryCounts
         ? supabase
             .from("inventory_counts")
             .select("id", { count: "exact", head: true })
@@ -196,7 +247,7 @@ export async function loadLiveToday(
             .eq("location_id", locationId)
             .in("status", ["pending", "in_review"])
         : Promise.resolve({ data: [], error: null, count: 0 }),
-      canSeeManagement
+      canReadParLevels
         ? supabase
             .from("inventory_par_levels")
             .select("inventory_item_id")
@@ -207,8 +258,6 @@ export async function loadLiveToday(
     ]);
 
     if (
-      shiftResult.error ||
-      openPunchResult.error ||
       taskResult.error ||
       announcementResult.error ||
       closeoutResult.error ||
@@ -218,12 +267,21 @@ export async function loadLiveToday(
       return readFailure();
     }
 
-    const broadShifts = (shiftResult.data ?? []) as ShiftRow[];
     const visibleShifts = workspace.role === "employee"
       ? broadShifts.filter((shift) => shift.is_open || shift.employee_id === currentEmployeeId)
       : broadShifts;
-    const todayShifts = visibleShifts.filter(
-      (shift) => localDateKey(shift.starts_at, timeZone) === date,
+    const todayShifts = visibleShifts.filter((shift) =>
+      serviceDayResult.data.startsAt && serviceDayResult.data.endsAt
+        ? shiftBelongsToResolvedServiceDay(
+            { startsAt: shift.starts_at, endsAt: shift.ends_at },
+            timeZone,
+            {
+              businessDate: date,
+              startsAt: serviceDayResult.data.startsAt,
+              endsAt: serviceDayResult.data.endsAt,
+            },
+          )
+        : localDateKey(shift.starts_at, timeZone) === date,
     );
     const employeeIds = [
       ...new Set(
@@ -330,6 +388,13 @@ export async function loadLiveToday(
       configuredParLevels: new Set(
         (parResult.data ?? []).map((par) => par.inventory_item_id),
       ).size,
+      operatingService: {
+        source: serviceDayResult.data.source,
+        name: serviceDayResult.data.serviceName,
+        startsAt: serviceDayResult.data.startsAt,
+        endsAt: serviceDayResult.data.endsAt,
+        state: serviceDayResult.data.configurationState,
+      },
       currentEmployeeId,
     });
   } catch {

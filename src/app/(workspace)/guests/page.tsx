@@ -4,6 +4,7 @@ import { GuestsWorkspace } from "@/components/guests/guests-workspace";
 import { loadLiveGuests } from "@/data/read-models/guests";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { isDemoMode } from "@/lib/env";
+import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Guests" };
 
@@ -15,6 +16,7 @@ export default async function GuestsPage({
   if (isDemoMode) return <GuestsWorkspace />;
   const resolution = await resolveWorkspaceSession();
   if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  requireWorkspaceRouteAccess("/guests", resolution.context);
   const params = await searchParams;
   const search = (Array.isArray(params.q) ? params.q[0] : params.q ?? "")
     .trim()

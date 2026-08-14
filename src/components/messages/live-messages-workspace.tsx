@@ -57,6 +57,7 @@ const chatAttachmentTypes = [
   "image/webp",
   "application/pdf",
 ] as const;
+const chatEvidenceRetryDelaysMs = [250, 1_000, 3_000] as const;
 type ChatMessageRow = Database["public"]["Tables"]["chat_messages"]["Row"];
 type ChatReactionRow = Database["public"]["Tables"]["chat_reactions"]["Row"];
 type ChatAttachmentRow = Database["public"]["Tables"]["chat_attachments"]["Row"];
@@ -95,8 +96,8 @@ function ChannelRow({
   return (
     <button type="button" onClick={onSelect} aria-current={selected ? "page" : undefined} className={cn("focus-ring flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-[var(--paper)]", selected && "bg-[var(--paper-strong)] shadow-sm")}>
       <span className={cn("flex size-7 items-center justify-center rounded-lg", channel.kind === "management" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}><ChannelIcon kind={channel.kind} /></span>
-      <span className="min-w-0 flex-1 truncate text-[10px] font-semibold">{channel.name}</span>
-      {unread ? <span className="numeric flex min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-[8px] font-semibold text-[#171a17]" aria-label={`${unread} unread`}>{unread}</span> : null}
+      <span className="min-w-0 flex-1 truncate text-xs font-semibold">{channel.name}</span>
+      {unread ? <span className="numeric flex min-w-5 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 py-0.5 text-xs font-semibold text-[#171a17]" aria-label={`${unread} unread`}>{unread}</span> : null}
     </button>
   );
 }
@@ -124,16 +125,16 @@ function MessageBubble({
     <article className={cn("group flex items-start gap-3", mine && "flex-row-reverse")}>
       <Avatar name={message.authorName} size="sm" />
       <div className={cn("min-w-0 max-w-[min(82%,680px)]", mine && "text-right")}>
-        <div className={cn("mb-1 flex flex-wrap items-center gap-2", mine && "justify-end")}><p className="text-[10px] font-semibold">{message.authorName}</p><time className="numeric text-[9px] text-[var(--ink-faint)]" dateTime={message.createdAt}>{new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(message.createdAt))}</time>{message.editedAt ? <span className="text-[8px] text-[var(--ink-faint)]">edited</span> : null}{message.isAnnouncement ? <StatusPill tone="warning">Announcement</StatusPill> : null}</div>
-        <div className={cn("rounded-[18px] px-3.5 py-2.5 text-left text-[11px] leading-5", mine ? "rounded-tr-md bg-[var(--ink)] text-[var(--paper)] dark:bg-[var(--accent)] dark:text-[#171a17]" : message.isAnnouncement ? "rounded-tl-md border border-[var(--accent)]/30 bg-[var(--accent-soft)]/35 text-[var(--ink)]" : "rounded-tl-md border border-[var(--line)] bg-[var(--paper-strong)] text-[var(--ink)]")}>
+        <div className={cn("mb-1 flex flex-wrap items-center gap-2", mine && "justify-end")}><p className="text-xs font-semibold">{message.authorName}</p><time className="numeric text-xs text-[var(--ink-faint)]" dateTime={message.createdAt}>{new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(message.createdAt))}</time>{message.editedAt ? <span className="text-xs text-[var(--ink-faint)]">edited</span> : null}{message.isAnnouncement ? <StatusPill tone="warning">Announcement</StatusPill> : null}</div>
+        <div className={cn("rounded-[18px] px-3.5 py-2.5 text-left text-[13px] leading-5", mine ? "rounded-tr-md bg-[var(--ink)] text-[var(--paper)] dark:bg-[var(--accent)] dark:text-[#171a17]" : message.isAnnouncement ? "rounded-tl-md border border-[var(--accent)]/30 bg-[var(--accent-soft)]/35 text-[var(--ink)]" : "rounded-tl-md border border-[var(--line)] bg-[var(--paper-strong)] text-[var(--ink)]")}>
           <p className="whitespace-pre-wrap break-words">{message.body}</p>
-          {message.attachments.map((attachment) => <button type="button" key={attachment.id} onClick={() => onOpenAttachment(attachment)} className={cn("focus-ring mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left", mine ? "bg-white/10" : "bg-[var(--canvas)]")}><FileText className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate text-[9px] font-semibold">{attachment.fileName}</span><span className="text-[8px] opacity-60">Private</span><Download className="size-3 shrink-0 opacity-60" /></button>)}
+          {message.attachments.map((attachment) => <button type="button" key={attachment.id} onClick={() => onOpenAttachment(attachment)} className={cn("focus-ring mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left", mine ? "bg-white/10" : "bg-[var(--canvas)]")}><FileText className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate text-xs font-semibold">{attachment.fileName}</span><span className="text-xs opacity-60">Private</span><Download className="size-3 shrink-0 opacity-60" /></button>)}
         </div>
         <div className={cn("mt-1.5 flex flex-wrap items-center gap-1", mine && "justify-end")}>
-          {message.reactions.map((reaction) => <button key={reaction.emoji} type="button" disabled={busy} onClick={() => onReact(message, reaction.emoji as (typeof reactions)[number])} aria-label={`${reaction.emoji} reaction from ${reaction.userIds.length} people`} className={cn("focus-ring inline-flex min-h-6 items-center gap-1 rounded-full border px-2 text-[9px]", reaction.userIds.includes(currentUserId) ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)] bg-[var(--paper)]")}><span>{reaction.emoji}</span><span className="numeric text-[var(--ink-faint)]">{reaction.userIds.length}</span></button>)}
+          {message.reactions.map((reaction) => <button key={reaction.emoji} type="button" disabled={busy} onClick={() => onReact(message, reaction.emoji as (typeof reactions)[number])} aria-label={`${reaction.emoji} reaction from ${reaction.userIds.length} people`} className={cn("focus-ring inline-flex min-h-6 items-center gap-1 rounded-full border px-2 text-xs", reaction.userIds.includes(currentUserId) ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)] bg-[var(--paper)]")}><span>{reaction.emoji}</span><span className="numeric text-[var(--ink-faint)]">{reaction.userIds.length}</span></button>)}
           <details className="relative"><summary className="focus-ring flex size-6 list-none items-center justify-center rounded-full text-[var(--ink-faint)] hover:bg-[var(--canvas-strong)]" aria-label="Add reaction"><SmilePlus className="size-3" /></summary><div className="absolute bottom-7 left-0 z-10 flex rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] p-1 shadow-lg">{reactions.map((emoji) => <button key={emoji} type="button" disabled={busy} className="flex size-8 items-center justify-center rounded-lg hover:bg-[var(--canvas)]" onClick={() => onReact(message, emoji)} aria-label={`React ${emoji}`}>{emoji}</button>)}</div></details>
         </div>
-        <div className={cn("mt-1.5 flex flex-wrap items-center gap-2 text-[8px] text-[var(--ink-faint)]", mine && "justify-end")}>
+        <div className={cn("mt-1.5 flex flex-wrap items-center gap-2 text-xs text-[var(--ink-faint)]", mine && "justify-end")}>
           {mine ? <span className="inline-flex items-center gap-1"><Check className="size-2.5" />{message.readByCount ? `Read by ${message.readByCount}` : "Sent"}</span> : null}
           {message.isAnnouncement ? <>{message.acknowledgedByMe ? <span className="text-[var(--positive)]">Acknowledged</span> : <button type="button" disabled={busy} onClick={() => onAcknowledge(message)} className="focus-ring rounded-md px-1 font-semibold text-[var(--accent-strong)]">Acknowledge</button>}<span>{message.acknowledgementCount} total</span></> : null}
         </div>
@@ -264,26 +265,30 @@ function ChannelManagementPanel({
 
   return (
     <section aria-label="Channel management" className="mb-5 border-y border-[var(--line)] bg-[var(--paper-strong)] px-4 py-5 sm:px-5">
-      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold">Channel management</p><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">Create tenant-scoped rooms. Canonical all-staff, management, and location channels cannot be duplicated.</p></div><Button variant="quiet" size="icon" onClick={closePanel} aria-label="Close channel management"><X className="size-4" /></Button></div>
+      <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold">Channel management</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Create tenant-scoped rooms. Canonical all-staff, management, and location channels cannot be duplicated.</p></div><Button variant="quiet" size="icon" onClick={closePanel} aria-label="Close channel management"><X className="size-4" /></Button></div>
       <form onSubmit={createChannel} className="mt-5 grid gap-3 lg:grid-cols-[150px_180px_minmax(0,1fr)_auto] lg:items-end">
-        <label><span className="mb-1.5 block text-[9px] font-semibold text-[var(--ink-faint)]">Kind</span><select value={kind} onChange={(event) => { const nextKind = event.target.value as LiveChatChannel["kind"]; setKind(nextKind); rotateRequestId("chat.channel.create"); }} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[10px]"><option value="all_staff">All staff</option><option value="location">Location</option><option value="management">Management</option><option value="private">Private</option></select></label>
-        {kind === "location" ? <label><span className="mb-1.5 block text-[9px] font-semibold text-[var(--ink-faint)]">Location</span><select value={locationId} onChange={(event) => setLocationId(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[10px]">{data.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label> : <label><span className="mb-1.5 block text-[9px] font-semibold text-[var(--ink-faint)]">Scope</span><span className="flex h-10 items-center rounded-xl bg-[var(--canvas)] px-3 text-[9px] text-[var(--ink-faint)]">Organization-wide</span></label>}
-        <label><span className="mb-1.5 block text-[9px] font-semibold text-[var(--ink-faint)]">Name</span><input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder={kind === "location" ? "Downtown" : kind === "private" ? "Event planning" : kind === "management" ? "Management" : "All staff"} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[10px]" /></label>
+        <label><span className="mb-1.5 block text-xs font-semibold text-[var(--ink-faint)]">Kind</span><select value={kind} onChange={(event) => { const nextKind = event.target.value as LiveChatChannel["kind"]; setKind(nextKind); rotateRequestId("chat.channel.create"); }} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"><option value="all_staff">All staff</option><option value="location">Location</option><option value="management">Management</option><option value="private">Private</option></select></label>
+        {kind === "location" ? <label><span className="mb-1.5 block text-xs font-semibold text-[var(--ink-faint)]">Location</span><select value={locationId} onChange={(event) => setLocationId(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs">{data.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label> : <label><span className="mb-1.5 block text-xs font-semibold text-[var(--ink-faint)]">Scope</span><span className="flex h-10 items-center rounded-xl bg-[var(--canvas)] px-3 text-xs text-[var(--ink-faint)]">Organization-wide</span></label>}
+        <label><span className="mb-1.5 block text-xs font-semibold text-[var(--ink-faint)]">Name</span><input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder={kind === "location" ? "Downtown" : kind === "private" ? "Event planning" : kind === "management" ? "Management" : "All staff"} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs" /></label>
         <Button type="submit" variant="accent" size="sm" disabled={busy || pending || !name.trim() || (kind === "private" && !memberIds.length)}>{pending ? <LoaderCircle className="size-3.5 animate-spin" /> : <Settings2 className="size-3.5" />}Create</Button>
-        <label className="lg:col-span-3"><span className="mb-1.5 block text-[9px] font-semibold text-[var(--ink-faint)]">Description</span><input maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional operating context" className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[10px]" /></label>
+        <label className="lg:col-span-3"><span className="mb-1.5 block text-xs font-semibold text-[var(--ink-faint)]">Description</span><input maxLength={1000} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional operating context" className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs" /></label>
       </form>
-      {kind === "private" ? <fieldset className="mt-4"><legend className="text-[9px] font-semibold text-[var(--ink-faint)]">Private members · your account is added automatically</legend><div className="mt-2 flex flex-wrap gap-2">{data.profiles.filter((profile) => profile.id !== workspace.identity.userId).map((profile) => <label key={profile.id} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[9px]", memberIds.includes(profile.id) ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)]")}><input type="checkbox" checked={memberIds.includes(profile.id)} onChange={() => setMemberIds((current) => toggleMember(current, profile.id))} className="size-3.5 accent-[var(--accent)]" />{profile.name}</label>)}</div></fieldset> : null}
-      {data.channels.length ? <div className="mt-6 border-t border-[var(--line)] pt-4"><p className="text-[9px] font-semibold text-[var(--ink-faint)]">Active channels</p><div className="mt-2 flex flex-wrap gap-2">{data.channels.map((channel) => <div key={channel.id} className="flex items-center gap-2 rounded-full bg-[var(--canvas)] py-1.5 pr-1.5 pl-3"><span className="text-[9px] font-semibold">{channel.name}</span><button type="button" disabled={pending || busy} onClick={() => archiveChannel(channel.id)} className="focus-ring flex size-7 items-center justify-center rounded-full text-[var(--ink-faint)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]" aria-label={`Archive ${channel.name}`}><Archive className="size-3" /></button></div>)}</div></div> : null}
-      {privateChannels.length ? <div className="mt-5 grid gap-3 border-t border-[var(--line)] pt-4 sm:grid-cols-[220px_minmax(0,1fr)_auto] sm:items-end"><label><span className="mb-1.5 block text-[9px] font-semibold text-[var(--ink-faint)]">Edit private members</span><select value={privateChannelId} onChange={(event) => choosePrivateChannel(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[10px]"><option value="">Choose a private channel</option>{privateChannels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}</select></label><div className="flex flex-wrap gap-2">{privateChannelId ? data.profiles.map((profile) => <label key={profile.id} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-[9px]", privateMemberIds.includes(profile.id) ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)]")}><input type="checkbox" checked={privateMemberIds.includes(profile.id)} onChange={() => setPrivateMemberIds((current) => toggleMember(current, profile.id))} className="size-3.5 accent-[var(--accent)]" />{profile.name}</label>) : <span className="text-[9px] text-[var(--ink-faint)]">Choose a private channel to replace its explicit member set.</span>}</div><Button type="button" variant="secondary" size="sm" disabled={!privateChannelId || pending || busy || privateMemberIds.length < 2} onClick={savePrivateMembers}>Save members</Button></div> : null}
-      {message ? <p role="status" aria-live="polite" className="mt-4 rounded-xl bg-[var(--canvas)] px-3 py-2 text-[9px]">{message}</p> : null}
+      {kind === "private" ? <fieldset className="mt-4"><legend className="text-xs font-semibold text-[var(--ink-faint)]">Private members · your account is added automatically</legend><div className="mt-2 flex flex-wrap gap-2">{data.profiles.filter((profile) => profile.id !== workspace.identity.userId).map((profile) => <label key={profile.id} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs", memberIds.includes(profile.id) ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)]")}><input type="checkbox" checked={memberIds.includes(profile.id)} onChange={() => setMemberIds((current) => toggleMember(current, profile.id))} className="size-3.5 accent-[var(--accent)]" />{profile.name}</label>)}</div></fieldset> : null}
+      {data.channels.length ? <div className="mt-6 border-t border-[var(--line)] pt-4"><p className="text-xs font-semibold text-[var(--ink-faint)]">Active channels</p><div className="mt-2 flex flex-wrap gap-2">{data.channels.map((channel) => <div key={channel.id} className="flex items-center gap-2 rounded-full bg-[var(--canvas)] py-1.5 pr-1.5 pl-3"><span className="text-xs font-semibold">{channel.name}</span><button type="button" disabled={pending || busy} onClick={() => archiveChannel(channel.id)} className="focus-ring flex size-7 items-center justify-center rounded-full text-[var(--ink-faint)] hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]" aria-label={`Archive ${channel.name}`}><Archive className="size-3" /></button></div>)}</div></div> : null}
+      {privateChannels.length ? <div className="mt-5 grid gap-3 border-t border-[var(--line)] pt-4 sm:grid-cols-[220px_minmax(0,1fr)_auto] sm:items-end"><label><span className="mb-1.5 block text-xs font-semibold text-[var(--ink-faint)]">Edit private members</span><select value={privateChannelId} onChange={(event) => choosePrivateChannel(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"><option value="">Choose a private channel</option>{privateChannels.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}</select></label><div className="flex flex-wrap gap-2">{privateChannelId ? data.profiles.map((profile) => <label key={profile.id} className={cn("flex cursor-pointer items-center gap-2 rounded-full border px-3 py-2 text-xs", privateMemberIds.includes(profile.id) ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-[var(--line)]")}><input type="checkbox" checked={privateMemberIds.includes(profile.id)} onChange={() => setPrivateMemberIds((current) => toggleMember(current, profile.id))} className="size-3.5 accent-[var(--accent)]" />{profile.name}</label>) : <span className="text-xs text-[var(--ink-faint)]">Choose a private channel to replace its explicit member set.</span>}</div><Button type="button" variant="secondary" size="sm" disabled={!privateChannelId || pending || busy || privateMemberIds.length < 2} onClick={savePrivateMembers}>Save members</Button></div> : null}
+      {message ? <p role="status" aria-live="polite" className="mt-4 rounded-xl bg-[var(--canvas)] px-3 py-2 text-xs">{message}</p> : null}
     </section>
   );
 }
 
 function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextValue; data: LiveMessagesModel }) {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const evidenceFallbackRequestedRef = useRef(false);
   const [selectedChannelId, setSelectedChannelId] = useState(data.channels[0]?.id ?? "");
   const [messages, setMessages] = useState(data.messages);
+  const dataMessagesRef = useRef(data.messages);
+  const messagesRef = useRef(messages);
   const [unread, setUnread] = useState<Record<string, number>>(() => Object.fromEntries(data.channels.map((channel) => [channel.id, channel.unreadCount])));
   const [draft, setDraft] = useState("");
   const [announcement, setAnnouncement] = useState(false);
@@ -299,6 +304,25 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
   const channelMessages = useMemo(() => messages.filter((message) => message.channelId === selectedChannelId), [messages, selectedChannelId]);
   const profilesById = useMemo(() => new Map(data.profiles.map((profile) => [profile.id, profile])), [data.profiles]);
   const latestMessageId = channelMessages.at(-1)?.id ?? null;
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    if (dataMessagesRef.current === data.messages) return;
+    dataMessagesRef.current = data.messages;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      messagesRef.current = data.messages;
+      setMessages(data.messages);
+      evidenceFallbackRequestedRef.current = false;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.messages]);
 
   useEffect(() => {
     if (!selectedChannel) return;
@@ -320,6 +344,182 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
     let stopped = false;
     let realtimeChannel: RealtimeChannel | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
+    type EvidenceRefreshControl = {
+      failures: number;
+      generation: number;
+      retryTimer: ReturnType<typeof setTimeout> | null;
+      rerun: boolean;
+      running: boolean;
+    };
+    const evidenceRefreshControls = new Map<string, EvidenceRefreshControl>();
+
+    const evidenceRefreshControl = (messageId: string) => {
+      const existing = evidenceRefreshControls.get(messageId);
+      if (existing) return existing;
+      const created: EvidenceRefreshControl = {
+        failures: 0,
+        generation: 0,
+        retryTimer: null,
+        rerun: false,
+        running: false,
+      };
+      evidenceRefreshControls.set(messageId, created);
+      return created;
+    };
+
+    const readMessageEvidence = async (messageId: string) =>
+      Promise.all([
+          supabase
+            .from("chat_reactions")
+            .select("message_id, user_id, emoji, created_at")
+            .eq("organization_id", workspace.organization.id)
+            .eq("message_id", messageId)
+            .order("created_at", { ascending: true })
+            .limit(5_000),
+          supabase
+            .from("chat_attachments")
+            .select("id, message_id, file_name, mime_type, size_bytes, storage_path, created_at")
+            .eq("organization_id", workspace.organization.id)
+            .eq("message_id", messageId)
+            .order("created_at", { ascending: true })
+            .limit(500),
+          supabase
+            .from("announcement_acknowledgements")
+            .select("message_id, user_id, acknowledged_at")
+            .eq("organization_id", workspace.organization.id)
+            .eq("message_id", messageId)
+            .order("acknowledged_at", { ascending: true })
+            .limit(5_000),
+        ]);
+
+    const applyMessageEvidence = (
+      messageId: string,
+      reactionRows: Awaited<ReturnType<typeof readMessageEvidence>>[0]["data"],
+      attachmentRows: Awaited<ReturnType<typeof readMessageEvidence>>[1]["data"],
+      acknowledgementRows: Awaited<ReturnType<typeof readMessageEvidence>>[2]["data"],
+    ) => {
+      const groupedReactions = new Map<string, string[]>();
+      for (const reaction of reactionRows ?? []) {
+        groupedReactions.set(reaction.emoji, [
+          ...(groupedReactions.get(reaction.emoji) ?? []),
+          reaction.user_id,
+        ]);
+      }
+      const acknowledgedUserIds = (acknowledgementRows ?? []).map(
+        (acknowledgement) => acknowledgement.user_id,
+      );
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === messageId
+            ? {
+                ...message,
+                reactions: [...groupedReactions.entries()].map(
+                  ([emoji, userIds]) => ({ emoji, userIds }),
+                ),
+                attachments: (attachmentRows ?? []).map((attachment) => ({
+                  id: attachment.id,
+                  fileName: attachment.file_name,
+                  mimeType: attachment.mime_type,
+                  sizeBytes:
+                    attachment.size_bytes == null
+                      ? null
+                      : Number(attachment.size_bytes),
+                  storagePath: attachment.storage_path,
+                })),
+                acknowledgedByMe: acknowledgedUserIds.includes(
+                  workspace.identity.userId,
+                ),
+                acknowledgementCount: acknowledgedUserIds.length,
+              }
+            : message,
+        ),
+      );
+    };
+
+    const runEvidenceRefresh = async (
+      messageId: string,
+      control: EvidenceRefreshControl,
+    ) => {
+      if (stopped || control.running) return;
+      control.running = true;
+      try {
+        while (!stopped && control.rerun) {
+          control.rerun = false;
+          const generation = control.generation;
+          let results: Awaited<ReturnType<typeof readMessageEvidence>> | null = null;
+          try {
+            results = await readMessageEvidence(messageId);
+          } catch {
+            results = null;
+          }
+          if (stopped) return;
+          const failed =
+            !results ||
+            results[0].error ||
+            results[1].error ||
+            results[2].error;
+          if (failed) {
+            control.failures += 1;
+            control.rerun = true;
+            const delay = chatEvidenceRetryDelaysMs[control.failures - 1];
+            if (delay != null) {
+              control.retryTimer = setTimeout(() => {
+                control.retryTimer = null;
+                void runEvidenceRefresh(messageId, control);
+              }, delay);
+            } else {
+              control.rerun = false;
+              setNotice("Live message details could not catch up. Refreshing authoritative message data.");
+              if (!evidenceFallbackRequestedRef.current) {
+                evidenceFallbackRequestedRef.current = true;
+                router.refresh();
+              }
+            }
+            return;
+          }
+          if (!results) return;
+          control.failures = 0;
+          evidenceFallbackRequestedRef.current = false;
+          if (control.generation !== generation) {
+            control.rerun = true;
+            continue;
+          }
+          applyMessageEvidence(
+            messageId,
+            results[0].data,
+            results[1].data,
+            results[2].data,
+          );
+        }
+      } finally {
+        control.running = false;
+      }
+    };
+
+    const requestEvidenceRefresh = (messageId: string) => {
+      const control = evidenceRefreshControl(messageId);
+      control.generation += 1;
+      control.rerun = true;
+      if (control.retryTimer) {
+        clearTimeout(control.retryTimer);
+        control.retryTimer = null;
+      }
+      void runEvidenceRefresh(messageId, control);
+    };
+
+    const recordEvidenceInsert = (messageId: string) => {
+      const control = evidenceRefreshControl(messageId);
+      control.generation += 1;
+      if (control.running) control.rerun = true;
+    };
+
+    const refreshSelectedChannelEvidence = () => {
+      for (const message of messagesRef.current) {
+        if (message.channelId === selectedChannel.id) {
+          requestEvidenceRefresh(message.id);
+        }
+      }
+    };
 
     const connect = () => {
       if (stopped) return;
@@ -334,57 +534,30 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
           } else if (payload.eventType === "UPDATE") {
             const row = payload.new as ChatMessageRow;
             setMessages((current) => row.deleted_at ? current.filter((message) => message.id !== row.id) : current.map((message) => message.id === row.id ? { ...message, body: row.body, editedAt: row.edited_at, isAnnouncement: row.is_announcement } : message));
+            if (!row.deleted_at) requestEvidenceRefresh(row.id);
           } else {
             const row = payload.old as Partial<ChatMessageRow>;
             if (row.id) setMessages((current) => current.filter((message) => message.id !== row.id));
           }
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "chat_reactions", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
-          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as Partial<ChatReactionRow>;
-          if (!row.message_id || !row.user_id || !row.emoji) {
-            if (payload.eventType === "DELETE") {
-              void supabase.from("chat_reactions").select("message_id, user_id, emoji").eq("organization_id", workspace.organization.id).limit(5_000).then(({ data: reactionRows }) => {
-                if (!reactionRows) return;
-                setMessages((current) => current.map((message) => {
-                  const grouped = new Map<string, string[]>();
-                  for (const reaction of reactionRows) {
-                    if (reaction.message_id !== message.id) continue;
-                    grouped.set(reaction.emoji, [...(grouped.get(reaction.emoji) ?? []), reaction.user_id]);
-                  }
-                  return { ...message, reactions: [...grouped.entries()].map(([emoji, userIds]) => ({ emoji, userIds })) };
-                }));
-              });
-            }
-            return;
-          }
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_reactions", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
+          const row = payload.new as Partial<ChatReactionRow>;
+          if (!row.message_id || !row.user_id || !row.emoji) return;
+          recordEvidenceInsert(row.message_id);
           setMessages((current) => current.map((message) => {
             if (message.id !== row.message_id) return message;
             const existing = message.reactions.find((reaction) => reaction.emoji === row.emoji);
-            if (payload.eventType === "DELETE") {
-              if (!existing) return message;
-              const userIds = existing.userIds.filter((id) => id !== row.user_id);
-              return { ...message, reactions: userIds.length ? message.reactions.map((reaction) => reaction.emoji === row.emoji ? { ...reaction, userIds } : reaction) : message.reactions.filter((reaction) => reaction.emoji !== row.emoji) };
-            }
             if (existing?.userIds.includes(row.user_id!)) return message;
             return { ...message, reactions: existing ? message.reactions.map((reaction) => reaction.emoji === row.emoji ? { ...reaction, userIds: [...reaction.userIds, row.user_id!] } : reaction) : [...message.reactions, { emoji: row.emoji!, userIds: [row.user_id!] }] };
           }));
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "chat_attachments", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
-          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as Partial<ChatAttachmentRow>;
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_attachments", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
+          const row = payload.new as Partial<ChatAttachmentRow>;
           if (!row.id) return;
-          if (payload.eventType === "DELETE" && !row.message_id) {
-            setMessages((current) => current.map((message) => ({
-              ...message,
-              attachments: message.attachments.filter((attachment) => attachment.id !== row.id),
-            })));
-            return;
-          }
           if (!row.message_id) return;
+          recordEvidenceInsert(row.message_id);
           setMessages((current) => current.map((message) => {
             if (message.id !== row.message_id) return message;
-            if (payload.eventType === "DELETE") {
-              return { ...message, attachments: message.attachments.filter((attachment) => attachment.id !== row.id) };
-            }
             if (!row.file_name || !row.storage_path) return message;
             const attachment = {
               id: row.id!,
@@ -401,16 +574,19 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
             };
           }));
         })
-        .on("postgres_changes", { event: "*", schema: "public", table: "announcement_acknowledgements", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
-          const row = (payload.eventType === "DELETE" ? payload.old : payload.new) as Partial<ChatAcknowledgementRow>;
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcement_acknowledgements", filter: `organization_id=eq.${workspace.organization.id}` }, (payload) => {
+          const row = payload.new as Partial<ChatAcknowledgementRow>;
           if (!row.message_id) return;
+          recordEvidenceInsert(row.message_id);
           setMessages((current) => current.map((message) => {
             if (message.id !== row.message_id) return message;
+            const ownAcknowledgementAlreadyApplied =
+              row.user_id === workspace.identity.userId && message.acknowledgedByMe;
             const acknowledgedByMe = row.user_id === workspace.identity.userId
-              ? payload.eventType !== "DELETE"
+              ? true
               : message.acknowledgedByMe;
-            const acknowledgementCount = payload.eventType === "DELETE"
-              ? Math.max(0, message.acknowledgementCount - 1)
+            const acknowledgementCount = ownAcknowledgementAlreadyApplied
+              ? message.acknowledgementCount
               : message.acknowledgementCount + 1;
             return { ...message, acknowledgedByMe, acknowledgementCount };
           }));
@@ -431,7 +607,10 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
         })
         .subscribe((status) => {
           if (stopped) return;
-          if (status === "SUBSCRIBED") setRealtimeState("live");
+          if (status === "SUBSCRIBED") {
+            setRealtimeState("live");
+            refreshSelectedChannelEvidence();
+          }
           else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
             setRealtimeState("reconnecting");
             if (retry) clearTimeout(retry);
@@ -452,9 +631,12 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
     return () => {
       stopped = true;
       if (retry) clearTimeout(retry);
+      for (const control of evidenceRefreshControls.values()) {
+        if (control.retryTimer) clearTimeout(control.retryTimer);
+      }
       if (realtimeChannel) void supabase.removeChannel(realtimeChannel);
     };
-  }, [profilesById, selectedChannel, selectedChannelId, workspace.identity.userId, workspace.organization.id]);
+  }, [profilesById, router, selectedChannel, selectedChannelId, workspace.identity.userId, workspace.organization.id]);
 
   function selectChannel(channel: LiveChatChannel) {
     if (channel.id !== selectedChannelId) setRealtimeState("connecting");
@@ -591,22 +773,22 @@ function LiveMessagesContent({ workspace, data }: { workspace: WorkspaceContextV
 
   return (
     <PageFrame width="full" className="max-w-[1680px] pb-3 lg:pb-8">
-      <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><StatusPill tone={totalUnread ? "accent" : "positive"} dot>{totalUnread ? `${totalUnread} unread` : "Caught up"}</StatusPill><StatusPill tone={realtimeState === "live" ? "positive" : "warning"}>{realtimeState === "live" ? "Realtime live" : realtimeState === "connecting" ? "Connecting" : "Reconnecting"}</StatusPill></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Stay close to service</h2><p className="mt-1 text-[11px] text-[var(--ink-faint)]">Live channels are filtered by organization, location, and management access.</p></div><div className="flex items-center gap-2">{data.canManageChannels ? <Button variant="secondary" size="sm" onClick={() => setManagingChannels((current) => !current)}><Settings2 className="size-3.5" />Manage channels</Button> : null}<StatusPill tone="neutral">Notification preferences apply</StatusPill></div></div>
+      <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><StatusPill tone={totalUnread ? "accent" : "positive"} dot>{totalUnread ? `${totalUnread} unread` : "Caught up"}</StatusPill><StatusPill tone={realtimeState === "live" ? "positive" : "warning"}>{realtimeState === "live" ? "Realtime live" : realtimeState === "connecting" ? "Connecting" : "Reconnecting"}</StatusPill></div><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Stay close to service</h2><p className="mt-1 text-[13px] text-[var(--ink-faint)]">Live channels are filtered by organization, location, and management access.</p></div><div className="flex items-center gap-2">{data.canManageChannels ? <Button variant="secondary" size="sm" onClick={() => setManagingChannels((current) => !current)}><Settings2 className="size-3.5" />Manage channels</Button> : null}<StatusPill tone="neutral">Notification preferences apply</StatusPill></div></div>
 
       {managingChannels ? <ChannelManagementPanel workspace={workspace} data={data} busy={isPending} onClose={() => setManagingChannels(false)} /> : null}
 
       {!data.channels.length ? <section className="rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[var(--paper-strong)] p-10 text-center"><MessageCircleMore className="mx-auto size-7 text-[var(--ink-faint)]" /><h3 className="mt-4 text-lg font-medium tracking-[-0.035em]">No channels are available</h3><p className="mx-auto mt-2 max-w-md text-xs leading-5 text-[var(--ink-faint)]">{data.canManageChannels ? "Create the first all-staff, location, management, or private channel above. No synthetic conversation is shown." : "Ask a manager to create an all-staff or location channel. No synthetic conversation is shown."}</p>{data.canManageChannels && !managingChannels ? <Button className="mt-5" variant="accent" size="sm" onClick={() => setManagingChannels(true)}><Settings2 className="size-3.5" />Create first channel</Button> : null}</section> : (
         <div className="grid min-h-[calc(100svh-190px)] overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--paper)] shadow-[0_12px_42px_rgba(25,28,24,.04)] lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)_290px]">
-          <nav aria-label="Message channels" className={cn("border-[var(--line)] bg-[var(--canvas)] p-3 lg:block lg:border-r", mobileChatOpen ? "hidden" : "block")}><div className="px-2 pt-2 pb-4"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-xl bg-[var(--graphite)] text-white"><MessageCircleMore className="size-3.5" /></span><div><p className="text-[11px] font-semibold">{workspace.organization.name}</p><p className="mt-0.5 text-[9px] text-[var(--ink-faint)]">{data.profiles.length} people · {data.channels.length} channels</p></div></div></div><label className="relative mb-4 block"><span className="sr-only">Search channels</span><Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a channel" className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-[10px] placeholder:text-[var(--ink-faint)]" /></label><div className="space-y-5"><section><p className="px-3 text-[9px] font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Team</p><div className="mt-2 space-y-1">{visibleChannels.filter((channel) => channel.kind !== "location").map((channel) => <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannelId} unread={unread[channel.id] ?? 0} onSelect={() => selectChannel(channel)} />)}</div></section><section><p className="px-3 text-[9px] font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Locations</p><div className="mt-2 space-y-1">{visibleChannels.filter((channel) => channel.kind === "location").map((channel) => <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannelId} unread={unread[channel.id] ?? 0} onSelect={() => selectChannel(channel)} />)}</div></section></div></nav>
+          <nav aria-label="Message channels" className={cn("border-[var(--line)] bg-[var(--canvas)] p-3 lg:block lg:border-r", mobileChatOpen ? "hidden" : "block")}><div className="px-2 pt-2 pb-4"><div className="flex items-center gap-2"><span className="flex size-8 items-center justify-center rounded-xl bg-[var(--graphite)] text-white"><MessageCircleMore className="size-3.5" /></span><div><p className="text-[13px] font-semibold">{workspace.organization.name}</p><p className="mt-0.5 text-xs text-[var(--ink-faint)]">{data.profiles.length} people · {data.channels.length} channels</p></div></div></div><label className="relative mb-4 block"><span className="sr-only">Search channels</span><Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a channel" className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-xs placeholder:text-[var(--ink-faint)]" /></label><div className="space-y-5"><section><p className="px-3 text-xs font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Team</p><div className="mt-2 space-y-1">{visibleChannels.filter((channel) => channel.kind !== "location").map((channel) => <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannelId} unread={unread[channel.id] ?? 0} onSelect={() => selectChannel(channel)} />)}</div></section><section><p className="px-3 text-xs font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">Locations</p><div className="mt-2 space-y-1">{visibleChannels.filter((channel) => channel.kind === "location").map((channel) => <ChannelRow key={channel.id} channel={channel} selected={channel.id === selectedChannelId} unread={unread[channel.id] ?? 0} onSelect={() => selectChannel(channel)} />)}</div></section></div></nav>
 
-          <main className={cn("min-w-0 flex-col bg-[var(--paper-strong)] lg:flex", mobileChatOpen ? "flex" : "hidden")} aria-label={`${selectedChannel?.name ?? "Channel"} conversation`}><header className="flex min-h-[72px] items-center gap-3 border-b border-[var(--line)] px-3 sm:px-5"><Button variant="quiet" size="icon" className="lg:hidden" aria-label="Back to channels" onClick={() => setMobileChatOpen(false)}><ArrowLeft className="size-4" /></Button><span className={cn("flex size-9 items-center justify-center rounded-xl", selectedChannel?.kind === "management" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}>{selectedChannel ? <ChannelIcon kind={selectedChannel.kind} /> : null}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate text-sm font-semibold">{selectedChannel?.name}</h3>{selectedChannel?.kind === "management" ? <StatusPill tone="danger">Private</StatusPill> : null}</div><p className="mt-0.5 truncate text-[9px] text-[var(--ink-faint)]">{selectedChannel?.description || `${selectedChannel?.memberIds.length ?? 0} people with verified access`}</p></div><Button variant="quiet" size="icon" aria-label="Channel information" onClick={() => setMobileInfoOpen(true)}><Info className="size-4" /></Button></header>
+          <main className={cn("min-w-0 flex-col bg-[var(--paper-strong)] lg:flex", mobileChatOpen ? "flex" : "hidden")} aria-label={`${selectedChannel?.name ?? "Channel"} conversation`}><header className="flex min-h-[72px] items-center gap-3 border-b border-[var(--line)] px-3 sm:px-5"><Button variant="quiet" size="icon" className="lg:hidden" aria-label="Back to channels" onClick={() => setMobileChatOpen(false)}><ArrowLeft className="size-4" /></Button><span className={cn("flex size-9 items-center justify-center rounded-xl", selectedChannel?.kind === "management" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}>{selectedChannel ? <ChannelIcon kind={selectedChannel.kind} /> : null}</span><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><h3 className="truncate text-sm font-semibold">{selectedChannel?.name}</h3>{selectedChannel?.kind === "management" ? <StatusPill tone="danger">Private</StatusPill> : null}</div><p className="mt-0.5 truncate text-xs text-[var(--ink-faint)]">{selectedChannel?.description || `${selectedChannel?.memberIds.length ?? 0} people with verified access`}</p></div><Button variant="quiet" size="icon" aria-label="Channel information" onClick={() => setMobileInfoOpen(true)}><Info className="size-4" /></Button></header>
 
-            <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-6"><div className="space-y-5">{channelMessages.map((message) => <MessageBubble key={message.id} message={message} mine={message.authorId === workspace.identity.userId} currentUserId={workspace.identity.userId} timeZone={data.timeZone} busy={isPending} onReact={toggleReaction} onAcknowledge={acknowledge} onOpenAttachment={openAttachment} />)}{!channelMessages.length ? <div className="flex min-h-64 flex-col items-center justify-center text-center"><span className="flex size-12 items-center justify-center rounded-2xl bg-[var(--canvas)] text-[var(--ink-faint)]"><MessageCircleMore className="size-5" /></span><p className="mt-4 text-xs font-semibold">Start the conversation</p><p className="mt-1 max-w-xs text-[10px] leading-4 text-[var(--ink-faint)]">Only people allowed into this live channel can read its messages.</p></div> : null}</div></div>
+            <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-6 sm:py-6"><div className="space-y-5">{channelMessages.map((message) => <MessageBubble key={message.id} message={message} mine={message.authorId === workspace.identity.userId} currentUserId={workspace.identity.userId} timeZone={data.timeZone} busy={isPending} onReact={toggleReaction} onAcknowledge={acknowledge} onOpenAttachment={openAttachment} />)}{!channelMessages.length ? <div className="flex min-h-64 flex-col items-center justify-center text-center"><span className="flex size-12 items-center justify-center rounded-2xl bg-[var(--canvas)] text-[var(--ink-faint)]"><MessageCircleMore className="size-5" /></span><p className="mt-4 text-xs font-semibold">Start the conversation</p><p className="mt-1 max-w-xs text-xs leading-4 text-[var(--ink-faint)]">Only people allowed into this live channel can read its messages.</p></div> : null}</div></div>
 
-            <footer className="border-t border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4"><form onSubmit={sendMessage} className="rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-2 focus-within:border-[var(--line-strong)]"><div className="flex items-end gap-2"><input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" onChange={(event) => { chooseAttachment(event.target.files?.[0]); event.currentTarget.value = ""; }} /><Button variant="quiet" size="icon" disabled={isPending} onClick={() => fileInputRef.current?.click()} title="Attach a private image or PDF" aria-label="Attach a private image or PDF"><Paperclip className="size-4" /></Button><label className="min-w-0 flex-1"><span className="sr-only">Message {selectedChannel?.name}</span><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} maxLength={10_000} placeholder={`Message ${selectedChannel?.name ?? "channel"}`} className="max-h-28 min-h-10 w-full resize-none bg-transparent px-1 py-2.5 text-xs outline-none placeholder:text-[var(--ink-faint)]" /></label><Button type="submit" variant="accent" size="icon" disabled={isPending || (!draft.trim() && !attachmentFile)} aria-label="Send message">{isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}</Button></div>{attachmentFile ? <div className="mx-2 mt-1 flex items-center gap-2 rounded-xl bg-[var(--canvas)] px-3 py-2 text-[9px]"><FileText className="size-3.5 shrink-0 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1 truncate font-semibold">{attachmentFile.name}</span><span className="numeric text-[8px] text-[var(--ink-faint)]">{(attachmentFile.size / 1_048_576).toFixed(1)} MB</span><button type="button" onClick={() => setAttachmentFile(null)} className="focus-ring rounded-md p-1 text-[var(--ink-faint)]" aria-label="Remove attachment"><X className="size-3" /></button></div> : null}{data.canAnnounce ? <label className="mt-1 flex items-center gap-2 px-2 py-1 text-[9px] text-[var(--ink-faint)]"><input type="checkbox" checked={announcement} onChange={(event) => setAnnouncement(event.target.checked)} className="size-3.5 accent-[var(--accent)]" /><Megaphone className="size-3" />Post as an announcement</label> : null}</form><p className="mt-2 px-2 text-[8px] text-[var(--ink-faint)]">Images and PDFs use private signed transfer; files are visible only to authorized channel members.</p>{notice ? <p role="status" className="mt-2 rounded-xl bg-[var(--danger-soft)] px-3 py-2 text-[9px] text-[var(--danger)]">{notice}</p> : null}</footer>
+            <footer className="border-t border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4"><form onSubmit={sendMessage} className="rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-2 focus-within:border-[var(--line-strong)]"><div className="flex items-end gap-2"><input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="sr-only" onChange={(event) => { chooseAttachment(event.target.files?.[0]); event.currentTarget.value = ""; }} /><Button variant="quiet" size="icon" disabled={isPending} onClick={() => fileInputRef.current?.click()} title="Attach a private image or PDF" aria-label="Attach a private image or PDF"><Paperclip className="size-4" /></Button><label className="min-w-0 flex-1"><span className="sr-only">Message {selectedChannel?.name}</span><textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={1} maxLength={10_000} placeholder={`Message ${selectedChannel?.name ?? "channel"}`} className="max-h-28 min-h-10 w-full resize-none bg-transparent px-1 py-2.5 text-xs outline-none placeholder:text-[var(--ink-faint)]" /></label><Button type="submit" variant="accent" size="icon" disabled={isPending || (!draft.trim() && !attachmentFile)} aria-label="Send message">{isPending ? <LoaderCircle className="size-4 animate-spin" /> : <Send className="size-4" />}</Button></div>{attachmentFile ? <div className="mx-2 mt-1 flex items-center gap-2 rounded-xl bg-[var(--canvas)] px-3 py-2 text-xs"><FileText className="size-3.5 shrink-0 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1 truncate font-semibold">{attachmentFile.name}</span><span className="numeric text-xs text-[var(--ink-faint)]">{(attachmentFile.size / 1_048_576).toFixed(1)} MB</span><button type="button" onClick={() => setAttachmentFile(null)} className="focus-ring rounded-md p-1 text-[var(--ink-faint)]" aria-label="Remove attachment"><X className="size-3" /></button></div> : null}{data.canAnnounce ? <label className="mt-1 flex items-center gap-2 px-2 py-1 text-xs text-[var(--ink-faint)]"><input type="checkbox" checked={announcement} onChange={(event) => setAnnouncement(event.target.checked)} className="size-3.5 accent-[var(--accent)]" /><Megaphone className="size-3" />Post as an announcement</label> : null}</form><p className="mt-2 px-2 text-xs text-[var(--ink-faint)]">Images and PDFs use private signed transfer; files are visible only to authorized channel members.</p>{notice ? <p role="status" className="mt-2 rounded-xl bg-[var(--danger-soft)] px-3 py-2 text-xs text-[var(--danger)]">{notice}</p> : null}</footer>
           </main>
 
-          <aside className={cn("border-l border-[var(--line)] bg-[var(--canvas)] p-5 xl:block", mobileInfoOpen ? "fixed inset-0 z-40 block overflow-y-auto" : "hidden")} aria-label="Channel information"><div className="flex items-center justify-between"><p className="text-xs font-semibold">Channel details</p><Button variant="quiet" size="icon" className="xl:hidden" onClick={() => setMobileInfoOpen(false)} aria-label="Close channel details"><X className="size-4" /></Button></div><div className="mt-6 flex flex-col items-center text-center"><span className={cn("flex size-14 items-center justify-center rounded-[18px]", selectedChannel?.kind === "management" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}>{selectedChannel ? <ChannelIcon kind={selectedChannel.kind} /> : null}</span><h4 className="mt-3 text-sm font-semibold">{selectedChannel?.name}</h4><p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">{selectedChannel?.description || "Access follows the channel’s tenant scope."}</p></div><section className="mt-7 border-t border-[var(--line)] pt-5"><div className="flex items-center justify-between"><p className="text-[10px] font-semibold">Members</p><span className="numeric text-[9px] text-[var(--ink-faint)]">{memberProfiles.length}</span></div><div className="mt-3 space-y-3">{memberProfiles.slice(0, 8).map((profile, index) => <div key={profile.id} className="flex items-center gap-2.5"><Avatar name={profile.name} size="sm" index={index} /><div className="min-w-0 flex-1"><p className="truncate text-[10px] font-semibold">{profile.name}</p><p className="mt-0.5 truncate text-[8px] text-[var(--ink-faint)] capitalize">{profile.role}</p></div>{profile.id === workspace.identity.userId ? <span className="text-[8px] text-[var(--ink-faint)]">You</span> : null}</div>)}</div></section>{selectedChannel?.kind === "management" ? <div className="mt-7 flex items-start gap-2 rounded-xl bg-[var(--danger-soft)] px-3 py-3 text-[9px] leading-4 text-[var(--danger)]"><LockKeyhole className="mt-0.5 size-3.5 shrink-0" />Membership is restricted to authorized management and checked by RLS.</div> : null}</aside>
+          <aside className={cn("border-l border-[var(--line)] bg-[var(--canvas)] p-5 xl:block", mobileInfoOpen ? "fixed inset-0 z-40 block overflow-y-auto" : "hidden")} aria-label="Channel information"><div className="flex items-center justify-between"><p className="text-xs font-semibold">Channel details</p><Button variant="quiet" size="icon" className="xl:hidden" onClick={() => setMobileInfoOpen(false)} aria-label="Close channel details"><X className="size-4" /></Button></div><div className="mt-6 flex flex-col items-center text-center"><span className={cn("flex size-14 items-center justify-center rounded-[18px]", selectedChannel?.kind === "management" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}>{selectedChannel ? <ChannelIcon kind={selectedChannel.kind} /> : null}</span><h4 className="mt-3 text-sm font-semibold">{selectedChannel?.name}</h4><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">{selectedChannel?.description || "Access follows the channel’s tenant scope."}</p></div><section className="mt-7 border-t border-[var(--line)] pt-5"><div className="flex items-center justify-between"><p className="text-xs font-semibold">Members</p><span className="numeric text-xs text-[var(--ink-faint)]">{memberProfiles.length}</span></div><div className="mt-3 space-y-3">{memberProfiles.slice(0, 8).map((profile, index) => <div key={profile.id} className="flex items-center gap-2.5"><Avatar name={profile.name} size="sm" index={index} /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{profile.name}</p><p className="mt-0.5 truncate text-xs text-[var(--ink-faint)] capitalize">{profile.role}</p></div>{profile.id === workspace.identity.userId ? <span className="text-xs text-[var(--ink-faint)]">You</span> : null}</div>)}</div></section>{selectedChannel?.kind === "management" ? <div className="mt-7 flex items-start gap-2 rounded-xl bg-[var(--danger-soft)] px-3 py-3 text-xs leading-4 text-[var(--danger)]"><LockKeyhole className="mt-0.5 size-3.5 shrink-0" />Membership is restricted to authorized management and checked by RLS.</div> : null}</aside>
         </div>
       )}
     </PageFrame>

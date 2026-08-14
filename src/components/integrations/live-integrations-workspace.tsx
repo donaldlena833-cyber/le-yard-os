@@ -25,7 +25,9 @@ import {
   finalizeManualCsvImportAction,
   retryIntegrationSyncAction,
 } from "@/app/actions/workflows/integrations";
+import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
+import { Drawer } from "@/components/ui/drawer";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import type {
@@ -51,11 +53,22 @@ import {
   retryDelayMinutes,
 } from "@/lib/integrations/adapters";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+import {
+  useRealtimeInvalidation,
+  type RealtimeInvalidationBinding,
+} from "@/lib/realtime/use-realtime-invalidation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { IntegrationProvider } from "@/types";
 
 type ActivityTab = "syncs" | "imports" | "events" | "audit";
+
+const integrationRealtimeBindings = [
+  { table: "integration_connections", scope: "organization" },
+  { table: "integration_sync_jobs", scope: "organization" },
+  { table: "import_jobs", scope: "organization" },
+  { table: "integration_events", events: ["INSERT"], scope: "organization" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 const catalogProviders: readonly IntegrationProvider[] = [
   "toast",
@@ -132,7 +145,7 @@ function EmptyLedger({ title, detail }: { title: string; detail: string }) {
     <div className="px-5 py-14 text-center">
       <FileClock className="mx-auto size-5 text-[var(--ink-faint)]" />
       <p className="mt-3 text-xs font-semibold">{title}</p>
-      <p className="mx-auto mt-1 max-w-sm text-[10px] leading-4 text-[var(--ink-faint)]">
+      <p className="mx-auto mt-1 max-w-sm text-xs leading-4 text-[var(--ink-faint)]">
         {detail}
       </p>
     </div>
@@ -174,24 +187,24 @@ function SyncLedger({
                 {humanize(job.status)}
               </StatusPill>
             </div>
-            <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+            <p className="mt-1 text-xs text-[var(--ink-faint)]">
               {humanize(job.resourceType)} · {job.direction} · attempt {job.attempts} of {job.maxAttempts}
             </p>
             {job.errorMessage ? (
-              <p className="mt-2 max-w-2xl text-[10px] leading-4 text-[var(--danger)]">
+              <p className="mt-2 max-w-2xl text-xs leading-4 text-[var(--danger)]">
                 {job.errorMessage}
               </p>
             ) : null}
           </div>
           <div>
-            <p className="text-[9px] text-[var(--ink-faint)]">Started</p>
-            <p className="numeric mt-1 text-[10px]">{timestamp(job.startedAt ?? job.createdAt)}</p>
+            <p className="text-xs text-[var(--ink-faint)]">Started</p>
+            <p className="numeric mt-1 text-xs">{timestamp(job.startedAt ?? job.createdAt)}</p>
           </div>
           <div>
-            <p className="text-[9px] text-[var(--ink-faint)]">Evidence</p>
-            <p className="numeric mt-1 text-[10px]">{job.recordsProcessed.toLocaleString()} processed</p>
+            <p className="text-xs text-[var(--ink-faint)]">Evidence</p>
+            <p className="numeric mt-1 text-xs">{job.recordsProcessed.toLocaleString()} processed</p>
             {Object.keys(job.recordOutcomes).length ? (
-              <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+              <p className="mt-1 text-xs text-[var(--ink-faint)]">
                 {Object.entries(job.recordOutcomes)
                   .map(([outcome, count]) => `${count} ${outcome}`)
                   .join(" · ")}
@@ -214,7 +227,7 @@ function SyncLedger({
                 Retry
               </Button>
             ) : (
-              <p className="text-[9px] text-[var(--ink-faint)]">
+              <p className="text-xs text-[var(--ink-faint)]">
                 {job.nextAttemptAt
                   ? `Next ${timestamp(job.nextAttemptAt)}`
                   : job.status === "failed"
@@ -252,22 +265,22 @@ function ImportLedger({ jobs }: { jobs: LiveIntegrationImportJob[] }) {
               <p className="truncate text-xs font-semibold">{job.fileName}</p>
               <StatusPill tone={statusTone(job.status)}>{humanize(job.status)}</StatusPill>
             </div>
-            <p className="mt-1 text-[9px] text-[var(--ink-faint)]">{humanize(job.importType)}</p>
+            <p className="mt-1 text-xs text-[var(--ink-faint)]">{humanize(job.importType)}</p>
           </div>
           <div>
-            <p className="text-[9px] text-[var(--ink-faint)]">Requested</p>
-            <p className="mt-1 text-[10px]">{job.requestedBy}</p>
-            <p className="numeric mt-1 text-[9px] text-[var(--ink-faint)]">{timestamp(job.createdAt)}</p>
+            <p className="text-xs text-[var(--ink-faint)]">Requested</p>
+            <p className="mt-1 text-xs">{job.requestedBy}</p>
+            <p className="numeric mt-1 text-xs text-[var(--ink-faint)]">{timestamp(job.createdAt)}</p>
           </div>
           <div>
-            <p className="text-[9px] text-[var(--ink-faint)]">Rows</p>
-            <p className="numeric mt-1 text-[10px]">
+            <p className="text-xs text-[var(--ink-faint)]">Rows</p>
+            <p className="numeric mt-1 text-xs">
               {job.totalRows == null ? "Pending scan" : job.totalRows.toLocaleString()}
             </p>
           </div>
           <div>
-            <p className="text-[9px] text-[var(--ink-faint)]">Outcome</p>
-            <p className="numeric mt-1 text-[10px]">
+            <p className="text-xs text-[var(--ink-faint)]">Outcome</p>
+            <p className="numeric mt-1 text-xs">
               {job.successfulRows.toLocaleString()} accepted · {job.failedRows.toLocaleString()} failed
             </p>
           </div>
@@ -294,12 +307,12 @@ function EventLedger({ events }: { events: LiveIntegrationEvent[] }) {
             <StatusPill tone={statusTone(event.severity === "error" ? "failed" : event.severity)}>
               {humanize(event.severity)}
             </StatusPill>
-            <p className="mt-2 text-[9px] text-[var(--ink-faint)]">
+            <p className="mt-2 text-xs text-[var(--ink-faint)]">
               {event.connectionName ?? "Organization event"} · {humanize(event.eventType)}
             </p>
           </div>
-          <p className="text-[10px] leading-4 text-[var(--ink-soft)]">{event.message}</p>
-          <p className="numeric text-[9px] text-[var(--ink-faint)] sm:text-right">
+          <p className="text-xs leading-4 text-[var(--ink-soft)]">{event.message}</p>
+          <p className="numeric text-xs text-[var(--ink-faint)] sm:text-right">
             {timestamp(event.occurredAt)}
           </p>
         </div>
@@ -322,17 +335,17 @@ function AuditLedger({ events }: { events: LiveIntegrationAuditEvent[] }) {
       {events.map((event) => (
         <div key={event.id} className="grid gap-2 px-4 py-4 sm:grid-cols-[.75fr_1fr_.75fr] sm:items-center">
           <div>
-            <p className="text-[10px] font-semibold">{humanize(event.action)}</p>
-            <p className="mt-1 text-[9px] text-[var(--ink-faint)]">{humanize(event.tableName)}</p>
+            <p className="text-xs font-semibold">{humanize(event.action)}</p>
+            <p className="mt-1 text-xs text-[var(--ink-faint)]">{humanize(event.tableName)}</p>
           </div>
           <div>
-            <p className="text-[10px]">{event.actorName}</p>
-            <p className="mt-1 truncate text-[9px] text-[var(--ink-faint)]">
+            <p className="text-xs">{event.actorName}</p>
+            <p className="mt-1 truncate text-xs text-[var(--ink-faint)]">
               {event.actorRole ? humanize(event.actorRole) : "Server"}
               {event.requestId ? ` · request ${event.requestId.slice(0, 8)}` : ""}
             </p>
           </div>
-          <p className="numeric text-[9px] text-[var(--ink-faint)] sm:text-right">
+          <p className="numeric text-xs text-[var(--ink-faint)] sm:text-right">
             {timestamp(event.occurredAt)}
           </p>
         </div>
@@ -348,50 +361,41 @@ function AdapterDrawer({
   onImport,
   onClose,
 }: {
-  provider: IntegrationProvider;
+  provider: IntegrationProvider | null;
   connections: LiveIntegrationConnection[];
   canImport: boolean;
   onImport: () => void;
   onClose: () => void;
 }) {
-  const adapter = integrationAdapters[provider];
+  const adapter = provider ? integrationAdapters[provider] : null;
   return (
-    <motion.div
-      className="fixed inset-0 z-50 bg-black/25 backdrop-blur-[2px]"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
+    <Drawer
+      open={adapter !== null}
+      onClose={onClose}
+      labelledBy="integration-adapter-title"
+      initialFocusSelector="[data-adapter-close]"
+      width="md"
+      className="p-5 sm:p-7"
     >
-      <motion.aside
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="integration-adapter-title"
-        className="absolute inset-y-0 right-0 w-[min(94vw,540px)] overflow-y-auto bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-float)] sm:p-7"
-        initial={{ x: "100%" }}
-        animate={{ x: 0 }}
-        exit={{ x: "100%" }}
-        transition={{ type: "spring", stiffness: 360, damping: 38 }}
-      >
+      {adapter ? (
+        <>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="eyebrow">Integration adapter</p>
             <h3 id="integration-adapter-title" className="mt-3 text-xl font-medium tracking-[-0.04em]">
               {adapter.label}
             </h3>
-            <p className="mt-2 text-[10px] leading-4 text-[var(--ink-faint)]">{adapter.description}</p>
+            <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">{adapter.description}</p>
           </div>
-          <Button variant="quiet" size="icon" onClick={onClose} aria-label="Close integration details">
+          <Button data-adapter-close variant="quiet" size="icon" onClick={onClose} aria-label="Close integration details">
             <X className="size-4" />
           </Button>
         </div>
 
         <section className="mt-7 border-y border-[var(--line)]">
           <div className="py-4">
-            <p className="text-[10px] font-semibold">Access boundary</p>
-            <p className="mt-2 text-[10px] leading-4 text-[var(--ink-faint)]">{adapter.accessNote}</p>
+            <p className="text-xs font-semibold">Access boundary</p>
+            <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">{adapter.accessNote}</p>
           </div>
         </section>
 
@@ -403,13 +407,13 @@ function AdapterDrawer({
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-xs font-semibold">{connection.displayName}</p>
-                    <p className="mt-1 text-[9px] text-[var(--ink-faint)]">
+                    <p className="mt-1 text-xs text-[var(--ink-faint)]">
                       {connection.scopeLabel} · adapter {connection.adapterVersion}
                     </p>
                   </div>
                   <StatusPill tone={statusTone(connection.status)}>{humanize(connection.status)}</StatusPill>
                 </div>
-                <p className="mt-3 text-[9px] text-[var(--ink-faint)]">
+                <p className="mt-3 text-xs text-[var(--ink-faint)]">
                   {connection.lastSyncedAt ? `Last sync ${timestamp(connection.lastSyncedAt)}` : "No successful sync recorded"}
                 </p>
               </div>
@@ -418,7 +422,7 @@ function AdapterDrawer({
               <div className="py-8 text-center">
                 <LockKeyhole className="mx-auto size-4 text-[var(--ink-faint)]" />
                 <p className="mt-3 text-xs font-semibold">No connection record</p>
-                <p className="mt-1 text-[10px] leading-4 text-[var(--ink-faint)]">
+                <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
                   No live or sandbox access is implied for this adapter.
                 </p>
               </div>
@@ -434,7 +438,7 @@ function AdapterDrawer({
                 <span className="flex size-7 items-center justify-center rounded-full bg-[var(--canvas-strong)]">
                   <Check className="size-3 text-[var(--positive)]" />
                 </span>
-                <span className="min-w-0 flex-1 text-[10px] font-semibold">{capability.label}</span>
+                <span className="min-w-0 flex-1 text-xs font-semibold">{capability.label}</span>
                 <StatusPill tone={capability.requiresApproval ? "warning" : "neutral"}>
                   {capability.requiresApproval ? "Approval required" : capability.direction}
                 </StatusPill>
@@ -446,8 +450,8 @@ function AdapterDrawer({
         <div className="mt-7 flex gap-3 border-y border-[var(--line)] py-4">
           <KeyRound className="mt-0.5 size-4 shrink-0 text-[var(--accent-strong)]" />
           <div>
-            <p className="text-[10px] font-semibold">Credential material is intentionally absent</p>
-            <p className="mt-1 text-[9px] leading-4 text-[var(--ink-faint)]">
+            <p className="text-xs font-semibold">Credential material is intentionally absent</p>
+            <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
               This panel never reads ciphertext, raw connection configuration, tokens, or passwords.
             </p>
           </div>
@@ -460,8 +464,9 @@ function AdapterDrawer({
             </Button>
           </div>
         ) : null}
-      </motion.aside>
-    </motion.div>
+        </>
+      ) : null}
+    </Drawer>
   );
 }
 
@@ -516,7 +521,7 @@ function ImportDialog({
             <h3 id="manual-import-title" className="mt-2 text-xl font-medium tracking-[-0.04em]">
               Validate and queue CSV
             </h3>
-            <p className="mt-2 text-[10px] text-[var(--ink-faint)]">Location · {locationName}</p>
+            <p className="mt-2 text-xs text-[var(--ink-faint)]">Location · {locationName}</p>
           </div>
           <Button variant="quiet" size="icon" disabled={busy} onClick={onClose} aria-label="Close import dialog">
             <X className="size-4" />
@@ -524,7 +529,7 @@ function ImportDialog({
         </div>
 
         <label className="mt-6 block">
-          <span className="mb-1.5 block text-[10px] font-semibold">Import contract</span>
+          <span className="mb-1.5 block text-xs font-semibold">Import contract</span>
           <select
             value={importType}
             disabled={busy}
@@ -538,7 +543,7 @@ function ImportDialog({
             ))}
           </select>
         </label>
-        <p className="mt-2 text-[9px] leading-4 text-[var(--ink-faint)]">{definition.description}</p>
+        <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">{definition.description}</p>
 
         <input
           ref={inputRef}
@@ -558,7 +563,7 @@ function ImportDialog({
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-semibold">{file?.name ?? "Choose a UTF-8 CSV"}</span>
-            <span className="mt-1 block text-[9px] text-[var(--ink-faint)]">
+            <span className="mt-1 block text-xs text-[var(--ink-faint)]">
               Maximum {MANUAL_CSV_MAX_BYTES / 1_048_576} MB · formulas and unsafe control bytes rejected
             </span>
           </span>
@@ -566,8 +571,8 @@ function ImportDialog({
         </button>
 
         <div className="mt-4 border-y border-[var(--line)] py-4">
-          <p className="text-[10px] font-semibold">Required headers</p>
-          <p className="mt-2 font-mono text-[9px] leading-4 text-[var(--ink-faint)]">
+          <p className="text-xs font-semibold">Required headers</p>
+          <p className="mt-2 font-mono text-xs leading-4 text-[var(--ink-faint)]">
             {definition.requiredHeaders.join(", ")}
             {definition.oneOfHeaders ? ` · plus ${definition.oneOfHeaders.join(" or ")}` : ""}
           </p>
@@ -577,23 +582,23 @@ function ImportDialog({
           <div className="mt-4 flex items-start gap-3 rounded-[16px] bg-[var(--positive-soft)] px-4 py-3 text-[var(--positive)]">
             <FileCheck2 className="mt-0.5 size-4 shrink-0" />
             <div>
-              <p className="text-[10px] font-semibold">
+              <p className="text-xs font-semibold">
                 {validation.totalRows.toLocaleString()} row{validation.totalRows === 1 ? "" : "s"} passed local validation
               </p>
-              <p className="mt-1 text-[9px] leading-4 opacity-80">
+              <p className="mt-1 text-xs leading-4 opacity-80">
                 The server downloads and validates the exact uploaded bytes again before creating a job.
               </p>
             </div>
           </div>
         ) : null}
         {error ? (
-          <div role="alert" className="mt-4 flex items-start gap-3 rounded-[16px] bg-[var(--danger-soft)] px-4 py-3 text-[10px] leading-4 text-[var(--danger)]">
+          <div role="alert" className="mt-4 flex items-start gap-3 rounded-[16px] bg-[var(--danger-soft)] px-4 py-3 text-xs leading-4 text-[var(--danger)]">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {error}
           </div>
         ) : null}
 
         <div className="mt-6 flex items-center justify-between gap-3 border-t border-[var(--line)] pt-5">
-          <p className="max-w-sm text-[9px] leading-4 text-[var(--ink-faint)]">
+          <p className="max-w-sm text-xs leading-4 text-[var(--ink-faint)]">
             Queued rows remain pending until the authorized import processor validates mappings and applies them.
           </p>
           <Button variant="accent" disabled={busy || !file || !validation} onClick={onSubmit}>
@@ -650,21 +655,13 @@ export function LiveIntegrationsWorkspace({
     };
   }, [busy, importOpen, overlayOpen]);
 
-  useEffect(() => {
-    if (!model) return;
-    const supabase = createClient();
-    const refresh = () => router.refresh();
-    const channel = supabase
-      .channel(`integrations-${workspace.organization.id}-${workspace.activeLocation.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "integration_connections", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "integration_sync_jobs", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "import_jobs", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "integration_events", filter: `organization_id=eq.${workspace.organization.id}` }, refresh)
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [model, router, workspace.activeLocation.id, workspace.organization.id]);
+  const realtime = useRealtimeInvalidation({
+    enabled: Boolean(model),
+    channelName: `integrations-${workspace.organization.id}-${workspace.activeLocation.id}`,
+    bindings: integrationRealtimeBindings,
+    organizationId: workspace.organization.id,
+    locationId: workspace.activeLocation.id,
+  });
 
   const connectionGroups = useMemo(() => {
     const groups = new Map<string, LiveIntegrationConnection[]>();
@@ -855,11 +852,11 @@ export function LiveIntegrationsWorkspace({
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill tone="positive" dot>Tenant scoped</StatusPill>
-            <span className="text-[10px] text-[var(--ink-faint)]">{model.locationName}</span>
+            <StatusPill tone="neutral">Tenant scoped</StatusPill>
+            <span className="text-xs text-[var(--ink-faint)]">{model.locationName}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Integrations</h2>
-          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
+          <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
             Connection state, manual imports, retries, and audit evidence—without exposing credentials.
           </p>
         </div>
@@ -872,14 +869,10 @@ export function LiveIntegrationsWorkspace({
         )}
       </div>
 
-      {model.ownerNeedsMfa ? (
-        <div className="mt-5 flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-[10px] leading-4 text-[var(--warning)]">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-          Owner integration changes require an MFA-verified session. Existing status remains readable.
-        </div>
-      ) : null}
+      <RealtimeSyncStatus {...realtime} />
+
       {message ? (
-        <div role="status" className="mt-5 flex items-start gap-3 rounded-[16px] bg-[var(--accent-soft)]/45 px-4 py-3 text-[10px] leading-4 text-[var(--accent-strong)]">
+        <div role="status" className="mt-5 flex items-start gap-3 rounded-[16px] bg-[var(--accent-soft)]/45 px-4 py-3 text-xs leading-4 text-[var(--accent-strong)]">
           <Clock3 className="mt-0.5 size-4 shrink-0" /> {message}
         </div>
       ) : null}
@@ -918,11 +911,12 @@ export function LiveIntegrationsWorkspace({
               <button
                 key={provider}
                 onClick={() => setSelectedProvider(provider)}
+                aria-label={`${adapter.label} integration details`}
                 className="focus-ring group flex items-start gap-4 border-b border-[var(--line)] py-5 text-left"
               >
                 <span
                   className={cn(
-                    "flex size-10 shrink-0 items-center justify-center rounded-[13px] text-[11px] font-bold",
+                    "flex size-10 shrink-0 items-center justify-center rounded-[13px] text-[13px] font-bold",
                     primary?.status === "connected"
                       ? "bg-[var(--positive-soft)] text-[var(--positive)]"
                       : manualAvailable
@@ -938,10 +932,10 @@ export function LiveIntegrationsWorkspace({
                     <StatusPill tone={primary ? statusTone(primary.status) : manualAvailable ? "accent" : "neutral"}>
                       {primary ? humanize(primary.status) : manualAvailable ? "Manual available" : "Not configured"}
                     </StatusPill>
-                    {connections.length > 1 ? <span className="text-[9px] text-[var(--ink-faint)]">+{connections.length - 1} scope</span> : null}
+                    {connections.length > 1 ? <span className="text-xs text-[var(--ink-faint)]">+{connections.length - 1} scope</span> : null}
                   </span>
-                  <span className="mt-1.5 block text-[10px] leading-4 text-[var(--ink-faint)]">{adapter.description}</span>
-                  <span className="mt-2 block text-[9px] text-[var(--ink-faint)]">
+                  <span className="mt-1.5 block text-xs leading-4 text-[var(--ink-faint)]">{adapter.description}</span>
+                  <span className="mt-2 block text-xs text-[var(--ink-faint)]">
                     {primary?.lastSyncedAt
                       ? `Last sync ${timestamp(primary.lastSyncedAt)}`
                       : manualAvailable
@@ -972,7 +966,7 @@ export function LiveIntegrationsWorkspace({
               key={value}
               onClick={() => setActivityTab(value)}
               className={cn(
-                "focus-ring rounded-lg px-3 py-2 text-[10px] font-semibold whitespace-nowrap",
+                "focus-ring rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap",
                 activityTab === value
                   ? "bg-[var(--ink)] text-[var(--paper)]"
                   : "text-[var(--ink-faint)] hover:bg-[var(--canvas-strong)]",
@@ -1000,33 +994,37 @@ export function LiveIntegrationsWorkspace({
           )}
         </div>
         {model.syncRecordEvidenceLimited ? (
-          <p className="mt-3 text-[9px] text-[var(--warning)]">
+          <p className="mt-3 text-xs text-[var(--warning)]">
             Per-record outcome evidence is capped at 10,000 rows in this view; job totals remain authoritative.
           </p>
         ) : null}
       </section>
 
       <div className="mt-7 grid gap-3 sm:grid-cols-2">
-        <div className="flex items-start gap-3 rounded-[16px] bg-[var(--positive-soft)] px-4 py-3 text-[10px] leading-4 text-[var(--positive)]">
+        <div className="flex items-start gap-3 rounded-[16px] bg-[var(--positive-soft)] px-4 py-3 text-xs leading-4 text-[var(--positive)]">
           <ShieldCheck className="mt-0.5 size-4 shrink-0" />
           Credential ciphertext remains in a private schema that browser roles cannot read. This screen does not request it.
         </div>
-        <div className="flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-[10px] leading-4 text-[var(--warning)]">
+        <div className="flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-xs leading-4 text-[var(--warning)]">
           <CircleAlert className="mt-0.5 size-4 shrink-0" />
           Toast and Resy API status is “not configured” until approved credentials and restaurant authorization are supplied.
         </div>
       </div>
 
+      <AdapterDrawer
+        provider={selectedProvider}
+        connections={
+          selectedProvider
+            ? connectionGroups.get(selectedProvider) ?? []
+            : []
+        }
+        canImport={canMutate}
+        onImport={() => {
+          if (selectedProvider) openImport(selectedProvider);
+        }}
+        onClose={() => setSelectedProvider(null)}
+      />
       <AnimatePresence>
-        {selectedProvider ? (
-          <AdapterDrawer
-            provider={selectedProvider}
-            connections={connectionGroups.get(selectedProvider) ?? []}
-            canImport={canMutate}
-            onImport={() => openImport(selectedProvider)}
-            onClose={() => setSelectedProvider(null)}
-          />
-        ) : null}
         {importOpen ? (
           <ImportDialog
             locationName={model.locationName}
