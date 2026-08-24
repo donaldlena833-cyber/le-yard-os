@@ -330,7 +330,7 @@ describe("disposable backup/restore drill safety contract", () => {
         process.cwd(),
         "supabase",
         "migrations",
-        "20260824220000_revoke_private_trigger_function_grants.sql",
+        "20260824220810_revoke_private_trigger_function_grants.sql",
       ),
       "utf8",
     );

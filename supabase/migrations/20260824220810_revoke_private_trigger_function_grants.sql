@@ -12,7 +12,7 @@ revoke all on function private.capture_waitlist_removal_evidence()
 from public, anon, authenticated, service_role;
 
 update private.runtime_schema_contract_expected expected
-set migration_head = '20260824220000',
+set migration_head = '20260824220810',
     table_fingerprint = snapshot.value ->> 'tableFingerprint',
     function_fingerprint = snapshot.value ->> 'functionFingerprint',
     access_fingerprint = snapshot.value ->> 'accessFingerprint',
