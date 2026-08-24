@@ -110,7 +110,7 @@ const bootstrap = `
 try {
   await db.exec(bootstrap);
   for (const file of migrationFiles) {
-    if (file === "20260824200345_location_release_control_and_aal2.sql") {
+    if (file === "20260824205728_location_release_control_and_aal2.sql") {
       await db.exec(`
         insert into public.organizations (id, name, slug, timezone)
         values (
