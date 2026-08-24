@@ -949,6 +949,7 @@ const SYNTHETIC_TIME_NORMALIZATIONS = new Map([
   ["auth.identities", ["created_at", "last_sign_in_at", "updated_at"]],
   ["auth.users", ["created_at", "email_confirmed_at", "updated_at"]],
   ["private.organization_owner_counts", ["updated_at"]],
+  ["private.runtime_schema_contract_expected", ["captured_at"]],
   ["public.audit_events", ["occurred_at"]],
   ["public.capability_definitions", ["created_at", "updated_at"]],
   ["public.chat_channels", ["created_at", "updated_at"]],

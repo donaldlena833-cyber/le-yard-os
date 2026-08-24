@@ -319,6 +319,9 @@ describe("disposable backup/restore drill safety contract", () => {
     expect(postgresLibrary).toContain("pg_control_system()");
     expect(postgresLibrary).toContain("postmaster.pid");
     expect(postgresLibrary).toContain("template1");
+    expect(postgresLibrary).toContain(
+      '["private.runtime_schema_contract_expected", ["captured_at"]]',
+    );
     expect(verifier).toContain("Evidence inside the repository must use an ignored");
     expect(verifier).toContain("task due-at mutation");
     expect(verifier).toContain("wrong demo password hash");
