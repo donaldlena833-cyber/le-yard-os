@@ -325,6 +325,25 @@ describe("disposable backup/restore drill safety contract", () => {
     expect(postgresLibrary).toMatch(
       /qualifiedName === "private\.organization_owner_counts" \|\|\s+qualifiedName === "private\.runtime_schema_contract_expected"/,
     );
+    const triggerGrantRepair = await readFile(
+      join(
+        process.cwd(),
+        "supabase",
+        "migrations",
+        "20260824220000_revoke_private_trigger_function_grants.sql",
+      ),
+      "utf8",
+    );
+    for (const triggerFunction of [
+      "bind_auth_user_to_invitation_request",
+      "project_user_invitation_delivery_state",
+      "project_user_invitation_acceptance",
+      "capture_waitlist_removal_evidence",
+    ]) {
+      expect(triggerGrantRepair).toContain(
+        `revoke all on function private.${triggerFunction}()`,
+      );
+    }
     expect(verifier).toContain("Evidence inside the repository must use an ignored");
     expect(verifier).toContain("task due-at mutation");
     expect(verifier).toContain("wrong demo password hash");
