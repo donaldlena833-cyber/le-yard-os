@@ -3,14 +3,15 @@ import { LiveTimeClockWorkspace } from "@/components/time-clock/live-time-clock-
 import { TimeClockWorkspace } from "@/components/time-clock/time-clock-workspace";
 import { loadLiveTimeClock } from "@/data/read-models/time-clock";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
-import { isDemoMode } from "@/lib/env";
+import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Time clock" };
 
 export default async function TimeClockPage() {
-  if (isDemoMode) return <TimeClockWorkspace />;
   const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  if (resolution.status !== "ready") return null;
+  requireWorkspaceRouteAccess("/time-clock", resolution.context);
+  if (resolution.context.mode === "demo") return <TimeClockWorkspace />;
   return (
     <LiveTimeClockWorkspace
       workspace={resolution.context}

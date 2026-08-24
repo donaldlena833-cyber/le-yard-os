@@ -131,6 +131,16 @@ export interface WaitlistSummary {
   quotedWaitMinutes: number | null;
   status: string;
   deliveryStatus: "queued" | "sending" | "sent" | "failed" | null;
+  deliveryChannel?: "email" | "sms" | null;
+  deliveryAttemptCount?: number;
+  deliveryErrorCode?: string | null;
+  deliveryEscalationRequired?: boolean;
+  fallbackChannel?: "email" | "sms" | null;
+  elapsedWaitMinutes?: number;
+  quotedWaitVarianceMinutes?: number | null;
+  overdue?: boolean;
+  offerExpiresAt?: string | null;
+  removalUndoAvailableUntil?: string | null;
   notes: string | null;
   createdAt: string;
 }

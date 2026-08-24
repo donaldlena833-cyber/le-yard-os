@@ -17,10 +17,12 @@ import {
   saveReservationWithGuestInputSchema,
   saveWaitlistEntryInputSchema,
   revokeServiceShiftExceptionInputSchema,
+  retryWaitlistDeliveryInputSchema,
   seatWaitlistEntryInputSchema,
   setReservationTableStatusInputSchema,
   transitionReservationInputSchema,
   transitionWaitlistEntryInputSchema,
+  undoWaitlistRemovalInputSchema,
 } from "@/data/reservation-schemas";
 import {
   approveReservationDraft,
@@ -37,10 +39,12 @@ import {
   saveReservationWithGuest,
   saveWaitlistEntry,
   revokeServiceShiftException,
+  retryWaitlistDelivery,
   seatWaitlistEntry,
   setReservationTableStatus,
   transitionReservation,
   transitionWaitlistEntry,
+  undoWaitlistRemoval,
 } from "@/data/workflows/reservations";
 
 function refreshOnSuccess(result: { ok: boolean; persisted: boolean }) {
@@ -221,6 +225,28 @@ export async function seatWaitlistEntryAction(input: unknown) {
     schema: seatWaitlistEntryInputSchema,
     input,
     run: seatWaitlistEntry,
+  });
+  refreshOnSuccess(result);
+  return result;
+}
+
+export async function retryWaitlistDeliveryAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "reservation.waitlist_delivery_retry",
+    schema: retryWaitlistDeliveryInputSchema,
+    input,
+    run: retryWaitlistDelivery,
+  });
+  refreshOnSuccess(result);
+  return result;
+}
+
+export async function undoWaitlistRemovalAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "reservation.waitlist_removal_undo",
+    schema: undoWaitlistRemovalInputSchema,
+    input,
+    run: undoWaitlistRemoval,
   });
   refreshOnSuccess(result);
   return result;

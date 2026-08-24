@@ -6,16 +6,15 @@ import { PageFrame } from "@/components/ui/page-frame";
 import { loadLiveInventory } from "@/data/read-models/inventory";
 import { loadLivePrep } from "@/data/read-models/prep";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
-import { isDemoMode } from "@/lib/env";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Kitchen" };
 
 export default async function KitchenPage() {
-  if (isDemoMode) return <KitchenWorkspace />;
   const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/kitchen", resolution.context);
+  if (resolution.context.mode === "demo") return <KitchenWorkspace />;
   const [prepResult, inventoryResult] = await Promise.all([
     loadLivePrep(resolution.context),
     loadLiveInventory(resolution.context),

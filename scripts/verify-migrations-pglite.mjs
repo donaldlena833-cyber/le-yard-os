@@ -180,6 +180,49 @@ try {
     }
   }
 
+  const runtimeContract = await db.query(`
+    select
+      expected.table_fingerprint = actual.value ->> 'tableFingerprint' as tables_match,
+      expected.function_fingerprint = actual.value ->> 'functionFingerprint' as functions_match,
+      expected.access_fingerprint = actual.value ->> 'accessFingerprint' as access_matches,
+      to_regprocedure('public.search_guests(uuid,text,integer)') is null as legacy_search_removed
+    from private.runtime_schema_contract_expected expected
+    cross join lateral (
+      select private.compute_runtime_schema_fingerprints() as value
+    ) actual
+    where expected.contract_version = 'runtime-schema-v2'
+  `);
+  const runtimeContractRow = runtimeContract.rows[0];
+  if (
+    runtimeContractRow?.tables_match !== true ||
+    runtimeContractRow?.functions_match !== true ||
+    runtimeContractRow?.access_matches !== true ||
+    runtimeContractRow?.legacy_search_removed !== true
+  ) {
+    throw new Error(
+      `Runtime schema fingerprint contract failed: ${JSON.stringify(runtimeContractRow)}`,
+    );
+  }
+  await db.exec("begin");
+  const baselineAccess = await db.query(
+    "select private.compute_runtime_schema_fingerprints() ->> 'accessFingerprint' as fingerprint",
+  );
+  await db.exec(
+    "grant execute on function public.search_receipts(uuid,text,uuid,integer) to anon",
+  );
+  const driftedAccess = await db.query(
+    "select private.compute_runtime_schema_fingerprints() ->> 'accessFingerprint' as fingerprint",
+  );
+  await db.exec("rollback");
+  if (
+    baselineAccess.rows[0]?.fingerprint === driftedAccess.rows[0]?.fingerprint
+  ) {
+    throw new Error("Runtime access fingerprint did not detect deliberate grant drift.");
+  }
+  process.stdout.write(
+    "PASS runtime schema v2 fingerprints and legacy guest-search removal\n",
+  );
+
   const legacyMigrationEvidence = await db.query(`
     select
       workspace.revision,

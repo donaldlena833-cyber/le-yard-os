@@ -79,4 +79,22 @@ describe("Sub2API owner intelligence adapter", () => {
     await expect(runSub2ApiOwnerIntelligence(input)).rejects.toThrow("status 401");
     await expect(runSub2ApiOwnerIntelligence(input)).rejects.not.toThrow("upstream-secret");
   });
+
+  it("stops a streamed multibyte response at the byte limit", async () => {
+    vi.stubEnv("LE_YARD_SUB2API_BASE_URL", "https://gateway.example.com");
+    vi.stubEnv("LE_YARD_SUB2API_API_KEY", "secret-test-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("é".repeat(600_000), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+
+    await expect(runSub2ApiOwnerIntelligence(input)).rejects.toThrow(
+      "oversized response",
+    );
+  });
 });

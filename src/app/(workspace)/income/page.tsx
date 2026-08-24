@@ -7,7 +7,6 @@ import {
 import { loadLiveIncome } from "@/data/read-models/income";
 import { readSuccess } from "@/data/read-models/shared";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
-import { isDemoMode } from "@/lib/env";
 import { createDemoIncomeModel } from "@/lib/income/model";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
@@ -24,7 +23,10 @@ export default async function IncomePage({
   searchParams: Promise<{ days?: string | string[] }>;
 }) {
   const days = historyDays((await searchParams).days);
-  if (isDemoMode) {
+  const resolution = await resolveWorkspaceSession();
+  if (resolution.status !== "ready") return null;
+  requireWorkspaceRouteAccess("/income", resolution.context);
+  if (resolution.context.mode === "demo") {
     const model = createDemoIncomeModel();
     model.historyDays = days;
     return (
@@ -42,10 +44,6 @@ export default async function IncomePage({
     );
   }
 
-  const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live")
-    return null;
-  requireWorkspaceRouteAccess("/income", resolution.context);
   const privileged =
     resolution.context.role === "owner" || resolution.context.role === "admin";
   const capabilities = new Set(resolution.context.capabilities);

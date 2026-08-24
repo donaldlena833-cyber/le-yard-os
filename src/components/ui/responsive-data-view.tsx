@@ -61,7 +61,7 @@ export function ResponsiveDataView<T>({
                   key={column.key}
                   scope="col"
                   className={cn(
-                    "px-4 py-2.5 text-xs font-semibold tracking-[0.1em] text-[var(--ink-faint)] uppercase",
+                    "px-4 py-2.5 text-xs font-semibold tracking-[0.1em] text-[var(--ink-soft)] uppercase",
                     column.align === "right" && "text-right",
                   )}
                 >

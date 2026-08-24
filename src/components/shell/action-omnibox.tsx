@@ -16,6 +16,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useConnectivity } from "@/components/providers/connectivity-provider";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import {
@@ -29,6 +30,7 @@ import {
   type OmniboxGroup,
 } from "@/lib/actions/action-registry";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { getCommandAvailability } from "@/lib/connectivity/command-availability";
 import { cn } from "@/lib/utils";
 
 type DisplayGroup = OmniboxGroup | "recent";
@@ -100,6 +102,7 @@ export function ActionOmnibox({
   returnFocusTarget?: HTMLElement | null;
 }) {
   const router = useRouter();
+  const connectivity = useConnectivity();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [recentReferences, setRecentReferences] = useState<RecentActionReference[]>([]);
@@ -150,6 +153,8 @@ export function ActionOmnibox({
   }
 
   function execute(action: ActionDefinition) {
+    const availability = getCommandAvailability(action.offlinePolicy, connectivity.state);
+    if (!availability.available) return;
     const destination = buildOmniboxDestination(action, query);
     setRecentReferences(recordRecentAction(window.localStorage, action));
     router.push(destination);
@@ -263,6 +268,10 @@ export function ActionOmnibox({
                 items.map((row, index) => {
                   const absoluteIndex = groupIndexOffset + index;
                   const selected = absoluteIndex === selectedIndex;
+                  const commandAvailability = getCommandAvailability(
+                    row.action.offlinePolicy,
+                    connectivity.state,
+                  );
                   return (
                     <button
                       id={`omnibox-${row.key}`}
@@ -271,15 +280,20 @@ export function ActionOmnibox({
                       role="option"
                       tabIndex={-1}
                       aria-selected={selected}
+                      aria-disabled={!commandAvailability.available}
+                      disabled={!commandAvailability.available}
                       data-action-id={row.action.id}
                       data-analytics-name={row.action.analyticsName}
+                      data-offline-policy={row.action.offlinePolicy}
                       onMouseEnter={() => setActiveIndex(absoluteIndex)}
                       onClick={() => execute(row.action)}
                       className={cn(
                         "focus-ring flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
-                        selected
+                        selected && commandAvailability.available
                           ? "bg-[var(--canvas-strong)] text-[var(--ink)]"
-                          : "text-[var(--ink-soft)] hover:bg-[var(--canvas)]",
+                          : commandAvailability.available
+                            ? "text-[var(--ink-soft)] hover:bg-[var(--canvas)]"
+                            : "cursor-not-allowed text-[var(--ink-faint)] opacity-55",
                       )}
                     >
                       <span className="min-w-0 flex-1">
@@ -287,7 +301,7 @@ export function ActionOmnibox({
                           {actionLabel(row.action, query.trim())}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-[var(--ink-faint)]">
-                          {row.action.description}
+                          {commandAvailability.reason ?? row.action.description}
                         </span>
                       </span>
                       {selected ? (

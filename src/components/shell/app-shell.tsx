@@ -25,6 +25,11 @@ import {
 import { useFormStatus } from "react-dom";
 import { signOutAction } from "@/app/actions/auth";
 import { ThemeProvider, useTheme } from "@/components/providers/theme-provider";
+import {
+  ConnectivityProvider,
+  ConnectivityStatusNotice,
+  useConnectivity,
+} from "@/components/providers/connectivity-provider";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Avatar } from "@/components/ui/avatar";
 import { BrandMark } from "@/components/ui/brand-mark";
@@ -540,6 +545,7 @@ function ShellContent({ children }: { children: ReactNode }) {
   const [commandTrigger, setCommandTrigger] = useState<HTMLElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { theme, toggleTheme } = useTheme();
+  const connectivity = useConnectivity();
   const meta = routeMeta[pathname] || {
     title: surfaceProductName,
     detail: surfaceProductDetail,
@@ -589,9 +595,9 @@ function ShellContent({ children }: { children: ReactNode }) {
                     Live
                   </span>
                 ) : workspace.mode === "live" ? (
-                  <span className="hidden items-center gap-1.5 text-xs font-semibold text-[var(--positive)] sm:flex">
-                    <span className="size-1.5 rounded-full bg-[var(--positive)]" />
-                    Connected
+                  <span className={cn("hidden items-center gap-1.5 text-xs font-semibold sm:flex", connectivity.state === "online" ? "text-[var(--positive)]" : "text-[var(--warning)]")}>
+                    <span className={cn("size-1.5 rounded-full", connectivity.state === "online" ? "bg-[var(--positive)]" : "bg-[var(--warning)]")} />
+                    {connectivity.state === "online" ? "Connected" : connectivity.state === "offline" ? "Offline" : "Reconnecting"}
                   </span>
                 ) : null}
               </div>
@@ -664,6 +670,8 @@ function ShellContent({ children }: { children: ReactNode }) {
           </div>
         </header>
 
+        <ConnectivityStatusNotice />
+
         <main key={pathname} className="page-enter min-h-[calc(100svh-64px)] pb-[calc(7rem+env(safe-area-inset-bottom))] lg:min-h-[calc(100svh-74px)] lg:pb-8">
           {children}
         </main>
@@ -713,7 +721,9 @@ function ShellContent({ children }: { children: ReactNode }) {
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <ThemeProvider>
-      <ShellContent>{children}</ShellContent>
+      <ConnectivityProvider>
+        <ShellContent>{children}</ShellContent>
+      </ConnectivityProvider>
     </ThemeProvider>
   );
 }

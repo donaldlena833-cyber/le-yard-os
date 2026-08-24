@@ -13,6 +13,12 @@ describe("health route", () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(response.headers.get("x-le-yard-config-fingerprint")).toMatch(
+      /^[0-9a-f]{64}$/,
+    );
+    expect(response.headers.get("x-le-yard-release-fingerprint")).toMatch(
+      /^[0-9a-f]{64}$/,
+    );
     expect(body.status).toBe("not_ready");
     expect(body.liveness).toBe("ok");
     expect(body.readiness).toBe("blocked");

@@ -277,6 +277,10 @@ export function CloseoutWorkspace() {
   const [adjustments, setAdjustments] = useState<Record<string, string>>({});
   const [exclusions, setExclusions] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<CloseoutStatus>("draft");
+  const [submittedBy, setSubmittedBy] = useState<{
+    userId: string;
+    displayName: string;
+  } | null>(null);
   const [calculation, setCalculation] = useState<TipPoolCalculation | null>(null);
   const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
@@ -323,6 +327,7 @@ export function CloseoutWorkspace() {
     setAdjustments({});
     setExclusions({});
     setStatus("draft");
+    setSubmittedBy(null);
     setCalculation(null);
     setExpandedEmployee(null);
     setAttachmentName(null);
@@ -445,11 +450,24 @@ export function CloseoutWorkspace() {
       return;
     }
     setStatus("submitted");
-    setMessage("Submitted for owner approval. Inputs are temporarily locked.");
+    setSubmittedBy({ userId: currentUserId, displayName: currentDisplayName });
+    setMessage(
+      "Submitted for owner approval. A different owner must review and approve this closeout.",
+    );
   }
 
   function approveCloseout() {
     if (!calculation || status !== "submitted") return;
+    if (workspace.role !== "owner") {
+      setMessage("Only an owner can approve a submitted closeout.");
+      return;
+    }
+    if (!submittedBy || submittedBy.userId === currentUserId) {
+      setMessage(
+        "Separation of duties blocked this approval. A different owner must review the submitted closeout.",
+      );
+      return;
+    }
     try {
       const approved = approveTipPoolCalculation(calculation, {
         approvedBy: currentUserId,
@@ -467,6 +485,7 @@ export function CloseoutWorkspace() {
   function returnToDraft() {
     if (status !== "submitted") return;
     setStatus("draft");
+    setSubmittedBy(null);
     setMessage("Returned to draft. Recalculate after any change before resubmitting.");
   }
 
@@ -922,7 +941,9 @@ export function CloseoutWorkspace() {
           status === "draft"
             ? "Manager draft · calculate before submitting"
             : status === "submitted"
-              ? "Awaiting owner approval"
+              ? submittedBy
+                ? `Submitted by ${submittedBy.displayName} · a different owner must approve`
+                : "Awaiting a different owner approval"
               : `Locked by ${currentDisplayName}`
         }
         icon={
@@ -935,7 +956,7 @@ export function CloseoutWorkspace() {
         actions={
           <>
           {status === "draft" ? <><Button variant="secondary" size="sm" className="border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={calculate}><Calculator className="size-3.5" /> Calculate</Button><Button variant="accent" size="sm" onClick={submitCloseout}><ShieldCheck className="size-3.5" /> Submit closeout</Button></> : null}
-          {status === "submitted" ? <><Button variant="quiet" size="sm" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={returnToDraft}><RotateCcw className="size-3.5" /> Return to draft</Button><Button variant="accent" size="sm" onClick={approveCloseout}><Check className="size-3.5" /> Owner approve</Button></> : null}
+          {status === "submitted" ? <><Button variant="quiet" size="sm" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={returnToDraft}><RotateCcw className="size-3.5" /> Return to draft</Button><Button variant="accent" size="sm" onClick={approveCloseout} disabled={workspace.role !== "owner" || !submittedBy || submittedBy.userId === currentUserId} aria-describedby="closeout-approval-separation-note"><Check className="size-3.5" /> Owner approve</Button><span id="closeout-approval-separation-note" className="sr-only">Only a different owner from the submitter can approve this closeout.</span></> : null}
           {status === "approved" ? <Button variant="accent" size="sm" onClick={downloadPayroll}><ArrowDownToLine className="size-3.5" /> Payroll CSV</Button> : null}
           </>
         }

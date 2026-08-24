@@ -117,6 +117,16 @@ export async function sendReservationOutboxMessage(input: {
   holdExpiresAt: string | null;
   messageCreatedAt: string;
 }): Promise<ReservationDeliveryResult> {
+  const forcedFailure = process.env.RESERVATION_DELIVERY_FORCE_FAILURE?.trim();
+  const failureSeamEnabled =
+    process.env.NODE_ENV === "test" || process.env.VERCEL_ENV === "preview";
+  if (
+    failureSeamEnabled &&
+    (forcedFailure === "all" ||
+      forcedFailure === `${input.templateKey}:${input.channel}`)
+  ) {
+    return { state: "failed", providerMessageId: null };
+  }
   const scheduled = displayDateTime(input.reservedAt);
   const offerDeadline = displayDateTime(input.offerExpiresAt);
   const siteUrl = canonicalReservationPublicSiteOrigin();

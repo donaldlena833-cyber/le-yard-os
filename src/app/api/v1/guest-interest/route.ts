@@ -1,5 +1,11 @@
 import { z } from "zod";
+import { after } from "next/server";
 import { guestInterestInputSchema } from "@/lib/guest-interest";
+import {
+  guestInterestDestinationHash,
+  guestInterestVerificationToken,
+  guestInterestVerificationTokenHash,
+} from "@/lib/guest-interest-verification.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   authenticateBookingApiRequest,
@@ -43,6 +49,18 @@ export async function POST(request: Request) {
       input.phone,
     );
 
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+    const verificationToken = guestInterestVerificationToken({
+      requestId: idempotencyKey,
+      organizationId: client.organizationId,
+      locationId: client.locationId,
+      destinationHash: guestInterestDestinationHash(
+        client.organizationId,
+        input.email,
+      ),
+      expiresAt,
+    });
+
     const admin = createAdminClient();
     const { data, error } = await admin.rpc(
       "service_capture_guest_interest",
@@ -62,6 +80,9 @@ export async function POST(request: Request) {
         p_sms_consent: input.smsConsent,
         p_profile_consent: input.profileConsent,
         p_source: input.source,
+        p_verification_token_hash:
+          guestInterestVerificationTokenHash(verificationToken),
+        p_expires_at: expiresAt,
       } as never,
     );
     if (error?.code === "23505")
@@ -88,16 +109,32 @@ export async function POST(request: Request) {
         "The Le Yard list is temporarily unavailable.",
       );
     }
-    const result = data as {
-      emailConsent?: boolean;
-      smsConsent?: boolean;
-    };
+    const result = data as { status?: string; verificationPending?: boolean };
+    const deliverySecret = process.env.IDENTITY_DELIVERY_SECRET?.trim();
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    if (deliverySecret && deliverySecret.length >= 32 && appUrl) {
+      const workerUrl = new URL("/api/internal/identity-delivery", appUrl);
+      after(async () => {
+        try {
+          await fetch(workerUrl, {
+            method: "POST",
+            headers: { authorization: `Bearer ${deliverySecret}` },
+            cache: "no-store",
+            signal: AbortSignal.timeout(25_000),
+          });
+        } catch {
+          // The committed outbox row remains available for a later worker run.
+        }
+      });
+    }
     return bookingApiResponse(
       {
         data: {
-          saved: true,
-          emailConsent: result.emailConsent === true,
-          smsConsent: result.smsConsent === true,
+          saved: false,
+          status: result.status ?? "pending",
+          verificationPending: result.verificationPending === true,
+          emailConsent: false,
+          smsConsent: false,
         },
       },
       { status: 201 },

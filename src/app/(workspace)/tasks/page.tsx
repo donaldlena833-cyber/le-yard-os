@@ -3,15 +3,15 @@ import { LiveTasksWorkspace } from "@/components/tasks/live-tasks-workspace";
 import { TasksWorkspace } from "@/components/tasks/tasks-workspace";
 import { loadLiveOperations } from "@/data/read-models/operations";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
-import { isDemoMode } from "@/lib/env";
+import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Tasks & SOPs" };
 
 export default async function TasksPage() {
-  if (isDemoMode) return <TasksWorkspace />;
-
   const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  if (resolution.status !== "ready") return null;
+  requireWorkspaceRouteAccess("/tasks", resolution.context);
+  if (resolution.context.mode === "demo") return <TasksWorkspace />;
   return (
     <LiveTasksWorkspace
       key={resolution.context.activeLocation.id}

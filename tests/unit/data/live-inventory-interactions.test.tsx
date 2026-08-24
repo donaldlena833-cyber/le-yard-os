@@ -539,6 +539,27 @@ describe("connected Inventory review interactions", () => {
     expect(screen.queryByText("Expected 24 ea")).toBeNull();
   });
 
+  it("offers save, discard, and continue when a dirty count is dismissed", async () => {
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Start or resume full count" }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Counted quantity for Lemons" }), {
+      target: { value: "18" },
+    });
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Full inventory count" })).getByRole("button", { name: "Close dialog" }));
+
+    const decision = await screen.findByRole("alertdialog", { name: "Leave this count?" });
+    expect(within(decision).getByRole("button", { name: "Continue counting" })).toBeTruthy();
+    expect(within(decision).getByRole("button", { name: "Discard & close" })).toBeTruthy();
+    expect(within(decision).getByRole("button", { name: "Save draft & close" })).toBeTruthy();
+    fireEvent.click(within(decision).getByRole("button", { name: "Continue counting" }));
+    expect(screen.getByRole("dialog", { name: "Full inventory count" })).toBeTruthy();
+  });
+
   it("submits counted quantities while leaving expected stock and cost to the server", async () => {
     vi.mocked(submitInventoryCountAction).mockResolvedValue({
       ok: true,
@@ -761,7 +782,13 @@ describe("connected Inventory review interactions", () => {
     fireEvent.change(screen.getByLabelText("Receiving exception note 1"), {
       target: { value: "One carton crushed" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Receive delivery" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review delivery" }));
+
+    expect(receiveInventoryDeliveryAction).not.toHaveBeenCalled();
+    const review = await screen.findByRole("alertdialog", { name: "Post this delivery to stock?" });
+    expect(within(review).getByText(/accepted 2.75 ea/i)).toBeTruthy();
+    expect(within(review).getByText(/Damaged · One carton crushed/i)).toBeTruthy();
+    fireEvent.click(within(review).getByRole("button", { name: "Confirm & post delivery" }));
 
     expect(await screen.findByText(/Delivery received/)).toBeTruthy();
     expect(receiveInventoryDeliveryAction).toHaveBeenCalledOnce();

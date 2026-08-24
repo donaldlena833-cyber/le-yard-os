@@ -37,8 +37,10 @@ import {
   submitWasteRecordAction,
 } from "@/app/actions/workflows/inventory";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
+import { useConnectivity } from "@/components/providers/connectivity-provider";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import {
   InventoryCatalogWorkspace,
   RecipeEditorDialog,
@@ -46,6 +48,7 @@ import {
 } from "@/components/inventory/inventory-catalog-workspace";
 import { InventoryModalFrame } from "@/components/inventory/inventory-modal-frame";
 import { Drawer } from "@/components/ui/drawer";
+import { Modal } from "@/components/ui/modal";
 import {
   Metric,
   PageFrame,
@@ -82,6 +85,11 @@ import {
   parseInventoryMoneyToCents,
   parseInventoryQuantity,
 } from "@/lib/inventory/input-parsing";
+import {
+  createInventoryCountDraft,
+  readInventoryCountDraft,
+} from "@/lib/inventory/count-draft";
+import { getCommandAvailability } from "@/lib/connectivity/command-availability";
 import { cn, formatMoney } from "@/lib/utils";
 
 type Tab =
@@ -253,9 +261,11 @@ function CountDialog({
   notes,
   notice,
   busy,
+  networkAvailable,
   onValueChange,
   onNotesChange,
   onClose,
+  onSaveClose,
   onDiscard,
   onSubmit,
 }: {
@@ -264,9 +274,11 @@ function CountDialog({
   notes: string;
   notice: string;
   busy: boolean;
+  networkAvailable: boolean;
   onValueChange: (itemId: string, value: string) => void;
   onNotesChange: (value: string) => void;
   onClose: () => void;
+  onSaveClose: () => void;
   onDiscard: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
@@ -386,7 +398,7 @@ function CountDialog({
             className="flex-1 sm:flex-none"
             variant="quiet"
             disabled={busy}
-            onClick={onClose}
+            onClick={onSaveClose}
           >
             Save & close
           </Button>
@@ -394,7 +406,9 @@ function CountDialog({
             className="flex-[1.6] sm:flex-none"
             type="submit"
             variant="accent"
-            disabled={busy || completed !== model.items.length}
+            disabled={busy || !networkAvailable || completed !== model.items.length}
+            aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}
+            title={!networkAvailable ? "Reconnect before submitting this count." : undefined}
           >
             {busy ? (
               <LoaderCircle className="size-4 animate-spin" />
@@ -409,6 +423,58 @@ function CountDialog({
   );
 }
 
+function CountDraftDismissDialog({
+  open,
+  busy,
+  onContinue,
+  onDiscard,
+  onSave,
+}: {
+  open: boolean;
+  busy: boolean;
+  onContinue: () => void;
+  onDiscard: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={busy ? () => undefined : onContinue}
+      labelledBy="inventory-count-draft-dismiss-title"
+      role="alertdialog"
+      initialFocusSelector="[data-count-draft-continue]"
+      position="responsive-sheet"
+      className="max-w-lg rounded-b-none sm:rounded-[22px]"
+    >
+      <div className="border-b border-[var(--line)] px-5 py-5 sm:px-6">
+        <h2 id="inventory-count-draft-dismiss-title" className="text-lg font-semibold">
+          Leave this count?
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--ink-faint)]">
+          Choose whether to keep the unfinished count on this device, discard it,
+          or continue counting. No inventory has changed.
+        </p>
+      </div>
+      <div className="flex flex-col-reverse gap-2 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
+        <Button
+          data-count-draft-continue
+          variant="secondary"
+          disabled={busy}
+          onClick={onContinue}
+        >
+          Continue counting
+        </Button>
+        <Button variant="danger" disabled={busy} onClick={onDiscard}>
+          Discard & close
+        </Button>
+        <Button variant="accent" disabled={busy} onClick={onSave}>
+          Save draft & close
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
 function ReviewDialog({
   count,
   model,
@@ -416,6 +482,7 @@ function ReviewDialog({
   note,
   notice,
   busy,
+  networkAvailable,
   onNoteChange,
   onClose,
   onDecision,
@@ -426,6 +493,7 @@ function ReviewDialog({
   note: string;
   notice: string;
   busy: boolean;
+  networkAvailable: boolean;
   onNoteChange: (value: string) => void;
   onClose: () => void;
   onDecision: (approve: boolean) => void;
@@ -524,7 +592,7 @@ function ReviewDialog({
                 rows={3}
                 maxLength={2_000}
                 value={note}
-                disabled={busy || isOwnCount}
+                disabled={busy || !networkAvailable || isOwnCount}
                 onChange={(event) => onNoteChange(event.target.value)}
                 placeholder="Optional decision context"
                 className="w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs outline-none focus:border-[var(--accent)] disabled:opacity-55"
@@ -560,7 +628,8 @@ function ReviewDialog({
               </Button>
               <Button
                 variant="danger"
-                disabled={busy || isOwnCount}
+                disabled={busy || !networkAvailable || isOwnCount}
+                aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}
                 onClick={() => onDecision(false)}
               >
                 {busy ? (
@@ -572,7 +641,8 @@ function ReviewDialog({
               </Button>
               <Button
                 variant="accent"
-                disabled={busy || isOwnCount}
+                disabled={busy || !networkAvailable || isOwnCount}
+                aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}
                 onClick={() => onDecision(true)}
               >
                 {busy ? (
@@ -626,6 +696,23 @@ interface MutationLineDraft {
   unitPrice: string;
   exceptionKind: "none" | "damaged" | "rejected" | "substituted" | "missing" | "unexpected" | "short" | "over";
   exceptionNote: string;
+}
+
+interface DeliveryPostingReview {
+  deliveredAt: string;
+  invoiceNumber: string | null;
+  notes: string | null;
+  lines: Array<{
+    inventoryItemId: string;
+    unitId: string;
+    quantity: number;
+    acceptedQuantity: number;
+    unitPriceCents: number;
+    lotCode: null;
+    expiresOn: null;
+    exceptionKind: MutationLineDraft["exceptionKind"];
+    exceptionNote: string | null;
+  }>;
 }
 
 const inventoryFieldClass =
@@ -887,6 +974,7 @@ function InventoryMutationDialog({
   workspace,
   model,
   busy,
+  networkAvailable,
   notice,
   onClose,
   returnFocus,
@@ -897,6 +985,7 @@ function InventoryMutationDialog({
   workspace: WorkspaceContextValue;
   model: LiveInventoryModel;
   busy: boolean;
+  networkAvailable: boolean;
   notice: string;
   onClose: () => void;
   returnFocus?: HTMLElement | null;
@@ -961,6 +1050,7 @@ function InventoryMutationDialog({
       : [];
   });
   const [wasteItemId, setWasteItemId] = useState(firstItem?.id ?? "");
+  const [deliveryReview, setDeliveryReview] = useState<DeliveryPostingReview | null>(null);
 
   function updateLine(key: string, patch: Partial<MutationLineDraft>) {
     setLines((current) =>
@@ -1067,7 +1157,7 @@ function InventoryMutationDialog({
                 name="note"
                 rows={4}
                 maxLength={2_000}
-                disabled={busy || own}
+                disabled={busy || !networkAvailable || own}
                 className={inventoryTextAreaClass}
               />
             </InventoryField>
@@ -1096,14 +1186,14 @@ function InventoryMutationDialog({
               <Button
                 type="button"
                 variant="danger"
-                disabled={busy || own}
+                disabled={busy || !networkAvailable || own}
                 onClick={(event) =>
                   void decide(false, event.currentTarget.form!)
                 }
               >
                 Reject & cancel
               </Button>
-              <Button type="submit" variant="accent" disabled={busy || own}>
+              <Button type="submit" variant="accent" disabled={busy || !networkAvailable || own} aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}>
                 {busy ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
@@ -1163,8 +1253,8 @@ function InventoryMutationDialog({
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="quiet" disabled={busy} onClick={onClose}>Cancel</Button>
-              <Button variant="danger" disabled={busy || own} onClick={(event) => void decide(false, event.currentTarget.form!)}>Reject</Button>
-              <Button type="submit" variant="accent" disabled={busy || own}>Approve & post correction</Button>
+              <Button variant="danger" disabled={busy || !networkAvailable || own} onClick={(event) => void decide(false, event.currentTarget.form!)}>Reject</Button>
+              <Button type="submit" variant="accent" disabled={busy || !networkAvailable || own} aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}>Approve & post correction</Button>
             </div>
           </div>
         </form>
@@ -1320,7 +1410,8 @@ function InventoryMutationDialog({
               <Button
                 type="submit"
                 variant="accent"
-                disabled={busy || !model.vendors.length || !lines.length}
+                disabled={busy || !networkAvailable || !model.vendors.length || !lines.length}
+                aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}
               >
                 {busy ? (
                   <LoaderCircle className="size-4 animate-spin" />
@@ -1337,58 +1428,71 @@ function InventoryMutationDialog({
   }
 
   if (dialog.kind === "delivery") {
+    const postDelivery = async () => {
+      if (!deliveryReview) return;
+      const succeeded = await onRun(
+        "Delivery received. Accepted quantities and vendor prices were posted once.",
+        () =>
+          receiveInventoryDeliveryAction({
+            requestId: dialog.requestId,
+            locationId: workspace.activeLocation.id,
+            vendorId: order!.vendorId,
+            purchaseOrderId: order!.id,
+            ...deliveryReview,
+          }),
+      );
+      if (succeeded) {
+        setDeliveryReview(null);
+        onClose();
+      }
+    };
+    const reviewTotalCents = deliveryReview?.lines.reduce(
+      (sum, line) => sum + Math.round(line.acceptedQuantity * line.unitPriceCents),
+      0,
+    ) ?? 0;
     return (
-      <ModalFrame
-        title="Receive delivery"
-        description={`${order!.poNumber} · ${order!.vendorName}. Accepted quantities post to stock immediately in canonical base units.`}
-        labelledBy="delivery-dialog"
-        notice={notice}
-        onClose={onClose}
-        width="max-w-5xl"
-      >
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const parsed = parsedLineValues("delivery");
-            if (!parsed) return;
-            const form = new FormData(event.currentTarget);
-            const deliveredAt = localInstant(
-              String(form.get("deliveredAt")),
-              model.timeZone,
-            );
-            if (!deliveredAt)
-              return onError(
-                "The delivery time is invalid in the restaurant timezone.",
-              );
-            const succeeded = await onRun(
-              "Delivery received. Accepted quantities and vendor prices were posted once.",
-              () =>
-                receiveInventoryDeliveryAction({
-                  requestId: dialog.requestId,
-                  locationId: workspace.activeLocation.id,
-                  vendorId: order!.vendorId,
-                  purchaseOrderId: order!.id,
-                  deliveredAt,
-                  invoiceNumber:
-                    String(form.get("invoiceNumber") || "") || null,
-                  notes: String(form.get("notes") || "") || null,
-                  lines: parsed.map((line) => ({
-                    inventoryItemId: line.inventoryItemId,
-                    unitId: line.unitId,
-                    quantity: line.parsedQuantity!,
-                    acceptedQuantity: line.parsedAccepted!,
-                    unitPriceCents: line.parsedPrice!,
-                    lotCode: null,
-                    expiresOn: null,
-                    exceptionKind: line.exceptionKind,
-                    exceptionNote: line.exceptionNote.trim() || null,
-                  })),
-                }),
-            );
-            if (succeeded) onClose();
-          }}
+      <>
+        <ModalFrame
+          title="Receive delivery"
+          description={`${order!.poNumber} · ${order!.vendorName}. Review the exact accepted quantities and prices before anything posts to stock.`}
+          labelledBy="delivery-dialog"
+          notice={notice}
+          onClose={onClose}
+          width="max-w-5xl"
         >
-          <div className="grid gap-5 px-5 py-5 sm:px-7">
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              const parsed = parsedLineValues("delivery");
+              if (!parsed) return;
+              const form = new FormData(event.currentTarget);
+              const deliveredAt = localInstant(
+                String(form.get("deliveredAt")),
+                model.timeZone,
+              );
+              if (!deliveredAt) {
+                onError("The delivery time is invalid in the restaurant timezone.");
+                return;
+              }
+              setDeliveryReview({
+                deliveredAt,
+                invoiceNumber: String(form.get("invoiceNumber") || "") || null,
+                notes: String(form.get("notes") || "") || null,
+                lines: parsed.map((line) => ({
+                  inventoryItemId: line.inventoryItemId,
+                  unitId: line.unitId,
+                  quantity: line.parsedQuantity!,
+                  acceptedQuantity: line.parsedAccepted!,
+                  unitPriceCents: line.parsedPrice!,
+                  lotCode: null,
+                  expiresOn: null,
+                  exceptionKind: line.exceptionKind,
+                  exceptionNote: line.exceptionNote.trim() || null,
+                })),
+              });
+            }}
+          >
+            <div className="grid gap-5 px-5 py-5 sm:px-7">
             <div className="grid gap-4 sm:grid-cols-3">
               <InventoryField label={`Delivered · ${model.timeZone}`}>
                 <input
@@ -1441,17 +1545,52 @@ function InventoryMutationDialog({
                 variant="accent"
                 disabled={busy || !lines.length}
               >
-                {busy ? (
-                  <LoaderCircle className="size-4 animate-spin" />
-                ) : (
-                  <Truck className="size-4" />
-                )}
-                Receive delivery
+                <ClipboardCheck className="size-4" />
+                Review delivery
               </Button>
             </div>
-          </div>
-        </form>
-      </ModalFrame>
+            </div>
+          </form>
+        </ModalFrame>
+        <ConfirmActionDialog
+          open={Boolean(deliveryReview)}
+          labelledBy="delivery-posting-review-title"
+          title="Post this delivery to stock?"
+          description="This is the final posting boundary. Confirm the accepted quantities, unit prices, invoice, and exception evidence below."
+          confirmLabel="Confirm & post delivery"
+          confirmVariant="accent"
+          busy={busy}
+          confirmDisabled={!networkAvailable}
+          onClose={() => setDeliveryReview(null)}
+          onConfirm={postDelivery}
+        >
+          {deliveryReview ? (
+            <div className="space-y-4 text-xs">
+              <dl className="grid grid-cols-2 gap-3 rounded-xl bg-[var(--canvas)] p-3">
+                <div><dt className="text-[var(--ink-faint)]">Purchase order</dt><dd className="mt-1 font-semibold">{order!.poNumber}</dd></div>
+                <div><dt className="text-[var(--ink-faint)]">Vendor</dt><dd className="mt-1 font-semibold">{order!.vendorName}</dd></div>
+                <div><dt className="text-[var(--ink-faint)]">Delivered</dt><dd className="mt-1 font-semibold">{dateTimeLabel(deliveryReview.deliveredAt, model.timeZone)}</dd></div>
+                <div><dt className="text-[var(--ink-faint)]">Invoice</dt><dd className="mt-1 font-semibold">{deliveryReview.invoiceNumber ?? "Not provided"}</dd></div>
+              </dl>
+              <div className="max-h-56 overflow-y-auto rounded-xl border border-[var(--line)]">
+                {deliveryReview.lines.map((line) => {
+                  const item = model.items.find((candidate) => candidate.id === line.inventoryItemId);
+                  const unit = model.units.find((candidate) => candidate.id === line.unitId);
+                  return (
+                    <div key={`${line.inventoryItemId}:${line.unitId}`} className="border-b border-[var(--line)] p-3 last:border-0">
+                      <div className="flex items-start justify-between gap-3"><p className="font-semibold">{item?.name ?? "Inventory item"}</p><p className="numeric font-semibold">{formatMoney(Math.round(line.acceptedQuantity * line.unitPriceCents), model.currencyCode)}</p></div>
+                      <p className="mt-1 text-[var(--ink-faint)]">Delivered {quantityLabel(line.quantity)} · accepted {quantityLabel(line.acceptedQuantity)} {unit?.symbol ?? item?.unitSymbol ?? "units"} · {formatMoney(line.unitPriceCents, model.currencyCode)} each</p>
+                      {line.exceptionKind !== "none" ? <p className="mt-1 text-[var(--warning)]">{sentenceCase(line.exceptionKind)} · {line.exceptionNote ?? "No exception note"}</p> : null}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between border-t border-[var(--line)] pt-3"><span className="font-semibold">Accepted value posting now</span><span className="numeric text-sm font-semibold">{formatMoney(reviewTotalCents, model.currencyCode)}</span></div>
+              <p className="leading-5 text-[var(--warning)]">Accepted quantities update on-hand stock immediately after confirmation. Exceptional lines remain zero-posted pending independent review.</p>
+            </div>
+          ) : null}
+        </ConfirmActionDialog>
+      </>
     );
   }
 
@@ -1596,7 +1735,8 @@ function InventoryMutationDialog({
               <Button
                 type="submit"
                 variant="accent"
-                disabled={busy || !firstItem}
+                disabled={busy || !networkAvailable || !firstItem}
+                aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}
               >
                 {busy ? (
                   <LoaderCircle className="size-4 animate-spin" />
@@ -1667,7 +1807,7 @@ function InventoryMutationDialog({
                 name="note"
                 rows={4}
                 maxLength={2_000}
-                disabled={busy || own}
+                disabled={busy || !networkAvailable || own}
                 className={inventoryTextAreaClass}
               />
             </InventoryField>
@@ -1696,7 +1836,7 @@ function InventoryMutationDialog({
               <Button
                 type="button"
                 variant="danger"
-                disabled={busy || own}
+                disabled={busy || !networkAvailable || own}
                 onClick={(event) =>
                   void decide(false, event.currentTarget.form!)
                 }
@@ -1704,7 +1844,7 @@ function InventoryMutationDialog({
                 <X className="size-4" />
                 Reject
               </Button>
-              <Button type="submit" variant="accent" disabled={busy || own}>
+              <Button type="submit" variant="accent" disabled={busy || !networkAvailable || own} aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}>
                 {busy ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
@@ -1806,7 +1946,8 @@ function InventoryMutationDialog({
               <Button
                 type="submit"
                 variant="accent"
-                disabled={busy || !destinations.length || !lines.length}
+                disabled={busy || !networkAvailable || !destinations.length || !lines.length}
+                aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}
               >
                 {busy ? (
                   <LoaderCircle className="size-4 animate-spin" />
@@ -1909,7 +2050,7 @@ function InventoryMutationDialog({
                   required
                   inputMode="decimal"
                   value={line.acceptedQuantity}
-                  disabled={busy || own || !atDestination}
+                  disabled={busy || !networkAvailable || own || !atDestination}
                   onChange={(event) =>
                     updateLine(line.key, {
                       acceptedQuantity: event.target.value,
@@ -1925,7 +2066,7 @@ function InventoryMutationDialog({
               name="note"
               rows={3}
               maxLength={2_000}
-              disabled={busy || own || !atDestination}
+              disabled={busy || !networkAvailable || own || !atDestination}
               className={inventoryTextAreaClass}
             />
           </InventoryField>
@@ -1956,7 +2097,8 @@ function InventoryMutationDialog({
             <Button
               type="button"
               variant="danger"
-              disabled={busy || own || !atDestination}
+              disabled={busy || !networkAvailable || own || !atDestination}
+              aria-describedby={!networkAvailable ? "workspace-connectivity-status" : undefined}
               onClick={(event) =>
                 void decideTransfer(false, event.currentTarget.form!)
               }
@@ -1967,7 +2109,7 @@ function InventoryMutationDialog({
             <Button
               type="submit"
               variant="accent"
-              disabled={busy || own || !atDestination}
+              disabled={busy || !networkAvailable || own || !atDestination}
             >
               {busy ? (
                 <LoaderCircle className="size-4 animate-spin" />
@@ -1996,6 +2138,7 @@ export function LiveInventoryWorkspace({
   title?: string;
   description?: string;
 }) {
+  const connectivity = useConnectivity();
   const administrativeWrite =
     workspace.role === "admin" || workspace.role === "owner";
   const can = (capability: Parameters<typeof hasCapability>[1]) =>
@@ -2066,6 +2209,7 @@ export function LiveInventoryWorkspace({
   const [activeTab, setActiveTab] = useState<Tab>(firstTab);
   const [query, setQuery] = useState("");
   const [countOpen, setCountOpen] = useState(false);
+  const [countDismissOpen, setCountDismissOpen] = useState(false);
   const [countSubmissionId, setCountSubmissionId] = useState<string | null>(
     null,
   );
@@ -2090,8 +2234,24 @@ export function LiveInventoryWorkspace({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const countDraftKey = model
-    ? `le-yard:inventory-count-draft:v1:${workspace.organization.id}:${workspace.activeLocation.id}:${workspace.identity.userId}`
+    ? `le-yard:inventory-count-draft:v2:${workspace.organization.id}:${workspace.activeLocation.id}:${workspace.identity.userId}`
     : null;
+  const countDraftContext = useMemo(
+    () => model
+      ? {
+          organizationId: workspace.organization.id,
+          locationId: workspace.activeLocation.id,
+          userId: workspace.identity.userId,
+          businessDate: model.date,
+          items: model.items,
+        }
+      : null,
+    [model, workspace.activeLocation.id, workspace.identity.userId, workspace.organization.id],
+  );
+  const networkCommandAvailability = getCommandAvailability(
+    "requires_network",
+    connectivity.state,
+  );
 
   const realtime = useRealtimeInvalidation({
     enabled: Boolean(model),
@@ -2102,19 +2262,18 @@ export function LiveInventoryWorkspace({
   });
 
   useEffect(() => {
-    if (!countOpen || !countDraftKey || !countSubmissionId || !model) return;
+    if (!countOpen || !countDraftKey || !countSubmissionId || !countDraftContext) return;
     localDraftSet(
       countDraftKey,
-      JSON.stringify({
-        schemaVersion: 1,
-        submissionId: countSubmissionId,
-        itemIds: model.items.map((item) => item.id).sort(),
-        values: countValues,
-        notes: countNotes,
-        updatedAt: new Date().toISOString(),
-      }),
+      JSON.stringify(
+        createInventoryCountDraft(countDraftContext, {
+          submissionId: countSubmissionId,
+          values: countValues,
+          notes: countNotes,
+        }),
+      ),
     );
-  }, [countDraftKey, countNotes, countOpen, countSubmissionId, countValues, model]);
+  }, [countDraftContext, countDraftKey, countNotes, countOpen, countSubmissionId, countValues]);
 
   const visibleItems = useMemo(() => {
     if (!model) return [];
@@ -2175,48 +2334,85 @@ export function LiveInventoryWorkspace({
   };
 
   function openCount() {
-    let draft: {
-      schemaVersion?: unknown;
-      submissionId?: unknown;
-      itemIds?: unknown;
-      values?: unknown;
-      notes?: unknown;
-    } | null = null;
-    if (countDraftKey) {
-      try {
-        draft = JSON.parse(localDraftGet(countDraftKey) ?? "null");
-      } catch {
-        localDraftRemove(countDraftKey);
-      }
-    }
+    const draftResult = countDraftContext
+      ? readInventoryCountDraft(localDraftGet(countDraftKey!), countDraftContext)
+      : { status: "none" as const };
     const itemIds = liveModel.items.map((item) => item.id).sort();
-    const matchingDraft =
-      draft?.schemaVersion === 1 &&
-      typeof draft.submissionId === "string" &&
-      Array.isArray(draft.itemIds) &&
-      JSON.stringify(draft.itemIds) === JSON.stringify(itemIds) &&
-      draft.values !== null &&
-      typeof draft.values === "object";
+    const restoredDraft = draftResult.status === "restored" ? draftResult.draft : null;
+    if (draftResult.status !== "none" && draftResult.status !== "restored" && countDraftKey) {
+      localDraftRemove(countDraftKey);
+    }
     setCountSubmissionId(
-      matchingDraft ? (draft!.submissionId as string) : crypto.randomUUID(),
+      restoredDraft?.submissionId ?? crypto.randomUUID(),
     );
     setCountValues(
-      matchingDraft
+      restoredDraft
         ? Object.fromEntries(
             itemIds.map((id) => [
               id,
-              typeof (draft!.values as Record<string, unknown>)[id] === "string"
-                ? (draft!.values as Record<string, string>)[id]
-                : "",
+              restoredDraft.values[id] ?? "",
             ]),
           )
         : Object.fromEntries(itemIds.map((id) => [id, ""])),
     );
-    setCountNotes(
-      matchingDraft && typeof draft!.notes === "string" ? draft!.notes : "",
+    setCountNotes(restoredDraft?.notes ?? "");
+    setNotice(
+      draftResult.status === "restored"
+        ? "Saved count draft restored for this business date and catalog."
+        : draftResult.status === "none"
+          ? ""
+          : draftResult.message,
     );
-    setNotice("");
+    setCountDismissOpen(false);
     setCountOpen(true);
+  }
+
+  function persistCountDraft(): boolean {
+    if (!countDraftKey || !countDraftContext || !countSubmissionId) return false;
+    return localDraftSet(
+      countDraftKey,
+      JSON.stringify(
+        createInventoryCountDraft(countDraftContext, {
+          submissionId: countSubmissionId,
+          values: countValues,
+          notes: countNotes,
+        }),
+      ),
+    );
+  }
+
+  function hasCountDraftContent(): boolean {
+    return countNotes.trim().length > 0 || Object.values(countValues).some((value) => value.trim().length > 0);
+  }
+
+  function requestCountClose() {
+    if (busy) return;
+    if (hasCountDraftContent()) {
+      setCountDismissOpen(true);
+      return;
+    }
+    setCountOpen(false);
+  }
+
+  function saveCountAndClose() {
+    if (!persistCountDraft()) {
+      setNotice("This browser could not save the count draft. Keep this window open or copy the values before leaving.");
+      setCountDismissOpen(false);
+      return;
+    }
+    setCountDismissOpen(false);
+    setCountOpen(false);
+    setNotice("Count draft saved on this device for this business date and catalog.");
+  }
+
+  function discardCountAndClose() {
+    if (countDraftKey) localDraftRemove(countDraftKey);
+    setCountDismissOpen(false);
+    setCountOpen(false);
+    setCountSubmissionId(null);
+    setCountValues({});
+    setCountNotes("");
+    setNotice("Count draft discarded. No stock changed.");
   }
 
   function openMutationDialog(next: InventoryMutationDialog) {
@@ -2244,6 +2440,10 @@ export function LiveInventoryWorkspace({
   async function submitCount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!countSubmissionId) return;
+    if (!networkCommandAvailability.available) {
+      setNotice(networkCommandAvailability.reason ?? "Reconnect before submitting this count.");
+      return;
+    }
     const decimal = /^\d+(?:\.\d{1,4})?$/;
     const values = liveModel.items.map(
       (item) => countValues[item.id]?.trim() ?? "",
@@ -2293,6 +2493,10 @@ export function LiveInventoryWorkspace({
 
   async function decideCount(approve: boolean) {
     if (!selectedCount || !countReviewRequestId) return;
+    if (!networkCommandAvailability.available) {
+      setNotice(networkCommandAvailability.reason ?? "Reconnect before reviewing this count.");
+      return;
+    }
     setBusy(true);
     setNotice("");
     try {
@@ -2326,6 +2530,10 @@ export function LiveInventoryWorkspace({
     successMessage: string,
     action: () => Promise<{ ok: boolean; message?: string }>,
   ) {
+    if (!networkCommandAvailability.available) {
+      setNotice(networkCommandAvailability.reason ?? "Reconnect before running this inventory command.");
+      return false;
+    }
     setBusy(true);
     setNotice("");
     try {
@@ -2348,6 +2556,10 @@ export function LiveInventoryWorkspace({
   }
 
   async function saveRecipe(input: unknown) {
+    if (!networkCommandAvailability.available) {
+      setNotice(networkCommandAvailability.reason ?? "Reconnect before saving this recipe.");
+      return false;
+    }
     setBusy(true);
     setNotice("");
     try {
@@ -3368,29 +3580,24 @@ export function LiveInventoryWorkspace({
             notes={countNotes}
             notice={notice}
             busy={busy}
+            networkAvailable={networkCommandAvailability.available}
             onValueChange={(itemId, value) =>
               setCountValues((current) => ({ ...current, [itemId]: value }))
             }
             onNotesChange={setCountNotes}
-            onClose={() => {
-              if (!busy) {
-                setCountOpen(false);
-                setNotice("Count draft saved on this device.");
-              }
-            }}
-            onDiscard={() => {
-              if (!busy) {
-                if (countDraftKey) localDraftRemove(countDraftKey);
-                setCountOpen(false);
-                setCountSubmissionId(null);
-                setCountValues({});
-                setCountNotes("");
-                setNotice("Count draft discarded. No stock changed.");
-              }
-            }}
+            onClose={requestCountClose}
+            onSaveClose={saveCountAndClose}
+            onDiscard={discardCountAndClose}
             onSubmit={submitCount}
           />
         ) : null}
+        <CountDraftDismissDialog
+          open={countDismissOpen}
+          busy={busy}
+          onContinue={() => setCountDismissOpen(false)}
+          onDiscard={discardCountAndClose}
+          onSave={saveCountAndClose}
+        />
         {selectedCount ? (
           <ReviewDialog
             key="review"
@@ -3400,6 +3607,7 @@ export function LiveInventoryWorkspace({
             note={reviewNote}
             notice={notice}
             busy={busy}
+            networkAvailable={networkCommandAvailability.available}
             onNoteChange={setReviewNote}
             onClose={() => {
               if (!busy) {
@@ -3417,6 +3625,7 @@ export function LiveInventoryWorkspace({
             workspace={workspace}
             model={model}
             busy={busy}
+            networkAvailable={networkCommandAvailability.available}
             notice={notice}
             returnFocus={mutationReturnFocus}
             onClose={() => {

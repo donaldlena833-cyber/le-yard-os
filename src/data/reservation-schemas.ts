@@ -173,6 +173,24 @@ export const seatWaitlistEntryInputSchema = z.object({
   durationMinutes: z.number().int().min(15).max(720),
 });
 
+export const retryWaitlistDeliveryInputSchema = z.object({
+  requestId: uuid,
+  waitlistEntryId: uuid,
+  reason: z.string().trim().min(4).max(1_000),
+  channel: z.enum(["email", "sms"]),
+  escalationState: z.enum([
+    "none",
+    "manager_attention",
+    "guest_contact_required",
+  ]),
+});
+
+export const undoWaitlistRemovalInputSchema = z.object({
+  requestId: uuid,
+  waitlistEntryId: uuid,
+  reason: z.string().trim().min(4).max(1_000),
+});
+
 export const setReservationTableStatusInputSchema = z.object({
   requestId: uuid,
   tableId: uuid,
@@ -330,6 +348,12 @@ export type TransitionWaitlistEntryInput = z.infer<
 >;
 export type SeatWaitlistEntryInput = z.infer<
   typeof seatWaitlistEntryInputSchema
+>;
+export type RetryWaitlistDeliveryInput = z.infer<
+  typeof retryWaitlistDeliveryInputSchema
+>;
+export type UndoWaitlistRemovalInput = z.infer<
+  typeof undoWaitlistRemovalInputSchema
 >;
 export type SetReservationTableStatusInput = z.infer<
   typeof setReservationTableStatusInputSchema

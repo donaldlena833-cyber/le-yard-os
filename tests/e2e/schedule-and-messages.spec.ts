@@ -5,7 +5,7 @@ import {
   openWorkspace,
 } from "./helpers/workspace";
 
-test("publishes a schedule and records an employee acknowledgement", async ({ page }) => {
+test("publishes a schedule and blocks manager attestation for an employee", async ({ page }) => {
   await openWorkspace(page, "/schedule", "Dinner schedule");
   const mobile = (page.viewportSize()?.width ?? 1_440) < 768;
 
@@ -28,8 +28,9 @@ test("publishes a schedule and records an employee acknowledgement", async ({ pa
   const shiftPanel = page.getByRole("dialog", { name: "Mateo", exact: true });
   await expect(shiftPanel).toBeVisible();
   await expect(shiftPanel.getByText("Awaiting response", { exact: true })).toBeVisible();
-  await shiftPanel.getByRole("button", { name: "Acknowledge shift" }).click();
-  await expect(shiftPanel.getByText("Acknowledged", { exact: true })).toBeVisible();
+  await expect(
+    shiftPanel.getByText(/Only Mateo can acknowledge this shift/i),
+  ).toBeVisible();
   await expect(shiftPanel.getByRole("button", { name: "Acknowledge shift" })).toHaveCount(0);
   await expectNoViewportOverflow(page);
 });

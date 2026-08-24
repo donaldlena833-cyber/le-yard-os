@@ -180,6 +180,7 @@ async function toastConnection(
 async function finishJob(
   admin: AdminClient,
   jobId: string,
+  leaseToken: string,
   values: {
     status: "succeeded" | "partially_succeeded" | "failed";
     cursor: string | null;
@@ -187,18 +188,15 @@ async function finishJob(
     errorMessage: string | null;
   },
 ) {
-  await admin
-    .from("integration_sync_jobs")
-    .update({
-      status: values.status,
-      cursor: values.cursor,
-      records_processed: values.recordsProcessed,
-      error_message: values.errorMessage,
-      completed_at: new Date().toISOString(),
-      lease_expires_at: null,
-    })
-    .eq("id", jobId)
-    .eq("status", "running");
+  const completed = await admin.rpc("service_complete_integration_sync_job", {
+    p_job_id: jobId,
+    p_lease_token: leaseToken,
+    p_status: values.status,
+    p_proposed_cursor: values.cursor,
+    p_records_processed: values.recordsProcessed,
+    p_error_message: values.errorMessage,
+  });
+  if (completed.error) throw new Error("Toast sync completion lease was lost.");
 }
 
 async function synchronize(request: Request) {
@@ -237,6 +235,17 @@ async function synchronize(request: Request) {
 
   const startedAt = new Date(claimedJob.started_at ?? new Date().toISOString());
   const jobId = claimedJob.id;
+  const fenced = await admin.rpc("service_fence_integration_sync_job", {
+    p_job_id: jobId,
+    p_lease_seconds: 900,
+  });
+  const leaseToken = (fenced.data as { leaseToken?: unknown } | null)?.leaseToken;
+  if (fenced.error || typeof leaseToken !== "string") {
+    return Response.json(
+      { error: "Toast sync lease is unavailable." },
+      { status: 409, headers: { "cache-control": "no-store" } },
+    );
+  }
 
   try {
     const fallbackStart = startedAt.getTime() - 7 * 86_400_000;
@@ -325,6 +334,14 @@ async function synchronize(request: Request) {
 
       if (errorMessage) failed += 1;
       processed += 1;
+      if (processed % 50 === 0) {
+        const renewed = await admin.rpc("service_renew_integration_sync_job_lease", {
+          p_job_id: jobId,
+          p_lease_token: leaseToken,
+          p_lease_seconds: 900,
+        });
+        if (renewed.error) throw new Error("Toast sync lease was lost.");
+      }
       const recordResult = await admin.from("integration_sync_records").insert({
         organization_id: scope.organization_id,
         sync_job_id: jobId,
@@ -334,13 +351,14 @@ async function synchronize(request: Request) {
         local_id: localId,
         status,
         payload_hash: payloadHash,
+        source_modified_at: entry.modifiedDate,
         error_message: errorMessage,
       });
       if (recordResult.error) throw new Error("Toast sync evidence could not be recorded.");
     }
 
     const terminalStatus = failed ? "partially_succeeded" : "succeeded";
-    await finishJob(admin, jobId, {
+    await finishJob(admin, jobId, leaseToken, {
       status: terminalStatus,
       cursor: startedAt.toISOString(),
       recordsProcessed: processed,
@@ -362,12 +380,17 @@ async function synchronize(request: Request) {
     const safeError = sanitizeIntegrationError(
       error instanceof Error ? error.message : "Toast labor sync failed.",
     );
-    await finishJob(admin, jobId, {
-      status: "failed",
-      cursor: null,
-      recordsProcessed: 0,
-      errorMessage: safeError,
-    });
+    try {
+      await finishJob(admin, jobId, leaseToken, {
+        status: "failed",
+        cursor: null,
+        recordsProcessed: 0,
+        errorMessage: safeError,
+      });
+    } catch {
+      // A reclaimed or expired lease is authoritative; the stale worker must
+      // not alter the newer run's cursor or terminal state.
+    }
     await admin
       .from("integration_connections")
       .update({ status: "degraded" })

@@ -18,6 +18,7 @@ import type {
   MoveReservationTableInput,
   ReservationLifecycleHeadInput,
   RevokeServiceShiftExceptionInput,
+  RetryWaitlistDeliveryInput,
   SaveReservationInput,
   SaveReservationFloorPositionsInput,
   SaveReservationWithGuestInput,
@@ -26,6 +27,7 @@ import type {
   SetReservationTableStatusInput,
   TransitionReservationInput,
   TransitionWaitlistEntryInput,
+  UndoWaitlistRemovalInput,
 } from "../reservation-schemas";
 import {
   reservationLifecycleHeadSchema,
@@ -425,6 +427,36 @@ export async function seatWaitlistEntry(
   if (error)
     throwDatabaseError(error, "The waitlist party could not be seated.");
   return assertFound(data, "The seated reservation was not returned.");
+}
+
+export async function retryWaitlistDelivery(
+  { supabase }: WorkflowContext,
+  input: RetryWaitlistDeliveryInput,
+) {
+  const { data, error } = await supabase.rpc("retry_waitlist_delivery", {
+    p_request_id: input.requestId,
+    p_waitlist_entry_id: input.waitlistEntryId,
+    p_channel: input.channel,
+    p_escalation_state: input.escalationState,
+    p_reason: input.reason,
+  });
+  if (error)
+    throwDatabaseError(error, "The waitlist message could not be requeued.");
+  return assertFound(data, "The requeued waitlist message was not returned.");
+}
+
+export async function undoWaitlistRemoval(
+  { supabase }: WorkflowContext,
+  input: UndoWaitlistRemovalInput,
+) {
+  const { data, error } = await supabase.rpc("undo_waitlist_removal", {
+    p_request_id: input.requestId,
+    p_waitlist_entry_id: input.waitlistEntryId,
+    p_reason: input.reason,
+  });
+  if (error)
+    throwDatabaseError(error, "The waitlist removal could not be undone.");
+  return assertFound(data, "The restored waitlist entry was not returned.");
 }
 
 export async function setReservationTableStatus(

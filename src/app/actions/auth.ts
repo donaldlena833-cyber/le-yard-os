@@ -2,6 +2,7 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 import { isDemoMode, publicEnv } from "@/lib/env";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
@@ -351,116 +352,160 @@ export async function inviteUserAction(
     }
   }
 
-  const [{ data: pendingInvitation }, { data: existingEmployee }] =
-    await Promise.all([
-      supabase
-        .from("user_invitations")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("email", normalizedEmail)
-        .is("accepted_at", null)
-        .is("revoked_at", null)
-        .maybeSingle(),
-      supabase
-        .from("employees")
-        .select("id")
-        .eq("organization_id", organizationId)
-        .eq("email", normalizedEmail)
-        .maybeSingle(),
-    ]);
-  if (pendingInvitation || existingEmployee) {
+  if (parsed.data.organizationId !== organizationId) {
     return {
       status: "error",
-      message: "This person already has access or a pending invitation.",
+      message: "The invitation organization does not match your active workspace.",
     };
   }
 
   const tracking = createInvitationTracking();
-
-  const admin = createAdminClient();
-  const { data: invited, error } = await admin.auth.admin.inviteUserByEmail(
-    normalizedEmail,
+  const requestId = crypto.randomUUID();
+  const { data: begun, error: beginError } = await supabase.rpc(
+    "begin_user_invitation_request",
     {
-      data: {
-        display_name: parsed.data.fullName,
-        requested_role: parsed.data.role,
-        organization_id: organizationId,
-        location_ids: locationIds,
-        invited_by: userId,
-      },
-      redirectTo: invitationCallbackUrl(
-        publicEnv.NEXT_PUBLIC_APP_URL,
-        organizationId,
-      ),
-    },
-  );
-
-  if (error || !invited.user) {
-    return {
-      status: "error",
-      message:
-        "The invitation could not be sent. Check the email or existing access.",
-    };
-  }
-
-  const { error: metadataError } = await admin.auth.admin.updateUserById(
-    invited.user.id,
-    {
-      app_metadata: {
-        ...invited.user.app_metadata,
-        pending_organization_id: organizationId,
-        pending_role: parsed.data.role,
-        invited_by: userId,
-      },
-    },
-  );
-
-  if (metadataError) {
-    await admin.auth.admin.deleteUser(invited.user.id);
-    return {
-      status: "error",
-      message:
-        "The invitation could not be securely scoped. No account was provisioned.",
-    };
-  }
-
-  const { error: provisioningError } = await supabase.rpc(
-    "provision_user_invitation",
-    {
-      p_auth_user_id: invited.user.id,
+      p_request_id: requestId,
       p_organization_id: organizationId,
       p_email: normalizedEmail,
       p_display_name: parsed.data.fullName,
       p_role: parsed.data.role,
       p_location_ids: locationIds,
-      p_token_hash: tracking.tokenHash,
-      p_expires_at: tracking.expiresAt,
       p_employee_id: tracking.employeeId,
-    },
+      p_expires_at: tracking.expiresAt,
+    } as never,
   );
-
-  if (provisioningError) {
-    await admin.auth.admin.deleteUser(invited.user.id);
-    await admin
-      .from("user_invitations")
-      .delete()
-      .eq("organization_id", organizationId)
-      .eq("token_hash", tracking.tokenHash);
-    await admin
-      .from("employees")
-      .delete()
-      .eq("organization_id", organizationId)
-      .eq("id", tracking.employeeId)
-      .eq("employment_status", "invited");
+  if (beginError) {
     return {
       status: "error",
       message:
-        "The invitation could not be provisioned atomically. No access was granted.",
+        beginError.code === "23505"
+          ? "This person already has access or a pending invitation."
+          : "The invitation request could not be opened safely. Verify MFA and try again.",
     };
+  }
+
+  const admin = createAdminClient();
+  const saga = begun as {
+    requestId?: string;
+    state?: string;
+    authUserId?: string | null;
+  } | null;
+  const sagaRequestId = saga?.requestId ?? requestId;
+  const callback = invitationCallbackUrl(
+    publicEnv.NEXT_PUBLIC_APP_URL,
+    organizationId,
+  );
+  const linkResult = saga?.authUserId
+    ? await admin.auth.admin.generateLink({
+        type: "recovery",
+        email: normalizedEmail,
+        options: { redirectTo: callback },
+      })
+    : await admin.auth.admin.generateLink({
+        type: "invite",
+        email: normalizedEmail,
+        options: {
+          redirectTo: callback,
+          data: {
+            invitation_request_id: sagaRequestId,
+            display_name: parsed.data.fullName,
+          },
+        },
+      });
+  const authUserId = saga?.authUserId ?? linkResult.data?.user?.id ?? null;
+  const actionUrl = linkResult.data?.properties?.action_link ?? null;
+  if (linkResult.error || !authUserId || !actionUrl) {
+    await admin.rpc("service_reconcile_user_invitation_auth", {
+      p_request_id: sagaRequestId,
+      p_auth_user_id: authUserId,
+      p_error_code: "auth_link_uncertain",
+    } as never);
+    return {
+      status: "error",
+      message:
+        "The invitation is saved but Auth link creation is unresolved. It was not reported as sent.",
+    };
+  }
+
+  const { error: metadataError } = await admin.auth.admin.updateUserById(
+    authUserId,
+    {
+      app_metadata: {
+        ...(linkResult.data.user?.app_metadata ?? {}),
+        pending_organization_id: organizationId,
+        pending_role: parsed.data.role,
+        invited_by: userId,
+        invitation_request_id: sagaRequestId,
+      },
+    },
+  );
+
+  if (metadataError) {
+    await admin.rpc("service_reconcile_user_invitation_auth", {
+      p_request_id: sagaRequestId,
+      p_auth_user_id: authUserId,
+      p_error_code: "auth_metadata_failed",
+    } as never);
+    return {
+      status: "error",
+      message:
+        "The Auth account exists but secure invitation scope needs reconciliation. No invitation was reported as sent.",
+    };
+  }
+
+  const reconciled = await admin.rpc("service_reconcile_user_invitation_auth", {
+    p_request_id: sagaRequestId,
+    p_auth_user_id: authUserId,
+    p_error_code: null,
+  } as never);
+  const provisioned = reconciled.error
+    ? reconciled
+    : await admin.rpc("service_provision_user_invitation_request", {
+        p_request_id: sagaRequestId,
+      } as never);
+
+  if (provisioned.error) {
+    return {
+      status: "error",
+      message:
+        "The Auth account exists, but tenant provisioning needs reconciliation. No invitation was reported as sent.",
+    };
+  }
+
+  const queued = await admin.rpc("service_queue_user_invitation_delivery", {
+    p_request_id: sagaRequestId,
+    p_action_url: actionUrl,
+  } as never);
+  if (queued.error) {
+    return {
+      status: "error",
+      message:
+        "Tenant access is staged, but delivery could not be queued. The invitation was not reported as sent.",
+    };
+  }
+
+  const deliverySecret = process.env.IDENTITY_DELIVERY_SECRET?.trim();
+  if (deliverySecret && deliverySecret.length >= 32) {
+    const workerUrl = new URL(
+      "/api/internal/identity-delivery",
+      publicEnv.NEXT_PUBLIC_APP_URL,
+    );
+    after(async () => {
+      try {
+        await fetch(workerUrl, {
+          method: "POST",
+          headers: { authorization: `Bearer ${deliverySecret}` },
+          cache: "no-store",
+          signal: AbortSignal.timeout(25_000),
+        });
+      } catch {
+        // Durable queued work remains available to the scheduled worker.
+      }
+    });
   }
 
   return {
     status: "success",
-    message: `Invitation sent to ${normalizedEmail}.`,
+    message: `Invitation prepared for ${normalizedEmail}. Delivery is queued and will be confirmed separately.`,
   };
 }

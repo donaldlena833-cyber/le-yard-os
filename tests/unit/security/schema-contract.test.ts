@@ -18,16 +18,34 @@ describe("runtime schema contract", () => {
   });
 
   it("accepts the exact checked-in migration and function contract", () => {
-    expect(matchesRuntimeSchemaContract(EXPECTED_SCHEMA_CONTRACT)).toBe(true);
+    expect(matchesRuntimeSchemaContract({
+      ...EXPECTED_SCHEMA_CONTRACT,
+      publicFunctionCount: 1,
+      tableFingerprint: "a".repeat(64),
+      functionFingerprint: "b".repeat(64),
+      accessFingerprint: "c".repeat(64),
+      schemaFingerprint: "d".repeat(64),
+      matchesExpected: true,
+    })).toBe(true);
   });
 
   it.each([
     { migrationHead: "20260812013549" },
-    { publicFunctionCount: EXPECTED_SCHEMA_CONTRACT.publicFunctionCount - 1 },
     { contractVersion: "runtime-schema-v0" },
+    { matchesExpected: false },
+    { schemaFingerprint: "not-a-fingerprint" },
   ])("rejects drift: %o", (drift) => {
     expect(
-      matchesRuntimeSchemaContract({ ...EXPECTED_SCHEMA_CONTRACT, ...drift }),
+      matchesRuntimeSchemaContract({
+        ...EXPECTED_SCHEMA_CONTRACT,
+        publicFunctionCount: 1,
+        tableFingerprint: "a".repeat(64),
+        functionFingerprint: "b".repeat(64),
+        accessFingerprint: "c".repeat(64),
+        schemaFingerprint: "d".repeat(64),
+        matchesExpected: true,
+        ...drift,
+      }),
     ).toBe(false);
   });
 });

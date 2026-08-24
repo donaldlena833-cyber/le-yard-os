@@ -43,11 +43,13 @@ import {
   resolveWorkMode,
   type ActionResolutionContext,
 } from "@/lib/actions/action-registry";
+import { demoIds } from "@/lib/demo";
 import { cn } from "@/lib/utils";
 
 type Shift = {
   id: string;
   dayId: string;
+  personId: string | null;
   person: string;
   role: string;
   start: string;
@@ -72,6 +74,7 @@ const initialShifts: Shift[] = [
   {
     id: "s1",
     dayId: "mon",
+    personId: demoIds.people.maris,
     person: "Maris",
     role: "Floor lead",
     start: "4:00p",
@@ -83,6 +86,7 @@ const initialShifts: Shift[] = [
   {
     id: "s2",
     dayId: "mon",
+    personId: demoIds.people.irini,
     person: "Irini",
     role: "Server",
     start: "4:30p",
@@ -94,6 +98,7 @@ const initialShifts: Shift[] = [
   {
     id: "s3",
     dayId: "tue",
+    personId: demoIds.people.irini,
     person: "Irini",
     role: "Server",
     start: "5:00p",
@@ -105,6 +110,7 @@ const initialShifts: Shift[] = [
   {
     id: "s4",
     dayId: "tue",
+    personId: demoIds.people.mateo,
     person: "Mateo",
     role: "Kitchen",
     start: "2:00p",
@@ -116,6 +122,7 @@ const initialShifts: Shift[] = [
   {
     id: "s5",
     dayId: "wed",
+    personId: demoIds.people.donald,
     person: "Donald",
     role: "Floor lead",
     start: "5:00p",
@@ -127,6 +134,7 @@ const initialShifts: Shift[] = [
   {
     id: "s6",
     dayId: "thu",
+    personId: null,
     person: "Open shift",
     role: "Server",
     start: "5:00p",
@@ -139,6 +147,7 @@ const initialShifts: Shift[] = [
   {
     id: "s7",
     dayId: "fri",
+    personId: demoIds.people.maris,
     person: "Maris",
     role: "Floor lead",
     start: "4:00p",
@@ -150,6 +159,7 @@ const initialShifts: Shift[] = [
   {
     id: "s8",
     dayId: "fri",
+    personId: demoIds.people.irini,
     person: "Irini",
     role: "Server",
     start: "4:00p",
@@ -161,6 +171,7 @@ const initialShifts: Shift[] = [
   {
     id: "s9",
     dayId: "sat",
+    personId: demoIds.people.irini,
     person: "Irini",
     role: "Server",
     start: "4:30p",
@@ -172,6 +183,7 @@ const initialShifts: Shift[] = [
   {
     id: "s10",
     dayId: "sat",
+    personId: demoIds.people.mateo,
     person: "Mateo",
     role: "Kitchen",
     start: "1:00p",
@@ -183,6 +195,7 @@ const initialShifts: Shift[] = [
   {
     id: "s11",
     dayId: "sun",
+    personId: demoIds.people.donald,
     person: "Donald",
     role: "Floor lead",
     start: "4:30p",
@@ -955,6 +968,16 @@ function ManagerScheduleWorkspace() {
       const updated = {
         ...shiftEditor,
         dayId,
+        personId:
+          person === "Donald"
+            ? demoIds.people.donald
+            : person === "Maris"
+              ? demoIds.people.maris
+              : person === "Irini"
+                ? demoIds.people.irini
+                : person === "Mateo"
+                  ? demoIds.people.mateo
+                  : null,
         person,
         role,
         start,
@@ -971,6 +994,16 @@ function ManagerScheduleWorkspace() {
         {
           id: `shift-${Date.now()}`,
           dayId,
+          personId:
+            person === "Donald"
+              ? demoIds.people.donald
+              : person === "Maris"
+                ? demoIds.people.maris
+                : person === "Irini"
+                  ? demoIds.people.irini
+                  : person === "Mateo"
+                    ? demoIds.people.mateo
+                    : null,
           person,
           role,
           start,
@@ -990,6 +1023,7 @@ function ManagerScheduleWorkspace() {
     if (!reopenShift) return;
     const reopened = {
       ...reopenShift,
+      personId: null,
       person: "Open shift",
       acknowledged: false,
       open: true,
@@ -1246,11 +1280,12 @@ function ManagerScheduleWorkspace() {
               className="mt-7 flex flex-wrap gap-2"
               size="sm"
             />
-            {!selected.acknowledged ? (
+            {!selected.acknowledged &&
+            selected.personId === workspace.identity.userId ? (
               <div className="mt-8 rounded-[16px] bg-[var(--accent-soft)]/50 p-4">
-                <p className="text-xs font-semibold">Employee preview</p>
+                <p className="text-xs font-semibold">Your acknowledgement</p>
                 <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
-                  Use this to verify the acknowledgement flow in demo mode.
+                  Confirm only the shift assigned to your identity.
                 </p>
                 <Button
                   className="mt-4 w-full"
@@ -1270,6 +1305,17 @@ function ManagerScheduleWorkspace() {
                 >
                   <CalendarCheck2 className="size-4" /> Acknowledge shift
                 </Button>
+              </div>
+            ) : !selected.acknowledged && selected.personId ? (
+              <div
+                role="note"
+                className="mt-8 rounded-[16px] border border-[var(--line)] bg-[var(--canvas-strong)] p-4"
+              >
+                <p className="text-xs font-semibold">Employee attestation required</p>
+                <p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">
+                  Only {selected.person} can acknowledge this shift. Managers can review or
+                  reopen coverage, but cannot attest for the employee.
+                </p>
               </div>
             ) : null}
           </>

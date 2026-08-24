@@ -24,6 +24,37 @@ const responseEnvelopeSchema = z.object({
 
 const maximumResponseBytes = 1_000_000;
 
+export async function readBoundedResponseBody(
+  response: Response,
+  maximumBytes = maximumResponseBytes,
+) {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > maximumBytes) {
+        await reader.cancel("response_byte_limit_exceeded");
+        throw new Error("Sub2API returned an oversized response.");
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder("utf-8", { fatal: true }).decode(body);
+}
+
 function resolveSub2ApiUrl() {
   const raw = process.env.LE_YARD_SUB2API_BASE_URL?.trim();
   if (!raw) throw new Error("The Sub2API base URL is not configured.");
@@ -96,9 +127,12 @@ export async function runSub2ApiOwnerIntelligence(
     }),
   });
 
-  const responseText = await response.text();
-  if (responseText.length > maximumResponseBytes) {
-    throw new Error("Sub2API returned an oversized response.");
+  let responseText: string;
+  try {
+    responseText = await readBoundedResponseBody(response);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("oversized")) throw error;
+    throw new Error("Sub2API returned an unreadable response.");
   }
   if (!response.ok) {
     throw new Error(`Sub2API request failed with status ${response.status}.`);

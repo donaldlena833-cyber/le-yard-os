@@ -9,6 +9,7 @@ import { runOwnerIntelligence } from "@/lib/ai/owner-intelligence-provider.serve
 import type { OperationsAnswer } from "@/lib/ai/guardrails";
 import {
   intelligenceTaskProposalSchema,
+  validateAndCalibrateOwnerIntelligenceOutput,
   type IntelligenceEvidence,
   type OwnerIntelligenceAnswer,
 } from "@/lib/ai/intelligence-contract";
@@ -242,11 +243,10 @@ export async function askOwnerIntelligenceAction(input: unknown): Promise<AskOwn
       localDate,
       evidence,
     });
-    const { output } = providerResult;
-    const allowedCitations = new Set(evidence.map((item) => `${item.sourceTable}\u0000${item.sourceRecordId}`));
-    if (output.citations.some((citation) => !allowedCitations.has(`${citation.sourceTable}\u0000${citation.sourceRecordId}`))) {
-      throw new Error("The intelligence response cited evidence outside the authorized context.");
-    }
+    const output = validateAndCalibrateOwnerIntelligenceOutput(
+      providerResult.output,
+      evidence,
+    );
     const proposal = output.proposal ? intelligenceTaskProposalSchema.parse(output.proposal) : null;
     if (proposal?.dueAt) {
       const dueAt = new Date(proposal.dueAt).getTime();

@@ -419,7 +419,7 @@ export async function loadLiveReservations(
       .order("created_at"),
     supabase
       .from("reservation_message_outbox")
-      .select("waitlist_entry_id,status,created_at")
+      .select("waitlist_entry_id,status,channel,attempts,last_error_code,created_at")
       .eq("organization_id", organization.id)
       .eq("location_id", activeLocation.id)
       .eq("template_key", "waitlist_table_ready")
@@ -761,6 +761,55 @@ export async function loadLiveReservations(
         if (statuses.includes("failed")) return "failed" as const;
         return null;
       })(),
+      deliveryChannel: (() => {
+        const latest = (waitlistDeliveryResult.data ?? []).find(
+          (message) => message.waitlist_entry_id === entry.id,
+        );
+        return latest?.channel === "email" || latest?.channel === "sms"
+          ? latest.channel
+          : null;
+      })(),
+      deliveryAttemptCount:
+        (waitlistDeliveryResult.data ?? []).find(
+          (message) => message.waitlist_entry_id === entry.id,
+        )?.attempts ?? 0,
+      deliveryErrorCode:
+        (waitlistDeliveryResult.data ?? []).find(
+          (message) => message.waitlist_entry_id === entry.id,
+        )?.last_error_code ?? null,
+      deliveryEscalationRequired:
+        entry.escalation_state === "manager_attention" ||
+        entry.escalation_state === "guest_contact_required",
+      fallbackChannel:
+        entry.fallback_channel === "email" || entry.fallback_channel === "sms"
+          ? entry.fallback_channel
+          : null,
+      elapsedWaitMinutes: Math.max(
+        0,
+        Math.floor(
+          (new Date(observedAt).valueOf() - new Date(entry.created_at).valueOf()) /
+            60_000,
+        ),
+      ),
+      quotedWaitVarianceMinutes:
+        entry.quoted_wait_minutes === null
+          ? null
+          : Math.max(
+              0,
+              Math.floor(
+                (new Date(observedAt).valueOf() -
+                  new Date(entry.created_at).valueOf()) /
+                  60_000,
+              ),
+            ) - entry.quoted_wait_minutes,
+      overdue:
+        entry.quoted_wait_minutes !== null &&
+        new Date(observedAt).valueOf() - new Date(entry.created_at).valueOf() >
+          entry.quoted_wait_minutes * 60_000,
+      offerExpiresAt: entry.offer_expires_at,
+      removalUndoAvailableUntil: entry.removed_at
+        ? new Date(new Date(entry.removed_at).valueOf() + 10 * 60_000).toISOString()
+        : null,
       notes: entry.notes,
       createdAt: entry.created_at,
     })),

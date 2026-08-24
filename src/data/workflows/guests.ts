@@ -11,11 +11,7 @@ import type {
   RecordGuestConsentInput,
   SaveGuestInput,
 } from "../guest-schemas";
-import {
-  requireLocationAccess,
-  requireManagementRead,
-  requireOrganizationAccess,
-} from "../policy";
+import { requireLocationAccess, requireOrganizationAccess } from "../policy";
 import type { WorkflowContext } from "../execute";
 import type { SearchGuestsInput } from "../schemas";
 
@@ -25,37 +21,31 @@ interface GuestSearchRow {
   email: string | null;
   phone: string | null;
   vip: boolean;
-  preferences: string | null;
-  allergies: string | null;
   last_visit_at: string | null;
   visit_count: number;
-  lifetime_spend_cents: number;
 }
 
 export async function searchGuests(
   { supabase, actor }: WorkflowContext,
   input: SearchGuestsInput,
 ) {
-  requireManagementRead(actor, input.organizationId);
-
-  const { data, error } = await supabase.rpc("search_guests", {
+  requireLocationAccess(actor, input.organizationId, input.locationId);
+  const { data, error } = await supabase.rpc("service_guest_profiles", {
     p_organization_id: input.organizationId,
+    p_location_id: input.locationId,
     p_query: input.query,
     p_limit: input.limit,
+    p_guest_ids: null,
   });
   if (error) throwDatabaseError(error, "Guests could not be searched.");
-
   return ((data ?? []) as GuestSearchRow[]).map((guest) => ({
-    id: guest.id as string,
-    displayName: guest.display_name as string,
-    email: guest.email as string | null,
-    phone: guest.phone as string | null,
-    vip: guest.vip as boolean,
-    preferences: guest.preferences as string | null,
-    allergies: guest.allergies as string | null,
-    lastVisitAt: guest.last_visit_at as string | null,
-    visitCount: guest.visit_count as number,
-    lifetimeSpendCents: guest.lifetime_spend_cents as number,
+    id: guest.id,
+    displayName: guest.display_name,
+    email: guest.email,
+    phone: guest.phone,
+    vip: guest.vip,
+    lastVisitAt: guest.last_visit_at,
+    visitCount: guest.visit_count,
   }));
 }
 

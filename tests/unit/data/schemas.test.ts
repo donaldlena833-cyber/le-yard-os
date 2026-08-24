@@ -205,7 +205,12 @@ describe("workflow action schemas", () => {
       ],
       [
         searchGuestsInputSchema,
-        { organizationId: ids.organization, query: "birthday august", limit: 25 },
+        {
+          organizationId: ids.organization,
+          locationId: ids.location,
+          query: "birthday august",
+          limit: 25,
+        },
       ],
       [
         requestReportExportInputSchema,
@@ -335,6 +340,7 @@ describe("workflow action schemas", () => {
     expect(
       searchGuestsInputSchema.safeParse({
         organizationId: ids.organization,
+        locationId: ids.location,
         query: "x",
       }).success,
     ).toBe(false);

@@ -112,6 +112,10 @@ beforeEach(() => {
   mocks.rpc
     .mockReset()
     .mockImplementation(async (name: string, args: Record<string, unknown>) => {
+      if (name === "service_begin_reservation_delivery_run")
+        return { data: { runId: args.p_run_id }, error: null };
+      if (name === "service_complete_reservation_delivery_run")
+        return { data: { runId: args.p_run_id, status: args.p_status }, error: null };
       if (name === "service_enqueue_reservation_reminders")
         return { data: null, error: null };
       if (name === "service_claim_reservation_message_outbox")

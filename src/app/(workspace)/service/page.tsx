@@ -3,12 +3,14 @@ import { LiveServiceControlWorkspace } from "@/components/service/live-service-c
 import { loadLiveServiceControl } from "@/data/read-models/service-control";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { hasCapability } from "@/lib/permissions/capabilities";
+import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Service control" };
 
 export default async function ServicePage() {
   const resolution = await resolveWorkspaceSession();
   if (resolution.status !== "ready") return null;
+  requireWorkspaceRouteAccess("/service", resolution.context);
   const result = resolution.context.mode === "live"
     ? await loadLiveServiceControl(resolution.context)
     : { ok: true as const, data: {

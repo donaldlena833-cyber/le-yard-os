@@ -24,6 +24,14 @@ export function selectedOwnerIntelligenceProvider() {
   throw new Error("The owner-intelligence provider is invalid.");
 }
 
+export function ownerIntelligenceProviderPolicy() {
+  return {
+    selected: selectedOwnerIntelligenceProvider(),
+    fallback: "none" as const,
+    automaticActionExecution: false as const,
+  };
+}
+
 export async function runOwnerIntelligence(
   input: OwnerIntelligenceProviderInput,
 ): Promise<OwnerIntelligenceProviderResult> {

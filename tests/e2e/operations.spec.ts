@@ -66,9 +66,8 @@ test("reveals task evidence and confirms a named terminal action", async ({
   await expectNoViewportOverflow(page);
 });
 
-test("reconciles, submits, and owner-approves a closeout", async ({ page }) => {
+test("reconciles and submits a closeout while blocking same-owner approval", async ({ page }) => {
   await openWorkspace(page, "/closeout", "Closeout & tips");
-  const businessDate = await page.getByLabel("Business date").inputValue();
   const mobile = (page.viewportSize()?.width ?? 1_440) < 768;
 
   await expect(
@@ -105,26 +104,15 @@ test("reconciles, submits, and owner-approves a closeout", async ({ page }) => {
     .click();
   await expect(
     page.getByText(
-      "Submitted for owner approval. Inputs are temporarily locked.",
+      "Submitted for owner approval. A different owner must review and approve this closeout.",
     ),
   ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Owner approve", exact: true })
-    .click();
   await expect(
-    page.getByText(
-      "Owner approval recorded. The closeout and tip calculation are now locked.",
-    ),
+    page.getByRole("button", { name: "Owner approve", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(/Submitted by Donald.*a different owner must approve/i),
   ).toBeVisible();
   await expect(page.getByLabel("Business date")).toBeDisabled();
-
-  const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Payroll CSV", exact: true }).click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(
-    /^le-yard-tips-.*-\d{4}-\d{2}-\d{2}\.csv$/,
-  );
-  expect(download.suggestedFilename()).toContain(businessDate);
-  expect(await download.failure()).toBeNull();
   await expectNoViewportOverflow(page);
 });

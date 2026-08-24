@@ -853,6 +853,7 @@ export const recordInventoryItemCostInputSchema = z
 export const searchGuestsInputSchema = z
   .object({
     organizationId: uuid,
+    locationId: uuid,
     query: z.string().trim().min(2).max(200),
     limit: z.number().int().min(1).max(100).default(25),
   })

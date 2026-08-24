@@ -3,7 +3,6 @@ import { ConnectedReceiptsWorkspace } from "@/components/receipts/connected-rece
 import { ReceiptsWorkspace } from "@/components/receipts/receipts-workspace";
 import { loadLiveReceipts } from "@/data/read-models/receipts";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
-import { isDemoMode } from "@/lib/env";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Receipts" };
@@ -13,10 +12,10 @@ export default async function ReceiptsPage({
 }: {
   searchParams: Promise<{ q?: string | string[]; p?: string | string[] }>;
 }) {
-  if (isDemoMode) return <ReceiptsWorkspace />;
   const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/receipts", resolution.context);
+  if (resolution.context.mode === "demo") return <ReceiptsWorkspace />;
   const params = await searchParams;
   const search = (Array.isArray(params.q) ? params.q[0] : params.q ?? "")
     .trim()

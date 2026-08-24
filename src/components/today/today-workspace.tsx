@@ -1,6 +1,5 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -44,6 +43,8 @@ type TodayAction = {
   tone: "danger" | "warning";
   title: string;
   detail: string;
+  href: string;
+  actionLabel: string;
 };
 
 const initialActions: TodayAction[] = [];
@@ -55,6 +56,8 @@ const saturdayServiceActions: TodayAction[] = [
     tone: "danger",
     title: "Table 9 is 18 minutes behind pace",
     detail: "Party of 6 · entrées fired at 7:31 PM · server requested a manager touch.",
+    href: `/reservations?date=${saturdayServiceSimulation.businessDate}`,
+    actionLabel: "Review in Reservations",
   },
   {
     id: "filet-running-low",
@@ -62,6 +65,8 @@ const saturdayServiceActions: TodayAction[] = [
     tone: "warning",
     title: "Filet au poivre is running low",
     detail: "8 portions remain · 11 later covers have ordered steak on comparable Saturdays.",
+    href: "/service",
+    actionLabel: "Review in Service",
   },
   {
     id: "break-window",
@@ -69,6 +74,8 @@ const saturdayServiceActions: TodayAction[] = [
     tone: "warning",
     title: "Two break windows need adjustment",
     detail: "Irini and Leo cross six hours tonight; no break timing has been approved yet.",
+    href: "/schedule",
+    actionLabel: "Review in Schedule",
   },
 ];
 
@@ -83,8 +90,7 @@ const saturdayTeam = [
   { name: "Imani", role: "Server", shift: "5:00–11:30", station: "Section 1" },
 ];
 
-function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string }) {
-  const [actions, setActions] = useState(saturdayServiceActions);
+export function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string }) {
   const pacing = [
     { label: "5 PM", covers: 18, width: "38%" },
     { label: "6 PM", covers: 27, width: "58%" },
@@ -194,26 +200,24 @@ function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string }) {
 
         <aside className="space-y-9">
           <section>
-            <SectionHeading eyebrow="Needs attention" title={`${actions.length} live decisions`} detail="Resolve freely; the preview resets without touching live data." />
+            <SectionHeading eyebrow="Needs attention" title={`${saturdayServiceActions.length} source-linked exceptions`} detail="Open the source workflow to investigate. These cards do not resolve records." />
             <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
-              <AnimatePresence initial={false}>
-                {actions.map((action) => {
-                  const Icon = action.icon;
-                  return (
-                    <motion.div key={action.id} layout exit={{ opacity: 0, height: 0 }} className="border-b border-[var(--line)] last:border-0">
-                      <div className="flex items-start gap-3 px-4 pt-4">
-                        <span className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl", action.tone === "danger" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--warning-soft)] text-[var(--warning)]")}><Icon className="size-4" /></span>
-                        <div><p className="text-sm font-semibold leading-5">{action.title}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{action.detail}</p></div>
-                      </div>
-                      <div className="flex justify-end gap-2 px-4 py-3">
-                        <Button variant="quiet" size="sm">Review</Button>
-                        <Button variant="secondary" size="sm" onClick={() => setActions((current) => current.filter((item) => item.id !== action.id))}><Check className="size-3" /> Resolve</Button>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-              {!actions.length ? <div className="px-5 py-9 text-center"><Check className="mx-auto size-5 text-[var(--positive)]" /><p className="mt-3 text-sm font-semibold">Service exceptions cleared</p><p className="mt-1 text-xs text-[var(--ink-faint)]">The simulated service remains active.</p></div> : null}
+              {saturdayServiceActions.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <div key={action.id} className="border-b border-[var(--line)] last:border-0">
+                    <div className="flex items-start gap-3 px-4 pt-4">
+                      <span className={cn("mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl", action.tone === "danger" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--warning-soft)] text-[var(--warning)]")}><Icon className="size-4" /></span>
+                      <div><p className="text-sm font-semibold leading-5">{action.title}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{action.detail}</p></div>
+                    </div>
+                    <div className="flex justify-end px-4 py-3">
+                      <Link href={action.href} className="focus-ring inline-flex min-h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">
+                        {action.actionLabel} <ArrowRight className="size-3" />
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </section>
 
@@ -330,7 +334,6 @@ function ChefTodayWorkspace() {
 
 export function TodayWorkspace() {
   const workspace = useWorkspaceContext();
-  const [actions, setActions] = useState(initialActions);
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
 
   if (workspace.role === "employee") return <EmployeeTodayWorkspace />;
@@ -393,7 +396,7 @@ export function TodayWorkspace() {
               <span className="text-right">Status</span>
             </div>
             {team.map((person, index) => (
-              <button key={person.name} className="focus-ring grid w-full grid-cols-[1fr_auto] items-center gap-4 border-t border-[var(--line)] px-4 py-3.5 text-left transition-colors first:border-0 hover:bg-[var(--paper)] sm:grid-cols-[1fr_110px_110px]">
+              <div key={person.name} className="grid w-full grid-cols-[1fr_auto] items-center gap-4 border-t border-[var(--line)] px-4 py-3.5 text-left first:border-0 sm:grid-cols-[1fr_110px_110px]">
                 <span className="flex min-w-0 items-center gap-3">
                   <Avatar name={person.name} index={index} />
                   <span className="min-w-0">
@@ -407,7 +410,7 @@ export function TodayWorkspace() {
                     {person.status === "on_shift" ? "On shift" : `Starts ${person.start}`}
                   </StatusPill>
                 </span>
-              </button>
+              </div>
             ))}
           </div>
 
@@ -447,36 +450,23 @@ export function TodayWorkspace() {
         <aside>
           <SectionHeading
             eyebrow="Needs action"
-            title={actions.length ? `${actions.length} decisions` : "All clear"}
-            detail="Nothing is finalized without your approval"
+            title={initialActions.length ? `${initialActions.length} source-linked exceptions` : "All clear"}
+            detail="Open a source workflow to act; this summary never finalizes a record."
           />
           <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
-            <AnimatePresence initial={false}>
-              {actions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <motion.div key={action.id} layout exit={{ opacity: 0, height: 0 }} className="border-b border-[var(--line)] last:border-0">
-                    <button className="focus-ring group flex w-full items-start gap-3 px-1 py-4 text-left">
-                      <span className={cn("mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl", action.tone === "danger" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--warning-soft)] text-[var(--warning)]")}>
-                        <Icon className="size-3.5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold leading-5">{action.title}</span>
-                        <span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">{action.detail}</span>
-                      </span>
-                      <ChevronRight className="mt-2 size-3.5 text-[var(--ink-faint)] transition-transform group-hover:translate-x-0.5" />
-                    </button>
-                    <div className="flex justify-end gap-2 pb-3">
-                      <Button variant="quiet" size="sm">Review</Button>
-                      <Button variant="secondary" size="sm" onClick={() => setActions((current) => current.filter((item) => item.id !== action.id))}>
-                        <Check className="size-3" /> Resolve
-                      </Button>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-            {!actions.length ? (
+            {initialActions.map((action) => {
+              const Icon = action.icon;
+              return (
+                <div key={action.id} className="border-b border-[var(--line)] px-4 py-4 last:border-0">
+                  <div className="flex items-start gap-3">
+                    <span className={cn("mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl", action.tone === "danger" ? "bg-[var(--danger-soft)] text-[var(--danger)]" : "bg-[var(--warning-soft)] text-[var(--warning)]")}><Icon className="size-3.5" /></span>
+                    <div className="min-w-0 flex-1"><p className="text-sm font-semibold leading-5">{action.title}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{action.detail}</p></div>
+                  </div>
+                  <div className="mt-3 flex justify-end"><Link href={action.href} className="focus-ring inline-flex min-h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">{action.actionLabel} <ArrowRight className="size-3" /></Link></div>
+                </div>
+              );
+            })}
+            {!initialActions.length ? (
               <div className="flex flex-col items-center px-5 py-10 text-center">
                 <span className="flex size-10 items-center justify-center rounded-full bg-[var(--positive-soft)] text-[var(--positive)]"><Check className="size-4" /></span>
                 <p className="mt-3 text-sm font-semibold">No open decisions</p>

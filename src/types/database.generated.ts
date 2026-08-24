@@ -2898,6 +2898,9 @@ export type Database = {
           "retry_of_id": string | null
           "requested_by": string | null
           "lease_expires_at": string | null
+          "lease_token": string | null
+          "cursor_high_water": string | null
+          "unresolved_records": number
         }
         Insert: {
           "id"?: string
@@ -2919,6 +2922,9 @@ export type Database = {
           "retry_of_id"?: string | null
           "requested_by"?: string | null
           "lease_expires_at"?: string | null
+          "lease_token"?: string | null
+          "cursor_high_water"?: string | null
+          "unresolved_records"?: number
         }
         Update: {
           "id"?: string
@@ -2940,6 +2946,9 @@ export type Database = {
           "retry_of_id"?: string | null
           "requested_by"?: string | null
           "lease_expires_at"?: string | null
+          "lease_token"?: string | null
+          "cursor_high_water"?: string | null
+          "unresolved_records"?: number
         }
         Relationships: [
           {
@@ -2969,6 +2978,7 @@ export type Database = {
           "payload_hash": string | null
           "error_message": string | null
           "processed_at": string
+          "source_modified_at": string | null
         }
         Insert: {
           "id"?: string
@@ -2982,6 +2992,7 @@ export type Database = {
           "payload_hash"?: string | null
           "error_message"?: string | null
           "processed_at"?: string
+          "source_modified_at"?: string | null
         }
         Update: {
           "id"?: string
@@ -2995,6 +3006,7 @@ export type Database = {
           "payload_hash"?: string | null
           "error_message"?: string | null
           "processed_at"?: string
+          "source_modified_at"?: string | null
         }
         Relationships: [
           {
@@ -8361,6 +8373,82 @@ export type Database = {
           },
         ]
       };
+      "user_invitation_requests": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "email": string
+          "display_name": string
+          "role": Database["public"]["Enums"]["app_role"]
+          "location_ids": string[]
+          "employee_id": string
+          "auth_user_id": string | null
+          "invitation_id": string | null
+          "state": string
+          "attempts": number
+          "last_error_code": string | null
+          "expires_at": string
+          "invited_by": string
+          "sent_at": string | null
+          "accepted_at": string | null
+          "created_at": string
+          "updated_at": string
+        }
+        Insert: {
+          "id": string
+          "organization_id": string
+          "email": string
+          "display_name": string
+          "role": Database["public"]["Enums"]["app_role"]
+          "location_ids"?: string[]
+          "employee_id": string
+          "auth_user_id"?: string | null
+          "invitation_id"?: string | null
+          "state"?: string
+          "attempts"?: number
+          "last_error_code"?: string | null
+          "expires_at": string
+          "invited_by": string
+          "sent_at"?: string | null
+          "accepted_at"?: string | null
+          "created_at"?: string
+          "updated_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "email"?: string
+          "display_name"?: string
+          "role"?: Database["public"]["Enums"]["app_role"]
+          "location_ids"?: string[]
+          "employee_id"?: string
+          "auth_user_id"?: string | null
+          "invitation_id"?: string | null
+          "state"?: string
+          "attempts"?: number
+          "last_error_code"?: string | null
+          "expires_at"?: string
+          "invited_by"?: string
+          "sent_at"?: string | null
+          "accepted_at"?: string | null
+          "created_at"?: string
+          "updated_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_invitation_requests_invitation_id_fkey"
+            columns: ["invitation_id"]
+            referencedRelation: "user_invitations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_invitation_requests_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      };
       "user_invitations": {
         Row: {
           "id": string
@@ -8551,6 +8639,13 @@ export type Database = {
           "updated_at": string
           "email": string | null
           "phone": string | null
+          "fallback_channel": string | null
+          "escalation_state": string
+          "previous_status": string | null
+          "removed_at": string | null
+          "removed_by": string | null
+          "removal_reason": string | null
+          "reinstated_at": string | null
         }
         Insert: {
           "id"?: string
@@ -8573,6 +8668,13 @@ export type Database = {
           "updated_at"?: string
           "email"?: string | null
           "phone"?: string | null
+          "fallback_channel"?: string | null
+          "escalation_state"?: string
+          "previous_status"?: string | null
+          "removed_at"?: string | null
+          "removed_by"?: string | null
+          "removal_reason"?: string | null
+          "reinstated_at"?: string | null
         }
         Update: {
           "id"?: string
@@ -8595,6 +8697,13 @@ export type Database = {
           "updated_at"?: string
           "email"?: string | null
           "phone"?: string | null
+          "fallback_channel"?: string | null
+          "escalation_state"?: string
+          "previous_status"?: string | null
+          "removed_at"?: string | null
+          "removed_by"?: string | null
+          "removal_reason"?: string | null
+          "reinstated_at"?: string | null
         }
         Relationships: [
           {
@@ -8854,6 +8963,19 @@ export type Database = {
           "p_input_parameters"?: Json | null
         }
         Returns: Database["public"]["Tables"]["ai_runs"]["Row"]
+      };
+      "begin_user_invitation_request": {
+        Args: {
+          "p_request_id": string | null
+          "p_organization_id": string | null
+          "p_email": string | null
+          "p_display_name": string | null
+          "p_role": Database["public"]["Enums"]["app_role"] | null
+          "p_location_ids": string[] | null
+          "p_employee_id": string | null
+          "p_expires_at": string | null
+        }
+        Returns: Json
       };
       "bind_verified_checklist_photo_response": {
         Args: {
@@ -10224,6 +10346,16 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["integration_sync_jobs"]["Row"]
       };
+      "retry_waitlist_delivery": {
+        Args: {
+          "p_request_id": string | null
+          "p_waitlist_entry_id": string | null
+          "p_channel": string | null
+          "p_escalation_state": string | null
+          "p_reason": string | null
+        }
+        Returns: Json
+      };
       "review_delivery_receiving_exceptions": {
         Args: {
           "p_request_id": string | null
@@ -10578,14 +10710,6 @@ export type Database = {
         }
         Returns: Json
       };
-      "search_guests": {
-        Args: {
-          "p_organization_id": string | null
-          "p_query": string | null
-          "p_limit"?: number | null
-        }
-        Returns: Database["public"]["Tables"]["guests"]["Row"][]
-      };
       "search_receipts": {
         Args: {
           "p_organization_id": string | null
@@ -10624,6 +10748,13 @@ export type Database = {
           "p_location_id": string | null
         }
         Returns: { "id": string | null; "subjectType": string | null; "label": string | null }[]
+      };
+      "service_begin_reservation_delivery_run": {
+        Args: {
+          "p_run_id": string | null
+          "p_trigger_source": string | null
+        }
+        Returns: Json
       };
       "service_begin_reservation_message_delivery": {
         Args: {
@@ -10704,6 +10835,8 @@ export type Database = {
           "p_sms_consent"?: boolean | null
           "p_profile_consent"?: boolean | null
           "p_source"?: string | null
+          "p_verification_token_hash"?: string | null
+          "p_expires_at"?: string | null
         }
         Returns: Json
       };
@@ -10714,6 +10847,15 @@ export type Database = {
           "p_window_seconds": number | null
         }
         Returns: Json
+      };
+      "service_claim_identity_delivery": {
+        Args: {
+          "p_worker_id": string | null
+          "p_limit"?: number | null
+          "p_lease_seconds"?: number | null
+          "p_now"?: string | null
+        }
+        Returns: Json[]
       };
       "service_claim_integration_sync_job": {
         Args: {
@@ -10744,6 +10886,40 @@ export type Database = {
           "p_now": string | null
         }
         Returns: { "id": string | null; "claimToken": string | null; "organizationId": string | null; "notificationId": string | null; "subscriptionId": string | null; "attempts": number | null; "deliveryTopic": string | null }[]
+      };
+      "service_complete_identity_delivery": {
+        Args: {
+          "p_id": string | null
+          "p_claim_token": string | null
+          "p_status": string | null
+          "p_provider_message_id"?: string | null
+          "p_error_code"?: string | null
+          "p_next_attempt_at"?: string | null
+        }
+        Returns: Json
+      };
+      "service_complete_integration_sync_job": {
+        Args: {
+          "p_job_id": string | null
+          "p_lease_token": string | null
+          "p_status": string | null
+          "p_proposed_cursor": string | null
+          "p_records_processed": number | null
+          "p_error_message"?: string | null
+        }
+        Returns: Json
+      };
+      "service_complete_reservation_delivery_run": {
+        Args: {
+          "p_run_id": string | null
+          "p_status": string | null
+          "p_sent": number | null
+          "p_failed": number | null
+          "p_skipped": number | null
+          "p_completion_errors": number | null
+          "p_error_code"?: string | null
+        }
+        Returns: Json
       };
       "service_complete_reservation_message_outbox": {
         Args: {
@@ -10822,6 +10998,20 @@ export type Database = {
         }
         Returns: { "provider": Database["public"]["Enums"]["integration_provider"] | null; "display_name": string | null; "status": string | null; "last_synced_at": string | null; "updated_at": string | null }[]
       };
+      "service_enqueue_identity_delivery": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_workflow": string | null
+          "p_correlation_id": string | null
+          "p_channel": string | null
+          "p_destination": string | null
+          "p_destination_hash": string | null
+          "p_template_data": Json | null
+          "p_dedupe_key": string | null
+        }
+        Returns: string
+      };
       "service_enqueue_reservation_reminders": {
         Args: {
           "p_now": string | null
@@ -10848,6 +11038,13 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_fence_integration_sync_job": {
+        Args: {
+          "p_job_id": string | null
+          "p_lease_seconds"?: number | null
+        }
+        Returns: Json
+      };
       "service_finalize_employee_document": {
         Args: {
           "p_request_id": string | null
@@ -10863,6 +11060,13 @@ export type Database = {
           "p_is_employee_visible"?: boolean | null
         }
         Returns: Database["public"]["Tables"]["employee_documents"]["Row"]
+      };
+      "service_finalize_guest_interest": {
+        Args: {
+          "p_request_id": string | null
+          "p_verification_token_hash": string | null
+        }
+        Returns: Json
       };
       "service_get_managed_reservation": {
         Args: {
@@ -10950,10 +11154,31 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_provision_user_invitation_request": {
+        Args: {
+          "p_request_id": string | null
+        }
+        Returns: Json
+      };
       "service_public_release_state": {
         Args: {
           "p_organization_id": string | null
           "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "service_queue_user_invitation_delivery": {
+        Args: {
+          "p_request_id": string | null
+          "p_action_url": string | null
+        }
+        Returns: Json
+      };
+      "service_reconcile_user_invitation_auth": {
+        Args: {
+          "p_request_id": string | null
+          "p_auth_user_id": string | null
+          "p_error_code"?: string | null
         }
         Returns: Json
       };
@@ -10968,6 +11193,18 @@ export type Database = {
           "p_evidence_note": string | null
         }
         Returns: { "id": string | null; "captured_at": string | null }[]
+      };
+      "service_renew_integration_sync_job_lease": {
+        Args: {
+          "p_job_id": string | null
+          "p_lease_token": string | null
+          "p_lease_seconds"?: number | null
+        }
+        Returns: string
+      };
+      "service_reservation_delivery_health": {
+        Args: Record<PropertyKey, never>
+        Returns: Json
       };
       "service_reservation_guest_summaries": {
         Args: {
@@ -11251,6 +11488,14 @@ export type Database = {
         }
         Returns: Json
       };
+      "undo_waitlist_removal": {
+        Args: {
+          "p_request_id": string | null
+          "p_waitlist_entry_id": string | null
+          "p_reason": string | null
+        }
+        Returns: Json
+      };
       "update_employee_document_metadata": {
         Args: {
           "p_request_id": string | null
@@ -11506,6 +11751,7 @@ export const DatabaseObjectNames = {
       "tip_sources",
       "unit_conversions",
       "user_capability_overrides",
+      "user_invitation_requests",
       "user_invitations",
       "vendor_items",
       "vendors",
@@ -11533,6 +11779,7 @@ export const DatabaseObjectNames = {
       "assign_guest_tag",
       "assign_reservation_tables",
       "begin_owner_intelligence_run",
+      "begin_user_invitation_request",
       "bind_verified_checklist_photo_response",
       "bind_verified_checklist_photo_response_aal2_legacy",
       "bootstrap_initial_tenant",
@@ -11709,6 +11956,7 @@ export const DatabaseObjectNames = {
       "reservation_capacity_snapshot",
       "resolve_receipt_duplicate",
       "retry_integration_sync_job",
+      "retry_waitlist_delivery",
       "review_delivery_receiving_exceptions",
       "review_inventory_transfer",
       "review_purchase_order",
@@ -11737,12 +11985,12 @@ export const DatabaseObjectNames = {
       "save_tip_pool_policy_draft",
       "save_waitlist_entry",
       "save_waitlist_entry_v2",
-      "search_guests",
       "search_receipts",
       "seat_waitlist_entry",
       "serialize_tip_labor_evidence",
       "service_add_guest_note",
       "service_availability_subjects",
+      "service_begin_reservation_delivery_run",
       "service_begin_reservation_message_delivery",
       "service_begin_reservation_push_delivery",
       "service_book_public_reservation",
@@ -11750,9 +11998,13 @@ export const DatabaseObjectNames = {
       "service_cancel_public_reservation",
       "service_capture_guest_interest",
       "service_claim_booking_rate_limit",
+      "service_claim_identity_delivery",
       "service_claim_integration_sync_job",
       "service_claim_reservation_message_outbox",
       "service_claim_reservation_push_deliveries",
+      "service_complete_identity_delivery",
+      "service_complete_integration_sync_job",
+      "service_complete_reservation_delivery_run",
       "service_complete_reservation_message_outbox",
       "service_complete_reservation_push_delivery",
       "service_confirm_public_reservation",
@@ -11760,10 +12012,13 @@ export const DatabaseObjectNames = {
       "service_create_public_reservation",
       "service_day_business_date",
       "service_day_provider_health",
+      "service_enqueue_identity_delivery",
       "service_enqueue_reservation_reminders",
       "service_exchange_reservation_management",
       "service_expire_reservation_deadlines",
+      "service_fence_integration_sync_job",
       "service_finalize_employee_document",
+      "service_finalize_guest_interest",
       "service_get_managed_reservation",
       "service_guest_profiles",
       "service_guest_sensitive_metrics",
@@ -11772,8 +12027,13 @@ export const DatabaseObjectNames = {
       "service_ingest_pos_time_entry",
       "service_merge_guests",
       "service_modify_public_reservation",
+      "service_provision_user_invitation_request",
       "service_public_release_state",
+      "service_queue_user_invitation_delivery",
+      "service_reconcile_user_invitation_auth",
       "service_record_guest_consent",
+      "service_renew_integration_sync_job_lease",
+      "service_reservation_delivery_health",
       "service_reservation_guest_summaries",
       "service_reservation_host_snapshot",
       "service_reservation_lifecycle_head",
@@ -11807,6 +12067,7 @@ export const DatabaseObjectNames = {
       "transition_task",
       "transition_waitlist_entry",
       "undo_owner_intelligence_task_proposal",
+      "undo_waitlist_removal",
       "update_employee_document_metadata",
       "update_employee_job_assignment",
       "update_job_role_definition",

@@ -40,6 +40,13 @@ export const guestInterestInputSchema = z
   })
   .strict()
   .superRefine((input, context) => {
+    if (input.smsConsent) {
+      context.addIssue({
+        code: "custom",
+        message: "Text-message signup remains unavailable until phone verification is enabled.",
+        path: ["smsConsent"],
+      });
+    }
     const hasMonth = input.birthdayMonth != null;
     const hasDay = input.birthdayDay != null;
     if (hasMonth !== hasDay) {

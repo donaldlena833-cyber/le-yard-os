@@ -187,13 +187,44 @@ async function deliverReservationMessages(request: Request) {
   const admin = createAdminClient();
   const rpc = admin.rpc.bind(admin) as unknown as ReservationRpc;
   const now = new Date();
+  const runId = crypto.randomUUID();
+  const requestedTrigger = request.headers.get("x-le-yard-trigger-source");
+  const triggerSource = ["cron", "opportunistic", "manual", "canary"].includes(
+    requestedTrigger ?? "",
+  )
+    ? requestedTrigger
+    : "manual";
+  const begunRun = await rpc("service_begin_reservation_delivery_run", {
+    p_run_id: runId,
+    p_trigger_source: triggerSource,
+  });
+  if (begunRun.error)
+    return Response.json(
+      { error: "Reservation delivery telemetry could not be started." },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  const failRun = async (error: string, errorCode: string) => {
+    await rpc("service_complete_reservation_delivery_run", {
+      p_run_id: runId,
+      p_status: "failed",
+      p_sent: 0,
+      p_failed: 0,
+      p_skipped: 0,
+      p_completion_errors: 0,
+      p_error_code: errorCode,
+    });
+    return Response.json(
+      { error, runId },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  };
   let scopes: Array<{ organizationId: string; locationId: string }>;
   try {
     scopes = await reservationScopes(admin);
   } catch {
-    return Response.json(
-      { error: "Reservation expiry scopes could not be loaded." },
-      { status: 503, headers: { "cache-control": "no-store" } },
+    return failRun(
+      "Reservation expiry scopes could not be loaded.",
+      "scope_load_failed",
     );
   }
   const expired = { holds: 0, waitlist: 0 };
@@ -210,9 +241,9 @@ async function deliverReservationMessages(request: Request) {
       ),
     );
     if (expiryResults.some((result) => result.error))
-      return Response.json(
-        { error: "Reservation deadlines could not be expired." },
-        { status: 503, headers: { "cache-control": "no-store" } },
+      return failRun(
+        "Reservation deadlines could not be expired.",
+        "deadline_expiry_failed",
       );
     for (const result of expiryResults) {
       const value = result.data as {
@@ -228,15 +259,15 @@ async function deliverReservationMessages(request: Request) {
     { p_now: now.toISOString() },
   );
   if (reminderError)
-    return Response.json(
-      { error: "Reservation reminders could not be scheduled." },
-      { status: 503, headers: { "cache-control": "no-store" } },
+    return failRun(
+      "Reservation reminders could not be scheduled.",
+      "reminder_enqueue_failed",
     );
 
   if (!reservationMessageClaimIsLeaseSafe())
-    return Response.json(
-      { error: "Reservation message lease policy is unsafe." },
-      { status: 503, headers: { "cache-control": "no-store" } },
+    return failRun(
+      "Reservation message lease policy is unsafe.",
+      "lease_policy_unsafe",
     );
 
   const { data, error } = await rpc(
@@ -249,9 +280,9 @@ async function deliverReservationMessages(request: Request) {
     },
   );
   if (error)
-    return Response.json(
-      { error: "Reservation messages could not be claimed." },
-      { status: 503, headers: { "cache-control": "no-store" } },
+    return failRun(
+      "Reservation messages could not be claimed.",
+      "outbox_claim_failed",
     );
 
   let sent = 0;
@@ -367,16 +398,39 @@ async function deliverReservationMessages(request: Request) {
   }
 
   const result = { expired, sent, failed, skipped, completionErrors };
+  const runStatus =
+    completionErrors > 0 || failed > 0
+      ? "partially_succeeded"
+      : "succeeded";
+  const completedRun = await rpc("service_complete_reservation_delivery_run", {
+    p_run_id: runId,
+    p_status: runStatus,
+    p_sent: sent,
+    p_failed: failed,
+    p_skipped: skipped,
+    p_completion_errors: completionErrors,
+    p_error_code: completionErrors > 0 ? "message_completion_failed" : null,
+  });
+  if (completedRun.error)
+    return Response.json(
+      {
+        error: "Reservation delivery telemetry could not be completed.",
+        data: result,
+        runId,
+      },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
   if (completionErrors > 0)
     return Response.json(
       {
         error: "Reservation message completion could not be recorded.",
         data: result,
+        runId,
       },
       { status: 503, headers: { "cache-control": "no-store" } },
     );
   return Response.json(
-    { data: result },
+    { data: result, runId },
     { headers: { "cache-control": "no-store" } },
   );
 }
