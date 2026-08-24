@@ -322,6 +322,9 @@ describe("disposable backup/restore drill safety contract", () => {
     expect(postgresLibrary).toContain(
       '["private.runtime_schema_contract_expected", ["captured_at"]]',
     );
+    expect(postgresLibrary).toMatch(
+      /qualifiedName === "private\.organization_owner_counts" \|\|\s+qualifiedName === "private\.runtime_schema_contract_expected"/,
+    );
     expect(verifier).toContain("Evidence inside the repository must use an ignored");
     expect(verifier).toContain("task due-at mutation");
     expect(verifier).toContain("wrong demo password hash");

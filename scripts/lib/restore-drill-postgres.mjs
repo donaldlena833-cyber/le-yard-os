@@ -996,7 +996,8 @@ function replaceSeedTimeFields(qualifiedName, row, anchors) {
     qualifiedName === "public.capability_definitions" ||
     qualifiedName === "public.audit_events" ||
     qualifiedName === "public.notifications" ||
-    qualifiedName === "private.organization_owner_counts"
+    qualifiedName === "private.organization_owner_counts" ||
+    qualifiedName === "private.runtime_schema_contract_expected"
         ? null
         : anchors.seed;
   for (const column of SYNTHETIC_TIME_NORMALIZATIONS.get(qualifiedName) ?? []) {
