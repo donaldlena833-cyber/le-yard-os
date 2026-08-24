@@ -31,6 +31,10 @@ export type Database = {
           "applied_at": string | null
           "created_at": string
           "updated_at": string
+          "reverted_by": string | null
+          "reverted_at": string | null
+          "reversion_note": string | null
+          "reversion_request_id": string | null
         }
         Insert: {
           "id"?: string
@@ -50,6 +54,10 @@ export type Database = {
           "applied_at"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "reverted_by"?: string | null
+          "reverted_at"?: string | null
+          "reversion_note"?: string | null
+          "reversion_request_id"?: string | null
         }
         Update: {
           "id"?: string
@@ -69,6 +77,10 @@ export type Database = {
           "applied_at"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "reverted_by"?: string | null
+          "reverted_at"?: string | null
+          "reversion_note"?: string | null
+          "reversion_request_id"?: string | null
         }
         Relationships: [
           {
@@ -1326,6 +1338,128 @@ export type Database = {
           },
         ]
       };
+      "delivery_receiving_batches": {
+        Row: {
+          "delivery_id": string
+          "organization_id": string
+          "location_id": string
+          "payload": Json
+          "status": string
+          "reviewed_by": string | null
+          "reviewed_at": string | null
+          "review_note": string | null
+          "corrective_delivery_id": string | null
+          "created_at": string
+        }
+        Insert: {
+          "delivery_id": string
+          "organization_id": string
+          "location_id": string
+          "payload": Json
+          "status": string
+          "reviewed_by"?: string | null
+          "reviewed_at"?: string | null
+          "review_note"?: string | null
+          "corrective_delivery_id"?: string | null
+          "created_at"?: string
+        }
+        Update: {
+          "delivery_id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "payload"?: Json
+          "status"?: string
+          "reviewed_by"?: string | null
+          "reviewed_at"?: string | null
+          "review_note"?: string | null
+          "corrective_delivery_id"?: string | null
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_receiving_batches_organization_id_corrective_deli_fkey"
+            columns: ["organization_id","corrective_delivery_id"]
+            referencedRelation: "deliveries"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "delivery_receiving_batches_organization_id_delivery_id_fkey"
+            columns: ["organization_id","delivery_id"]
+            referencedRelation: "deliveries"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "delivery_receiving_batches_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
+      "delivery_receiving_exceptions": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "delivery_id": string
+          "inventory_item_id": string
+          "unit_id": string
+          "exception_kind": string
+          "proposed_accepted_quantity": number
+          "note": string
+          "created_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "delivery_id": string
+          "inventory_item_id": string
+          "unit_id": string
+          "exception_kind": string
+          "proposed_accepted_quantity": number
+          "note": string
+          "created_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "delivery_id"?: string
+          "inventory_item_id"?: string
+          "unit_id"?: string
+          "exception_kind"?: string
+          "proposed_accepted_quantity"?: number
+          "note"?: string
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_receiving_exceptions_organization_id_delivery_id_fkey"
+            columns: ["organization_id","delivery_id"]
+            referencedRelation: "deliveries"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "delivery_receiving_exceptions_organization_id_inventory_it_fkey"
+            columns: ["organization_id","inventory_item_id"]
+            referencedRelation: "inventory_items"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "delivery_receiving_exceptions_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "delivery_receiving_exceptions_organization_id_unit_id_fkey"
+            columns: ["organization_id","unit_id"]
+            referencedRelation: "measurement_units"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
       "dining_areas": {
         Row: {
           "id": string
@@ -2237,6 +2371,9 @@ export type Database = {
           "search_vector": string | null
           "created_at": string
           "updated_at": string
+          "birthday_month_day": string | null
+          "age_21_plus": boolean | null
+          "marketing_interests": string[]
         }
         Insert: {
           "id"?: string
@@ -2261,6 +2398,9 @@ export type Database = {
           "search_vector"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "birthday_month_day"?: string | null
+          "age_21_plus"?: boolean | null
+          "marketing_interests"?: string[]
         }
         Update: {
           "id"?: string
@@ -2285,6 +2425,9 @@ export type Database = {
           "search_vector"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "birthday_month_day"?: string | null
+          "age_21_plus"?: boolean | null
+          "marketing_interests"?: string[]
         }
         Relationships: [
           {
@@ -2754,6 +2897,7 @@ export type Database = {
           "updated_at": string
           "retry_of_id": string | null
           "requested_by": string | null
+          "lease_expires_at": string | null
         }
         Insert: {
           "id"?: string
@@ -2774,6 +2918,7 @@ export type Database = {
           "updated_at"?: string
           "retry_of_id"?: string | null
           "requested_by"?: string | null
+          "lease_expires_at"?: string | null
         }
         Update: {
           "id"?: string
@@ -2794,6 +2939,7 @@ export type Database = {
           "updated_at"?: string
           "retry_of_id"?: string | null
           "requested_by"?: string | null
+          "lease_expires_at"?: string | null
         }
         Relationships: [
           {
@@ -3586,6 +3732,64 @@ export type Database = {
           },
         ]
       };
+      "location_release_controls": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "state": string
+          "accept_reservations_from": string
+          "public_inventory_percent": number
+          "booking_approved": boolean
+          "support_ready": boolean
+          "approved_by": string | null
+          "approved_at": string | null
+          "release_id": string
+          "version": number
+          "created_at": string
+          "updated_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "state"?: string
+          "accept_reservations_from"?: string
+          "public_inventory_percent"?: number
+          "booking_approved"?: boolean
+          "support_ready"?: boolean
+          "approved_by"?: string | null
+          "approved_at"?: string | null
+          "release_id"?: string
+          "version"?: number
+          "created_at"?: string
+          "updated_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "state"?: string
+          "accept_reservations_from"?: string
+          "public_inventory_percent"?: number
+          "booking_approved"?: boolean
+          "support_ready"?: boolean
+          "approved_by"?: string | null
+          "approved_at"?: string | null
+          "release_id"?: string
+          "version"?: number
+          "created_at"?: string
+          "updated_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "location_release_controls_location_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
       "locations": {
         Row: {
           "id": string
@@ -4195,6 +4399,145 @@ export type Database = {
             foreignKeyName: "payroll_exports_tip_run_fk"
             columns: ["organization_id","tip_run_id"]
             referencedRelation: "tip_runs"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
+      "prep_tasks": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "business_date": string
+          "service_period": string
+          "station": string
+          "recipe_id": string | null
+          "output_inventory_item_id": string | null
+          "target_quantity": number
+          "target_unit_id": string
+          "due_at": string
+          "assignee_user_id": string | null
+          "state": string
+          "actual_yield": number | null
+          "note": string | null
+          "completion_note": string | null
+          "stock_override": boolean
+          "stock_warnings": Json
+          "version": number
+          "created_by": string
+          "published_by": string | null
+          "published_at": string | null
+          "started_by": string | null
+          "started_at": string | null
+          "completed_by": string | null
+          "completed_at": string | null
+          "corrected_by": string | null
+          "corrected_at": string | null
+          "correction_note": string | null
+          "cancelled_by": string | null
+          "cancelled_at": string | null
+          "created_at": string
+          "updated_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "business_date": string
+          "service_period": string
+          "station": string
+          "recipe_id"?: string | null
+          "output_inventory_item_id"?: string | null
+          "target_quantity": number
+          "target_unit_id": string
+          "due_at": string
+          "assignee_user_id"?: string | null
+          "state"?: string
+          "actual_yield"?: number | null
+          "note"?: string | null
+          "completion_note"?: string | null
+          "stock_override"?: boolean
+          "stock_warnings"?: Json
+          "version"?: number
+          "created_by": string
+          "published_by"?: string | null
+          "published_at"?: string | null
+          "started_by"?: string | null
+          "started_at"?: string | null
+          "completed_by"?: string | null
+          "completed_at"?: string | null
+          "corrected_by"?: string | null
+          "corrected_at"?: string | null
+          "correction_note"?: string | null
+          "cancelled_by"?: string | null
+          "cancelled_at"?: string | null
+          "created_at"?: string
+          "updated_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "business_date"?: string
+          "service_period"?: string
+          "station"?: string
+          "recipe_id"?: string | null
+          "output_inventory_item_id"?: string | null
+          "target_quantity"?: number
+          "target_unit_id"?: string
+          "due_at"?: string
+          "assignee_user_id"?: string | null
+          "state"?: string
+          "actual_yield"?: number | null
+          "note"?: string | null
+          "completion_note"?: string | null
+          "stock_override"?: boolean
+          "stock_warnings"?: Json
+          "version"?: number
+          "created_by"?: string
+          "published_by"?: string | null
+          "published_at"?: string | null
+          "started_by"?: string | null
+          "started_at"?: string | null
+          "completed_by"?: string | null
+          "completed_at"?: string | null
+          "corrected_by"?: string | null
+          "corrected_at"?: string | null
+          "correction_note"?: string | null
+          "cancelled_by"?: string | null
+          "cancelled_at"?: string | null
+          "created_at"?: string
+          "updated_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "prep_tasks_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "prep_tasks_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "prep_tasks_organization_id_output_inventory_item_id_fkey"
+            columns: ["organization_id","output_inventory_item_id"]
+            referencedRelation: "inventory_items"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "prep_tasks_organization_id_recipe_id_fkey"
+            columns: ["organization_id","recipe_id"]
+            referencedRelation: "recipes"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "prep_tasks_organization_id_target_unit_id_fkey"
+            columns: ["organization_id","target_unit_id"]
+            referencedRelation: "measurement_units"
             referencedColumns: ["organization_id","id"]
           },
         ]
@@ -6191,6 +6534,7 @@ export type Database = {
           "actor_id": string
           "notes": string | null
           "created_at": string
+          "subject_id": string | null
         }
         Insert: {
           "id": string
@@ -6206,6 +6550,7 @@ export type Database = {
           "actor_id": string
           "notes"?: string | null
           "created_at"?: string
+          "subject_id"?: string | null
         }
         Update: {
           "id"?: string
@@ -6221,6 +6566,7 @@ export type Database = {
           "actor_id"?: string
           "notes"?: string | null
           "created_at"?: string
+          "subject_id"?: string | null
         }
         Relationships: [
           {
@@ -6853,6 +7199,129 @@ export type Database = {
             columns: ["organization_id","sop_document_id"]
             referencedRelation: "sop_documents"
             referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
+      "startup_cost_documents": {
+        Row: {
+          "id": string
+          "workspace_id": string
+          "organization_id": string
+          "budget_item_id": string
+          "storage_path": string
+          "file_name": string
+          "mime_type": string
+          "byte_size": number
+          "uploaded_by": string
+          "created_at": string
+        }
+        Insert: {
+          "id"?: string
+          "workspace_id": string
+          "organization_id": string
+          "budget_item_id": string
+          "storage_path": string
+          "file_name": string
+          "mime_type": string
+          "byte_size": number
+          "uploaded_by": string
+          "created_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "workspace_id"?: string
+          "organization_id"?: string
+          "budget_item_id"?: string
+          "storage_path"?: string
+          "file_name"?: string
+          "mime_type"?: string
+          "byte_size"?: number
+          "uploaded_by"?: string
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "startup_cost_documents_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "startup_cost_documents_workspace_id_fkey"
+            columns: ["workspace_id"]
+            referencedRelation: "startup_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      };
+      "startup_workspace_revisions": {
+        Row: {
+          "workspace_id": string
+          "organization_id": string
+          "revision": number
+          "data": Json
+          "actor_id": string | null
+          "created_at": string
+        }
+        Insert: {
+          "workspace_id": string
+          "organization_id": string
+          "revision": number
+          "data": Json
+          "actor_id"?: string | null
+          "created_at"?: string
+        }
+        Update: {
+          "workspace_id"?: string
+          "organization_id"?: string
+          "revision"?: number
+          "data"?: Json
+          "actor_id"?: string | null
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "startup_workspace_revisions_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "startup_workspace_revisions_workspace_id_fkey"
+            columns: ["workspace_id"]
+            referencedRelation: "startup_workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      };
+      "startup_workspaces": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "data": Json
+          "updated_at": string
+          "revision": number
+        }
+        Insert: {
+          "id": string
+          "organization_id": string
+          "data": Json
+          "updated_at"?: string
+          "revision"?: number
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "data"?: Json
+          "updated_at"?: string
+          "revision"?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "startup_workspaces_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
           },
         ]
       };
@@ -8300,6 +8769,7 @@ export type Database = {
           "p_role": Database["public"]["Enums"]["app_role"] | null
           "p_status": Database["public"]["Enums"]["membership_status"] | null
           "p_location_ids": string[] | null
+          "p_primary_location_id": string | null
         }
         Returns: Database["public"]["Tables"]["organization_memberships"]["Row"]
       };
@@ -8375,6 +8845,15 @@ export type Database = {
           "p_override_note": string | null
         }
         Returns: Json
+      };
+      "begin_owner_intelligence_run": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_prompt": string | null
+          "p_input_parameters"?: Json | null
+        }
+        Returns: Database["public"]["Tables"]["ai_runs"]["Row"]
       };
       "bind_verified_checklist_photo_response": {
         Args: {
@@ -8464,6 +8943,14 @@ export type Database = {
         }
         Returns: boolean
       };
+      "can_access_report_kind": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_report_type": string | null
+        }
+        Returns: boolean
+      };
       "can_access_storage_scope": {
         Args: {
           "p_name": string | null
@@ -8475,6 +8962,12 @@ export type Database = {
           "p_organization_id": string | null
           "p_target_user_id": string | null
           "p_prospective_role"?: Database["public"]["Enums"]["app_role"] | null
+        }
+        Returns: boolean
+      };
+      "can_execute_owner_intelligence": {
+        Args: {
+          "p_organization_id": string | null
         }
         Returns: boolean
       };
@@ -8570,6 +9063,12 @@ export type Database = {
         }
         Returns: boolean
       };
+      "can_use_owner_intelligence": {
+        Args: {
+          "p_organization_id": string | null
+        }
+        Returns: boolean
+      };
       "cancel_reservation": {
         Args: {
           "p_request_id": string | null
@@ -8605,6 +9104,28 @@ export type Database = {
           "p_note"?: string | null
         }
         Returns: Database["public"]["Tables"]["checklist_runs"]["Row"]
+      };
+      "complete_owner_intelligence_run": {
+        Args: {
+          "p_request_id": string | null
+          "p_ai_run_id": string | null
+          "p_output": Json | null
+          "p_confidence": number | null
+          "p_citations": Json | null
+          "p_proposal"?: Json | null
+        }
+        Returns: Json
+      };
+      "complete_prep_task": {
+        Args: {
+          "p_request_id": string | null
+          "p_task_id": string | null
+          "p_expected_version": number | null
+          "p_actual_yield": number | null
+          "p_override_insufficient": boolean | null
+          "p_completion_note"?: string | null
+        }
+        Returns: Database["public"]["Tables"]["prep_tasks"]["Row"]
       };
       "complete_report_export": {
         Args: {
@@ -8723,6 +9244,25 @@ export type Database = {
           "p_effective_from": string | null
           "p_effective_to": string | null
           "p_is_active": boolean | null
+        }
+        Returns: Json
+      };
+      "correct_prep_completion": {
+        Args: {
+          "p_request_id": string | null
+          "p_task_id": string | null
+          "p_expected_version": number | null
+          "p_correction_note": string | null
+        }
+        Returns: Database["public"]["Tables"]["prep_tasks"]["Row"]
+      };
+      "correct_reservation_status": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_reservation_id": string | null
+          "p_expected_version": number | null
+          "p_reason": string | null
         }
         Returns: Json
       };
@@ -8953,6 +9493,22 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: unknown
       };
+      "execute_owner_intelligence_task_proposal": {
+        Args: {
+          "p_request_id": string | null
+          "p_proposal_id": string | null
+          "p_confirmation_fingerprint": string | null
+        }
+        Returns: Json
+      };
+      "fail_owner_intelligence_run": {
+        Args: {
+          "p_request_id": string | null
+          "p_ai_run_id": string | null
+          "p_error_message": string | null
+        }
+        Returns: Database["public"]["Tables"]["ai_runs"]["Row"]
+      };
       "finalize_employee_document": {
         Args: {
           "p_request_id": string | null
@@ -9078,6 +9634,10 @@ export type Database = {
         Returns: unknown
       };
       "guard_report_job_mutation": {
+        Args: Record<PropertyKey, never>
+        Returns: unknown
+      };
+      "guard_report_kind_authorization": {
         Args: Record<PropertyKey, never>
         Returns: unknown
       };
@@ -9226,6 +9786,13 @@ export type Database = {
         }
         Returns: Json
       };
+      "install_le_yard_reservation_draft_legacy_unsafe": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "is_owner_pending_mfa": {
         Args: {
           "p_organization_id": string | null
@@ -9241,6 +9808,20 @@ export type Database = {
       "jwt_aal": {
         Args: Record<PropertyKey, never>
         Returns: string
+      };
+      "manage_location_release_control": {
+        Args: {
+          "p_request_id": string | null
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_expected_version": number | null
+          "p_state": string | null
+          "p_accept_reservations_from": string | null
+          "p_public_inventory_percent": number | null
+          "p_booking_approved": boolean | null
+          "p_support_ready": boolean | null
+        }
+        Returns: Json
       };
       "manual_import_headers_are_valid": {
         Args: {
@@ -9333,6 +9914,13 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: unknown
       };
+      "preview_prep_completion": {
+        Args: {
+          "p_task_id": string | null
+          "p_actual_yield": number | null
+        }
+        Returns: Json
+      };
       "provision_user_invitation": {
         Args: {
           "p_auth_user_id": string | null
@@ -9382,6 +9970,15 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["sop_versions"]["Row"]
       };
+      "read_preshifts_safe": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_from_business_date": string | null
+          "p_limit"?: number | null
+        }
+        Returns: { "id": string | null; "organization_id": string | null; "location_id": string | null; "business_date": string | null; "service_period": string | null; "version_number": number | null; "status": string | null; "booked_covers": number | null; "projected_covers": number | null; "vip_notes": string | null; "allergy_notes": string | null; "large_party_notes": string | null; "specials": string | null; "staffing_notes": string | null; "station_assignments": Json | null; "previous_handoff": string | null; "service_goal": string | null; "training_point": string | null; "manager_notes": string | null; "published_at": string | null; "updated_at": string | null }[]
+      };
       "receive_inventory_delivery": {
         Args: {
           "p_request_id": string | null
@@ -9394,6 +9991,44 @@ export type Database = {
           "p_lines": Json | null
         }
         Returns: Database["public"]["Tables"]["deliveries"]["Row"]
+      };
+      "receive_inventory_delivery_with_exceptions": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_vendor_id": string | null
+          "p_purchase_order_id": string | null
+          "p_delivered_at": string | null
+          "p_invoice_number": string | null
+          "p_notes": string | null
+          "p_lines": Json | null
+        }
+        Returns: Json
+      };
+      "recipe_cost_snapshot": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_observed_at"?: string | null
+        }
+        Returns: { "recipeId": string | null; "name": string | null; "yieldQuantity": number | null; "yieldUnitId": string | null; "menuPriceCents": number | null; "ingredientCount": number | null; "costedIngredientCount": number | null; "missingCostCount": number | null; "batchCostCents": number | null; "portionCostCents": number | null; "foodCostPercent": number | null }[]
+      };
+      "record_canonical_service_availability_event": {
+        Args: {
+          "p_request_id": string | null
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_subject_type": string | null
+          "p_subject_id": string | null
+          "p_expected_event_id": string | null
+          "p_status": string | null
+          "p_estimated_portions": number | null
+          "p_reason": string | null
+          "p_effective_at": string | null
+          "p_expected_restoration_at": string | null
+          "p_notes": string | null
+        }
+        Returns: Database["public"]["Tables"]["service_availability_events"]["Row"]
       };
       "record_checklist_response": {
         Args: {
@@ -9559,6 +10194,12 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["time_entry_corrections"]["Row"]
       };
+      "required_report_capability": {
+        Args: {
+          "p_report_type": string | null
+        }
+        Returns: string
+      };
       "reservation_capacity_snapshot": {
         Args: {
           "p_organization_id": string | null
@@ -9583,6 +10224,16 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["integration_sync_jobs"]["Row"]
       };
+      "review_delivery_receiving_exceptions": {
+        Args: {
+          "p_request_id": string | null
+          "p_posting_request_id": string | null
+          "p_delivery_id": string | null
+          "p_approve": boolean | null
+          "p_note": string | null
+        }
+        Returns: Database["public"]["Tables"]["delivery_receiving_batches"]["Row"]
+      };
       "review_inventory_transfer": {
         Args: {
           "p_request_id": string | null
@@ -9592,6 +10243,15 @@ export type Database = {
           "p_lines": Json | null
         }
         Returns: Database["public"]["Tables"]["inventory_transfers"]["Row"]
+      };
+      "review_purchase_order": {
+        Args: {
+          "p_request_id": string | null
+          "p_purchase_order_id": string | null
+          "p_approve": boolean | null
+          "p_note": string | null
+        }
+        Returns: Database["public"]["Tables"]["purchase_orders"]["Row"]
       };
       "review_receipt": {
         Args: {
@@ -9755,6 +10415,25 @@ export type Database = {
         }
         Returns: Json
       };
+      "save_prep_task": {
+        Args: {
+          "p_request_id": string | null
+          "p_task_id": string | null
+          "p_location_id": string | null
+          "p_business_date": string | null
+          "p_service_period": string | null
+          "p_station": string | null
+          "p_recipe_id": string | null
+          "p_output_inventory_item_id": string | null
+          "p_target_quantity": number | null
+          "p_target_unit_id": string | null
+          "p_due_at": string | null
+          "p_assignee_user_id": string | null
+          "p_note": string | null
+          "p_expected_version"?: number | null
+        }
+        Returns: Database["public"]["Tables"]["prep_tasks"]["Row"]
+      };
       "save_preshift": {
         Args: {
           "p_request_id": string | null
@@ -9804,6 +10483,14 @@ export type Database = {
         }
         Returns: Json
       };
+      "save_reservation_floor_positions": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_moves": Json | null
+        }
+        Returns: Json
+      };
       "save_reservation_with_guest": {
         Args: {
           "p_request_id": string | null
@@ -9827,6 +10514,14 @@ export type Database = {
           "p_name": string | null
         }
         Returns: Json
+      };
+      "save_startup_workspace": {
+        Args: {
+          "p_workspace_id": string | null
+          "p_expected_revision": number | null
+          "p_data": Json | null
+        }
+        Returns: { "outcome": string | null; "revision": number | null; "data": Json | null; "updated_at": string | null }[]
       };
       "save_time_off_request": {
         Args: {
@@ -9923,6 +10618,13 @@ export type Database = {
         }
         Returns: { "id": string | null; "created_at": string | null }[]
       };
+      "service_availability_subjects": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
+        }
+        Returns: { "id": string | null; "subjectType": string | null; "label": string | null }[]
+      };
       "service_begin_reservation_message_delivery": {
         Args: {
           "p_id": string | null
@@ -9957,6 +10659,24 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_book_public_reservation_release_legacy": {
+        Args: {
+          "p_request_id": string | null
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_reserved_at": string | null
+          "p_duration_minutes": number | null
+          "p_party_size": number | null
+          "p_first_name": string | null
+          "p_last_name": string | null
+          "p_email": string | null
+          "p_phone": string | null
+          "p_special_requests": string | null
+          "p_table_ids": string[] | null
+          "p_available_channels": string[] | null
+        }
+        Returns: Json
+      };
       "service_cancel_public_reservation": {
         Args: {
           "p_request_id": string | null
@@ -9967,6 +10687,26 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_capture_guest_interest": {
+        Args: {
+          "p_request_id": string | null
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_first_name": string | null
+          "p_last_name": string | null
+          "p_email": string | null
+          "p_phone"?: string | null
+          "p_birthday_month"?: number | null
+          "p_birthday_day"?: number | null
+          "p_age_21_plus"?: boolean | null
+          "p_interests"?: string[] | null
+          "p_email_consent"?: boolean | null
+          "p_sms_consent"?: boolean | null
+          "p_profile_consent"?: boolean | null
+          "p_source"?: string | null
+        }
+        Returns: Json
+      };
       "service_claim_booking_rate_limit": {
         Args: {
           "p_bucket_hash": string | null
@@ -9974,6 +10714,18 @@ export type Database = {
           "p_window_seconds": number | null
         }
         Returns: Json
+      };
+      "service_claim_integration_sync_job": {
+        Args: {
+          "p_organization_id": string | null
+          "p_connection_id": string | null
+          "p_resource_type": string | null
+          "p_requested_by": string | null
+          "p_direction"?: string | null
+          "p_cursor"?: string | null
+          "p_lease_seconds"?: number | null
+        }
+        Returns: Database["public"]["Tables"]["integration_sync_jobs"]["Row"]
       };
       "service_claim_reservation_message_outbox": {
         Args: {
@@ -10195,6 +10947,13 @@ export type Database = {
           "p_party_size": number | null
           "p_special_requests": string | null
           "p_table_ids": string[] | null
+        }
+        Returns: Json
+      };
+      "service_public_release_state": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
         }
         Returns: Json
       };
@@ -10448,6 +11207,15 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: unknown
       };
+      "transition_prep_task": {
+        Args: {
+          "p_request_id": string | null
+          "p_task_id": string | null
+          "p_expected_version": number | null
+          "p_command": string | null
+        }
+        Returns: Database["public"]["Tables"]["prep_tasks"]["Row"]
+      };
       "transition_reservation": {
         Args: {
           "p_request_id": string | null
@@ -10472,6 +11240,14 @@ export type Database = {
           "p_waitlist_entry_id": string | null
           "p_target_status": string | null
           "p_note": string | null
+        }
+        Returns: Json
+      };
+      "undo_owner_intelligence_task_proposal": {
+        Args: {
+          "p_request_id": string | null
+          "p_proposal_id": string | null
+          "p_reason": string | null
         }
         Returns: Json
       };
@@ -10614,6 +11390,8 @@ export const DatabaseObjectNames = {
       "data_export_requests",
       "deliveries",
       "delivery_lines",
+      "delivery_receiving_batches",
+      "delivery_receiving_exceptions",
       "dining_areas",
       "employee_certifications",
       "employee_documents",
@@ -10654,6 +11432,7 @@ export const DatabaseObjectNames = {
       "job_role_capabilities",
       "job_roles",
       "location_memberships",
+      "location_release_controls",
       "locations",
       "maintenance_requests",
       "manager_log_entries",
@@ -10665,6 +11444,7 @@ export const DatabaseObjectNames = {
       "organization_settings",
       "organizations",
       "payroll_exports",
+      "prep_tasks",
       "preshift_acknowledgements",
       "preshifts",
       "profiles",
@@ -10707,6 +11487,9 @@ export const DatabaseObjectNames = {
       "sop_acknowledgements",
       "sop_documents",
       "sop_versions",
+      "startup_cost_documents",
+      "startup_workspace_revisions",
+      "startup_workspaces",
       "table_status_events",
       "tasks",
       "time_breaks",
@@ -10749,6 +11532,7 @@ export const DatabaseObjectNames = {
       "approve_tip_run",
       "assign_guest_tag",
       "assign_reservation_tables",
+      "begin_owner_intelligence_run",
       "bind_verified_checklist_photo_response",
       "bind_verified_checklist_photo_response_aal2_legacy",
       "bootstrap_initial_tenant",
@@ -10758,8 +11542,10 @@ export const DatabaseObjectNames = {
       "can_access_channel",
       "can_access_location",
       "can_access_org",
+      "can_access_report_kind",
       "can_access_storage_scope",
       "can_administer_membership_target",
+      "can_execute_owner_intelligence",
       "can_manage_guest_profile_scope",
       "can_manage_location",
       "can_manage_org",
@@ -10774,11 +11560,14 @@ export const DatabaseObjectNames = {
       "can_read_management_org",
       "can_read_management_storage_scope",
       "can_read_report_scope",
+      "can_use_owner_intelligence",
       "cancel_reservation",
       "cancel_time_off_request",
       "capture_audit_event",
       "claim_open_shift",
       "complete_checklist_run",
+      "complete_owner_intelligence_run",
+      "complete_prep_task",
       "complete_report_export",
       "configure_inventory_catalog",
       "configure_job_role_capability",
@@ -10789,6 +11578,8 @@ export const DatabaseObjectNames = {
       "configure_service_shift_exception",
       "configure_tip_pool_policy",
       "configure_user_capability_override",
+      "correct_prep_completion",
+      "correct_reservation_status",
       "create_chat_channel",
       "create_checklist_template_version",
       "create_employee_job_assignment",
@@ -10812,6 +11603,8 @@ export const DatabaseObjectNames = {
       "end_employee_job_assignment",
       "end_time_break",
       "enforce_owner_role_assignment",
+      "execute_owner_intelligence_task_proposal",
+      "fail_owner_intelligence_run",
       "finalize_employee_document",
       "get_pos_labor_sync_status",
       "guard_active_owner_count",
@@ -10841,6 +11634,7 @@ export const DatabaseObjectNames = {
       "guard_receipt_reference_link",
       "guard_receipt_terminal_duplicate_resolution",
       "guard_report_job_mutation",
+      "guard_report_kind_authorization",
       "guard_reservation_append_only",
       "guard_saved_report_scope",
       "guard_schedule_mutation",
@@ -10865,9 +11659,11 @@ export const DatabaseObjectNames = {
       "income_operating_snapshot",
       "ingest_income_sales_check",
       "install_le_yard_reservation_draft",
+      "install_le_yard_reservation_draft_legacy_unsafe",
       "is_owner_pending_mfa",
       "is_self_employee",
       "jwt_aal",
+      "manage_location_release_control",
       "manual_import_headers_are_valid",
       "mark_channel_read",
       "merge_guests",
@@ -10881,12 +11677,17 @@ export const DatabaseObjectNames = {
       "prevent_audit_mutation",
       "prevent_ledger_mutation",
       "prevent_locked_tip_mutation",
+      "preview_prep_completion",
       "provision_user_invitation",
       "provision_user_invitation_aal2_legacy",
       "publish_checklist_template",
       "publish_schedule",
       "publish_sop_version",
+      "read_preshifts_safe",
       "receive_inventory_delivery",
+      "receive_inventory_delivery_with_exceptions",
+      "recipe_cost_snapshot",
+      "record_canonical_service_availability_event",
       "record_checklist_response",
       "record_clock_in",
       "record_clock_out",
@@ -10904,10 +11705,13 @@ export const DatabaseObjectNames = {
       "request_report_export",
       "request_shift_swap",
       "request_time_entry_correction",
+      "required_report_capability",
       "reservation_capacity_snapshot",
       "resolve_receipt_duplicate",
       "retry_integration_sync_job",
+      "review_delivery_receiving_exceptions",
       "review_inventory_transfer",
+      "review_purchase_order",
       "review_receipt",
       "review_time_entry",
       "review_waste_record",
@@ -10921,11 +11725,14 @@ export const DatabaseObjectNames = {
       "save_guest_contact",
       "save_manager_log_entry",
       "save_manager_recipe",
+      "save_prep_task",
       "save_preshift",
       "save_push_subscription",
       "save_reservation",
+      "save_reservation_floor_positions",
       "save_reservation_with_guest",
       "save_schedule_template",
+      "save_startup_workspace",
       "save_time_off_request",
       "save_tip_pool_policy_draft",
       "save_waitlist_entry",
@@ -10935,11 +11742,15 @@ export const DatabaseObjectNames = {
       "seat_waitlist_entry",
       "serialize_tip_labor_evidence",
       "service_add_guest_note",
+      "service_availability_subjects",
       "service_begin_reservation_message_delivery",
       "service_begin_reservation_push_delivery",
       "service_book_public_reservation",
+      "service_book_public_reservation_release_legacy",
       "service_cancel_public_reservation",
+      "service_capture_guest_interest",
       "service_claim_booking_rate_limit",
+      "service_claim_integration_sync_job",
       "service_claim_reservation_message_outbox",
       "service_claim_reservation_push_deliveries",
       "service_complete_reservation_message_outbox",
@@ -10961,6 +11772,7 @@ export const DatabaseObjectNames = {
       "service_ingest_pos_time_entry",
       "service_merge_guests",
       "service_modify_public_reservation",
+      "service_public_release_state",
       "service_record_guest_consent",
       "service_reservation_guest_summaries",
       "service_reservation_host_snapshot",
@@ -10990,9 +11802,11 @@ export const DatabaseObjectNames = {
       "submit_waste_record",
       "tip_run_derivation_hash",
       "touch_updated_at",
+      "transition_prep_task",
       "transition_reservation",
       "transition_task",
       "transition_waitlist_entry",
+      "undo_owner_intelligence_task_proposal",
       "update_employee_document_metadata",
       "update_employee_job_assignment",
       "update_job_role_definition",

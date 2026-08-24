@@ -19,12 +19,13 @@ export async function recordServiceAvailability(
   input: RecordServiceAvailabilityInput,
 ) {
   const location = await scopedLocation(context, input.locationId);
-  const { data, error } = await context.supabase.rpc("record_service_availability_event", {
+  const { data, error } = await context.supabase.rpc("record_canonical_service_availability_event", {
     p_request_id: input.requestId,
     p_organization_id: location.organizationId,
     p_location_id: location.id,
     p_subject_type: input.subjectType,
-    p_subject_label: input.subjectLabel,
+    p_subject_id: input.subjectId,
+    p_expected_event_id: input.expectedEventId ?? null,
     p_status: input.status,
     p_estimated_portions: input.estimatedPortions ?? null,
     p_reason: input.reason ?? null,

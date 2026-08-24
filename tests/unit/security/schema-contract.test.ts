@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   EXPECTED_SCHEMA_CONTRACT,
@@ -5,6 +7,16 @@ import {
 } from "@/lib/security/schema-contract";
 
 describe("runtime schema contract", () => {
+  it("tracks the newest checked-in migration", () => {
+    const migrationHead = readdirSync(resolve(process.cwd(), "supabase/migrations"))
+      .map((name) => name.match(/^(\d{14})_/)?.[1] ?? null)
+      .filter((version): version is string => version !== null)
+      .sort()
+      .at(-1);
+
+    expect(EXPECTED_SCHEMA_CONTRACT.migrationHead).toBe(migrationHead);
+  });
+
   it("accepts the exact checked-in migration and function contract", () => {
     expect(matchesRuntimeSchemaContract(EXPECTED_SCHEMA_CONTRACT)).toBe(true);
   });

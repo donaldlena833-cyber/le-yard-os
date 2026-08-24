@@ -82,7 +82,11 @@ const platformBootstrap = `
 
 async function assume(userId) {
   await db.query("select set_config('request.jwt.claims', $1, false)", [
-    JSON.stringify({ role: "authenticated", sub: userId, aal: "aal1" }),
+    JSON.stringify({
+      role: "authenticated",
+      sub: userId,
+      aal: userId === ids.admin ? "aal2" : "aal1",
+    }),
   ]);
 }
 

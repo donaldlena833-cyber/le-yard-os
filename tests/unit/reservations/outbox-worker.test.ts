@@ -180,7 +180,7 @@ describe("reservation maintenance worker", () => {
     ).resolves.toEqual({ state: "sent", providerMessageId: "email_123" });
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject(
       {
-        from: "reservations@leyard.example",
+        from: "Le Yard Reservations Team <reservations@leyard.example>",
         reply_to: "donaldlena833@gmail.com",
         to: ["ada@example.com"],
       },

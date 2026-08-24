@@ -127,7 +127,11 @@ function assert(condition, message, evidence = undefined) {
 async function assume(userId) {
   await db.exec("reset role; set role authenticated");
   await db.query("select set_config('request.jwt.claims', $1, false)", [
-    JSON.stringify({ role: "authenticated", sub: userId, aal: "aal1" }),
+    JSON.stringify({
+      role: "authenticated",
+      sub: userId,
+      aal: userId === ids.owner ? "aal2" : "aal1",
+    }),
   ]);
 }
 
@@ -210,7 +214,7 @@ try {
     );
     select set_config(
       'request.jwt.claims',
-      '{"role":"authenticated","sub":"${ids.owner}","aal":"aal1"}',
+      '{"role":"authenticated","sub":"${ids.owner}","aal":"aal2"}',
       false
     );
     update public.employees

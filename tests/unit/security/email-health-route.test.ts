@@ -12,22 +12,17 @@ afterEach(() => {
 });
 
 describe("email health route", () => {
-  it("reports ready only when the configured sender domain is verified", async () => {
+  it("reports ready when the least-privilege sender configuration is present", async () => {
     process.env.RESEND_API_KEY = "re_test";
     process.env.RESERVATION_EMAIL_FROM =
       "Le Yard <reservations@send.donaldlena.com>";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        Response.json({
-          data: [{ name: "send.donaldlena.com", status: "verified" }],
-        }),
-      ),
-    );
     const { GET } = await import("@/app/api/health/email/route");
     const response = await GET();
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ state: "ready" });
+    await expect(response.json()).resolves.toEqual({
+      state: "ready",
+      senderDomain: "send.donaldlena.com",
+    });
   });
 
   it("fails closed when delivery is not configured", async () => {

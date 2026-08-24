@@ -15,13 +15,17 @@ const quantity = z
   .min(0)
   .lt(1_000_000_000_000)
   .refine(
-    (value) => Math.abs(value * 10_000 - Math.round(value * 10_000)) < 0.000_001,
+    (value) =>
+      Math.abs(value * 10_000 - Math.round(value * 10_000)) < 0.000_001,
     "Use no more than four decimal places.",
   );
 const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Use an ISO date in YYYY-MM-DD format.")
-  .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)), "Invalid date.");
+  .refine(
+    (value) => !Number.isNaN(Date.parse(`${value}T00:00:00Z`)),
+    "Invalid date.",
+  );
 const localDateTime = z
   .string()
   .regex(
@@ -118,8 +122,8 @@ export const requestTimeCorrectionInputSchema = z
     (value) =>
       Boolean(
         value.proposedClockedInLocal ||
-          value.proposedClockedOutLocal ||
-          value.proposedJobRoleId,
+        value.proposedClockedOutLocal ||
+        value.proposedJobRoleId,
       ),
     { message: "Propose at least one punch or job-role correction." },
   );
@@ -151,7 +155,11 @@ export const submitCloseoutInputSchema = z
     netSalesCents: cents,
     cashSalesCents: cents,
     cardSalesCents: cents,
-    expectedCashCents: z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+    expectedCashCents: z
+      .number()
+      .int()
+      .min(-Number.MAX_SAFE_INTEGER)
+      .max(Number.MAX_SAFE_INTEGER),
     actualCashCents: nullableCents,
     covers: z.number().int().min(0).max(100_000),
     compsCents: cents,
@@ -209,13 +217,9 @@ export const prepareTipRunInputSchema = z
   })
   .strict();
 
-export const calculateTipRunInputSchema = z
-  .object({ tipRunId: uuid })
-  .strict();
+export const calculateTipRunInputSchema = z.object({ tipRunId: uuid }).strict();
 
-export const approveTipRunInputSchema = z
-  .object({ tipRunId: uuid })
-  .strict();
+export const approveTipRunInputSchema = z.object({ tipRunId: uuid }).strict();
 
 export const exportTipPayrollInputSchema = z
   .object({
@@ -276,7 +280,10 @@ const csvFileName = z
   .trim()
   .min(1)
   .max(240)
-  .refine((value) => value.toLowerCase().endsWith(".csv"), "Choose a .csv file.");
+  .refine(
+    (value) => value.toLowerCase().endsWith(".csv"),
+    "Choose a .csv file.",
+  );
 
 export const manualCsvUploadUrlInputSchema = z
   .object({
@@ -397,12 +404,20 @@ const inventoryDeliveryLineSchema = z
     unitPriceCents: cents,
     lotCode: z.string().trim().max(120).nullable().optional(),
     expiresOn: isoDate.nullable().optional(),
+    exceptionKind: z.enum([
+      "none", "damaged", "rejected", "substituted", "missing", "unexpected", "short", "over",
+    ]),
+    exceptionNote: z.string().trim().max(2_000).nullable().optional(),
   })
   .strict()
   .refine((value) => value.acceptedQuantity <= value.quantity, {
     message: "Accepted quantity cannot exceed delivered quantity.",
     path: ["acceptedQuantity"],
-  });
+  })
+  .refine(
+    (value) => value.exceptionKind === "none" || Boolean(value.exceptionNote),
+    { message: "Receiving exceptions require a note.", path: ["exceptionNote"] },
+  );
 
 const inventoryTransferLineSchema = z
   .object({
@@ -412,10 +427,13 @@ const inventoryTransferLineSchema = z
   })
   .strict();
 
-function uniqueInventoryLinePairs<T extends { inventoryItemId: string; unitId: string }>(
-  lines: T[],
-) {
-  return new Set(lines.map((line) => `${line.inventoryItemId}:${line.unitId}`)).size === lines.length;
+function uniqueInventoryLinePairs<
+  T extends { inventoryItemId: string; unitId: string },
+>(lines: T[]) {
+  return (
+    new Set(lines.map((line) => `${line.inventoryItemId}:${line.unitId}`))
+      .size === lines.length
+  );
 }
 
 export const createPurchaseOrderInputSchema = z
@@ -433,13 +451,28 @@ export const createPurchaseOrderInputSchema = z
   })
   .strict()
   .refine(
-    (value) => !value.orderedOn || !value.expectedOn || value.expectedOn >= value.orderedOn,
-    { message: "Expected date cannot be before the order date.", path: ["expectedOn"] },
+    (value) =>
+      !value.orderedOn ||
+      !value.expectedOn ||
+      value.expectedOn >= value.orderedOn,
+    {
+      message: "Expected date cannot be before the order date.",
+      path: ["expectedOn"],
+    },
   )
   .refine((value) => uniqueInventoryLinePairs(value.lines), {
     message: "Each item and unit combination may appear only once.",
     path: ["lines"],
   });
+
+export const reviewPurchaseOrderInputSchema = z
+  .object({
+    requestId: uuid,
+    purchaseOrderId: uuid,
+    approve: z.boolean(),
+    note: z.string().trim().max(2_000).nullable().optional(),
+  })
+  .strict();
 
 export const receiveInventoryDeliveryInputSchema = z
   .object({
@@ -458,6 +491,14 @@ export const receiveInventoryDeliveryInputSchema = z
     path: ["lines"],
   });
 
+export const reviewDeliveryExceptionsInputSchema = z.object({
+  requestId: uuid,
+  postingRequestId: uuid,
+  deliveryId: uuid,
+  approve: z.boolean(),
+  note: z.string().trim().max(2_000).nullable().optional(),
+}).strict();
+
 export const submitWasteRecordInputSchema = z
   .object({
     requestId: uuid,
@@ -465,7 +506,11 @@ export const submitWasteRecordInputSchema = z
     inventoryItemId: uuid,
     unitId: uuid,
     quantity: positiveInventoryQuantity,
-    reasonCode: z.string().trim().toLowerCase().regex(/^[a-z][a-z0-9_]{0,63}$/),
+    reasonCode: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z][a-z0-9_]{0,63}$/),
     occurredAt: z.string().datetime({ offset: true }),
     notes: z.string().trim().max(4_000).nullable().optional(),
   })
@@ -504,21 +549,28 @@ export const reviewInventoryTransferInputSchema = z
     transferId: uuid,
     approve: z.boolean(),
     note: shortNote,
-    lines: z.array(
-      z
-        .object({
-          inventoryItemId: uuid,
-          unitId: uuid,
-          receivedQuantity: quantity,
-        })
-        .strict(),
-    ).max(500),
+    lines: z
+      .array(
+        z
+          .object({
+            inventoryItemId: uuid,
+            unitId: uuid,
+            receivedQuantity: quantity,
+          })
+          .strict(),
+      )
+      .max(500),
   })
   .strict()
-  .refine((value) => (value.approve ? value.lines.length > 0 : value.lines.length === 0), {
-    message: "Approved transfers require received quantities; rejected transfers cannot include them.",
-    path: ["lines"],
-  })
+  .refine(
+    (value) =>
+      value.approve ? value.lines.length > 0 : value.lines.length === 0,
+    {
+      message:
+        "Approved transfers require received quantities; rejected transfers cannot include them.",
+      path: ["lines"],
+    },
+  )
   .refine((value) => uniqueInventoryLinePairs(value.lines), {
     message: "Each item and unit combination may appear only once.",
     path: ["lines"],
@@ -541,7 +593,8 @@ const recipeQuantity = z
   .positive()
   .lt(1_000_000_000_000)
   .refine(
-    (value) => Math.abs(value * 1_000_000 - Math.round(value * 1_000_000)) < 0.000_001,
+    (value) =>
+      Math.abs(value * 1_000_000 - Math.round(value * 1_000_000)) < 0.000_001,
     "Use no more than six decimal places.",
   );
 
@@ -556,117 +609,233 @@ const catalogRecipeIngredientSchema = z
       .min(0)
       .lt(1)
       .refine(
-        (value) => Math.abs(value * 1_000_000 - Math.round(value * 1_000_000)) < 0.000_001,
+        (value) =>
+          Math.abs(value * 1_000_000 - Math.round(value * 1_000_000)) <
+          0.000_001,
         "Use no more than six decimal places.",
       ),
   })
   .strict();
 
-export const configureInventoryCatalogInputSchema = z.discriminatedUnion("command", [
-  z.object({
-    ...catalogCommandBase,
-    command: z.literal("unit.save"),
-    id: catalogId,
-    name: z.string().trim().min(1).max(120),
-    symbol: z.string().trim().min(1).max(24),
-    dimension: z.enum(["count", "mass", "volume", "length"]),
-    isBase: z.boolean(),
-    isActive: z.boolean(),
-  }).strict(),
-  z.object({
-    ...catalogCommandBase,
-    command: z.literal("conversion.save"),
-    id: catalogId,
-    fromUnitId: uuid,
-    toUnitId: uuid,
-    inventoryItemId: uuid.nullable().optional(),
-    multiplier: z.number().finite().positive().lt(1_000_000_000_000).refine(
-      (value) => Math.abs(value * 100_000_000 - Math.round(value * 100_000_000)) < 0.000_001,
-      "Use no more than eight decimal places.",
-    ),
-    isActive: z.boolean(),
-  }).strict().refine((value) => value.fromUnitId !== value.toUnitId, {
-    message: "Conversion units must be different.",
-    path: ["toUnitId"],
-  }),
-  z.object({
-    ...catalogCommandBase,
-    command: z.literal("category.save"),
-    id: catalogId,
-    name: z.string().trim().min(1).max(120),
-    parentId: uuid.nullable().optional(),
-    isActive: z.boolean(),
-  }).strict(),
-  z.object({
-    ...catalogCommandBase,
-    command: z.literal("vendor.save"),
-    id: catalogId,
-    name: catalogName,
-    accountNumber: catalogOptionalText(120),
-    contactName: catalogOptionalText(160),
-    email: z.string().trim().toLowerCase().email().max(320).nullable().optional(),
-    phone: catalogOptionalText(80),
-    paymentTerms: catalogOptionalText(160),
-    isActive: z.boolean(),
-  }).strict(),
-  z.object({
-    ...catalogCommandBase,
-    command: z.literal("item.save"),
-    id: catalogId,
-    name: catalogName,
-    sku: catalogOptionalText(120),
-    description: catalogOptionalText(4_000),
-    categoryId: uuid.nullable().optional(),
-    baseUnitId: uuid,
-    trackInventory: z.boolean(),
-    isActive: z.boolean(),
-  }).strict(),
-  z.object({
-    ...catalogCommandBase,
-    command: z.literal("vendor_item.save"),
-    id: catalogId,
-    vendorId: uuid,
-    inventoryItemId: uuid,
-    purchaseUnitId: uuid,
-    vendorSku: catalogOptionalText(120),
-    packQuantity: catalogPositiveQuantity,
-    lastPriceCents: nullableCents.optional(),
-    priceEffectiveAt: z.string().datetime({ offset: true }),
-    isPreferred: z.boolean(),
-    isActive: z.boolean(),
-  }).strict(),
-  z.object({
-    ...catalogCommandBase,
-    command: z.literal("par.set"),
+export const configureInventoryCatalogInputSchema = z.discriminatedUnion(
+  "command",
+  [
+    z
+      .object({
+        ...catalogCommandBase,
+        command: z.literal("unit.save"),
+        id: catalogId,
+        name: z.string().trim().min(1).max(120),
+        symbol: z.string().trim().min(1).max(24),
+        dimension: z.enum(["count", "mass", "volume", "length"]),
+        isBase: z.boolean(),
+        isActive: z.boolean(),
+      })
+      .strict(),
+    z
+      .object({
+        ...catalogCommandBase,
+        command: z.literal("conversion.save"),
+        id: catalogId,
+        fromUnitId: uuid,
+        toUnitId: uuid,
+        inventoryItemId: uuid.nullable().optional(),
+        multiplier: z
+          .number()
+          .finite()
+          .positive()
+          .lt(1_000_000_000_000)
+          .refine(
+            (value) =>
+              Math.abs(value * 100_000_000 - Math.round(value * 100_000_000)) <
+              0.000_001,
+            "Use no more than eight decimal places.",
+          ),
+        isActive: z.boolean(),
+      })
+      .strict()
+      .refine((value) => value.fromUnitId !== value.toUnitId, {
+        message: "Conversion units must be different.",
+        path: ["toUnitId"],
+      }),
+    z
+      .object({
+        ...catalogCommandBase,
+        command: z.literal("category.save"),
+        id: catalogId,
+        name: z.string().trim().min(1).max(120),
+        parentId: uuid.nullable().optional(),
+        isActive: z.boolean(),
+      })
+      .strict(),
+    z
+      .object({
+        ...catalogCommandBase,
+        command: z.literal("vendor.save"),
+        id: catalogId,
+        name: catalogName,
+        accountNumber: catalogOptionalText(120),
+        contactName: catalogOptionalText(160),
+        email: z
+          .string()
+          .trim()
+          .toLowerCase()
+          .email()
+          .max(320)
+          .nullable()
+          .optional(),
+        phone: catalogOptionalText(80),
+        paymentTerms: catalogOptionalText(160),
+        isActive: z.boolean(),
+      })
+      .strict(),
+    z
+      .object({
+        ...catalogCommandBase,
+        command: z.literal("item.save"),
+        id: catalogId,
+        name: catalogName,
+        sku: catalogOptionalText(120),
+        description: catalogOptionalText(4_000),
+        categoryId: uuid.nullable().optional(),
+        baseUnitId: uuid,
+        trackInventory: z.boolean(),
+        isActive: z.boolean(),
+      })
+      .strict(),
+    z
+      .object({
+        ...catalogCommandBase,
+        command: z.literal("vendor_item.save"),
+        id: catalogId,
+        vendorId: uuid,
+        inventoryItemId: uuid,
+        purchaseUnitId: uuid,
+        vendorSku: catalogOptionalText(120),
+        packQuantity: catalogPositiveQuantity,
+        lastPriceCents: nullableCents.optional(),
+        priceEffectiveAt: z.string().datetime({ offset: true }),
+        isPreferred: z.boolean(),
+        isActive: z.boolean(),
+      })
+      .strict(),
+    z
+      .object({
+        ...catalogCommandBase,
+        command: z.literal("par.set"),
+        locationId: uuid,
+        inventoryItemId: uuid,
+        parQuantity: quantity,
+        reorderQuantity: quantity.nullable().optional(),
+        effectiveFrom: isoDate,
+      })
+      .strict()
+      .refine(
+        (value) =>
+          value.reorderQuantity == null ||
+          value.reorderQuantity <= value.parQuantity,
+        {
+          message: "Reorder quantity cannot exceed par.",
+          path: ["reorderQuantity"],
+        },
+      ),
+    z
+      .object({
+        ...catalogCommandBase,
+        command: z.literal("recipe.save"),
+        id: catalogId,
+        name: catalogName,
+        yieldQuantity: catalogPositiveQuantity,
+        yieldUnitId: uuid,
+        menuPriceCents: nullableCents.optional(),
+        isActive: z.boolean(),
+        ingredients: z.array(catalogRecipeIngredientSchema).max(500),
+      })
+      .strict()
+      .superRefine((value, context) => {
+        if (value.isActive && value.ingredients.length === 0) {
+          context.addIssue({
+            code: "custom",
+            message: "Active recipes require an ingredient.",
+            path: ["ingredients"],
+          });
+        }
+        const itemIds = value.ingredients.map(
+          (ingredient) => ingredient.inventoryItemId,
+        );
+        if (new Set(itemIds).size !== itemIds.length) {
+          context.addIssue({
+            code: "custom",
+            message: "Each inventory item may appear once.",
+            path: ["ingredients"],
+          });
+        }
+      }),
+  ],
+);
+
+const prepPositiveQuantity = quantity.refine((value) => value > 0, {
+  message: "Quantity must be greater than zero.",
+});
+
+export const savePrepTaskInputSchema = z
+  .object({
+    requestId: uuid,
+    taskId: uuid,
     locationId: uuid,
-    inventoryItemId: uuid,
-    parQuantity: quantity,
-    reorderQuantity: quantity.nullable().optional(),
-    effectiveFrom: isoDate,
-  }).strict().refine(
-    (value) => value.reorderQuantity == null || value.reorderQuantity <= value.parQuantity,
-    { message: "Reorder quantity cannot exceed par.", path: ["reorderQuantity"] },
-  ),
-  z.object({
-    ...catalogCommandBase,
-    command: z.literal("recipe.save"),
-    id: catalogId,
-    name: catalogName,
-    yieldQuantity: catalogPositiveQuantity,
-    yieldUnitId: uuid,
-    menuPriceCents: nullableCents.optional(),
-    isActive: z.boolean(),
-    ingredients: z.array(catalogRecipeIngredientSchema).max(500),
-  }).strict().superRefine((value, context) => {
-    if (value.isActive && value.ingredients.length === 0) {
-      context.addIssue({ code: "custom", message: "Active recipes require an ingredient.", path: ["ingredients"] });
-    }
-    const itemIds = value.ingredients.map((ingredient) => ingredient.inventoryItemId);
-    if (new Set(itemIds).size !== itemIds.length) {
-      context.addIssue({ code: "custom", message: "Each inventory item may appear once.", path: ["ingredients"] });
-    }
-  }),
-]);
+    businessDate: isoDate,
+    servicePeriod: z.enum(["prep", "lunch", "dinner", "all_day"]),
+    station: z.string().trim().min(1).max(80),
+    recipeId: uuid.nullable().optional(),
+    outputInventoryItemId: uuid.nullable().optional(),
+    targetQuantity: prepPositiveQuantity,
+    targetUnitId: uuid,
+    dueAt: z.string().datetime({ offset: true }),
+    assigneeUserId: uuid.nullable().optional(),
+    note: shortNote,
+    expectedVersion: z.number().int().positive().nullable().optional(),
+  })
+  .strict()
+  .refine((value) => value.recipeId || value.outputInventoryItemId, {
+    message: "Choose a recipe or finished inventory item.",
+    path: ["recipeId"],
+  });
+
+export const transitionPrepTaskInputSchema = z
+  .object({
+    requestId: uuid,
+    taskId: uuid,
+    expectedVersion: z.number().int().positive(),
+    command: z.enum(["publish", "start"]),
+  })
+  .strict();
+
+export const previewPrepCompletionInputSchema = z
+  .object({
+    taskId: uuid,
+    actualYield: prepPositiveQuantity,
+  })
+  .strict();
+
+export const completePrepTaskInputSchema = z
+  .object({
+    requestId: uuid,
+    taskId: uuid,
+    expectedVersion: z.number().int().positive(),
+    actualYield: prepPositiveQuantity,
+    overrideInsufficient: z.boolean(),
+    completionNote: shortNote,
+  })
+  .strict();
+
+export const correctPrepCompletionInputSchema = z
+  .object({
+    requestId: uuid,
+    taskId: uuid,
+    expectedVersion: z.number().int().positive(),
+    correctionNote: z.string().trim().min(8).max(2_000),
+  })
+  .strict();
 
 export const recordInventoryItemCostInputSchema = z
   .object({
@@ -720,7 +889,11 @@ export const requestReportExportInputSchema = z
   })
   .strict()
   .superRefine((value, context) => {
-    if (value.periodStart && value.periodEnd && value.periodEnd < value.periodStart) {
+    if (
+      value.periodStart &&
+      value.periodEnd &&
+      value.periodEnd < value.periodStart
+    ) {
       context.addIssue({
         code: "custom",
         message: "The end date cannot be before the start date.",
@@ -737,35 +910,94 @@ export type ClockInInput = z.infer<typeof clockInInputSchema>;
 export type ClockOutInput = z.infer<typeof clockOutInputSchema>;
 export type StartBreakInput = z.infer<typeof startBreakInputSchema>;
 export type EndBreakInput = z.infer<typeof endBreakInputSchema>;
-export type ApproveTimeCorrectionInput = z.infer<typeof approveTimeCorrectionInputSchema>;
-export type RequestTimeCorrectionInput = z.infer<typeof requestTimeCorrectionInputSchema>;
-export type RecordMissedTimeEntryInput = z.infer<typeof recordMissedTimeEntryInputSchema>;
+export type ApproveTimeCorrectionInput = z.infer<
+  typeof approveTimeCorrectionInputSchema
+>;
+export type RequestTimeCorrectionInput = z.infer<
+  typeof requestTimeCorrectionInputSchema
+>;
+export type RecordMissedTimeEntryInput = z.infer<
+  typeof recordMissedTimeEntryInputSchema
+>;
 export type SubmitCloseoutInput = z.infer<typeof submitCloseoutInputSchema>;
 export type ApproveCloseoutInput = z.infer<typeof approveCloseoutInputSchema>;
-export type CloseoutUploadUrlInput = z.infer<typeof closeoutUploadUrlInputSchema>;
-export type FinalizeCloseoutUploadInput = z.infer<typeof finalizeCloseoutUploadInputSchema>;
+export type CloseoutUploadUrlInput = z.infer<
+  typeof closeoutUploadUrlInputSchema
+>;
+export type FinalizeCloseoutUploadInput = z.infer<
+  typeof finalizeCloseoutUploadInputSchema
+>;
 export type PrepareTipRunInput = z.infer<typeof prepareTipRunInputSchema>;
 export type CalculateTipRunInput = z.infer<typeof calculateTipRunInputSchema>;
 export type ApproveTipRunInput = z.infer<typeof approveTipRunInputSchema>;
 export type ExportTipPayrollInput = z.infer<typeof exportTipPayrollInputSchema>;
 export type ReviewReceiptInput = z.infer<typeof reviewReceiptInputSchema>;
 export type ReceiptUploadUrlInput = z.infer<typeof receiptUploadUrlInputSchema>;
-export type FinalizeReceiptUploadInput = z.infer<typeof finalizeReceiptUploadInputSchema>;
-export type ManualCsvUploadUrlInput = z.infer<typeof manualCsvUploadUrlInputSchema>;
+export type FinalizeReceiptUploadInput = z.infer<
+  typeof finalizeReceiptUploadInputSchema
+>;
+export type ManualCsvUploadUrlInput = z.infer<
+  typeof manualCsvUploadUrlInputSchema
+>;
 export type FinalizeManualCsvImportInput = z.infer<
   typeof finalizeManualCsvImportInputSchema
 >;
-export type RetryIntegrationSyncInput = z.infer<typeof retryIntegrationSyncInputSchema>;
-export type PrivateFileDownloadInput = z.infer<typeof privateFileDownloadInputSchema>;
-export type SubmitInventoryCountInput = z.infer<typeof submitInventoryCountInputSchema>;
-export type ApproveInventoryCountInput = z.infer<typeof approveInventoryCountInputSchema>;
-export type CreatePurchaseOrderInput = z.infer<typeof createPurchaseOrderInputSchema>;
-export type ReceiveInventoryDeliveryInput = z.infer<typeof receiveInventoryDeliveryInputSchema>;
-export type SubmitWasteRecordInput = z.infer<typeof submitWasteRecordInputSchema>;
-export type ReviewWasteRecordInput = z.infer<typeof reviewWasteRecordInputSchema>;
-export type CreateInventoryTransferInput = z.infer<typeof createInventoryTransferInputSchema>;
-export type ReviewInventoryTransferInput = z.infer<typeof reviewInventoryTransferInputSchema>;
-export type ConfigureInventoryCatalogInput = z.infer<typeof configureInventoryCatalogInputSchema>;
-export type RecordInventoryItemCostInput = z.infer<typeof recordInventoryItemCostInputSchema>;
+export type RetryIntegrationSyncInput = z.infer<
+  typeof retryIntegrationSyncInputSchema
+>;
+export type PrivateFileDownloadInput = z.infer<
+  typeof privateFileDownloadInputSchema
+>;
+export type SubmitInventoryCountInput = z.infer<
+  typeof submitInventoryCountInputSchema
+>;
+export type ApproveInventoryCountInput = z.infer<
+  typeof approveInventoryCountInputSchema
+>;
+export type CreatePurchaseOrderInput = z.infer<
+  typeof createPurchaseOrderInputSchema
+>;
+export type ReviewPurchaseOrderInput = z.infer<
+  typeof reviewPurchaseOrderInputSchema
+>;
+export type ReceiveInventoryDeliveryInput = z.infer<
+  typeof receiveInventoryDeliveryInputSchema
+>;
+export type ReviewDeliveryExceptionsInput = z.infer<
+  typeof reviewDeliveryExceptionsInputSchema
+>;
+export type SubmitWasteRecordInput = z.infer<
+  typeof submitWasteRecordInputSchema
+>;
+export type ReviewWasteRecordInput = z.infer<
+  typeof reviewWasteRecordInputSchema
+>;
+export type CreateInventoryTransferInput = z.infer<
+  typeof createInventoryTransferInputSchema
+>;
+export type ReviewInventoryTransferInput = z.infer<
+  typeof reviewInventoryTransferInputSchema
+>;
+export type ConfigureInventoryCatalogInput = z.infer<
+  typeof configureInventoryCatalogInputSchema
+>;
+export type RecordInventoryItemCostInput = z.infer<
+  typeof recordInventoryItemCostInputSchema
+>;
+export type SavePrepTaskInput = z.infer<typeof savePrepTaskInputSchema>;
+export type TransitionPrepTaskInput = z.infer<
+  typeof transitionPrepTaskInputSchema
+>;
+export type PreviewPrepCompletionInput = z.infer<
+  typeof previewPrepCompletionInputSchema
+>;
+export type CompletePrepTaskInput = z.infer<
+  typeof completePrepTaskInputSchema
+>;
+export type CorrectPrepCompletionInput = z.infer<
+  typeof correctPrepCompletionInputSchema
+>;
 export type SearchGuestsInput = z.infer<typeof searchGuestsInputSchema>;
-export type RequestReportExportInput = z.infer<typeof requestReportExportInputSchema>;
+export type RequestReportExportInput = z.infer<
+  typeof requestReportExportInputSchema
+>;

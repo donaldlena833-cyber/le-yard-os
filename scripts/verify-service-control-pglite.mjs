@@ -19,7 +19,9 @@ const ids = {
   managerEmployee: "50000000-0000-4000-8000-000000000004",
   employeeRecord: "50000000-0000-4000-8000-000000000005",
   role: "d1000000-0000-4000-8000-000000000001",
+  recipe: "d1300000-0000-4000-8000-000000000001",
   availability: "d2000000-0000-4000-8000-000000000001",
+  availabilityRestore: "d2000000-0000-4000-8000-000000000002",
   log: "d3000000-0000-4000-8000-000000000001",
   preshift: "d4000000-0000-4000-8000-000000000001",
   ack: "d5000000-0000-4000-8000-000000000001",
@@ -41,7 +43,7 @@ const bootstrap = `
 `;
 
 async function assume(userId) {
-  await db.query("select set_config('request.jwt.claims', $1, false)", [JSON.stringify({ role: "authenticated", sub: userId, aal: "aal1" })]);
+  await db.query("select set_config('request.jwt.claims', $1, false)", [JSON.stringify({ role: "authenticated", sub: userId, aal: userId === ids.admin ? "aal2" : "aal1" })]);
 }
 async function expectError(action, code, label) {
   try { await action(); } catch (error) { if (code === null || error?.code === code) return; throw new Error(`${label}: ${error?.message ?? error}`); }
@@ -57,37 +59,69 @@ try {
     values ('${ids.role}', '${ids.organization}', 'FOH Manager Test', 'FOH-MGR-TEST', 'Front of house', 0, false);
     insert into public.employee_job_roles (organization_id, employee_id, job_role_id, location_id, effective_from, is_primary)
     values ('${ids.organization}', '${ids.managerEmployee}', '${ids.role}', '${ids.location}', date '2026-01-01', true);
+    insert into public.recipes (id, organization_id, name, yield_quantity, yield_unit_id, menu_price_cents, is_active)
+    values ('${ids.recipe}', '${ids.organization}', 'Steak frites', 2, '70000000-0000-4000-8000-000000000001', 1000, true);
+    insert into public.recipe_ingredients (
+      organization_id, recipe_id, inventory_item_id, unit_id, quantity, waste_factor
+    ) values (
+      '${ids.organization}', '${ids.recipe}', '72000000-0000-4000-8000-000000000001',
+      '70000000-0000-4000-8000-000000000002', 0.5, 0.2
+    );
+    insert into public.item_price_history (
+      id, organization_id, inventory_item_id, vendor_id, unit_id,
+      price_quantity, unit_price_cents, effective_at, source_type
+    ) values (
+      'd1400000-0000-4000-8000-000000000001', '${ids.organization}',
+      '72000000-0000-4000-8000-000000000001', null,
+      '70000000-0000-4000-8000-000000000002', 10, 2000,
+      '2026-08-01T12:00:00Z', 'manual'
+    );
     set role authenticated;
   `);
   await assume(ids.admin);
-  for (const [index, capability] of ["service.availability.manage", "manager_log.manage", "preshift.manage"].entries()) {
+  for (const [index, capability] of ["service.availability.manage", "manager_log.manage", "preshift.manage", "recipe.manage"].entries()) {
     await db.query(`select public.configure_job_role_capability($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::uuid, date '2026-01-01', null::date, true)`, [
       `d1100000-0000-4000-8000-00000000000${index + 1}`, ids.organization,
       `d1200000-0000-4000-8000-00000000000${index + 1}`, ids.role, capability, ids.location,
     ]);
   }
   await assume(ids.manager);
-  const availabilityArgs = [ids.availability, ids.organization, ids.location, "menu_item", "Steak frites", "eighty_sixed", 0, "Sold out", "2026-08-08T18:00:00Z", null, "Internal only"];
-  await db.query("select public.record_service_availability_event($1::uuid,$2::uuid,$3::uuid,$4::text,$5::text,$6::text,$7::numeric,$8::text,$9::timestamptz,$10::timestamptz,$11::text)", availabilityArgs);
-  await db.query("select public.record_service_availability_event($1::uuid,$2::uuid,$3::uuid,$4::text,$5::text,$6::text,$7::numeric,$8::text,$9::timestamptz,$10::timestamptz,$11::text)", availabilityArgs);
-  await expectError(() => db.query("select public.record_service_availability_event($1::uuid,$2::uuid,$3::uuid,$4::text,$5::text,$6::text,$7::numeric,$8::text,$9::timestamptz,$10::timestamptz,$11::text)", [...availabilityArgs.slice(0, 5), "running_low", ...availabilityArgs.slice(6)]), "23505", "changed replay");
+  const cost = (await db.query(
+    "select * from public.recipe_cost_snapshot($1::uuid,$2::uuid,$3::timestamptz) where \"recipeId\"=$4::uuid",
+    [ids.organization, ids.location, "2026-08-08T18:00:00Z", ids.recipe],
+  )).rows[0];
+  if (!cost || Number(cost.batchCostCents) !== 125 || Number(cost.portionCostCents) !== 63 || Number(cost.foodCostPercent) !== 6.25 || Number(cost.missingCostCount) !== 0) {
+    throw new Error(`Server recipe costing evidence failed: ${JSON.stringify(cost)}`);
+  }
+  const recipe = (await db.query("select id, name from public.recipes where organization_id=$1::uuid and is_active order by id limit 1", [ids.organization])).rows[0];
+  if (!recipe) throw new Error("Canonical availability test requires an active recipe");
+  const availabilityArgs = [ids.availability, ids.organization, ids.location, "menu_item", recipe.id, null, "eighty_sixed", 0, "Sold out", "2026-08-08T18:00:00Z", null, "Internal only"];
+  await db.query("select public.record_canonical_service_availability_event($1::uuid,$2::uuid,$3::uuid,$4::text,$5::uuid,$6::uuid,$7::text,$8::numeric,$9::text,$10::timestamptz,$11::timestamptz,$12::text)", availabilityArgs);
+  await db.query("select public.record_canonical_service_availability_event($1::uuid,$2::uuid,$3::uuid,$4::text,$5::uuid,$6::uuid,$7::text,$8::numeric,$9::text,$10::timestamptz,$11::timestamptz,$12::text)", availabilityArgs);
+  await expectError(() => db.query("select public.record_canonical_service_availability_event($1::uuid,$2::uuid,$3::uuid,$4::text,$5::uuid,$6::uuid,$7::text,$8::numeric,$9::text,$10::timestamptz,$11::timestamptz,$12::text)", [...availabilityArgs.slice(0, 6), "running_low", ...availabilityArgs.slice(7)]), "23505", "changed replay");
+  const catalog = await db.query("select * from public.service_availability_subjects($1::uuid,$2::uuid)", [ids.organization, ids.location]);
+  if (!catalog.rows.some((row) => row.id === recipe.id && row.label === recipe.name)) throw new Error("Canonical availability catalog omitted active recipe");
+  await db.query("select public.record_canonical_service_availability_event($1::uuid,$2::uuid,$3::uuid,$4::text,$5::uuid,$6::uuid,$7::text,$8::numeric,$9::text,$10::timestamptz,$11::timestamptz,$12::text)", [ids.availabilityRestore, ids.organization, ids.location, "menu_item", recipe.id, ids.availability, "restored", null, "Back in stock", "2026-08-08T18:01:00Z", null, "Undo path"]);
+  await expectError(() => db.query("select public.record_canonical_service_availability_event($1::uuid,$2::uuid,$3::uuid,$4::text,$5::uuid,$6::uuid,$7::text,$8::numeric,$9::text,$10::timestamptz,$11::timestamptz,$12::text)", ["d2000000-0000-4000-8000-000000000003", ids.organization, ids.location, "menu_item", recipe.id, ids.availability, "eighty_sixed", 0, null, "2026-08-08T18:02:00Z", null, null]), "40001", "stale availability head");
   await db.query(`select public.save_manager_log_entry($1::uuid,null::uuid,$2::uuid,$3::uuid,date '2026-08-08','dinner','foh','action_required','Guest follow-up','Call tomorrow',null,null,null,null,null,date '2026-08-09','needs_follow_up',null,null)`, [ids.log, ids.organization, ids.location]);
   await db.query(`select public.save_preshift($1::uuid,null::uuid,$2::uuid,$3::uuid,date '2026-08-08','dinner','published',null,null,null,'Tree nut allergy',null,'Steak frites 86',null,'[]'::jsonb,'Guest follow-up','Clear allergy communication','Allergy protocol',null)`, [ids.preshift, ids.organization, ids.location]);
-  await expectError(() => db.query(`select public.record_service_availability_event('d2100000-0000-4000-8000-000000000001'::uuid,$1::uuid,$2::uuid,'menu_item','Wrong room','running_low',2,null,now(),null,null)`, [ids.organization, ids.otherLocation]), "42501", "cross-location availability");
+  await expectError(() => db.query(`select public.record_canonical_service_availability_event('d2100000-0000-4000-8000-000000000001'::uuid,$1::uuid,$2::uuid,'menu_item',$3::uuid,null::uuid,'running_low',2,null,now(),null,null)`, [ids.organization, ids.otherLocation, recipe.id]), "42501", "cross-location availability");
   await assume(ids.employee);
+  await expectError(() => db.query("select * from public.recipe_cost_snapshot($1::uuid,$2::uuid,now())", [ids.organization, ids.location]), "42501", "employee recipe costing");
   await db.query("select public.acknowledge_preshift($1::uuid,$2::uuid,null::text)", [ids.ack, ids.preshift]);
-  await expectError(() => db.query(`select public.record_service_availability_event('d2200000-0000-4000-8000-000000000001'::uuid,$1::uuid,$2::uuid,'menu_item','Unauthorized','eighty_sixed',0,null,now(),null,null)`, [ids.organization, ids.location]), "42501", "employee management action");
+  await expectError(() => db.query(`select public.record_canonical_service_availability_event('d2200000-0000-4000-8000-000000000001'::uuid,$1::uuid,$2::uuid,'menu_item',$3::uuid,null::uuid,'eighty_sixed',0,null,now(),null,null)`, [ids.organization, ids.location, recipe.id]), "42501", "employee management action");
+  await expectError(() => db.query("select * from public.service_availability_subjects($1::uuid,$2::uuid)", [ids.organization, ids.location]), "42501", "employee availability catalog");
   await db.exec("reset role; select set_config('request.jwt.claims', '{}', false)");
   const evidence = (await db.query(`select
-    (select count(*)::integer from public.service_availability_events where id='${ids.availability}') as availability_count,
+    (select count(*)::integer from public.service_availability_events where id in ('${ids.availability}','${ids.availabilityRestore}')) as availability_count,
     (select count(*)::integer from public.manager_log_versions where manager_log_entry_id='${ids.log}') as log_versions,
     (select count(*)::integer from public.preshift_acknowledgements where id='${ids.ack}' and employee_id='${ids.employeeRecord}') as acknowledgements,
     (select count(*)::integer from public.audit_events where table_name in ('service_availability_events','manager_log_entries','preshifts','preshift_acknowledgements')) as audit_events,
     has_table_privilege('authenticated','public.service_availability_events','INSERT,UPDATE,DELETE') as direct_availability_write
   `)).rows[0];
-  if (evidence.availability_count !== 1 || evidence.log_versions !== 1 || evidence.acknowledgements !== 1 || evidence.audit_events < 4 || evidence.direct_availability_write) throw new Error(`Service-control evidence failed: ${JSON.stringify(evidence)}`);
+  if (evidence.availability_count !== 2 || evidence.log_versions !== 1 || evidence.acknowledgements !== 1 || evidence.audit_events < 5 || evidence.direct_availability_write) throw new Error(`Service-control evidence failed: ${JSON.stringify(evidence)}`);
   await expectError(() => db.query(`update public.service_availability_events set notes='rewrite' where id=$1::uuid`, [ids.availability]), null, "availability history rewrite");
-  process.stdout.write("PASS service availability, handoff versions, pre-shift publish/acknowledge, replay, location scope, audit, and immutable history\n");
+  process.stdout.write("PASS canonical service availability, server recipe costing, exact restore, stale-write fence, handoff versions, pre-shift publish/acknowledge, replay, location scope, audit, and immutable history\n");
 } finally {
   await db.close();
 }

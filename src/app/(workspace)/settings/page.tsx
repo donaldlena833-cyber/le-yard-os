@@ -9,10 +9,10 @@ import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.serv
 export const metadata: Metadata = { title: "Settings" };
 
 export default async function SettingsPage() {
-  if (isDemoMode) return <SettingsWorkspace />;
   const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/settings", resolution.context);
+  if (isDemoMode || resolution.context.mode === "demo") return <SettingsWorkspace />;
   return (
     <LiveSettingsWorkspace
       workspace={resolution.context}

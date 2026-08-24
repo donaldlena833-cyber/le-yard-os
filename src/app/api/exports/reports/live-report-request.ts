@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { toDatabaseReportType } from "@/lib/supabase/value-mappers";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import type { Json } from "@/types/database.generated";
+import { canAccessReportKind } from "@/lib/permissions/report-access";
 
 export type LiveReportExportRequest = {
   workspace: WorkspaceContextValue;
@@ -29,6 +30,9 @@ export async function liveReportFromRequest(
   const startsOn = search.get("startsOn") ?? "";
   const endsOn = search.get("endsOn") ?? "";
   if (!isLiveReportKind(kind)) return { error: "Unknown report kind.", status: 400 };
+  if (!canAccessReportKind(resolution.context, kind)) {
+    return { error: "This report export is not authorized.", status: 403 };
+  }
   if (
     !locationId ||
     !isIsoCalendarDate(startsOn) ||

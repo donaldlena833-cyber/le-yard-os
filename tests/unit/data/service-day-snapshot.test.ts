@@ -89,11 +89,13 @@ const serviceControl: LiveServiceControlModel = {
   date: "2026-08-09",
   timeZone: "America/New_York",
   canManageAvailability: true,
-  canManageLog: true,
-  canManagePreshift: true,
-  availability: [
+      canManageLog: true,
+      canManagePreshift: true,
+      availabilitySubjects: [],
+      availability: [
     {
       id: "availability-1",
+      subjectId: "10000000-0000-4000-8000-000000000101",
       subjectType: "menu_item",
       subjectLabel: "Steak frites",
       status: "eighty_sixed",

@@ -7,14 +7,15 @@ import {
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: surfaceProductName,
     short_name: "Le Yard",
     description: isHostSurface
       ? "The private reservation book and guest CRM for Le Yard."
       : "The private operating system for modern restaurant teams.",
     start_url: defaultWorkspacePath,
+    scope: "/",
     display: "standalone",
-    display_override: ["window-controls-overlay", "standalone"],
     orientation: "portrait-primary",
     background_color: "#f2f0e9",
     theme_color: "#171a17",

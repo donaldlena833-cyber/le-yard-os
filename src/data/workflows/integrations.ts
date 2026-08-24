@@ -29,6 +29,14 @@ function requireIntegrationAdministrator(
   return membership;
 }
 
+function requireManualCsvProcessor() {
+  assertCondition(
+    process.env.LE_YARD_MANUAL_CSV_PROCESSOR_ENABLED?.trim() === "true",
+    "conflict",
+    "Manual CSV import is unavailable until the server-side processor is deployed and verified.",
+  );
+}
+
 function expectedImportPath({
   organizationId,
   input,
@@ -53,6 +61,7 @@ export async function createManualCsvUploadUrl(
   context: WorkflowContext,
   input: ManualCsvUploadUrlInput,
 ) {
+  requireManualCsvProcessor();
   const location = await requireAccessibleLocation(
     context.supabase,
     context.actor,
@@ -87,6 +96,7 @@ export async function finalizeManualCsvImport(
   context: WorkflowContext,
   input: FinalizeManualCsvImportInput,
 ) {
+  requireManualCsvProcessor();
   const location = await requireAccessibleLocation(
     context.supabase,
     context.actor,

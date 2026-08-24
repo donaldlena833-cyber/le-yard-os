@@ -8,12 +8,13 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   configureInventoryCatalogAction,
   createInventoryTransferAction,
   createPurchaseOrderAction,
   receiveInventoryDeliveryAction,
+  reviewDeliveryExceptionsAction,
   submitInventoryCountAction,
 } from "@/app/actions/workflows/inventory";
 import { LiveInventoryWorkspace } from "@/components/inventory/live-inventory-workspace";
@@ -30,6 +31,7 @@ vi.mock("@/app/actions/workflows/inventory", () => ({
   createInventoryTransferAction: vi.fn(),
   createPurchaseOrderAction: vi.fn(),
   receiveInventoryDeliveryAction: vi.fn(),
+  reviewDeliveryExceptionsAction: vi.fn(),
   reviewInventoryTransferAction: vi.fn(),
   reviewWasteRecordAction: vi.fn(),
   submitInventoryCountAction: vi.fn(),
@@ -51,9 +53,24 @@ vi.mock("@/lib/supabase/client", () => ({
   },
 }));
 
+const draftStorage = new Map<string, string>();
+
+beforeEach(() => {
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => draftStorage.get(key) ?? null,
+      setItem: (key: string, value: string) => draftStorage.set(key, value),
+      removeItem: (key: string) => draftStorage.delete(key),
+      clear: () => draftStorage.clear(),
+    },
+  });
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  draftStorage.clear();
 });
 
 const userId = "10000000-0000-4000-8000-000000000001";
@@ -178,6 +195,10 @@ const mutationModel: LiveInventoryModel = {
       vendorName: "Hudson Produce",
       poNumber: "PO-2048",
       status: "partially_received",
+      createdByUserId: "10000000-0000-4000-8000-000000000003",
+      createdBy: "Alex Morgan",
+      approvedBy: "Jamie Chen",
+      approvedAt: "2026-08-01T15:00:00.000Z",
       orderedOn: "2026-08-01",
       expectedOn: "2026-08-02",
       subtotalCents: 625,
@@ -210,7 +231,18 @@ const mutationModel: LiveInventoryModel = {
       deliveredAt: "2026-08-01T14:00:00.000Z",
       invoiceNumber: "INV-1",
       receivedBy: "Maris",
+      receivedByUserId: "10000000-0000-4000-8000-000000000002",
       notes: null,
+      exceptionStatus: "pending_review",
+      exceptionReviewNote: null,
+      exceptions: [{
+        inventoryItemId: model.items[0].id,
+        itemName: "Lemons",
+        unitSymbol: "ea",
+        kind: "damaged",
+        proposedAcceptedQuantity: 1,
+        note: "One case crushed in transit",
+      }],
       lines: [
         {
           id: "e0000000-0000-4000-8000-000000000001",
@@ -287,7 +319,11 @@ describe("connected Inventory review interactions", () => {
     await waitFor(() => expect(document.activeElement).toBe(row));
 
     fireEvent.click(row);
-    const reopenedDrawer = screen.getByRole("dialog", { name: "Lemons" });
+    const reopenedDrawer = await screen.findByRole(
+      "dialog",
+      { name: "Lemons" },
+      { timeout: 5_000 },
+    );
     fireEvent.click(
       within(reopenedDrawer).getByRole("button", { name: "Start transfer" }),
     );
@@ -316,7 +352,9 @@ describe("connected Inventory review interactions", () => {
           yieldUnit: "ea",
           menuPriceCents: 1000,
           ingredientCount: 1,
-          knownCostCents: 55,
+          batchCostCents: 55,
+          portionCostCents: 55,
+          foodCostPercent: 4.58,
           missingCostCount: 0,
         },
       ],
@@ -428,7 +466,7 @@ describe("connected Inventory review interactions", () => {
         result={{ ok: true, data: model }}
       />,
     );
-    const opener = screen.getByRole("button", { name: "Start full count" });
+    const opener = screen.getByRole("button", { name: "Start or resume full count" });
     opener.focus();
 
     fireEvent.click(opener);
@@ -451,6 +489,9 @@ describe("connected Inventory review interactions", () => {
     });
     const close = within(dialog).getByRole("button", { name: "Close dialog" });
 
+    expect(within(dialog).queryByText("Expected")).toBeNull();
+    expect(within(dialog).queryByText("Variance")).toBeNull();
+
     expect(overlay?.parentElement).toBe(document.body);
     expect(dialog.dataset.inventoryModalLayout).toBe("task");
     expect(modalBody?.className).toContain("overflow-hidden");
@@ -463,6 +504,39 @@ describe("connected Inventory review interactions", () => {
 
     fireEvent.click(close);
     await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
+  it("saves and resumes a blind count draft on the same scoped device", async () => {
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Start or resume full count" }),
+    );
+    fireEvent.change(
+      screen.getByRole("spinbutton", { name: "Counted quantity for Lemons" }),
+      { target: { value: "19.25" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save & close" }));
+    expect(await screen.findByText(/draft saved on this device/i)).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Full inventory count" }),
+      ).toBeNull(),
+    );
+    const resume = screen.getByRole("button", { name: "Start or resume full count" });
+    fireEvent.click(resume);
+    expect(
+      (
+        screen.getByRole("spinbutton", {
+          name: "Counted quantity for Lemons",
+        }) as HTMLInputElement
+      ).value,
+    ).toBe("19.25");
+    expect(screen.queryByText("Expected 24 ea")).toBeNull();
   });
 
   it("submits counted quantities while leaving expected stock and cost to the server", async () => {
@@ -485,7 +559,7 @@ describe("connected Inventory review interactions", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Start full count" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start or resume full count" }));
     fireEvent.change(
       screen.getByRole("spinbutton", { name: "Counted quantity for Lemons" }),
       {
@@ -681,6 +755,12 @@ describe("connected Inventory review interactions", () => {
     fireEvent.change(screen.getByLabelText("Accepted quantity 1"), {
       target: { value: "2.75" },
     });
+    fireEvent.change(screen.getByLabelText("Receiving condition 1"), {
+      target: { value: "damaged" },
+    });
+    fireEvent.change(screen.getByLabelText("Receiving exception note 1"), {
+      target: { value: "One carton crushed" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Receive delivery" }));
 
     expect(await screen.findByText(/Delivery received/)).toBeTruthy();
@@ -698,8 +778,34 @@ describe("connected Inventory review interactions", () => {
           quantity: 3,
           acceptedQuantity: 2.75,
           unitPriceCents: 125,
+          exceptionKind: "damaged",
+          exceptionNote: "One carton crushed",
         },
       ],
+    });
+  });
+
+  it("shows structured receiving evidence and requires a different receiver to approve the correction", async () => {
+    vi.mocked(reviewDeliveryExceptionsAction).mockResolvedValue({ ok: true } as never);
+    render(
+      <LiveInventoryWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: mutationModel }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /Orders/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Review exceptions" }));
+    const dialog = screen.getByRole("dialog", { name: "Review receiving exceptions" });
+    expect(within(dialog).getByText("One case crushed in transit")).toBeTruthy();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Review note" }), {
+      target: { value: "Damage confirmed at dock" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Approve & post correction" }));
+    await waitFor(() => expect(reviewDeliveryExceptionsAction).toHaveBeenCalledOnce());
+    expect(vi.mocked(reviewDeliveryExceptionsAction).mock.calls[0][0]).toMatchObject({
+      deliveryId: mutationModel.deliveries[0].id,
+      approve: true,
+      note: "Damage confirmed at dock",
     });
   });
 

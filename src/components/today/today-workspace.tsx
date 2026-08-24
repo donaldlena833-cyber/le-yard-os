@@ -333,10 +333,9 @@ export function TodayWorkspace() {
   const [actions, setActions] = useState(initialActions);
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
 
-  if (isSaturdayServicePreview) return <SaturdayServiceTodayWorkspace firstName={firstName} />;
-
   if (workspace.role === "employee") return <EmployeeTodayWorkspace />;
   if (workspace.persona === "chef") return <ChefTodayWorkspace />;
+  if (isSaturdayServicePreview) return <SaturdayServiceTodayWorkspace firstName={firstName} />;
 
   return (
     <PageFrame>

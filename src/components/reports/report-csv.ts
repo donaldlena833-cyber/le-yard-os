@@ -10,7 +10,7 @@ export function buildReportCsv(view: ReportView, filters: ReportFilters): string
     ["Starts on", filters.startsOn],
     ["Ends on", filters.endsOn],
     ["Source", view.sourceLabel],
-    ["Source freshness", view.freshnessAt],
+    ["Source freshness", view.freshnessAt ?? "No matching source observations"],
     ["Coverage", view.coverageNote],
   ].map((row) => row.map(escapeReportCsvField).join(","));
 

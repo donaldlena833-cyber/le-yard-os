@@ -17,10 +17,14 @@ async function expectDatabaseError(sql, expectedCode, label) {
   try {
     await db.exec(sql);
   } catch (error) {
-    if (error && typeof error === "object" && error.code === expectedCode) return;
-    throw new Error(`${label} returned an unexpected error: ${error instanceof Error ? error.message : String(error)}`, {
-      cause: error,
-    });
+    if (error && typeof error === "object" && error.code === expectedCode)
+      return;
+    throw new Error(
+      `${label} returned an unexpected error: ${error instanceof Error ? error.message : String(error)}`,
+      {
+        cause: error,
+      },
+    );
   }
   throw new Error(`${label} unexpectedly succeeded`);
 }
@@ -106,18 +110,467 @@ const bootstrap = `
 try {
   await db.exec(bootstrap);
   for (const file of migrationFiles) {
+    if (file === "20260824200345_location_release_control_and_aal2.sql") {
+      await db.exec(`
+        insert into public.organizations (id, name, slug, timezone)
+        values (
+          '20000000-0000-4000-8000-000000000001',
+          'Le Yard Demo',
+          'le-yard-demo',
+          'America/New_York'
+        )
+        on conflict (id) do nothing;
+        insert into public.startup_workspaces (
+          id, organization_id, data, updated_at
+        ) values (
+          'le-yard-opening',
+          '20000000-0000-4000-8000-000000000001',
+          $legacy_workspace$
+          {
+            "version": 1,
+            "organizationId": "20000000-0000-4000-8000-000000000001",
+            "businessName": "Le Yard",
+            "targetOpeningDate": "2026-11-15",
+            "updatedAt": "2026-08-24T18:00:00.000Z",
+            "tasks": [],
+            "milestones": [{"id":"opening","title":"Opening","date":"2026-11-15","note":"Original v1 date"}],
+            "events": [{"id":"opening-event","title":"Opening day","date":"2026-11-15","kind":"opening","note":"Original v1 date"}],
+            "budgetItems": [
+              {
+                "id":"opening-inventory","category":"Inventory","name":"Liquor / food supply",
+                "planned":12000,"committed":0,"paid":0,"essential":true,"budgetRole":"opening-cost",
+                "subcategories":[{"id":"opening-inventory-unallocated","name":"Unallocated","planned":10000,"committed":0,"paid":0}]
+              },
+              {
+                "id":"8aafb99f-cc0b-4f07-82da-be28c520a4f1","category":"Legal","name":"Attorney Lease Review",
+                "planned":5000,"committed":0,"paid":0,"essential":true,"budgetRole":"opening-cost",
+                "subcategories":[{"id":"attorney-unallocated","name":"Unallocated","planned":0,"committed":0,"paid":0}]
+              },
+              {
+                "id":"operating-reserve","category":"Reserve","name":"Operating reserve",
+                "planned":50000,"committed":0,"paid":0,"essential":true,"flexibility":"non-negotiable",
+                "minimumAmount":50000,"budgetRole":"operating-reserve",
+                "subcategories":[{"id":"operating-reserve-base","name":"Protected operating cash","planned":50000,"committed":0,"paid":0}]
+              }
+            ],
+            "financials": {
+              "cashOnHand":250000,"reserveFloor":50000,"projectedMonthlySales":0,
+              "grossMarginPercent":0,"startupBudgetCap":250000,"monthlyCosts":[]
+            },
+            "facts": [{
+              "id":"opening-date","group":"opening","label":"Opening date","value":"November 15, 2026",
+              "status":"confirmed","public":true,"note":"Original v1 date","source":"Founder plan"
+            }]
+          }
+          $legacy_workspace$::jsonb,
+          '2026-08-24T18:00:00.000Z'
+        );
+      `);
+    }
     try {
       await db.exec(await readFile(join(migrationsDirectory, file), "utf8"));
       process.stdout.write(`PASS migration ${file}\n`);
     } catch (error) {
-      throw new Error(`Migration ${file} failed: ${error instanceof Error ? error.message : String(error)}`, {
-        cause: error,
-      });
+      throw new Error(
+        `Migration ${file} failed: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          cause: error,
+        },
+      );
     }
   }
 
+  const legacyMigrationEvidence = await db.query(`
+    select
+      workspace.revision,
+      workspace.data ->> 'version' as version,
+      workspace.data ->> 'targetOpeningDate' as opening_date,
+      workspace.data #>> '{milestones,0,date}' as milestone_date,
+      workspace.data #>> '{events,0,date}' as event_date,
+      workspace.data #>> '{facts,0,value}' as fact_value,
+      workspace.data #>> '{budgetItems,0,subcategories,0,planned}' as inventory_subcategory,
+      workspace.data #>> '{budgetItems,1,subcategories,0,planned}' as attorney_subcategory,
+      (select count(*)::integer
+       from public.startup_workspace_revisions revision
+       where revision.workspace_id = workspace.id) as revision_count,
+      (select data #>> '{budgetItems,0,subcategories,0,planned}'
+       from public.startup_workspace_revisions revision
+       where revision.workspace_id = workspace.id and revision.revision = 1) as baseline_inventory,
+      (select data #>> '{budgetItems,1,subcategories,0,planned}'
+       from public.startup_workspace_revisions revision
+       where revision.workspace_id = workspace.id and revision.revision = 1) as baseline_attorney,
+      (select metadata -> 'normalizedBudgetItemIds'
+       from public.audit_events event
+       where event.table_name = 'startup_workspaces'
+         and event.record_id = workspace.id
+         and event.action = 'startup_workspace_v1_migrated'
+       order by event.id desc limit 1) as normalized_ids
+    from public.startup_workspaces workspace
+    where workspace.id = 'le-yard-opening'
+  `);
+  const legacyMigration = legacyMigrationEvidence.rows[0];
+  if (
+    legacyMigration?.revision !== 2 ||
+    legacyMigration?.version !== "2" ||
+    legacyMigration?.opening_date !== "2026-12-01" ||
+    legacyMigration?.milestone_date !== "2026-12-01" ||
+    legacyMigration?.event_date !== "2026-12-01" ||
+    legacyMigration?.fact_value !== "December 1, 2026" ||
+    legacyMigration?.inventory_subcategory !== "12000" ||
+    legacyMigration?.attorney_subcategory !== "5000" ||
+    legacyMigration?.revision_count !== 2 ||
+    legacyMigration?.baseline_inventory !== "10000" ||
+    legacyMigration?.baseline_attorney !== "0" ||
+    JSON.stringify(legacyMigration?.normalized_ids) !==
+      JSON.stringify([
+        "opening-inventory",
+        "8aafb99f-cc0b-4f07-82da-be28c520a4f1",
+      ])
+  ) {
+    throw new Error(
+      `Audited Opening Room v1 migration failed: ${JSON.stringify(legacyMigration)}`,
+    );
+  }
+  process.stdout.write(
+    "PASS audited lossless Opening Room v1 baseline and deterministic v2 migration\n",
+  );
+
+  const unsafeLegacyMigration = await db.query(`
+    with source as (
+      select jsonb_set(
+        jsonb_set(
+          data,
+          '{budgetItems,0,committed}',
+          '100'::jsonb,
+          false
+        ),
+        '{budgetItems,0,paid}',
+        '50'::jsonb,
+        false
+      ) as data,
+      organization_id
+      from public.startup_workspace_revisions
+      where workspace_id = 'le-yard-opening' and revision = 1
+    ), candidate as (
+      select private.startup_workspace_migrate_v1(data) as data,
+             organization_id
+      from source
+    )
+    select
+      data #>> '{budgetItems,0,subcategories,0,planned}' as child_planned,
+      data #>> '{budgetItems,0,subcategories,0,committed}' as child_committed,
+      private.startup_workspace_contract_violations(
+        data,
+        organization_id
+      ) as violations
+    from candidate
+  `);
+  const unsafeLegacy = unsafeLegacyMigration.rows[0];
+  if (
+    unsafeLegacy?.child_planned !== "10000" ||
+    unsafeLegacy?.child_committed !== "0" ||
+    !unsafeLegacy?.violations?.includes("subcategory_totals")
+  ) {
+    throw new Error(
+      `Unsafe nonzero legacy accounting mismatch was not refused: ${JSON.stringify(unsafeLegacy)}`,
+    );
+  }
+  process.stdout.write(
+    "PASS Opening Room migration refuses nonzero committed/paid mismatches\n",
+  );
+
   await db.exec(await readFile(join(root, "supabase", "seed.sql"), "utf8"));
   process.stdout.write("PASS synthetic seed\n");
+
+  // Production locations predate the migration. The synthetic PGlite seed is
+  // intentionally loaded afterward, so reproduce the migration's fail-closed
+  // location backfill before asserting the release contract.
+  await db.exec(`
+    insert into public.location_release_controls (
+      organization_id, location_id, state, accept_reservations_from,
+      public_inventory_percent, booking_approved, support_ready
+    )
+    select organization_id, id, 'pilot', date '2026-12-01', 25, false, false
+    from public.locations
+    where is_active
+    on conflict (organization_id, location_id) do nothing;
+  `);
+
+  const initialRelease = await db.query(`
+    select state,
+           accept_reservations_from::text as accept_reservations_from,
+           public_inventory_percent,
+           booking_approved,
+           support_ready,
+           version
+    from public.location_release_controls
+    where organization_id = '20000000-0000-4000-8000-000000000001'
+      and location_id = '30000000-0000-4000-8000-000000000001'
+  `);
+  const initialReleaseRow = initialRelease.rows[0];
+  if (
+    initialReleaseRow?.state !== "pilot" ||
+    initialReleaseRow?.accept_reservations_from !== "2026-12-01" ||
+    initialReleaseRow?.public_inventory_percent !== 25 ||
+    initialReleaseRow?.booking_approved !== false ||
+    initialReleaseRow?.support_ready !== false ||
+    initialReleaseRow?.version !== 1
+  ) {
+    throw new Error(
+      `Fail-closed location release seed failed: ${JSON.stringify(initialReleaseRow)}`,
+    );
+  }
+
+  await db.exec(`
+    set role authenticated;
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',
+      false
+    );
+  `);
+  const aal1Authority = await db.query(`
+    select public.can_manage_org(
+             '20000000-0000-4000-8000-000000000001'
+           ) as can_manage,
+           public.is_owner_pending_mfa(
+             '20000000-0000-4000-8000-000000000001'
+           ) as pending_mfa,
+           (select count(*)::integer from public.startup_workspaces) as visible_workspaces
+  `);
+  if (
+    aal1Authority.rows[0]?.can_manage !== false ||
+    aal1Authority.rows[0]?.pending_mfa !== true ||
+    aal1Authority.rows[0]?.visible_workspaces !== 0
+  ) {
+    throw new Error(
+      `AAL1 management barrier failed: ${JSON.stringify(aal1Authority.rows[0])}`,
+    );
+  }
+  await expectDatabaseError(
+    `select * from public.save_startup_workspace(
+      'le-yard-opening', 2,
+      jsonb_build_object('version', 2)
+    )`,
+    "42501",
+    "AAL1 Opening Room save",
+  );
+  await expectDatabaseError(
+    `select public.manage_location_release_control(
+      '94000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      1, 'pilot', '2026-12-01', 25, true, true
+    )`,
+    "22023",
+    "AAL1 release-control command",
+  );
+  await db.exec(`
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
+      false
+    );
+  `);
+  const aal2Authority = await db.query(`
+    select public.can_manage_org(
+             '20000000-0000-4000-8000-000000000001'
+           ) as can_manage,
+           public.is_owner_pending_mfa(
+             '20000000-0000-4000-8000-000000000001'
+           ) as pending_mfa
+  `);
+  if (
+    aal2Authority.rows[0]?.can_manage !== true ||
+    aal2Authority.rows[0]?.pending_mfa !== false
+  ) {
+    throw new Error(
+      `AAL2 management authority failed: ${JSON.stringify(aal2Authority.rows[0])}`,
+    );
+  }
+  await expectDatabaseError(
+    `update public.startup_workspaces
+     set data = data
+     where id = 'le-yard-opening'`,
+    "42501",
+    "direct authenticated Opening Room update",
+  );
+  const startupSave = await db.query(`
+    select outcome, revision, data, updated_at
+    from public.save_startup_workspace(
+      'le-yard-opening',
+      2,
+      (select data || jsonb_build_object('updatedAt', '2026-08-24T20:00:00.000Z')
+       from public.startup_workspaces
+       where id = 'le-yard-opening')
+    )
+  `);
+  if (
+    startupSave.rows[0]?.outcome !== "saved" ||
+    startupSave.rows[0]?.revision !== 3 ||
+    !startupSave.rows[0]?.data ||
+    !startupSave.rows[0]?.updated_at
+  ) {
+    throw new Error(
+      `Opening Room optimistic save failed: ${JSON.stringify(startupSave.rows[0])}`,
+    );
+  }
+  const startupConflict = await db.query(`
+    select outcome, revision, data, updated_at
+    from public.save_startup_workspace(
+      'le-yard-opening',
+      2,
+      (select data from public.startup_workspaces where id = 'le-yard-opening')
+    )
+  `);
+  const revisionEvidence = await db.query(`
+    select count(*)::integer as revision_count,
+           (array_agg(actor_id order by revision desc)
+             filter (where actor_id is not null))[1]::text as last_actor
+    from public.startup_workspace_revisions
+    where workspace_id = 'le-yard-opening'
+  `);
+  if (
+    startupConflict.rows[0]?.outcome !== "conflict" ||
+    startupConflict.rows[0]?.revision !== 3 ||
+    revisionEvidence.rows[0]?.revision_count !== 3 ||
+    revisionEvidence.rows[0]?.last_actor !==
+      "10000000-0000-4000-8000-000000000001"
+  ) {
+    throw new Error(
+      `Opening Room conflict/history contract failed: ${JSON.stringify({ startupConflict: startupConflict.rows[0], revisionEvidence: revisionEvidence.rows[0] })}`,
+    );
+  }
+  await expectDatabaseError(
+    `select public.manage_location_release_control(
+      '94000000-0000-4000-8000-000000000002',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      1, 'pilot', '2026-12-01', 20, true, true
+    )`,
+    "23514",
+    "pilot inventory percentage constraint",
+  );
+  const managedRelease = await db.query(`
+    select public.manage_location_release_control(
+      '94000000-0000-4000-8000-000000000003',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      1, 'pilot', '2026-12-01', 25, true, true
+    ) as release
+  `);
+  const replayedRelease = await db.query(`
+    select public.manage_location_release_control(
+      '94000000-0000-4000-8000-000000000003',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      1, 'pilot', '2026-12-01', 25, true, true
+    ) as release
+  `);
+  if (
+    managedRelease.rows[0]?.release?.version !== 2 ||
+    managedRelease.rows[0]?.release?.publicInventoryPercent !== 25 ||
+    managedRelease.rows[0]?.release?.replayed !== false ||
+    replayedRelease.rows[0]?.release?.version !== 2 ||
+    replayedRelease.rows[0]?.release?.replayed !== true
+  ) {
+    throw new Error(
+      `Release command/idempotency failed: ${JSON.stringify({ managedRelease: managedRelease.rows[0], replayedRelease: replayedRelease.rows[0] })}`,
+    );
+  }
+  await db.exec(`reset role;`);
+  const strictWorkspaceMatrix = await db.query(`
+    with base as (
+      select data
+      from public.startup_workspaces
+      where id = 'le-yard-opening'
+    ), variants as (
+      select 'extra_top_level_key' as name,
+             data || jsonb_build_object('unexpected', true) as candidate
+      from base
+      union all
+      select 'missing_required_field', data - 'businessName' from base
+      union all
+      select 'invalid_timestamp',
+             jsonb_set(data, '{updatedAt}', '"2026-08-24T20:00:00"'::jsonb)
+      from base
+      union all
+      select 'invalid_fact_enum',
+             jsonb_set(data, '{facts,0,status}', '"unknown"'::jsonb)
+      from base
+      union all
+      select 'duplicate_collection_id',
+             jsonb_set(data, '{facts}', (data -> 'facts') || (data -> 'facts' -> 0))
+      from base
+      union all
+      select 'unknown_milestone_reference',
+             jsonb_set(data, '{tasks}', jsonb_build_array(jsonb_build_object(
+               'id', 'licensing-task',
+               'title', 'Licensing',
+               'area', 'Compliance',
+               'owner', 'Owner',
+               'status', 'todo',
+               'priority', 'now',
+               'dueDate', '2026-10-01',
+               'dependsOn', '[]'::jsonb,
+               'milestoneId', 'missing-milestone',
+               'notes', '',
+               'updatedAt', '2026-08-24T20:00:00.000Z'
+             )))
+      from base
+      union all
+      select 'money_above_client_bound',
+             jsonb_set(
+               jsonb_set(
+                 jsonb_set(data, '{budgetItems,0,planned}', '1000000001'::jsonb),
+                 '{budgetItems,0,subcategories,0,planned}', '1000000001'::jsonb
+               ),
+               '{financials,reserveFloor}', '1000000001'::jsonb
+             )
+      from base
+      union all
+      select 'second_opening_event',
+             jsonb_set(
+               data,
+               '{events}',
+               (data -> 'events') || jsonb_build_object(
+                 'id', 'second-opening',
+                 'title', 'Invalid second opening',
+                 'date', '2026-11-30',
+                 'kind', 'opening',
+                 'note', ''
+               )
+             )
+      from base
+    )
+    select
+      (select cardinality(
+        private.startup_workspace_contract_violations(
+          base.data,
+          '20000000-0000-4000-8000-000000000001'
+        )
+      ) = 0 from base) as accepts_valid,
+      count(*)::integer as variant_count,
+      count(*) filter (where cardinality(
+        private.startup_workspace_contract_violations(
+          variants.candidate,
+          '20000000-0000-4000-8000-000000000001'
+        )
+      ) > 0)::integer as rejected_count
+    from variants
+  `);
+  if (
+    strictWorkspaceMatrix.rows[0]?.accepts_valid !== true ||
+    strictWorkspaceMatrix.rows[0]?.variant_count !== 8 ||
+    strictWorkspaceMatrix.rows[0]?.rejected_count !== 8
+  ) {
+    throw new Error(
+      `Strict Opening Room v2 negative matrix failed: ${JSON.stringify(strictWorkspaceMatrix.rows[0])}`,
+    );
+  }
+  process.stdout.write(
+    "PASS release authority, AAL2 management, and strict Opening Room optimistic contract\n",
+  );
 
   const storageScopeChecks = await db.query(`
     select
@@ -149,7 +602,9 @@ try {
     scope.rejects_noncanonical_global ||
     scope.rejects_cross_tenant_location
   ) {
-    throw new Error(`Storage scope validation failed: ${JSON.stringify(scope)}`);
+    throw new Error(
+      `Storage scope validation failed: ${JSON.stringify(scope)}`,
+    );
   }
 
   await db.exec(`
@@ -301,7 +756,9 @@ try {
     managerStorage.malformed_deletes !== 0 ||
     managerStorage.visible_receipts !== 3
   ) {
-    throw new Error(`Manager storage isolation failed: ${JSON.stringify(managerStorage)}`);
+    throw new Error(
+      `Manager storage isolation failed: ${JSON.stringify(managerStorage)}`,
+    );
   }
 
   await db.exec(`
@@ -324,7 +781,9 @@ try {
     employeeStorageReads.visible_sops !== 2 ||
     employeeStorageReads.visible_chat_attachments !== 2
   ) {
-    throw new Error(`Staff storage isolation failed: ${JSON.stringify(employeeStorageReads)}`);
+    throw new Error(
+      `Staff storage isolation failed: ${JSON.stringify(employeeStorageReads)}`,
+    );
   }
   await db.exec(`
     insert into storage.objects (id, bucket_id, name, owner_id) values
@@ -380,7 +839,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     insert into storage.objects (id, bucket_id, name, owner_id) values (
@@ -407,12 +866,14 @@ try {
       false
     );
   `);
-  await db.exec(
+  await expectDatabaseError(
     `insert into storage.objects (id, bucket_id, name, owner_id) values (
       '90000000-0000-4000-8000-000000000033', 'receipts',
       '20000000-0000-4000-8000-000000000001/global/owner-aal1-global.pdf',
       '10000000-0000-4000-8000-000000000001'
     )`,
+    "42501",
+    "AAL1 owner sensitive storage insert",
   );
   await db.exec(`
     select set_config(
@@ -427,7 +888,9 @@ try {
     );
     reset role;
   `);
-  process.stdout.write("PASS strict storage path, tenant/location, role, and password-authenticated Owner policies\n");
+  process.stdout.write(
+    "PASS strict storage path, tenant/location, role, and AAL2 Owner policies\n",
+  );
 
   // The synthetic seed is a fixed business snapshot, while the clock-in RPC
   // intentionally validates against the database clock. Add an isolated,
@@ -550,9 +1013,13 @@ try {
     punchReview.approved_by !== "10000000-0000-4000-8000-000000000004" ||
     punchReview.review_note !== "Independent punch review complete"
   ) {
-    throw new Error(`Time-entry review evidence failed: ${JSON.stringify(punchReview)}`);
+    throw new Error(
+      `Time-entry review evidence failed: ${JSON.stringify(punchReview)}`,
+    );
   }
-  process.stdout.write("PASS actor-derived clock/break and independent time-review workflows\n");
+  process.stdout.write(
+    "PASS actor-derived clock/break and independent time-review workflows\n",
+  );
 
   await db.exec(`
     reset role;
@@ -616,7 +1083,7 @@ try {
     );
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.approve_closeout('a3000000-0000-4000-8000-000000000001', true, 'verified');
@@ -744,6 +1211,16 @@ try {
         'grant', 'Portable transfer fixture', date '2026-01-01',
         '10000000-0000-4000-8000-000000000003',
         '10000000-0000-4000-8000-000000000003'
+      ),
+      (
+        'a4a00000-0000-4000-8000-000000000007',
+        '20000000-0000-4000-8000-000000000001',
+        '10000000-0000-4000-8000-000000000004',
+        'reports.operational.view',
+        '30000000-0000-4000-8000-000000000001',
+        'grant', 'Portable report-export fixture', date '2020-01-01',
+        '10000000-0000-4000-8000-000000000003',
+        '10000000-0000-4000-8000-000000000003'
       );
     set role authenticated;
     select set_config(
@@ -824,12 +1301,13 @@ try {
     !terminalStorage.receipt_is_terminal ||
     !terminalStorage.closeout_is_terminal
   ) {
-    throw new Error(`Terminal storage evidence guard failed: ${JSON.stringify(terminalStorage)}`);
+    throw new Error(
+      `Terminal storage evidence guard failed: ${JSON.stringify(terminalStorage)}`,
+    );
   }
-  await db.query(
-    "select set_config('request.jwt.claims', $1, false)",
-    ['{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}'],
-  );
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
+  ]);
   const workflowCounts = await db.query(`
     select
       (select count(*)::integer from public.inventory_counts where id = 'a5000000-0000-4000-8000-000000000001') as inventory_headers,
@@ -844,12 +1322,13 @@ try {
     workflow.report_runs !== 1 ||
     workflow.export_jobs !== 1
   ) {
-    throw new Error(`Workflow retry verification failed: ${JSON.stringify(workflow)}`);
+    throw new Error(
+      `Workflow retry verification failed: ${JSON.stringify(workflow)}`,
+    );
   }
-  await db.query(
-    "select set_config('request.jwt.claims', $1, false)",
-    ['{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}'],
-  );
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    '{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}',
+  ]);
   await expectDatabaseError(
     `select public.approve_inventory_count(
        'a5200000-0000-4000-8000-000000000099',
@@ -863,7 +1342,7 @@ try {
   await db.exec(`
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.approve_inventory_count(
@@ -940,9 +1419,13 @@ try {
     Number(inventoryEvidence.posting_delta) !== 6.5 ||
     Number(inventoryEvidence.on_hand) !== 4.5
   ) {
-    throw new Error(`Inventory approval evidence failed: ${JSON.stringify(inventoryEvidence)}`);
+    throw new Error(
+      `Inventory approval evidence failed: ${JSON.stringify(inventoryEvidence)}`,
+    );
   }
-  process.stdout.write("PASS guarded schedule/closeout/receipt/count/chat/report transitions and retries\n");
+  process.stdout.write(
+    "PASS guarded schedule/closeout/receipt/count/chat/report transitions and retries\n",
+  );
 
   // 009: atomic published-shift claims/reopens and swap request/offer/decision.
   await db.exec(`
@@ -1011,7 +1494,9 @@ try {
     claimedShift.rows[0]?.is_open !== false ||
     claimedShift.rows[0]?.employee_id !== "50000000-0000-4000-8000-000000000005"
   ) {
-    throw new Error(`Atomic shift claim failed: ${JSON.stringify(claimedShift.rows[0])}`);
+    throw new Error(
+      `Atomic shift claim failed: ${JSON.stringify(claimedShift.rows[0])}`,
+    );
   }
   await db.exec(`
     select set_config(
@@ -1046,7 +1531,7 @@ try {
     );
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
   `);
@@ -1104,15 +1589,20 @@ try {
   if (
     shiftResult.reopened_status !== "open" ||
     shiftResult.reopened_is_open !== true ||
-    shiftResult.swapped_employee_id !== "50000000-0000-4000-8000-000000000003" ||
+    shiftResult.swapped_employee_id !==
+      "50000000-0000-4000-8000-000000000003" ||
     shiftResult.swap_status !== "approved" ||
     shiftResult.offer_status !== "approved"
   ) {
-    throw new Error(`Shift workflow invariant failed: ${JSON.stringify(shiftResult)}`);
+    throw new Error(
+      `Shift workflow invariant failed: ${JSON.stringify(shiftResult)}`,
+    );
   }
-  process.stdout.write("PASS canonical shift claim/reopen and actor-bound swap workflows\n");
+  process.stdout.write(
+    "PASS canonical shift claim/reopen and actor-bound swap workflows\n",
+  );
 
-  // 032: password-authenticated Owner receives the normal tenant workspace.
+  // 032: AAL1 management receives tenant context but no sensitive org rows.
   await db.exec(`
     reset role;
     set role authenticated;
@@ -1141,12 +1631,16 @@ try {
     ownerAal1.locations !== 2 ||
     ownerAal1.organization_memberships < 1 ||
     ownerAal1.profiles < 5 ||
-    ownerAal1.employees < 6 ||
-    ownerAal1.tasks < 1 ||
-    ownerAal1.audit_events < 1 ||
+    ownerAal1.employees !== 0 ||
+    ownerAal1.receipts !== 0 ||
+    ownerAal1.tasks !== 0 ||
+    ownerAal1.audit_events !== 0 ||
+    ownerAal1.invitations !== 0 ||
     ownerAal1.storage_objects < 1
   ) {
-    throw new Error(`Password-authenticated Owner read boundary failed: ${JSON.stringify(ownerAal1)}`);
+    throw new Error(
+      `AAL1 Owner sensitive-read barrier failed: ${JSON.stringify(ownerAal1)}`,
+    );
   }
   await db.exec(`
     select set_config(
@@ -1162,23 +1656,77 @@ try {
       (select count(*)::integer from storage.objects) as storage_objects
   `);
   const ownerAal2 = ownerAal2Query.rows[0];
-  if (ownerAal2.employees < 6 || ownerAal2.audit_events < 1 || ownerAal2.storage_objects < 1) {
-    throw new Error(`Optional MFA Owner access failed: ${JSON.stringify(ownerAal2)}`);
+  if (
+    ownerAal2.employees < 6 ||
+    ownerAal2.audit_events < 1 ||
+    ownerAal2.storage_objects < 1
+  ) {
+    throw new Error(
+      `AAL2 Owner access failed: ${JSON.stringify(ownerAal2)}`,
+    );
   }
   await db.exec(`
     select public.administer_organization_member(
       'b1400000-0000-4000-8000-000000000001',
       '21000000-0000-4000-8000-000000000002',
-      'owner', 'active', '{}'::uuid[]
+      'manager', 'active', array[
+        '30000000-0000-4000-8000-000000000001',
+        '30000000-0000-4000-8000-000000000002'
+      ]::uuid[],
+      '30000000-0000-4000-8000-000000000002'
     );
     select public.administer_organization_member(
       'b1400000-0000-4000-8000-000000000001',
       '21000000-0000-4000-8000-000000000002',
-      'owner', 'active', '{}'::uuid[]
+      'manager', 'active', array[
+        '30000000-0000-4000-8000-000000000001',
+        '30000000-0000-4000-8000-000000000002'
+      ]::uuid[],
+      '30000000-0000-4000-8000-000000000002'
+    );
+  `);
+  const explicitPrimaryQuery = await db.query(`
+    select
+      (select count(*)::integer
+       from public.location_memberships location_membership
+       where location_membership.user_id = '10000000-0000-4000-8000-000000000002'
+         and location_membership.is_primary) as primary_count,
+      (select location_id
+       from public.location_memberships location_membership
+       where location_membership.user_id = '10000000-0000-4000-8000-000000000002'
+         and location_membership.is_primary) as primary_location_id,
+      (select home_location_id
+       from public.employees employee
+       where employee.user_id = '10000000-0000-4000-8000-000000000002') as home_location_id
+  `);
+  const explicitPrimary = explicitPrimaryQuery.rows[0];
+  if (
+    explicitPrimary.primary_count !== 1 ||
+    explicitPrimary.primary_location_id !== '30000000-0000-4000-8000-000000000002' ||
+    explicitPrimary.home_location_id !== '30000000-0000-4000-8000-000000000002'
+  ) {
+    throw new Error(`Explicit member primary location failed: ${JSON.stringify(explicitPrimary)}`);
+  }
+  await expectDatabaseError(
+    `select public.administer_organization_member(
+       'b1400000-0000-4000-8000-000000000003',
+       '21000000-0000-4000-8000-000000000002',
+       'manager', 'active',
+       array['30000000-0000-4000-8000-000000000001']::uuid[],
+       null
+     )`,
+    "23514",
+    "missing explicit member primary location",
+  );
+  await db.exec(`
+    select public.administer_organization_member(
+      'b1400000-0000-4000-8000-000000000004',
+      '21000000-0000-4000-8000-000000000002',
+      'owner', 'active', '{}'::uuid[], null
     );
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
   `);
@@ -1193,7 +1741,7 @@ try {
     `select public.administer_organization_member(
        'b1400000-0000-4000-8000-000000000002',
        '21000000-0000-4000-8000-000000000001',
-       'owner', 'active', '{}'::uuid[]
+       'owner', 'active', '{}'::uuid[], null
      )`,
     "42501",
     "admin Owner-target member command",
@@ -1209,7 +1757,9 @@ try {
     "23514",
     "final active Owner counter",
   );
-  process.stdout.write("PASS Owner AAL boundary and Owner-target membership governance\n");
+  process.stdout.write(
+    "PASS Owner AAL boundary and Owner-target membership governance\n",
+  );
 
   // 009: employee correction requests and manager-recorded missed punches.
   await db.exec(`
@@ -1358,7 +1908,7 @@ try {
     );
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.apply_time_entry_correction(
@@ -1381,9 +1931,13 @@ try {
     timeWorkflow.missed_source !== "manager" ||
     timeWorkflow.missed_approver !== "10000000-0000-4000-8000-000000000004"
   ) {
-    throw new Error(`Time correction/missed-punch workflow failed: ${JSON.stringify(timeWorkflow)}`);
+    throw new Error(
+      `Time correction/missed-punch workflow failed: ${JSON.stringify(timeWorkflow)}`,
+    );
   }
-  process.stdout.write("PASS bounded time corrections and independent missed-punch workflow\n");
+  process.stdout.write(
+    "PASS bounded time corrections and independent missed-punch workflow\n",
+  );
 
   // 009: report location is authoritative; JSON cannot smuggle scope.
   await db.exec(`
@@ -1405,6 +1959,30 @@ try {
       false
     );
   `);
+  const reportAuthorizationCheck = await db.query(`
+    select
+      auth.uid() as actor_id,
+      current_date as effective_on,
+      public.has_capability(
+        '20000000-0000-4000-8000-000000000001',
+        '30000000-0000-4000-8000-000000000001',
+        'reports.operational.view',
+        current_date
+      ) as has_operational,
+      public.can_access_report_kind(
+        '20000000-0000-4000-8000-000000000001',
+        '30000000-0000-4000-8000-000000000001',
+        'labor'
+      ) as can_access
+  `);
+  if (
+    !reportAuthorizationCheck.rows[0]?.has_operational ||
+    !reportAuthorizationCheck.rows[0]?.can_access
+  ) {
+    throw new Error(
+      `Report capability fixture failed: ${JSON.stringify(reportAuthorizationCheck.rows[0])}`,
+    );
+  }
   await expectDatabaseError(
     `select public.request_report_export(
        'b3100000-0000-4000-8000-000000000099',
@@ -1500,9 +2078,13 @@ try {
     reportScope.cross_runs !== 0 ||
     reportScope.cross_exports !== 0
   ) {
-    throw new Error(`Authoritative report scope failed: ${JSON.stringify(reportScope)}`);
+    throw new Error(
+      `Authoritative report scope failed: ${JSON.stringify(reportScope)}`,
+    );
   }
-  process.stdout.write("PASS authoritative report scope and recursive filter rejection\n");
+  process.stdout.write(
+    "PASS authoritative report scope and recursive filter rejection\n",
+  );
 
   // 009: expired invitations can be safely reissued against the same Auth,
   // membership, and employee identities, then revoked idempotently.
@@ -1523,7 +2105,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.provision_user_invitation(
@@ -1546,7 +2128,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.provision_user_invitation(
@@ -1611,9 +2193,13 @@ try {
     invitationReissue.membership_count !== 1 ||
     invitationReissue.original_employee_count !== 1
   ) {
-    throw new Error(`Invitation reissue lifecycle failed: ${JSON.stringify(invitationReissue)}`);
+    throw new Error(
+      `Invitation reissue lifecycle failed: ${JSON.stringify(invitationReissue)}`,
+    );
   }
-  process.stdout.write("PASS expired invitation reissue and idempotent revocation\n");
+  process.stdout.write(
+    "PASS expired invitation reissue and idempotent revocation\n",
+  );
 
   // 009: financial maker/checker stamps cannot be forged or authored by the
   // eventual approver, and approval recalculates immutable inputs.
@@ -1701,7 +2287,7 @@ try {
     );
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
   `);
@@ -1754,7 +2340,7 @@ try {
     );
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.approve_closeout(
@@ -1844,7 +2430,7 @@ try {
     );
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.prepare_tip_run_from_closeout(
@@ -1862,7 +2448,9 @@ try {
     )).status::text as status
   `);
   if (reprepareQuery.rows[0].status !== "draft") {
-    throw new Error(`Calculated tip run did not reprepare to draft: ${JSON.stringify(reprepareQuery.rows[0])}`);
+    throw new Error(
+      `Calculated tip run did not reprepare to draft: ${JSON.stringify(reprepareQuery.rows[0])}`,
+    );
   }
   await db.exec(`
     select public.calculate_tip_run('b5100000-0000-4000-8000-000000000001');
@@ -1914,10 +2502,13 @@ try {
     tipEvidence.final_amount !== 10000 ||
     tipEvidence.participant_count < 1 ||
     !tipEvidence.was_prepared ||
-    tipEvidence.adjustment_approver !== "10000000-0000-4000-8000-000000000004" ||
+    tipEvidence.adjustment_approver !==
+      "10000000-0000-4000-8000-000000000004" ||
     tipEvidence.policy_approver !== "10000000-0000-4000-8000-000000000002"
   ) {
-    throw new Error(`Financial maker/checker evidence failed: ${JSON.stringify(tipEvidence)}`);
+    throw new Error(
+      `Financial maker/checker evidence failed: ${JSON.stringify(tipEvidence)}`,
+    );
   }
 
   await db.exec(`
@@ -1944,7 +2535,7 @@ try {
   await db.exec(`
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
   `);
@@ -1967,7 +2558,9 @@ try {
       'b5200000-0000-4000-8000-000000000001', true, 'Independent review complete'
     );
   `);
-  process.stdout.write("PASS financial creator binding, recalculation, and independent approvals\n");
+  process.stdout.write(
+    "PASS financial creator binding, recalculation, and independent approvals\n",
+  );
 
   // 012: operational commands own actor stamps, lifecycle transitions, and
   // attachment evidence. Every exact retry returns the one durable result.
@@ -2246,13 +2839,18 @@ try {
     operationEvidence.maintenance_assignee !== "Internal maintenance" ||
     operationEvidence.maintenance_cost !== 1200 ||
     operationEvidence.incident_status !== "closed" ||
-    operationEvidence.attachment_actor !== "10000000-0000-4000-8000-000000000005" ||
+    operationEvidence.attachment_actor !==
+      "10000000-0000-4000-8000-000000000005" ||
     operationEvidence.checklist_storage_deletes !== 0 ||
     operationEvidence.incident_storage_deletes !== 0
   ) {
-    throw new Error(`Operational command evidence failed: ${JSON.stringify(operationEvidence)}`);
+    throw new Error(
+      `Operational command evidence failed: ${JSON.stringify(operationEvidence)}`,
+    );
   }
-  process.stdout.write("PASS idempotent tasks, checklists, SOPs, maintenance, incidents, and protected attachments\n");
+  process.stdout.write(
+    "PASS idempotent tasks, checklists, SOPs, maintenance, incidents, and protected attachments\n",
+  );
 
   // 013: human-entered CRM fields flow through validated commands while
   // notes, consent, contacts, and merge provenance remain durable evidence.
@@ -2269,7 +2867,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.service_save_guest(
@@ -2377,7 +2975,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     set role service_role;
@@ -2518,9 +3116,13 @@ try {
     crmEvidence.consents !== 1 ||
     crmEvidence.closed_incident_guest !== "c2010000-0000-4000-8000-000000000001"
   ) {
-    throw new Error(`CRM merge evidence failed: ${JSON.stringify(crmEvidence)}`);
+    throw new Error(
+      `CRM merge evidence failed: ${JSON.stringify(crmEvidence)}`,
+    );
   }
-  process.stdout.write("PASS validated CRM commands, append-only evidence, and closed-incident-safe guest merging\n");
+  process.stdout.write(
+    "PASS validated CRM commands, append-only evidence, and closed-incident-safe guest merging\n",
+  );
 
   // 014: trusted CSV/import queues and retries are actor-, tenant-, file-,
   // declaration-, and idempotency-bound. Browser DML cannot bypass commands.
@@ -2574,7 +3176,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.create_manual_csv_import(
@@ -2675,18 +3277,99 @@ try {
   const integrationEvidence = integrationEvidenceQuery.rows[0];
   if (
     integrationEvidence.import_jobs !== 1 ||
-    integrationEvidence.import_actor !== "10000000-0000-4000-8000-000000000003" ||
+    integrationEvidence.import_actor !==
+      "10000000-0000-4000-8000-000000000003" ||
     integrationEvidence.declared_rows !== 2 ||
     integrationEvidence.retry_jobs !== 1 ||
     integrationEvidence.retry_attempt !== 2 ||
     integrationEvidence.retry_of !== "d0210000-0000-4000-8000-000000000001" ||
-    integrationEvidence.retry_actor !== "10000000-0000-4000-8000-000000000003" ||
+    integrationEvidence.retry_actor !==
+      "10000000-0000-4000-8000-000000000003" ||
     integrationEvidence.import_events !== 1 ||
     integrationEvidence.retry_events !== 1
   ) {
-    throw new Error(`Integration command evidence failed: ${JSON.stringify(integrationEvidence)}`);
+    throw new Error(
+      `Integration command evidence failed: ${JSON.stringify(integrationEvidence)}`,
+    );
   }
-  process.stdout.write("PASS tenant-bound manual imports and exact-idempotent integration retries\n");
+  process.stdout.write(
+    "PASS tenant-bound manual imports and exact-idempotent integration retries\n",
+  );
+
+  // Phase 2: the worker claims the queued retry itself instead of rejecting it,
+  // and an expired running lease is terminalized before a linked retry starts.
+  await db.exec(`
+    reset role;
+    insert into public.integration_sync_jobs (
+      id, organization_id, connection_id, direction, resource_type,
+      status, attempts, max_attempts, requested_by, started_at,
+      lease_expires_at
+    ) values (
+      'd0230000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      'd0200000-0000-4000-8000-000000000001',
+      'import', 'time_entries', 'running', 1, 5,
+      '10000000-0000-4000-8000-000000000003',
+      clock_timestamp() - interval '20 minutes',
+      clock_timestamp() - interval '5 minutes'
+    );
+    set role service_role;
+    select set_config('request.jwt.claims', '{"role":"service_role"}', false);
+  `);
+  const claimedQueued = await db.query(`
+    select (public.service_claim_integration_sync_job(
+      '20000000-0000-4000-8000-000000000001',
+      'd0200000-0000-4000-8000-000000000001',
+      'orders',
+      '10000000-0000-4000-8000-000000000003',
+      'import', null, 900
+    )).id as id
+  `);
+  const recoveredLease = await db.query(`
+    select (public.service_claim_integration_sync_job(
+      '20000000-0000-4000-8000-000000000001',
+      'd0200000-0000-4000-8000-000000000001',
+      'time_entries',
+      '10000000-0000-4000-8000-000000000003',
+      'import', null, 900
+    )).id as id
+  `);
+  await db.exec(
+    `reset role; select set_config('request.jwt.claims', '{}', false);`,
+  );
+  const workerClaimEvidence = await db.query(
+    `
+    select
+      (select status::text from public.integration_sync_jobs
+       where id = 'd0220000-0000-4000-8000-000000000001') as queued_retry_status,
+      (select status::text from public.integration_sync_jobs
+       where id = 'd0230000-0000-4000-8000-000000000001') as expired_status,
+      (select retry_of_id from public.integration_sync_jobs
+       where id = $1::uuid) as recovered_retry_of,
+      (select attempts from public.integration_sync_jobs
+       where id = $1::uuid) as recovered_attempt,
+      (select lease_expires_at > clock_timestamp() from public.integration_sync_jobs
+       where id = $1::uuid) as recovered_has_live_lease
+  `,
+    [recoveredLease.rows[0]?.id],
+  );
+  const workerEvidence = workerClaimEvidence.rows[0];
+  if (
+    claimedQueued.rows[0]?.id !== "d0220000-0000-4000-8000-000000000001" ||
+    workerEvidence.queued_retry_status !== "running" ||
+    workerEvidence.expired_status !== "failed" ||
+    workerEvidence.recovered_retry_of !==
+      "d0230000-0000-4000-8000-000000000001" ||
+    workerEvidence.recovered_attempt !== 2 ||
+    !workerEvidence.recovered_has_live_lease
+  ) {
+    throw new Error(
+      `Integration worker claim evidence failed: ${JSON.stringify({ claimedQueued: claimedQueued.rows[0], recoveredLease: recoveredLease.rows[0], workerEvidence })}`,
+    );
+  }
+  process.stdout.write(
+    "PASS queued integration retry claim and expired-lease recovery\n",
+  );
 
   // Toast Labor imports are service-only, provider-versioned, and replay-safe.
   await db.exec(`
@@ -2748,7 +3431,8 @@ try {
     reset role;
     select set_config('request.jwt.claims', '{}', false);
   `);
-  const toastFacts = (await db.query(`
+  const toastFacts = (
+    await db.query(`
     select
       entry.status,
       entry.source,
@@ -2762,7 +3446,8 @@ try {
     where entry.integration_connection_id = 'd0200000-0000-4000-8000-000000000001'
       and entry.external_id = 'toast-time-entry-1'
     group by entry.id
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (
     firstToastImport.rows[0].result.status !== "created" ||
     replayedToastImport.rows[0].result.status !== "unchanged" ||
@@ -2773,14 +3458,18 @@ try {
     !toastFacts.clocked_out_at ||
     toastFacts.visible_breaks !== 0
   ) {
-    throw new Error(`Toast Labor ingest failed: ${JSON.stringify({
-      first: firstToastImport.rows[0],
-      replay: replayedToastImport.rows[0],
-      completed: completedToastImport.rows[0],
-      facts: toastFacts,
-    })}`);
+    throw new Error(
+      `Toast Labor ingest failed: ${JSON.stringify({
+        first: firstToastImport.rows[0],
+        replay: replayedToastImport.rows[0],
+        completed: completedToastImport.rows[0],
+        facts: toastFacts,
+      })}`,
+    );
   }
-  process.stdout.write("PASS service-only replay-safe Toast Labor time entry ingestion\n");
+  process.stdout.write(
+    "PASS service-only replay-safe Toast Labor time entry ingestion\n",
+  );
 
   // The read-only attendance mirror exposes only bounded sync freshness to an
   // authenticated employee at their assigned location. The SECURITY DEFINER
@@ -2794,7 +3483,8 @@ try {
       false
     );
   `);
-  const toastSyncScope = (await db.query(`
+  const toastSyncScope = (
+    await db.query(`
     select
       (select count(*)::integer
        from public.get_pos_labor_sync_status(
@@ -2808,7 +3498,8 @@ try {
        from public.get_pos_labor_sync_status(
          '30000000-0000-4000-8000-000000000003'
        )) as cross_tenant_rows
-  `)).rows[0];
+  `)
+  ).rows[0];
   if (
     toastSyncScope.assigned_location_rows !== 1 ||
     toastSyncScope.unassigned_location_rows !== 0 ||
@@ -2828,7 +3519,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.request_report_export(
@@ -2899,7 +3590,7 @@ try {
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
   `);
@@ -2948,9 +3639,13 @@ try {
     reportCompletion.failed_export_status !== "failed" ||
     reportCompletion.failed_error !== "Synthetic render failure"
   ) {
-    throw new Error(`Atomic report completion failed: ${JSON.stringify(reportCompletion)}`);
+    throw new Error(
+      `Atomic report completion failed: ${JSON.stringify(reportCompletion)}`,
+    );
   }
-  process.stdout.write("PASS service-only atomic report completion and exact replay semantics\n");
+  process.stdout.write(
+    "PASS service-only atomic report completion and exact replay semantics\n",
+  );
 
   // 014: notifications are derived from workflow evidence, delivered once to
   // active tenant recipients, and recipient updates can only mark them read.
@@ -3056,13 +3751,15 @@ try {
     notificationEvidence.manager_correction_notifications !== 1 ||
     notificationEvidence.task_notifications !== 1
   ) {
-    throw new Error(`Derived notification evidence failed: ${JSON.stringify(notificationEvidence)}`);
+    throw new Error(
+      `Derived notification evidence failed: ${JSON.stringify(notificationEvidence)}`,
+    );
   }
   await db.exec(`
     set role authenticated;
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
   `);
@@ -3072,9 +3769,13 @@ try {
     where user_id = '10000000-0000-4000-8000-000000000005'
   `);
   if (otherRecipientNotifications.rows[0]?.count !== 0) {
-    throw new Error(`Notification recipient isolation failed: ${JSON.stringify(otherRecipientNotifications.rows[0])}`);
+    throw new Error(
+      `Notification recipient isolation failed: ${JSON.stringify(otherRecipientNotifications.rows[0])}`,
+    );
   }
-  process.stdout.write("PASS server-derived idempotent notifications and recipient-only read stamps\n");
+  process.stdout.write(
+    "PASS server-derived idempotent notifications and recipient-only read stamps\n",
+  );
 
   // 015: purchasing, receiving, waste, and transfers use actor-bound,
   // idempotent commands. Only independent reviewers can post waste/transfer
@@ -3102,6 +3803,22 @@ try {
       'PO-CONTRACT-001', date '2026-08-01', date '2026-08-02',
       175, 50, 'Contract test order',
       '[{"inventory_item_id":"72000000-0000-4000-8000-000000000001","unit_id":"70000000-0000-4000-8000-000000000002","quantity":10,"unit_price_cents":200}]'::jsonb
+    );
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
+      false
+    );
+    select public.review_purchase_order(
+      'e1000000-0000-4000-8000-000000000002',
+      'e1000000-0000-4000-8000-000000000001',
+      true,
+      'Independent contract-test approval'
+    );
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}',
+      false
     );
     select public.receive_inventory_delivery(
       'e1010000-0000-4000-8000-000000000001',
@@ -3175,7 +3892,7 @@ try {
   await db.exec(`
     select set_config(
       'request.jwt.claims',
-      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',
+      '{"sub":"10000000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal2"}',
       false
     );
     select public.review_waste_record(
@@ -3270,9 +3987,11 @@ try {
     inventoryWorkflowEvidence.order_status !== "received" ||
     inventoryWorkflowEvidence.deliveries !== 1 ||
     inventoryWorkflowEvidence.waste_status !== "approved" ||
-    inventoryWorkflowEvidence.waste_reviewer !== "10000000-0000-4000-8000-000000000003" ||
+    inventoryWorkflowEvidence.waste_reviewer !==
+      "10000000-0000-4000-8000-000000000003" ||
     inventoryWorkflowEvidence.transfer_status !== "received" ||
-    inventoryWorkflowEvidence.transfer_reviewer !== "10000000-0000-4000-8000-000000000003" ||
+    inventoryWorkflowEvidence.transfer_reviewer !==
+      "10000000-0000-4000-8000-000000000003" ||
     inventoryWorkflowEvidence.delivery_posts !== 1 ||
     inventoryWorkflowEvidence.waste_posts !== 1 ||
     inventoryWorkflowEvidence.transfer_posts !== 2 ||
@@ -3281,7 +4000,9 @@ try {
     Number(inventoryWorkflowEvidence.transfer_out_delta) !== -3 ||
     Number(inventoryWorkflowEvidence.transfer_in_delta) !== 2.5
   ) {
-    throw new Error(`Inventory workflow evidence failed: ${JSON.stringify(inventoryWorkflowEvidence)}`);
+    throw new Error(
+      `Inventory workflow evidence failed: ${JSON.stringify(inventoryWorkflowEvidence)}`,
+    );
   }
   const inventoryContractQuery = await db.query(`
     select
@@ -3300,16 +4021,26 @@ try {
   `);
   const inventoryContract = inventoryContractQuery.rows[0];
   if (
-    !inventoryContract.po_rpc || !inventoryContract.delivery_rpc ||
-    !inventoryContract.waste_submit_rpc || !inventoryContract.waste_review_rpc ||
-    !inventoryContract.transfer_create_rpc || !inventoryContract.transfer_review_rpc ||
-    inventoryContract.po_direct_write || inventoryContract.delivery_direct_write ||
-    inventoryContract.waste_direct_write || inventoryContract.transfer_direct_write ||
-    inventoryContract.anon_waste_review || !inventoryContract.authenticated_waste_review
+    !inventoryContract.po_rpc ||
+    !inventoryContract.delivery_rpc ||
+    !inventoryContract.waste_submit_rpc ||
+    !inventoryContract.waste_review_rpc ||
+    !inventoryContract.transfer_create_rpc ||
+    !inventoryContract.transfer_review_rpc ||
+    inventoryContract.po_direct_write ||
+    inventoryContract.delivery_direct_write ||
+    inventoryContract.waste_direct_write ||
+    inventoryContract.transfer_direct_write ||
+    inventoryContract.anon_waste_review ||
+    !inventoryContract.authenticated_waste_review
   ) {
-    throw new Error(`Inventory workflow contract failed: ${JSON.stringify(inventoryContract)}`);
+    throw new Error(
+      `Inventory workflow contract failed: ${JSON.stringify(inventoryContract)}`,
+    );
   }
-  process.stdout.write("PASS actor-bound inventory purchasing, receiving, waste, transfer, and ledger workflows\n");
+  process.stdout.write(
+    "PASS actor-bound inventory purchasing, receiving, waste, transfer, and ledger workflows\n",
+  );
 
   await db.exec(`
     reset role;
@@ -3466,10 +4197,13 @@ try {
   const peopleManagerScope = peopleManagerScopeQuery.rows[0];
   if (
     peopleManagerScope.actor_id !== "10000000-0000-4000-8000-000000000004" ||
-    peopleManagerScope.can_operate_uptown || peopleManagerScope.can_manage_uptown ||
+    peopleManagerScope.can_operate_uptown ||
+    peopleManagerScope.can_manage_uptown ||
     peopleManagerScope.uptown_memberships !== 0
   ) {
-    throw new Error(`People manager scope fixture failed: ${JSON.stringify(peopleManagerScope)}`);
+    throw new Error(
+      `People manager scope fixture failed: ${JSON.stringify(peopleManagerScope)}`,
+    );
   }
   await expectDatabaseError(
     `select set_config(
@@ -3543,15 +4277,19 @@ try {
   if (
     peopleWorkflowEvidence.availability_rows !== 1 ||
     peopleWorkflowEvidence.time_off_status !== "approved" ||
-    peopleWorkflowEvidence.time_off_decider !== "10000000-0000-4000-8000-000000000004" ||
+    peopleWorkflowEvidence.time_off_decider !==
+      "10000000-0000-4000-8000-000000000004" ||
     peopleWorkflowEvidence.emergency_contacts !== 1 ||
-    peopleWorkflowEvidence.certification_verifier !== "10000000-0000-4000-8000-000000000004" ||
+    peopleWorkflowEvidence.certification_verifier !==
+      "10000000-0000-4000-8000-000000000004" ||
     peopleWorkflowEvidence.document_title !== "Handbook acknowledgement" ||
     peopleWorkflowEvidence.employee_visible !== false ||
     peopleWorkflowEvidence.decision_notifications !== 1 ||
     peopleWorkflowEvidence.people_audit_events < 6
   ) {
-    throw new Error(`People Operations evidence failed: ${JSON.stringify(peopleWorkflowEvidence)}`);
+    throw new Error(
+      `People Operations evidence failed: ${JSON.stringify(peopleWorkflowEvidence)}`,
+    );
   }
   const peopleContractQuery = await db.query(`
     select
@@ -3571,17 +4309,27 @@ try {
   `);
   const peopleContract = peopleContractQuery.rows[0];
   if (
-    !peopleContract.availability_rpc || !peopleContract.time_off_rpc ||
-    !peopleContract.time_off_decision_rpc || !peopleContract.certification_rpc ||
-    !peopleContract.emergency_contact_rpc || !peopleContract.document_rpc ||
-    peopleContract.direct_availability_write || peopleContract.direct_time_off_write ||
-    peopleContract.direct_certification_write || peopleContract.direct_emergency_write ||
-    peopleContract.direct_document_write || peopleContract.anon_decision ||
+    !peopleContract.availability_rpc ||
+    !peopleContract.time_off_rpc ||
+    !peopleContract.time_off_decision_rpc ||
+    !peopleContract.certification_rpc ||
+    !peopleContract.emergency_contact_rpc ||
+    !peopleContract.document_rpc ||
+    peopleContract.direct_availability_write ||
+    peopleContract.direct_time_off_write ||
+    peopleContract.direct_certification_write ||
+    peopleContract.direct_emergency_write ||
+    peopleContract.direct_document_write ||
+    peopleContract.anon_decision ||
     !peopleContract.authenticated_decision
   ) {
-    throw new Error(`People Operations contract failed: ${JSON.stringify(peopleContract)}`);
+    throw new Error(
+      `People Operations contract failed: ${JSON.stringify(peopleContract)}`,
+    );
   }
-  process.stdout.write("PASS actor-derived People Operations, independent leave decisions, and private document binding\n");
+  process.stdout.write(
+    "PASS actor-derived People Operations, independent leave decisions, and private document binding\n",
+  );
 
   await db.exec(`
     reset role;
@@ -3817,9 +4565,12 @@ try {
   const releaseGapEvidence = releaseGapEvidenceQuery.rows[0];
   if (
     releaseGapEvidence.duplicate_resolution !== "not_duplicate" ||
-    releaseGapEvidence.duplicate_actor !== "10000000-0000-4000-8000-000000000004" ||
-    releaseGapEvidence.expense_receipt_id !== "d7000000-0000-4000-8000-000000000001" ||
-    releaseGapEvidence.delivery_receipt_id !== "d7000000-0000-4000-8000-000000000001" ||
+    releaseGapEvidence.duplicate_actor !==
+      "10000000-0000-4000-8000-000000000004" ||
+    releaseGapEvidence.expense_receipt_id !==
+      "d7000000-0000-4000-8000-000000000001" ||
+    releaseGapEvidence.delivery_receipt_id !==
+      "d7000000-0000-4000-8000-000000000001" ||
     releaseGapEvidence.published_templates !== 1 ||
     releaseGapEvidence.template_items !== 2 ||
     releaseGapEvidence.sop_versions !== 2 ||
@@ -3828,9 +4579,13 @@ try {
     releaseGapEvidence.direct_preference_write ||
     !releaseGapEvidence.authenticated_remove_push
   ) {
-    throw new Error(`Receipt/operations/preferences evidence failed: ${JSON.stringify(releaseGapEvidence)}`);
+    throw new Error(
+      `Receipt/operations/preferences evidence failed: ${JSON.stringify(releaseGapEvidence)}`,
+    );
   }
-  process.stdout.write("PASS receipt reconciliation, authored operations content, preference custody, and exact replays\n");
+  process.stdout.write(
+    "PASS receipt reconciliation, authored operations content, preference custody, and exact replays\n",
+  );
 
   await db.exec(`
     reset role;
@@ -3906,6 +4661,256 @@ try {
       );
     }
   }
+
+  await db.exec(`
+    reset role;
+    select set_config('request.jwt.claims', '{}', false);
+    insert into private.intelligence_operator_authorizations (
+      organization_id, user_id, can_execute_actions, authorized_by
+    ) values (
+      '20000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000001', true,
+      '10000000-0000-4000-8000-000000000001'
+    );
+    set role authenticated;
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',
+      false
+    );
+  `);
+  const ownerAal1Intelligence = await db.query(`
+    select public.can_use_owner_intelligence(
+      '20000000-0000-4000-8000-000000000001'
+    ) as allowed
+  `);
+  if (ownerAal1Intelligence.rows[0]?.allowed) {
+    throw new Error("Owner intelligence accepted an AAL1 session");
+  }
+  await db.exec(`
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000002","role":"authenticated","aal":"aal2"}',
+      false
+    );
+  `);
+  const secondOwnerIntelligence = await db.query(`
+    select public.can_use_owner_intelligence(
+      '20000000-0000-4000-8000-000000000001'
+    ) as allowed
+  `);
+  if (secondOwnerIntelligence.rows[0]?.allowed) {
+    throw new Error("Owner intelligence accepted an owner without explicit authorization");
+  }
+  await expectDatabaseError(
+    `select public.begin_owner_intelligence_run(
+      'dd100000-0000-4000-8000-000000000099',
+      '30000000-0000-4000-8000-000000000001', 'Unauthorized request', '{}'::jsonb
+    )`,
+    "42501",
+    "Unauthorized owner intelligence request",
+  );
+  await db.exec(`
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
+      false
+    );
+    select public.begin_owner_intelligence_run(
+      'dd100000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      'Create a task to review tomorrow pickup list',
+      '{"reportKind":"guest_activity","evidenceCount":1}'::jsonb
+    );
+  `);
+  const completion = await db.query(`
+    select public.complete_owner_intelligence_run(
+      'dd110000-0000-4000-8000-000000000001',
+      'dd100000-0000-4000-8000-000000000001',
+      '{"title":"Pickup review","summary":"Create a review task.","confidence":0.94}'::jsonb,
+      0.94,
+      '[{"sourceTable":"owner_request","sourceRecordId":"dd100000-0000-4000-8000-000000000001","label":"Your instruction","excerpt":"Create a task","relevance":1}]'::jsonb,
+      '{"kind":"task.create","title":"Review tomorrow pickup list","description":"Check names and readiness before service.","priority":"high","assignedEmployeeId":null,"dueAt":null}'::jsonb
+    ) as result
+  `);
+  const completionResult = completion.rows[0]?.result;
+  if (!completionResult?.proposalId || !completionResult?.confirmationFingerprint) {
+    throw new Error(`Owner intelligence did not persist confirmation evidence: ${JSON.stringify(completionResult)}`);
+  }
+  await expectDatabaseError(
+    `select public.execute_owner_intelligence_task_proposal(
+      'dd120000-0000-4000-8000-000000000001',
+      '${completionResult.proposalId}', repeat('0', 64)
+    )`,
+    "40001",
+    "Mismatched intelligence confirmation fingerprint",
+  );
+  const execution = await db.query(
+    `select public.execute_owner_intelligence_task_proposal($1, $2, $3) as result`,
+    [
+      "dd120000-0000-4000-8000-000000000002",
+      completionResult.proposalId,
+      completionResult.confirmationFingerprint,
+    ],
+  );
+  const executionResult = execution.rows[0]?.result;
+  if (!executionResult?.taskId || executionResult.status !== "open") {
+    throw new Error(`Owner intelligence did not execute the confirmed task: ${JSON.stringify(executionResult)}`);
+  }
+  const undo = await db.query(
+    `select public.undo_owner_intelligence_task_proposal($1, $2, $3) as result`,
+    [
+      "dd130000-0000-4000-8000-000000000001",
+      completionResult.proposalId,
+      "Owner changed the operating plan.",
+    ],
+  );
+  const undoResult = undo.rows[0]?.result;
+  if (undoResult?.taskId !== executionResult.taskId || undoResult.status !== "cancelled") {
+    throw new Error(`Owner intelligence undo failed: ${JSON.stringify(undoResult)}`);
+  }
+  const intelligenceEvidence = await db.query(`
+    select
+      (select count(*)::integer from public.ai_runs
+       where id = 'dd100000-0000-4000-8000-000000000001') as runs,
+      (select count(*)::integer from public.ai_citations
+       where ai_run_id = 'dd100000-0000-4000-8000-000000000001') as citations,
+      (select count(*)::integer from public.ai_action_proposals
+       where id = '${completionResult.proposalId}' and reverted_by = auth.uid()) as reverted,
+      (select count(*)::integer from public.tasks
+       where id = '${executionResult.taskId}' and status = 'cancelled'
+         and source_type = 'ai_proposal') as cancelled_tasks
+  `);
+  if (Object.values(intelligenceEvidence.rows[0] ?? {}).some((value) => value !== 1)) {
+    throw new Error(`Owner intelligence evidence is incomplete: ${JSON.stringify(intelligenceEvidence.rows[0])}`);
+  }
+  process.stdout.write(
+    "PASS owner-only AAL2 intelligence, exact confirmation, task execution, and audited undo\n",
+  );
+
+  await db.exec(`
+    reset role;
+    select set_config('request.jwt.claims', '{}', false);
+    insert into public.recipes (
+      id, organization_id, name, yield_quantity, yield_unit_id, is_active
+    ) values (
+      'ef000000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      'Prep verification tomato base', 1,
+      '70000000-0000-4000-8000-000000000002', true
+    );
+    insert into public.recipe_ingredients (
+      id, organization_id, recipe_id, inventory_item_id, unit_id, quantity, waste_factor
+    ) values (
+      'ef010000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      'ef000000-0000-4000-8000-000000000001',
+      '72000000-0000-4000-8000-000000000001',
+      '70000000-0000-4000-8000-000000000002', 1, 0
+    );
+    insert into public.inventory_transactions (
+      id, organization_id, location_id, inventory_item_id, unit_id,
+      transaction_kind, quantity_delta, occurred_at, reference_type, reason, created_by
+    ) values (
+      'ef020000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      '72000000-0000-4000-8000-000000000001',
+      '70000000-0000-4000-8000-000000000002',
+      'manual_adjustment', 10, clock_timestamp(), 'prep_verifier',
+      'Opening prep verification stock', '10000000-0000-4000-8000-000000000001'
+    );
+    set role authenticated;
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal2"}',
+      false
+    );
+  `);
+  const savedPrep = await db.query(`
+    select * from public.save_prep_task(
+      'ef100000-0000-4000-8000-000000000001',
+      'ef110000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001', current_date,
+      'dinner', 'Garde manger',
+      'ef000000-0000-4000-8000-000000000001', null,
+      2, '70000000-0000-4000-8000-000000000002',
+      clock_timestamp() + interval '2 hours', null, 'Verifier prep task', null
+    )
+  `);
+  const savedPrepRow = savedPrep.rows[0];
+  if (savedPrepRow?.state !== "draft" || savedPrepRow?.version !== 1) {
+    throw new Error(`Prep draft save failed: ${JSON.stringify(savedPrepRow)}`);
+  }
+  const publishedPrep = await db.query(`
+    select * from public.transition_prep_task(
+      'ef100000-0000-4000-8000-000000000002',
+      'ef110000-0000-4000-8000-000000000001', 1, 'publish'
+    )
+  `);
+  if (publishedPrep.rows[0]?.state !== "published" || publishedPrep.rows[0]?.version !== 2) {
+    throw new Error(`Prep publish failed: ${JSON.stringify(publishedPrep.rows[0])}`);
+  }
+  const prepPreview = (await db.query(`
+    select public.preview_prep_completion(
+      'ef110000-0000-4000-8000-000000000001', 2
+    ) as result
+  `)).rows[0]?.result;
+  if (prepPreview?.has_shortage || prepPreview?.movements?.[0]?.quantity !== 2) {
+    throw new Error(`Prep completion preview failed: ${JSON.stringify(prepPreview)}`);
+  }
+  const completedPrep = await db.query(`
+    select * from public.complete_prep_task(
+      'ef100000-0000-4000-8000-000000000003',
+      'ef110000-0000-4000-8000-000000000001', 2, 2, false, 'Verified yield'
+    )
+  `);
+  if (completedPrep.rows[0]?.state !== "completed" || completedPrep.rows[0]?.version !== 3) {
+    throw new Error(`Prep completion failed: ${JSON.stringify(completedPrep.rows[0])}`);
+  }
+  const replayedPrep = await db.query(`
+    select (public.complete_prep_task(
+      'ef100000-0000-4000-8000-000000000003',
+      'ef110000-0000-4000-8000-000000000001', 2, 2, false, 'Verified yield'
+    )).state as state
+  `);
+  if (replayedPrep.rows[0]?.state !== "completed") {
+    throw new Error(`Prep completion replay failed: ${JSON.stringify(replayedPrep.rows[0])}`);
+  }
+  await expectDatabaseError(
+    `select public.complete_prep_task(
+      'ef100000-0000-4000-8000-000000000003',
+      'ef110000-0000-4000-8000-000000000001', 2, 3, false, 'Changed replay'
+    )`,
+    "23505",
+    "Prep completion request reuse",
+  );
+  const correctedPrep = await db.query(`
+    select * from public.correct_prep_completion(
+      'ef100000-0000-4000-8000-000000000004',
+      'ef110000-0000-4000-8000-000000000001', 3,
+      'Verifier correction reverses the ledger'
+    )
+  `);
+  const prepLedger = await db.query(`
+    select coalesce(sum(quantity_delta), 0) as prep_net,
+      count(*)::integer as movement_count
+    from public.inventory_transactions
+    where reference_id = 'ef110000-0000-4000-8000-000000000001'
+      and reference_type in ('prep_completion', 'prep_correction')
+  `);
+  if (correctedPrep.rows[0]?.state !== "corrected"
+    || Number(prepLedger.rows[0]?.prep_net) !== 0
+    || prepLedger.rows[0]?.movement_count !== 2) {
+    throw new Error(`Prep correction did not reconcile inventory: ${JSON.stringify({ task: correctedPrep.rows[0], ledger: prepLedger.rows[0] })}`);
+  }
+  process.stdout.write(
+    "PASS manual prep draft, publish, preview, replay-safe posting, and compensating correction\n",
+  );
+  await db.exec(`
+    reset role;
+    select set_config('request.jwt.claims', '{}', false);
+  `);
 
   const finalSecurityContractsQuery = await db.query(`
     select
@@ -4007,9 +5012,13 @@ try {
     finalSecurityContracts.chat_delete_invalidation_triggers !== 3 ||
     finalSecurityContracts.browser_can_execute_chat_delete_invalidation
   ) {
-    throw new Error(`Final security contract catalog failed: ${JSON.stringify(finalSecurityContracts)}`);
+    throw new Error(
+      `Final security contract catalog failed: ${JSON.stringify(finalSecurityContracts)}`,
+    );
   }
-  process.stdout.write("PASS frozen RPC grants, evidence revokes, and notification trigger catalog\n");
+  process.stdout.write(
+    "PASS frozen RPC grants, evidence revokes, and notification trigger catalog\n",
+  );
 
   const coverage = await db.query(`
     select
@@ -4038,11 +5047,17 @@ try {
     !inviteChecks.accept_exists ||
     !inviteChecks.owner_guard_exists
   ) {
-    throw new Error(`Catalog verification failed: ${JSON.stringify({ counts, inviteChecks })}`);
+    throw new Error(
+      `Catalog verification failed: ${JSON.stringify({ counts, inviteChecks })}`,
+    );
   }
 
-  process.stdout.write(`PASS catalog ${counts.table_count}/${counts.table_count} public tables use forced RLS\n`);
-  process.stdout.write("PASS secure invitation functions and owner-role guard\n");
+  process.stdout.write(
+    `PASS catalog ${counts.table_count}/${counts.table_count} public tables use forced RLS\n`,
+  );
+  process.stdout.write(
+    "PASS secure invitation functions and owner-role guard\n",
+  );
 } finally {
   await db.close();
 }

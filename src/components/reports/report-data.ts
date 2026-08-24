@@ -58,7 +58,7 @@ export interface ReportView {
   title: string;
   description: string;
   sourceLabel: string;
-  freshnessAt: string;
+  freshnessAt: string | null;
   coverageNote: string;
   metrics: ReportMetric[];
   columns: ReportColumn[];

@@ -7,6 +7,10 @@ import { addIsoDays, isIsoCalendarDate } from "@/data/read-models/shared";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { isDemoMode } from "@/lib/env";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
+import {
+  accessibleReportKinds,
+  canAccessReportKind,
+} from "@/lib/permissions/report-access";
 
 export const metadata: Metadata = { title: "Reports" };
 
@@ -24,13 +28,19 @@ export default async function ReportsPage({
     to?: string | string[];
   }>;
 }) {
-  if (isDemoMode) return <ReportsWorkspace />;
   const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/reports", resolution.context);
+  if (isDemoMode || resolution.context.mode === "demo") return <ReportsWorkspace />;
   const params = await searchParams;
   const requestedKind = first(params.type);
-  const kind = isLiveReportKind(requestedKind) ? requestedKind : "labor";
+  const authorizedKinds = accessibleReportKinds(resolution.context);
+  const kind =
+    isLiveReportKind(requestedKind) &&
+    canAccessReportKind(resolution.context, requestedKind)
+      ? requestedKind
+      : authorizedKinds[0];
+  if (!kind) return null;
   const defaultEnd = new Date().toISOString().slice(0, 10);
   const requestedStart = first(params.from);
   const requestedEnd = first(params.to);

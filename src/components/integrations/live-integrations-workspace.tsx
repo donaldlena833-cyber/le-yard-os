@@ -614,9 +614,11 @@ function ImportDialog({
 export function LiveIntegrationsWorkspace({
   workspace,
   result,
+  manualCsvProcessorEnabled = true,
 }: {
   workspace: WorkspaceContextValue;
   result: LiveReadResult<LiveIntegrationsModel>;
+  manualCsvProcessorEnabled?: boolean;
 }) {
   const router = useRouter();
   const model = result.ok ? result.data : null;
@@ -741,6 +743,11 @@ export function LiveIntegrationsWorkspace({
   }
 
   function openImport(provider?: IntegrationProvider) {
+    if (!manualCsvProcessorEnabled) {
+      setSelectedProvider(null);
+      setMessage("Manual CSV import is unavailable until its server-side processor is deployed and verified. No file was selected or uploaded.");
+      return;
+    }
     if (provider === "resy") setImportType("resy_reservations");
     else if (provider === "toast") setImportType("toast_sales");
     setSelectedProvider(null);
@@ -861,8 +868,12 @@ export function LiveIntegrationsWorkspace({
           </p>
         </div>
         {model.canManageSettings ? (
-          <Button variant="accent" disabled={model.ownerNeedsMfa} onClick={() => openImport()}>
-            <FileUp className="size-4" /> Import CSV
+          <Button
+            variant={manualCsvProcessorEnabled ? "accent" : "secondary"}
+            disabled={model.ownerNeedsMfa}
+            onClick={() => openImport()}
+          >
+            <FileUp className="size-4" /> {manualCsvProcessorEnabled ? "Import CSV" : "CSV import unavailable"}
           </Button>
         ) : (
           <StatusPill tone="neutral">View only</StatusPill>
@@ -906,7 +917,7 @@ export function LiveIntegrationsWorkspace({
             const adapter = integrationAdapters[provider];
             const connections = connectionGroups.get(provider) ?? [];
             const primary = connections.find((connection) => connection.locationId === model.locationId) ?? connections[0];
-            const manualAvailable = provider === "csv" && !primary;
+            const manualAvailable = provider === "csv" && !primary && manualCsvProcessorEnabled;
             return (
               <button
                 key={provider}
@@ -939,7 +950,9 @@ export function LiveIntegrationsWorkspace({
                     {primary?.lastSyncedAt
                       ? `Last sync ${timestamp(primary.lastSyncedAt)}`
                       : manualAvailable
-                        ? "Private CSV validation is available without provider credentials."
+                        ? "Private CSV validation is available because the processor is enabled."
+                        : provider === "csv" && !primary
+                          ? "Uploads are blocked until a verified server-side processor is deployed."
                         : adapter.accessNote}
                   </span>
                 </span>
@@ -1018,7 +1031,7 @@ export function LiveIntegrationsWorkspace({
             ? connectionGroups.get(selectedProvider) ?? []
             : []
         }
-        canImport={canMutate}
+        canImport={canMutate && manualCsvProcessorEnabled}
         onImport={() => {
           if (selectedProvider) openImport(selectedProvider);
         }}

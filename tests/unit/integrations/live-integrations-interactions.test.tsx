@@ -87,6 +87,24 @@ const model: LiveIntegrationsModel = {
 };
 
 describe("connected integration import interactions", () => {
+  it("blocks file selection before upload when no processor is deployed", () => {
+    render(
+      <LiveIntegrationsWorkspace
+        workspace={workspace}
+        result={{ ok: true, data: model }}
+        manualCsvProcessorEnabled={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "CSV import unavailable" }));
+
+    expect(screen.queryByRole("dialog", { name: "Validate and queue CSV" })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain(
+      "No file was selected or uploaded",
+    );
+    expect(createManualCsvUploadUrlAction).not.toHaveBeenCalled();
+  });
+
   it("opens provider evidence in a labelled, dismissible drawer", async () => {
     render(
       <LiveIntegrationsWorkspace

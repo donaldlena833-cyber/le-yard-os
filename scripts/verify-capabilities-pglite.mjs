@@ -84,7 +84,10 @@ function claimsFor(userId, aal = "aal1") {
   return JSON.stringify({ role: "authenticated", sub: userId, aal });
 }
 
-async function assumeUser(userId, aal = "aal1") {
+async function assumeUser(
+  userId,
+  aal = userId === ids.owner || userId === ids.admin ? "aal2" : "aal1",
+) {
   await db.query("select set_config('request.jwt.claims', $1, false)", [claimsFor(userId, aal)]);
 }
 
@@ -356,7 +359,7 @@ try {
     "42501",
     "cross-location direct cost",
   );
-  await assumeUser(ids.owner, "aal1");
+  await assumeUser(ids.owner, "aal2");
   const directCostEvidence = (await db.query(
     `select
       count(*) filter (where vendor_id is null and source_type = 'manual_unit_cost')::int as price_rows,
@@ -369,12 +372,13 @@ try {
     throw new Error(`Direct cost evidence is incomplete: ${JSON.stringify(directCostEvidence)}`);
   }
 
-  const ownerPasswordAccess = (await db.query(
+  await assumeUser(ids.owner, "aal1");
+  const ownerAal1Access = (await db.query(
     "select public.can_manage_org($1::uuid) as can_manage, public.is_owner_pending_mfa($1::uuid) as pending_mfa",
     [ids.organization],
   )).rows[0];
-  if (!ownerPasswordAccess.can_manage || ownerPasswordAccess.pending_mfa) {
-    throw new Error(`Password-only Owner policy failed: ${JSON.stringify(ownerPasswordAccess)}`);
+  if (ownerAal1Access.can_manage || !ownerAal1Access.pending_mfa) {
+    throw new Error(`AAL1 Owner policy failed: ${JSON.stringify(ownerAal1Access)}`);
   }
   await assumeUser(ids.manager);
   await configure(ids.vendor, "vendor.save", {

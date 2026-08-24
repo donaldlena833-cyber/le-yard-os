@@ -16,6 +16,7 @@ export interface LiveTeamMember {
   membershipStatus: "invited" | "active" | "suspended";
   employmentStatus: "invited" | "active" | "leave" | "terminated" | null;
   locationIds: string[];
+  primaryLocationId: string | null;
   jobRoles: { id: string; name: string; locationId: string }[];
   jobAssignments: LiveJobAssignment[];
   pendingTimeOff: number;
@@ -243,10 +244,14 @@ export async function loadLiveTeam(
     );
     const now = new Date();
     const locationIdsByUser = new Map<string, string[]>();
+    const primaryLocationByUser = new Map<string, string>();
     for (const assignment of locationMembershipResult.data ?? []) {
       const current = locationIdsByUser.get(assignment.user_id) ?? [];
       current.push(assignment.location_id);
       locationIdsByUser.set(assignment.user_id, current);
+      if (assignment.is_primary) {
+        primaryLocationByUser.set(assignment.user_id, assignment.location_id);
+      }
     }
     const jobRolesByEmployee = new Map<string, LiveTeamMember["jobRoles"]>();
     const jobAssignmentsByEmployee = new Map<string, LiveJobAssignment[]>();
@@ -411,6 +416,10 @@ export async function loadLiveTeam(
             ? (employee.employment_status as LiveTeamMember["employmentStatus"])
             : null,
           locationIds,
+          primaryLocationId:
+            primaryLocationByUser.get(membership.user_id) ??
+            employee?.home_location_id ??
+            null,
           jobRoles,
           jobAssignments: employee
             ? jobAssignmentsByEmployee.get(employee.id) ?? []

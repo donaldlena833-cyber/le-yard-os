@@ -21,12 +21,12 @@ The connected read model also omits the public connection's free-form `configura
 3. The server authorizes the actor from the session and issues a one-use signed upload for the tenant/location path in the private `imports` bucket.
 4. After upload, the server downloads the exact stored bytes, checks the signed size and path again, repeats validation, and calculates a SHA-256 fingerprint.
 5. An atomic database command derives actor, tenant, and timestamps; it creates an idempotent queued import job and append-only audit/integration evidence.
-6. A future approved import processor reads the private source, performs source-specific date, currency, external-ID, and location mapping, stages row outcomes, and applies only human-reviewed mappings.
+6. An approved import processor reads the private source, performs source-specific date, currency, external-ID, and location mapping, stages row outcomes, and applies only human-reviewed mappings.
 7. The import file, counts, non-sensitive failures, actor, and timestamps remain available in scoped history.
 
 Manual imports reject values beginning with `=`, `+`, `@`, or a nonnumeric `-` after leading whitespace. Exports independently escape formula-like values. Currency remains integer cents and timestamps include an explicit timezone after source-specific processing.
 
-Demo mode remains synthetic. Connected mode reads only persisted connection/job evidence and never simulates a successful upload, retry, or provider sync. The connected CSV path currently validates, fingerprints, stores, and queues source files; applying rows to restaurant records remains disabled until real source samples, mapping rules, and the import worker are approved.
+Demo mode remains synthetic. Connected mode reads only persisted connection/job evidence and never simulates a successful upload, retry, or provider sync. Production keeps `LE_YARD_MANUAL_CSV_PROCESSOR_ENABLED=false`, which blocks file selection at the connected UI and independently rejects upload preparation/finalization on the server. Enable it only after real source samples, mapping rules, the leased worker, and recovery tests are approved.
 
 ## Toast adapter
 

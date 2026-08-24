@@ -177,7 +177,9 @@ const platformBootstrap = `
 `;
 
 function authenticatedClaims(userId) {
-  return JSON.stringify({ role: "authenticated", sub: userId, aal: "aal1" });
+  const aal =
+    userId === ids.owner || userId === ids.otherTenantOwner ? "aal2" : "aal1";
+  return JSON.stringify({ role: "authenticated", sub: userId, aal });
 }
 
 async function assumeUser(userId) {
@@ -477,7 +479,77 @@ try {
   if (!replayedFloorTableMove.replayed) {
     throw new Error("Floor-table move did not replay idempotently");
   }
+  const floorDraftMoves = [
+    { tableId: ids.table, fromX: 0.24, fromY: 0.27, toX: 0.28, toY: 0.31 },
+    { tableId: ids.otherTable, fromX: 0.5, fromY: 0.2, toX: 0.55, toY: 0.25 },
+  ];
+  const floorDraftSave = (
+    await db.query(
+      "select public.save_reservation_floor_positions($1::uuid, $2::uuid, $3::jsonb) result",
+      [
+        "d2100000-0000-4000-8000-000000000004",
+        ids.location,
+        JSON.stringify(floorDraftMoves),
+      ],
+    )
+  ).rows[0].result;
+  if (floorDraftSave.replayed || floorDraftSave.moves.length !== 2)
+    throw new Error(`Atomic floor draft save failed: ${JSON.stringify(floorDraftSave)}`);
+  const floorDraftReplay = (
+    await db.query(
+      "select public.save_reservation_floor_positions($1::uuid, $2::uuid, $3::jsonb) result",
+      [
+        "d2100000-0000-4000-8000-000000000004",
+        ids.location,
+        JSON.stringify(floorDraftMoves),
+      ],
+    )
+  ).rows[0].result;
+  if (!floorDraftReplay.replayed)
+    throw new Error("Atomic floor draft save did not replay exactly");
+  await expectDatabaseError(
+    () => db.query(
+      "select public.save_reservation_floor_positions($1::uuid, $2::uuid, $3::jsonb)",
+      [
+        "d2100000-0000-4000-8000-000000000005",
+        ids.location,
+        JSON.stringify([
+          { tableId: ids.table, fromX: 0.24, fromY: 0.27, toX: 0.3, toY: 0.3 },
+          { tableId: ids.otherTable, fromX: 0.55, fromY: 0.25, toX: 0.6, toY: 0.3 },
+        ]),
+      ],
+    ),
+    "40001",
+    "stale atomic floor draft",
+  );
+  const positionsAfterRejectedDraft = (
+    await db.query(
+      `select jsonb_agg(jsonb_build_object(
+        'id', id, 'x', position_x, 'y', position_y
+      ) order by id) positions
+      from public.reservation_tables where id in ($1::uuid, $2::uuid)`,
+      [ids.table, ids.otherTable],
+    )
+  ).rows[0].positions;
+  if (
+    positionsAfterRejectedDraft.some((position) =>
+      (position.id === ids.table && (Number(position.x) !== 0.28 || Number(position.y) !== 0.31))
+      || (position.id === ids.otherTable && (Number(position.x) !== 0.55 || Number(position.y) !== 0.25)),
+    )
+  ) throw new Error("A rejected floor draft partially changed the layout");
   await assumeUser(ids.employee);
+  await expectDatabaseError(
+    () => db.query(
+      "select public.save_reservation_floor_positions($1::uuid, $2::uuid, $3::jsonb)",
+      [
+        "d2100000-0000-4000-8000-000000000006",
+        ids.location,
+        JSON.stringify([{ tableId: ids.table, fromX: 0.28, fromY: 0.31, toX: 0.3, toY: 0.3 }]),
+      ],
+    ),
+    "42501",
+    "floor draft save without reservations.configure",
+  );
   await expectDatabaseError(
     () =>
       db.query(
@@ -502,6 +574,20 @@ try {
     "cross-tenant floor-table move",
   );
   await assumeUser(ids.owner);
+  await db.query(
+    "select public.save_reservation_floor_positions($1::uuid, $2::uuid, $3::jsonb)",
+    [
+      "d2100000-0000-4000-8000-000000000007",
+      ids.location,
+      JSON.stringify(floorDraftMoves.map((move) => ({
+        ...move,
+        fromX: move.toX,
+        fromY: move.toY,
+        toX: move.fromX,
+        toY: move.fromY,
+      }))),
+    ],
+  );
   await configure(ids.period, "service_period.save", {
     name: "Dinner",
     daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
@@ -580,6 +666,23 @@ try {
   await expectDatabaseError(
     () =>
       db.query(
+        `select public.correct_reservation_status(
+          $1::uuid, $2::uuid, $3::uuid, $4::integer, $5::text
+        )`,
+        [
+          "d4200000-0000-4000-8000-000000000001",
+          ids.location,
+          ids.staffReservation,
+          arrived.version,
+          "Employee attempted correction",
+        ],
+      ),
+    "42501",
+    "employee reservation correction",
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
         "select public.transition_reservation($1::uuid, $2::uuid, 'seated', null)",
         ["d4100000-0000-4000-8000-000000000002", ids.staffReservation],
       ),
@@ -588,6 +691,46 @@ try {
   );
 
   await assumeUser(ids.owner);
+  const arrivalCorrection = (
+    await db.query(
+      `select public.correct_reservation_status(
+        $1::uuid, $2::uuid, $3::uuid, $4::integer, $5::text
+      ) as result`,
+      [
+        "d4200000-0000-4000-8000-000000000002",
+        ids.location,
+        ids.staffReservation,
+        arrived.version,
+        "Guest had not arrived yet",
+      ],
+    )
+  ).rows[0].result;
+  if (arrivalCorrection.status !== "booked" || arrivalCorrection.replayed)
+    throw new Error(`Arrival correction failed: ${JSON.stringify(arrivalCorrection)}`);
+  const arrivalCorrectionReplay = (
+    await db.query(
+      `select public.correct_reservation_status(
+        $1::uuid, $2::uuid, $3::uuid, $4::integer, $5::text
+      ) as result`,
+      [
+        "d4200000-0000-4000-8000-000000000002",
+        ids.location,
+        ids.staffReservation,
+        arrived.version,
+        "Guest had not arrived yet",
+      ],
+    )
+  ).rows[0].result;
+  if (!arrivalCorrectionReplay.replayed)
+    throw new Error("Reservation correction did not replay exactly");
+  const arrivedAgain = (
+    await db.query(
+      "select public.transition_reservation($1::uuid, $2::uuid, 'arrived', 'Party checked in') as result",
+      ["d4200000-0000-4000-8000-000000000003", ids.staffReservation],
+    )
+  ).rows[0].result;
+  if (arrivedAgain.status !== "arrived")
+    throw new Error("Arrival after correction did not persist");
   const seated = (
     await db.query(
       "select public.transition_reservation($1::uuid, $2::uuid, 'seated', null) as result",
@@ -596,6 +739,38 @@ try {
   ).rows[0].result;
   if (seated.status !== "seated")
     throw new Error("Seating transition did not persist");
+  const seatingCorrection = (
+    await db.query(
+      `select public.correct_reservation_status(
+        $1::uuid, $2::uuid, $3::uuid, $4::integer, $5::text
+      ) as result`,
+      [
+        "d4200000-0000-4000-8000-000000000004",
+        ids.location,
+        ids.staffReservation,
+        seated.version,
+        "Party was not seated yet",
+      ],
+    )
+  ).rows[0].result;
+  if (seatingCorrection.status !== "arrived")
+    throw new Error(`Seating correction failed: ${JSON.stringify(seatingCorrection)}`);
+  const tableAfterSeatingCorrection = (
+    await db.query(
+      "select status from public.table_status_events where table_id = $1::uuid order by occurred_at desc, id desc limit 1",
+      [ids.table],
+    )
+  ).rows[0]?.status;
+  if (tableAfterSeatingCorrection !== "available")
+    throw new Error("Seating correction did not release the physical table state");
+  const seatedAgain = (
+    await db.query(
+      "select public.transition_reservation($1::uuid, $2::uuid, 'seated', null) as result",
+      ["d4200000-0000-4000-8000-000000000005", ids.staffReservation],
+    )
+  ).rows[0].result;
+  if (seatedAgain.status !== "seated")
+    throw new Error("Seating after correction did not persist");
   await expectDatabaseError(
     () =>
       db.query(
@@ -619,6 +794,42 @@ try {
   ).rows[0].result;
   if (completed.status !== "completed")
     throw new Error("Completion transition did not persist");
+  const completionCorrection = (
+    await db.query(
+      `select public.correct_reservation_status(
+        $1::uuid, $2::uuid, $3::uuid, $4::integer, $5::text
+      ) as result`,
+      [
+        "d4200000-0000-4000-8000-000000000006",
+        ids.location,
+        ids.staffReservation,
+        completed.version,
+        "Table was completed by mistake",
+      ],
+    )
+  ).rows[0].result;
+  if (completionCorrection.status !== "seated")
+    throw new Error(`Completion correction failed: ${JSON.stringify(completionCorrection)}`);
+  const reopenedState = (
+    await db.query(
+      `select
+        (select count(*) from public.reservation_table_allocations
+          where reservation_id = $1::uuid and is_active) active_allocations,
+        (select status from public.table_status_events where table_id = $2::uuid
+          order by occurred_at desc, id desc limit 1) table_status`,
+      [ids.staffReservation, ids.table],
+    )
+  ).rows[0];
+  if (Number(reopenedState.active_allocations) !== 1 || reopenedState.table_status !== "occupied")
+    throw new Error(`Completion correction did not atomically restore the table: ${JSON.stringify(reopenedState)}`);
+  const completedAgain = (
+    await db.query(
+      "select public.transition_reservation($1::uuid, $2::uuid, 'completed', null) as result",
+      ["d4200000-0000-4000-8000-000000000007", ids.staffReservation],
+    )
+  ).rows[0].result;
+  if (completedAgain.status !== "completed")
+    throw new Error("Reopened reservation could not be completed again");
   const resetState = (
     await db.query(
       "select status from public.table_status_events where table_id = $1::uuid order by occurred_at desc, id desc limit 1",
@@ -2997,8 +3208,8 @@ try {
       ["d7100000-0000-4000-8000-000000000001", ids.waitlistRequest],
     )
   ).rows[0].result;
-  if (notified.status !== "notified")
-    throw new Error("Waitlist notification did not persist");
+  if (notified.status !== "notified" || notified.deliveryStatus !== "queued")
+    throw new Error("Waitlist delivery was not queued truthfully");
   const waitlistSeat = (
     await db.query(
       "select public.seat_waitlist_entry($1::uuid, $2::uuid, array[$3::uuid], 90) as result",
@@ -3024,7 +3235,82 @@ try {
     "select public.transition_waitlist_entry($1::uuid, $2::uuid, 'notified', null)",
     ["d7100000-0000-4000-8000-000000000003", ids.expiringWaitlist],
   );
+  const pendingOffer = (
+    await db.query(
+      `select notified_at, offer_expires_at = 'infinity'::timestamptz pending
+      from public.waitlist_entries where id = $1::uuid`,
+      [ids.expiringWaitlist],
+    )
+  ).rows[0];
+  if (pendingOffer.notified_at !== null || !pendingOffer.pending)
+    throw new Error("Waitlist offer clock started before provider acceptance");
+  await expectDatabaseError(
+    () => db.query(
+      "select public.transition_waitlist_entry($1::uuid, $2::uuid, 'accepted', null)",
+      ["d7100000-0000-4000-8000-000000000004", ids.expiringWaitlist],
+    ),
+    "23514",
+    "waitlist acceptance before delivered offer",
+  );
   await db.exec("reset role");
+  await db.exec("set role service_role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  const waitlistDeliveryNow = (
+    await db.query("select clock_timestamp() as value")
+  ).rows[0].value;
+  const deliveryClaims = (
+    await db.query(
+      "select * from public.service_claim_reservation_message_outbox($1::uuid, 500, 30, $2::timestamptz)",
+      ["d7200000-0000-4000-8000-000000000001", waitlistDeliveryNow],
+    )
+  ).rows;
+  let claimedWaitlistDelivery = null;
+  let begunWaitlistDelivery = null;
+  for (const claim of deliveryClaims) {
+    const begun = (
+      await db.query(
+        `select public.service_begin_reservation_message_delivery(
+          $1::uuid, $2::uuid, $3::timestamptz
+        ) result`,
+        [claim.id, claim.claimToken, waitlistDeliveryNow],
+      )
+    ).rows[0].result;
+    if (begun.waitlistEntryId === ids.expiringWaitlist) {
+      claimedWaitlistDelivery = claim;
+      begunWaitlistDelivery = begun;
+      break;
+    }
+    if (begun.status === "dispatching") {
+      await db.query(
+        `select public.service_complete_reservation_message_outbox(
+          $1::uuid, $2::uuid, 'cancelled', 'test_cleanup', null, null
+        )`,
+        [claim.id, claim.claimToken],
+      );
+    }
+  }
+  if (!claimedWaitlistDelivery || begunWaitlistDelivery?.status !== "dispatching")
+    throw new Error("Expected waitlist delivery could not be claimed and begun");
+  await db.query(
+    `select public.service_complete_reservation_message_outbox(
+      $1::uuid, $2::uuid, 'sent', null, null, 'waitlist-provider-1'
+    )`,
+    [claimedWaitlistDelivery.id, claimedWaitlistDelivery.claimToken],
+  );
+  await db.exec("reset role");
+  const deliveredOffer = (
+    await db.query(
+      `select notified_at,
+        offer_expires_at > notified_at + interval '14 minutes 59 seconds' valid_window,
+        offer_expires_at < 'infinity'::timestamptz finite
+      from public.waitlist_entries where id = $1::uuid`,
+      [ids.expiringWaitlist],
+    )
+  ).rows[0];
+  if (!deliveredOffer.notified_at || !deliveredOffer.valid_window || !deliveredOffer.finite)
+    throw new Error(`Provider acceptance did not start the offer clock: ${JSON.stringify(deliveredOffer)}`);
   await db.exec("set role service_role");
   await db.query("select set_config('request.jwt.claims', $1, false)", [
     JSON.stringify({ role: "service_role" }),
@@ -7743,6 +8029,116 @@ try {
       `Final delivery configuration evidence is incomplete: ${JSON.stringify(finalDeliveryFenceEvidence)}`,
     );
   }
+
+  // The public booking wrapper's release fence is intentionally tested at the
+  // database boundary, independent of the web availability calculation.
+  await db.exec("reset role");
+  await db.query("select set_config('request.jwt.claims', $1, false)", [
+    JSON.stringify({ role: "service_role" }),
+  ]);
+  await db.query(
+    `select private.ensure_service_shifts(
+      $1::uuid,
+      $2::uuid,
+      array(select date '2026-12-01' + day_offset
+            from generate_series(0, 6) day_offset)
+    )`,
+    [ids.organization, ids.location],
+  );
+  const pilotShift = (
+    await db.query(
+      `select shift.id,
+              shift.starts_at + interval '30 minutes' as reserved_at,
+              policy.pacing_cover_limit
+       from public.service_shifts shift
+       cross join lateral private.service_shift_effective_policy(
+         shift.id,
+         shift.starts_at + interval '30 minutes',
+         shift.starts_at + interval '30 minutes 1 microsecond'
+       ) policy
+       where shift.organization_id = $1::uuid
+         and shift.location_id = $2::uuid
+         and shift.status = 'scheduled'
+         and shift.online_enabled
+         and not policy.is_closed
+         and (shift.starts_at at time zone 'America/New_York')::date
+           >= date '2026-12-01'
+       order by shift.starts_at
+       limit 1`,
+      [ids.organization, ids.location],
+    )
+  ).rows[0];
+  const pilotCoverLimit = Math.floor(
+    Number(pilotShift?.pacing_cover_limit ?? 0) * 0.25,
+  );
+  if (!pilotShift?.reserved_at || pilotCoverLimit < 1) {
+    throw new Error(
+      `Pilot-cap fixture could not resolve released online inventory: ${JSON.stringify(pilotShift)}`,
+    );
+  }
+  await db.query(
+    `insert into public.location_release_controls (
+       organization_id, location_id, state, accept_reservations_from,
+       public_inventory_percent, booking_approved, support_ready,
+       approved_by, approved_at
+     ) values (
+       $1::uuid, $2::uuid, 'pilot', date '2026-12-01',
+       25, true, true, $3::uuid, clock_timestamp()
+     )
+     on conflict (organization_id, location_id) do update
+     set state = 'pilot',
+         accept_reservations_from = date '2026-12-01',
+         public_inventory_percent = 25,
+         booking_approved = true,
+         support_ready = true,
+         approved_by = excluded.approved_by,
+         approved_at = excluded.approved_at`,
+    [ids.organization, ids.location, ids.owner],
+  );
+  await db.query(
+    `select private.assert_public_booking_release_control(
+      $1::uuid, $2::uuid, $3::timestamptz, 1
+    )`,
+    [ids.organization, ids.location, pilotShift.reserved_at],
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select private.assert_public_booking_release_control(
+          $1::uuid, $2::uuid, $3::timestamptz, $4::integer
+        )`,
+        [
+          ids.organization,
+          ids.location,
+          pilotShift.reserved_at,
+          pilotCoverLimit + 1,
+        ],
+      ),
+    "23P01",
+    "public pilot percentage cap",
+  );
+  await db.query(
+    `insert into public.reservations (
+      id, organization_id, location_id, reserved_at, duration_minutes,
+      party_size, status, source, booking_channel, version
+    ) values (
+      'f1100000-0000-4000-8000-000000000001',
+      $1::uuid, $2::uuid, $3::timestamptz, 120,
+      $4::integer, 'booked', 'manual', 'staff', 1
+    )`,
+    [ids.organization, ids.location, pilotShift.reserved_at, pilotCoverLimit],
+  );
+  await expectDatabaseError(
+    () =>
+      db.query(
+        `select private.assert_public_booking_release_control(
+          $1::uuid, $2::uuid, $3::timestamptz, 1
+        )`,
+        [ids.organization, ids.location, pilotShift.reserved_at],
+      ),
+    "23P01",
+    "public pilot exhausted inventory",
+  );
 
   process.stdout.write(
     "PASS reservation configuration, atomic staff lifecycle revisions, table states, rate limits, reminders, public verification/modification/cancellation, exact cross-boundary expiry, waitlist seating, recipient/version evidence, and linearized begin-delivery authorization fences\n",

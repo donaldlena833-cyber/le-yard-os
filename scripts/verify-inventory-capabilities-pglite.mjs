@@ -34,6 +34,10 @@ const ids = {
   deniedPurchaseOrder: "d2000000-0000-4000-8000-000000000002",
   delivery: "d3000000-0000-4000-8000-000000000001",
   expiredDelivery: "d3000000-0000-4000-8000-000000000002",
+  exceptionOrder: "d3000000-0000-4000-8000-000000000003",
+  exceptionDelivery: "d3000000-0000-4000-8000-000000000004",
+  exceptionReview: "d3000000-0000-4000-8000-000000000005",
+  exceptionPosting: "d3000000-0000-4000-8000-000000000006",
   waste: "d4000000-0000-4000-8000-000000000001",
   wasteReview: "d4000000-0000-4000-8000-000000000002",
   transfer: "d5000000-0000-4000-8000-000000000001",
@@ -170,6 +174,17 @@ const deliveryLines = JSON.stringify([{
   lot_code: "CAP-LOT",
   expires_on: null,
 }]);
+const exceptionDeliveryLines = JSON.stringify([{
+  inventory_item_id: ids.item,
+  unit_id: ids.unit,
+  quantity: 5,
+  accepted_quantity: 3,
+  unit_price_cents: 200,
+  lot_code: "DAMAGED-LOT",
+  expires_on: null,
+  exception_kind: "damaged",
+  exception_note: "Two units crushed in transit",
+}]);
 const transferLines = JSON.stringify([{
   inventory_item_id: ids.item,
   unit_id: ids.unit,
@@ -304,6 +319,8 @@ try {
       ('${ids.organization}', '${ids.reviewerRole}', 'inventory.waste.approve', null,
         date '2020-01-01', null, true, '${ids.owner}', '${ids.owner}'),
       ('${ids.organization}', '${ids.reviewerRole}', 'inventory.transfer.approve', null,
+        date '2020-01-01', null, true, '${ids.owner}', '${ids.owner}'),
+      ('${ids.organization}', '${ids.reviewerRole}', 'inventory.purchase.approve', null,
         date '2020-01-01', null, true, '${ids.owner}', '${ids.owner}'),
       ('${ids.organization}', '${ids.reviewerRole}', 'inventory.purchase.create', null,
         date '2020-01-01', null, true, '${ids.owner}', '${ids.owner}');
@@ -495,12 +512,18 @@ try {
     insert into public.job_role_capabilities (
       organization_id, job_role_id, capability_key, location_id,
       effective_from, effective_to, is_active, created_by, updated_by
-    ) values (
-      '${ids.organization}', '${ids.creatorRole}', 'inventory.receive', null,
-      date '2021-01-01', null, true, '${ids.owner}', '${ids.owner}'
-    );
+    ) values
+      ('${ids.organization}', '${ids.creatorRole}', 'inventory.receive', null,
+       date '2021-01-01', null, true, '${ids.owner}', '${ids.owner}'),
+      ('${ids.organization}', '${ids.reviewerRole}', 'inventory.receive', null,
+       date '2021-01-01', null, true, '${ids.owner}', '${ids.owner}');
     set role authenticated;
   `);
+  await assumeUser(ids.manager);
+  await db.query(
+    "select public.review_purchase_order($1::uuid, $2::uuid, true, 'Independent receiving approval')",
+    ["d2000000-0000-4000-8000-000000000003", ids.purchaseOrder],
+  );
   await assumeUser(ids.employee);
   await db.query(
     `select public.receive_inventory_delivery(
@@ -509,6 +532,51 @@ try {
     )`,
     [ids.delivery, ids.downtown, ids.vendor, ids.purchaseOrder, deliveryLines],
   );
+  await db.query(
+    `select public.create_purchase_order(
+      $1::uuid, $2::uuid, $3::uuid, 'CAP-PO-EXCEPTION', current_date,
+      current_date, 0, 0, 'Exception review proof', $4::jsonb
+    )`,
+    [ids.exceptionOrder, ids.downtown, ids.vendor, JSON.stringify([{ inventory_item_id: ids.item, unit_id: ids.unit, quantity: 5, unit_price_cents: 200, notes: null }])],
+  );
+  await assumeUser(ids.manager);
+  await db.query("select public.review_purchase_order($1::uuid,$2::uuid,true,'Review exception order')", ["d3000000-0000-4000-8000-000000000007", ids.exceptionOrder]);
+  await assumeUser(ids.employee);
+  await db.query(
+    `select public.receive_inventory_delivery_with_exceptions(
+      $1::uuid,$2::uuid,$3::uuid,$4::uuid,clock_timestamp(),
+      'CAP-INV-EXCEPTION',null::text,$5::jsonb
+    )`,
+    [ids.exceptionDelivery, ids.downtown, ids.vendor, ids.exceptionOrder, exceptionDeliveryLines],
+  );
+  await expectDatabaseError(
+    () => db.query("select public.review_delivery_receiving_exceptions($1::uuid,$2::uuid,$3::uuid,true,'Self review')", [ids.exceptionReview, ids.exceptionPosting, ids.exceptionDelivery]),
+    "42501",
+    "self-reviewed delivery exception",
+  );
+  await assumeUser(ids.manager);
+  await db.query(
+    "select public.review_delivery_receiving_exceptions($1::uuid,$2::uuid,$3::uuid,true,'Damage verified')",
+    [ids.exceptionReview, ids.exceptionPosting, ids.exceptionDelivery],
+  );
+  const exceptionEvidence = (await db.query(`select
+    (select status from public.delivery_receiving_batches where delivery_id='${ids.exceptionDelivery}') as status,
+    (select corrective_delivery_id from public.delivery_receiving_batches where delivery_id='${ids.exceptionDelivery}') as corrective_delivery_id,
+    (select count(*)::int from public.delivery_receiving_exceptions where delivery_id='${ids.exceptionDelivery}') as exception_count,
+    (select count(*)::int from public.inventory_transactions where reference_id='${ids.exceptionPosting}' and quantity_delta=3) as corrective_posts
+  `)).rows[0];
+  if (exceptionEvidence.status !== "approved" || exceptionEvidence.corrective_delivery_id !== ids.exceptionPosting || exceptionEvidence.exception_count !== 1 || exceptionEvidence.corrective_posts !== 1) {
+    throw new Error(`Delivery exception review evidence failed: ${JSON.stringify(exceptionEvidence)}`);
+  }
+  await db.exec(`
+    reset role;
+    update public.job_role_capabilities
+    set is_active = false
+    where organization_id = '${ids.organization}'
+      and job_role_id = '${ids.reviewerRole}'
+      and capability_key = 'inventory.receive';
+    set role authenticated;
+  `);
 
   await db.exec(`
     reset role;
@@ -578,7 +646,8 @@ try {
       'inventory.count.approve',
       'inventory.waste.approve',
       'inventory.transfer.approve',
-      'inventory.purchase.create'
+      'inventory.purchase.create',
+      'inventory.purchase.approve'
     ]::text[]) capability_key;
     set role authenticated;
   `);
@@ -676,6 +745,8 @@ try {
     ["approve_inventory_count", "inventory.count.approve"],
     ["create_purchase_order", "inventory.purchase.create"],
     ["receive_inventory_delivery", "inventory.receive"],
+    ["receive_inventory_delivery_with_exceptions", "inventory.receive"],
+    ["review_delivery_receiving_exceptions", "inventory.receive"],
     ["submit_waste_record", "inventory.waste.create"],
     ["review_waste_record", "inventory.waste.approve"],
     ["create_inventory_transfer", "inventory.transfer.create"],
@@ -691,7 +762,7 @@ try {
     order by p.proname
   `, [[...expectedFunctions.keys()]])).rows;
   if (functionRows.length !== expectedFunctions.size) {
-    throw new Error(`Expected eight inventory RPCs, found ${functionRows.length}`);
+    throw new Error(`Expected ${expectedFunctions.size} inventory RPCs, found ${functionRows.length}`);
   }
   for (const row of functionRows) {
     const capability = expectedFunctions.get(row.name);
@@ -731,7 +802,7 @@ try {
   }
 
   process.stdout.write(
-    "PASS exact inventory capabilities: all eight RPCs, Owner coverage, grants, expiry, location isolation, create/approve separation, self-review, target/request non-enumeration, explicit-deny RLS, and function grants\n",
+    "PASS exact inventory capabilities: all ten RPCs, Owner coverage, grants, expiry, location isolation, create/approve separation, self-review, target/request non-enumeration, explicit-deny RLS, and function grants\n",
   );
 } finally {
   await db.close();

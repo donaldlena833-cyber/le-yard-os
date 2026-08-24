@@ -94,7 +94,12 @@ const platformBootstrap = `
 `;
 
 function claimsFor(userId) {
-  return JSON.stringify({ role: "authenticated", sub: userId, aal: "aal1" });
+  const managementIds = new Set([ids.owner, ids.admin, ids.otherOwner]);
+  return JSON.stringify({
+    role: "authenticated",
+    sub: userId,
+    aal: managementIds.has(userId) ? "aal2" : "aal1",
+  });
 }
 
 async function assume(userId) {

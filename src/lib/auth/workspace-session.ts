@@ -25,6 +25,7 @@ import { readWorkspacePreference } from "@/lib/auth/workspace-preference.server"
 import { localDateKey } from "@/data/read-models/local-time";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
 import { requiresOwnerMfaGate } from "@/lib/auth/mfa";
+import { retryJwtIssuedAtFuture } from "@/lib/auth/jwt-clock-skew-retry";
 import { createClient } from "@/lib/supabase/server";
 import {
   DEMO_CAPABILITY_TEMPLATES,
@@ -262,11 +263,22 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
   const email = typeof claims.email === "string" ? claims.email : null;
   const preferencePromise = readWorkspacePreference(userId);
   const [membershipResult, profileResult] = await Promise.all([
-    supabase
-      .from("organization_memberships")
-      .select("id, organization_id, user_id, role, status")
-      .eq("user_id", userId)
-      .eq("status", "active"),
+    retryJwtIssuedAtFuture(
+      () =>
+        supabase
+          .from("organization_memberships")
+          .select("id, organization_id, user_id, role, status")
+          .eq("user_id", userId)
+          .eq("status", "active"),
+      {
+        onRetry: () => {
+          console.warn(
+            "[workspace-session] retrying membership query after JWT clock skew",
+            { userId },
+          );
+        },
+      },
+    ),
     supabase
       .from("profiles")
       .select("display_name, preferred_name")

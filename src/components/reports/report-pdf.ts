@@ -183,7 +183,7 @@ export async function buildReportPdf(
   const coverageLines = wrapText(`${view.sourceLabel}. ${view.coverageNote}`, font, 8.2, PAGE_WIDTH - MARGIN * 2);
   coverageLines.slice(0, 3).forEach((line, index) => page.drawText(line, { x: MARGIN, y: y - index * 11, size: 8.2, font, color: SOFT_INK }));
   y -= Math.min(coverageLines.length, 3) * 11 + 10;
-  page.drawText(`Source freshness: ${sanitizePdfText(view.freshnessAt)}`, { x: MARGIN, y, size: 7, font, color: FAINT_INK });
+  page.drawText(`Source freshness: ${sanitizePdfText(view.freshnessAt ?? "No matching source observations")}`, { x: MARGIN, y, size: 7, font, color: FAINT_INK });
 
   y -= 27;
   page.drawText(sanitizePdfText(view.chart.title.toUpperCase()), { x: MARGIN, y, size: 7, font: bold, color: FAINT_INK });

@@ -195,6 +195,7 @@ async function finishJob(
       records_processed: values.recordsProcessed,
       error_message: values.errorMessage,
       completed_at: new Date().toISOString(),
+      lease_expires_at: null,
     })
     .eq("id", jobId)
     .eq("status", "running");
@@ -214,48 +215,34 @@ async function synchronize(request: Request) {
   const ownerId = await ownerForOrganization(admin, scope.organization_id);
   const connection = await toastConnection(admin, scope, ownerId);
 
-  const activeJob = await admin
-    .from("integration_sync_jobs")
-    .select("id")
-    .eq("organization_id", scope.organization_id)
-    .eq("connection_id", connection.id)
-    .eq("resource_type", "time_entries")
-    .in("status", ["queued", "running"])
-    .limit(1)
-    .maybeSingle();
-  if (activeJob.error) throw new Error("Toast sync state could not be loaded.");
-  if (activeJob.data) {
+  const claimResult = await admin.rpc("service_claim_integration_sync_job", {
+    p_organization_id: scope.organization_id,
+    p_connection_id: connection.id,
+    p_resource_type: "time_entries",
+    p_requested_by: ownerId,
+    p_direction: "import",
+    p_cursor: connection.last_synced_at,
+    p_lease_seconds: 900,
+  });
+  if (claimResult.error) throw new Error("Toast sync state could not be claimed.");
+  const claimedJob = Array.isArray(claimResult.data)
+    ? claimResult.data[0]
+    : claimResult.data;
+  if (!claimedJob) {
     return Response.json(
       { error: "A Toast labor sync is already active." },
       { status: 409, headers: { "cache-control": "no-store" } },
     );
   }
 
-  const startedAt = new Date();
-  const jobResult = await admin
-    .from("integration_sync_jobs")
-    .insert({
-      organization_id: scope.organization_id,
-      connection_id: connection.id,
-      direction: "import",
-      resource_type: "time_entries",
-      status: "running",
-      attempts: 1,
-      max_attempts: 5,
-      requested_by: ownerId,
-      started_at: startedAt.toISOString(),
-    })
-    .select("id")
-    .single();
-  if (jobResult.error || !jobResult.data) {
-    throw new Error("Toast sync job could not be started.");
-  }
-  const jobId = jobResult.data.id;
+  const startedAt = new Date(claimedJob.started_at ?? new Date().toISOString());
+  const jobId = claimedJob.id;
 
   try {
     const fallbackStart = startedAt.getTime() - 7 * 86_400_000;
-    const previousCursor = connection.last_synced_at
-      ? new Date(connection.last_synced_at).getTime() - 5 * 60_000
+    const effectiveCursor = claimedJob.cursor ?? connection.last_synced_at;
+    const previousCursor = effectiveCursor
+      ? new Date(effectiveCursor).getTime() - 5 * 60_000
       : fallbackStart;
     const minimumStart = startedAt.getTime() - 29 * 86_400_000;
     const windowStart = new Date(Math.max(minimumStart, previousCursor));

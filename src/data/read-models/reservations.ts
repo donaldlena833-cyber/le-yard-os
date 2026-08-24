@@ -350,6 +350,7 @@ export async function loadLiveReservations(
     allocationResult,
     floorAllocationResult,
     waitlistResult,
+    waitlistDeliveryResult,
     combinationResult,
     memberResult,
     capacityResult,
@@ -417,6 +418,14 @@ export async function loadLiveReservations(
       .in("status", ["waiting", "notified", "accepted"])
       .order("created_at"),
     supabase
+      .from("reservation_message_outbox")
+      .select("waitlist_entry_id,status,created_at")
+      .eq("organization_id", organization.id)
+      .eq("location_id", activeLocation.id)
+      .eq("template_key", "waitlist_table_ready")
+      .not("waitlist_entry_id", "is", null)
+      .order("created_at", { ascending: false }),
+    supabase
       .from("reservation_table_combinations")
       .select("*")
       .eq("organization_id", organization.id)
@@ -441,6 +450,7 @@ export async function loadLiveReservations(
     ["allocations", allocationResult],
     ["floor_allocations", floorAllocationResult],
     ["waitlist", waitlistResult],
+    ["waitlist_delivery", waitlistDeliveryResult],
     ["combinations", combinationResult],
     ["combination_members", memberResult],
     ["capacity", capacityResult],
@@ -741,6 +751,16 @@ export async function loadLiveReservations(
       partySize: entry.party_size,
       quotedWaitMinutes: entry.quoted_wait_minutes,
       status: entry.status,
+      deliveryStatus: (() => {
+        const statuses = (waitlistDeliveryResult.data ?? [])
+          .filter((message) => message.waitlist_entry_id === entry.id)
+          .map((message) => message.status);
+        if (statuses.some((status) => status === "sent" || status === "delivered")) return "sent" as const;
+        if (statuses.includes("sending")) return "sending" as const;
+        if (statuses.includes("queued")) return "queued" as const;
+        if (statuses.includes("failed")) return "failed" as const;
+        return null;
+      })(),
       notes: entry.notes,
       createdAt: entry.created_at,
     })),
@@ -759,6 +779,7 @@ export async function loadLiveReservations(
       ),
       onlineBookingEnabled: settings?.online_booking_enabled ?? false,
       messagingEnabled: settings?.guest_messaging_enabled ?? false,
+      staffPushEnabled: settings?.staff_push_enabled ?? false,
       tableCount: floorTables.length,
       seatCount: floorTables.reduce(
         (sum, table) => sum + table.maxCapacity,

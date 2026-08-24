@@ -15,6 +15,7 @@ const inputSchema = z.object({
   membershipId: z.string().uuid(),
   role: z.enum(["owner", "admin", "manager", "employee"]).optional(),
   locationIds: z.array(z.string().uuid()).max(100),
+  primaryLocationId: z.string().uuid().optional(),
 });
 
 export async function administerTeamMemberAction(
@@ -26,6 +27,7 @@ export async function administerTeamMemberAction(
     membershipId: formData.get("membershipId"),
     role: formData.get("role") || undefined,
     locationIds: formData.getAll("locationIds"),
+    primaryLocationId: formData.get("primaryLocationId") || undefined,
   });
   if (!parsed.success) {
     return { status: "error", message: "Review the access details and try again." };
@@ -52,7 +54,7 @@ export async function administerTeamMemberAction(
 
   const { data: currentLocations, error: locationError } = await supabase
     .from("location_memberships")
-    .select("location_id")
+    .select("location_id, is_primary")
     .eq("organization_id", workspace.organization.id)
     .eq("user_id", target.user_id);
   if (locationError) {
@@ -63,6 +65,9 @@ export async function administerTeamMemberAction(
     parsed.data.intent === "update_access"
       ? [...new Set(parsed.data.locationIds)]
       : (currentLocations ?? []).map((location) => location.location_id);
+  const primaryLocationId = parsed.data.intent === "update_access"
+    ? parsed.data.primaryLocationId ?? null
+    : (currentLocations ?? []).find((location) => location.is_primary)?.location_id ?? null;
   const role = parsed.data.intent === "update_access" && parsed.data.role
     ? parsed.data.role
     : target.role;
@@ -75,6 +80,12 @@ export async function administerTeamMemberAction(
   if (["manager", "employee"].includes(role) && requestedLocations.length === 0) {
     return { status: "error", message: "Managers and employees need at least one location." };
   }
+  if (requestedLocations.length > 0 && !primaryLocationId) {
+    return { status: "error", message: "Choose one selected location as the primary location." };
+  }
+  if (primaryLocationId && !requestedLocations.includes(primaryLocationId)) {
+    return { status: "error", message: "The primary location must also be selected for access." };
+  }
   if (requestedLocations.some((id) => !workspace.locations.some((location) => location.id === id))) {
     return { status: "error", message: "Choose only active locations in this organization." };
   }
@@ -85,6 +96,7 @@ export async function administerTeamMemberAction(
     p_role: role,
     p_status: status,
     p_location_ids: requestedLocations,
+    p_primary_location_id: primaryLocationId,
   });
   if (error) {
     return {

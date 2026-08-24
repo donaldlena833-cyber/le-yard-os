@@ -20,6 +20,7 @@ import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { StatusPill } from "@/components/ui/status-pill";
 import { demoWorkspace } from "@/lib/demo";
+import { canAccessReportKind } from "@/lib/permissions/report-access";
 import { cn } from "@/lib/utils";
 import type { ReportKind } from "@/types";
 
@@ -137,9 +138,21 @@ function ExportLink({ href, format }: { href: string; format: "CSV" | "PDF" }) {
 
 export function ReportsWorkspace() {
   const workspace = useWorkspaceContext();
-  const [kind, setKind] = useState<ReportKind>("labor");
+  const authorizedCatalog = useMemo(
+    () => REPORT_CATALOG.filter((entry) => canAccessReportKind(workspace, entry.kind)),
+    [workspace],
+  );
+  const [kind, setKind] = useState<ReportKind>(
+    () => authorizedCatalog[0]?.kind ?? "labor",
+  );
   const [filters, setFilters] = useState<ReportFilters>(DEFAULT_REPORT_FILTERS);
-  const report = useMemo(() => getReportView(kind, filters), [kind, filters]);
+  const effectiveKind = authorizedCatalog.some((entry) => entry.kind === kind)
+    ? kind
+    : authorizedCatalog[0]?.kind ?? "labor";
+  const report = useMemo(
+    () => getReportView(effectiveKind, filters),
+    [effectiveKind, filters],
+  );
 
   function updateFilter<Key extends keyof ReportFilters>(key: Key, value: ReportFilters[Key]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -215,7 +228,7 @@ export function ReportsWorkspace() {
             onChange={(event) => setKind(event.target.value as ReportKind)}
             className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs font-semibold outline-none"
           >
-            {REPORT_CATALOG.map((item) => <option key={item.kind} value={item.kind}>{item.group} · {item.label}</option>)}
+            {authorizedCatalog.map((item) => <option key={item.kind} value={item.kind}>{item.group} · {item.label}</option>)}
           </select>
         </label>
       </div>
@@ -225,7 +238,7 @@ export function ReportsWorkspace() {
         label="Report views"
         className="mt-6 hidden border-y lg:flex"
         size="large"
-        items={REPORT_CATALOG.map((item) => ({
+        items={authorizedCatalog.map((item) => ({
           value: item.kind,
           label: item.label,
         }))}
@@ -239,22 +252,22 @@ export function ReportsWorkspace() {
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${kind}-${filters.locationId}-${filters.startsOn}-${filters.endsOn}`}
+          key={`${effectiveKind}-${filters.locationId}-${filters.startsOn}-${filters.endsOn}`}
           initial={{ opacity: 0, y: 7 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -5 }}
           transition={{ duration: 0.2 }}
         >
-          <TabPanel id="demo-report-views" value={kind}>
+          <TabPanel id="demo-report-views" value={effectiveKind}>
           <div className="mt-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
-              <p className="eyebrow">{REPORT_CATALOG.find((item) => item.kind === kind)?.group}</p>
+              <p className="eyebrow">{authorizedCatalog.find((item) => item.kind === effectiveKind)?.group}</p>
               <h3 className="mt-2 text-xl font-medium tracking-[-0.04em]">{report.title}</h3>
               <p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">{report.description}</p>
             </div>
             <div className="flex gap-2">
-              <ExportLink href={exportHref("csv", kind, filters)} format="CSV" />
-              <ExportLink href={exportHref("pdf", kind, filters)} format="PDF" />
+              <ExportLink href={exportHref("csv", effectiveKind, filters)} format="CSV" />
+              <ExportLink href={exportHref("pdf", effectiveKind, filters)} format="PDF" />
             </div>
           </div>
 
@@ -266,7 +279,7 @@ export function ReportsWorkspace() {
             <section className="min-w-0">
               <SectionHeading eyebrow="Selected view" title={report.chart.title} detail={report.chart.description} />
               <div className="overflow-hidden border-y border-[var(--line)] py-5">
-                <AccessibleBarChart reportKind={kind} title={report.chart.title} description={report.chart.description} points={report.chart.points} />
+                <AccessibleBarChart reportKind={effectiveKind} title={report.chart.title} description={report.chart.description} points={report.chart.points} />
               </div>
             </section>
 
@@ -279,7 +292,7 @@ export function ReportsWorkspace() {
                 </div>
                 <div className="flex gap-3 py-4">
                   <Clock3 className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" />
-                  <div><p className="text-[13px] font-semibold">Fresh {formatFreshness(report.freshnessAt)}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Newest included source update</p></div>
+                  <div><p className="text-[13px] font-semibold">{report.freshnessAt ? `Source updated ${formatFreshness(report.freshnessAt)}` : "No matching source observations"}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">{report.freshnessAt ? "Newest included source update" : "Generated time is not used as source freshness"}</p></div>
                 </div>
                 <div className="flex gap-3 py-4">
                   <Info className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" />

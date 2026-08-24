@@ -11,6 +11,7 @@ import type {
   ApproveReservationDraftInput,
   AssignReservationTablesInput,
   CancelReservationInput,
+  CorrectReservationStatusInput,
   ConfigureServiceShiftExceptionInput,
   InstallReservationDraftInput,
   ModifyReservationInput,
@@ -18,6 +19,7 @@ import type {
   ReservationLifecycleHeadInput,
   RevokeServiceShiftExceptionInput,
   SaveReservationInput,
+  SaveReservationFloorPositionsInput,
   SaveReservationWithGuestInput,
   SaveWaitlistEntryInput,
   SeatWaitlistEntryInput,
@@ -28,9 +30,29 @@ import type {
 import {
   reservationLifecycleHeadSchema,
   reservationLifecycleRpcResultSchema,
+  reservationStatusCorrectionResultSchema,
+  reservationFloorSaveResultSchema,
 } from "../reservation-schemas";
 
 type ReservationLifecycleRpc = {
+  (
+    name: "save_reservation_floor_positions",
+    args: {
+      p_request_id: string;
+      p_location_id: string;
+      p_moves: unknown;
+    },
+  ): Promise<{ data: unknown | null; error: unknown | null }>;
+  (
+    name: "correct_reservation_status",
+    args: {
+      p_request_id: string;
+      p_location_id: string;
+      p_reservation_id: string;
+      p_expected_version: number;
+      p_reason: string;
+    },
+  ): Promise<{ data: unknown | null; error: unknown | null }>;
   (
     name: "modify_reservation",
     args: {
@@ -64,6 +86,40 @@ type ReservationLifecycleRpc = {
     },
   ): Promise<{ data: unknown | null; error: unknown | null }>;
 };
+
+export async function saveReservationFloorPositions(
+  { supabase }: WorkflowContext,
+  input: SaveReservationFloorPositionsInput,
+) {
+  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const { data, error } = await lifecycleRpc("save_reservation_floor_positions", {
+    p_request_id: input.requestId,
+    p_location_id: input.locationId,
+    p_moves: input.moves,
+  });
+  if (error) throwDatabaseError(error, "The reviewed floor layout could not be saved.");
+  return reservationFloorSaveResultSchema.parse(
+    assertFound(data, "The saved floor layout was not returned."),
+  );
+}
+
+export async function correctReservationStatus(
+  { supabase }: WorkflowContext,
+  input: CorrectReservationStatusInput,
+) {
+  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const { data, error } = await lifecycleRpc("correct_reservation_status", {
+    p_request_id: input.requestId,
+    p_location_id: input.locationId,
+    p_reservation_id: input.reservationId,
+    p_expected_version: input.expectedVersion,
+    p_reason: input.reason,
+  });
+  if (error) throwDatabaseError(error, "The reservation status could not be corrected.");
+  return reservationStatusCorrectionResultSchema.parse(
+    assertFound(data, "The reservation correction was not returned."),
+  );
+}
 
 function parseReservationLifecycleResult(value: unknown) {
   const parsed = reservationLifecycleRpcResultSchema.safeParse(value);

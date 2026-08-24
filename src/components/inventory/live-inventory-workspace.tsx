@@ -2,8 +2,6 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import {
-  ArrowDown,
-  ArrowUp,
   Boxes,
   Check,
   ChevronRight,
@@ -24,13 +22,15 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   approveInventoryCountAction,
   configureInventoryCatalogAction,
   createInventoryTransferAction,
   createPurchaseOrderAction,
   receiveInventoryDeliveryAction,
+  reviewDeliveryExceptionsAction,
+  reviewPurchaseOrderAction,
   reviewInventoryTransferAction,
   reviewWasteRecordAction,
   submitInventoryCountAction,
@@ -93,6 +93,31 @@ type Tab =
   | "recipes"
   | "waste"
   | "catalog";
+
+function localDraftGet(key: string) {
+  try {
+    return window.localStorage?.getItem?.(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function localDraftSet(key: string, value: string) {
+  try {
+    window.localStorage?.setItem?.(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function localDraftRemove(key: string) {
+  try {
+    window.localStorage?.removeItem?.(key);
+  } catch {
+    // A blocked storage API must not block the live count workflow.
+  }
+}
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "stock", label: "Stock" },
@@ -231,6 +256,7 @@ function CountDialog({
   onValueChange,
   onNotesChange,
   onClose,
+  onDiscard,
   onSubmit,
 }: {
   model: LiveInventoryModel;
@@ -241,6 +267,7 @@ function CountDialog({
   onValueChange: (itemId: string, value: string) => void;
   onNotesChange: (value: string) => void;
   onClose: () => void;
+  onDiscard: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   const completed = model.items.filter((item) =>
@@ -249,7 +276,7 @@ function CountDialog({
   return (
     <ModalFrame
       title="Full inventory count"
-      description={`Enter every active tracked item in its base unit. Expected quantities are refreshed on the server when the count is submitted.`}
+      description="Enter every active tracked item in its base unit. This is a blind count: expected stock and variance are revealed only to the independent reviewer."
       labelledBy="inventory-count-dialog"
       onClose={onClose}
       width="max-w-4xl"
@@ -273,38 +300,24 @@ function CountDialog({
           data-inventory-count-scroll
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
-          <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1.3fr)_minmax(72px,.6fr)_minmax(112px,.7fr)_minmax(72px,.6fr)] gap-4 border-b border-[var(--line)] bg-[var(--paper-strong)] px-7 py-2.5 text-xs font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase sm:grid">
+          <div className="sticky top-0 z-10 hidden grid-cols-[minmax(0,1.3fr)_minmax(112px,.7fr)] gap-4 border-b border-[var(--line)] bg-[var(--paper-strong)] px-7 py-2.5 text-xs font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase sm:grid">
             <span>Item</span>
-            <span>Expected</span>
             <span>Counted</span>
-            <span>Variance</span>
           </div>
           {model.items.map((item) => {
             const raw = values[item.id] ?? "";
-            const counted =
-              raw.trim() && Number.isFinite(Number(raw)) ? Number(raw) : null;
-            const variance = counted === null ? null : counted - item.onHand;
-            const varianceLabel =
-              variance === null ? "—" : quantityLabel(variance);
             return (
               <div
                 data-inventory-count-row
                 key={item.id}
-                className="grid grid-cols-[minmax(0,1fr)_112px] items-center gap-3 border-b border-[var(--line)] px-4 py-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(72px,.6fr)_minmax(112px,.7fr)_minmax(72px,.6fr)] sm:gap-4 sm:px-7"
+                className="grid grid-cols-[minmax(0,1fr)_112px] items-center gap-3 border-b border-[var(--line)] px-4 py-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(112px,.7fr)] sm:gap-4 sm:px-7"
               >
                 <div className="min-w-0">
                   <p className="truncate text-xs font-semibold">{item.name}</p>
                   <p className="mt-1 truncate text-xs text-[var(--ink-faint)]">
                     {item.category} · {item.unitSymbol}
                   </p>
-                  <p className="numeric mt-1.5 text-xs text-[var(--ink-faint)] sm:hidden">
-                    Expected {quantityLabel(item.onHand)} {item.unitSymbol} ·
-                    Variance {varianceLabel}
-                  </p>
                 </div>
-                <span className="numeric hidden text-xs text-[var(--ink-faint)] sm:block">
-                  {quantityLabel(item.onHand)} {item.unitSymbol}
-                </span>
                 <input
                   aria-label={`Counted quantity for ${item.name}`}
                   required
@@ -320,25 +333,6 @@ function CountDialog({
                   }
                   className="numeric h-11 w-full min-w-0 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-right text-sm font-semibold outline-none transition-colors focus:border-[var(--accent)]"
                 />
-                <span
-                  className={cn(
-                    "numeric hidden items-center gap-1 text-xs font-semibold sm:flex",
-                    variance === null && "text-[var(--ink-faint)]",
-                    variance !== null && variance < 0 && "text-[var(--danger)]",
-                    variance !== null &&
-                      variance > 0 &&
-                      "text-[var(--positive)]",
-                    variance === 0 && "text-[var(--ink-faint)]",
-                  )}
-                >
-                  {variance !== null && variance < 0 ? (
-                    <ArrowDown className="size-3" />
-                  ) : null}
-                  {variance !== null && variance > 0 ? (
-                    <ArrowUp className="size-3" />
-                  ) : null}
-                  {varianceLabel}
-                </span>
               </div>
             );
           })}
@@ -361,7 +355,8 @@ function CountDialog({
               <ShieldCheck className="mt-0.5 size-4 shrink-0" />
               <span>
                 Submitting creates a pending count only. On-hand stock changes
-                after a different manager approves it.
+                after a different manager approves it. This device saves the
+                unfinished draft automatically.
               </span>
             </div>
             {notice ? (
@@ -383,9 +378,17 @@ function CountDialog({
             className="flex-1 sm:flex-none"
             variant="quiet"
             disabled={busy}
+            onClick={onDiscard}
+          >
+            Discard draft
+          </Button>
+          <Button
+            className="flex-1 sm:flex-none"
+            variant="quiet"
+            disabled={busy}
             onClick={onClose}
           >
-            Cancel
+            Save & close
           </Button>
           <Button
             className="flex-[1.6] sm:flex-none"
@@ -598,7 +601,13 @@ function ReviewDialog({
 
 type InventoryMutationDialog =
   | { kind: "purchase-order"; requestId: string }
+  | {
+      kind: "purchase-order-review";
+      requestId: string;
+      order: LivePurchaseOrder;
+    }
   | { kind: "delivery"; requestId: string; order: LivePurchaseOrder }
+  | { kind: "delivery-exception-review"; requestId: string; postingRequestId: string; delivery: LiveInventoryModel["deliveries"][number] }
   | { kind: "waste"; requestId: string; itemId?: string }
   | { kind: "waste-review"; requestId: string; record: LiveWasteRecord }
   | { kind: "transfer"; requestId: string; itemId?: string }
@@ -615,6 +624,8 @@ interface MutationLineDraft {
   quantity: string;
   acceptedQuantity: string;
   unitPrice: string;
+  exceptionKind: "none" | "damaged" | "rejected" | "substituted" | "missing" | "unexpected" | "short" | "over";
+  exceptionNote: string;
 }
 
 const inventoryFieldClass =
@@ -824,6 +835,45 @@ function InventoryLineEditor({
               ) : (
                 <span className="hidden lg:block" />
               )}
+              {mode === "delivery" ? (
+                <div className="grid gap-3 lg:col-span-5 lg:grid-cols-[.65fr_1.85fr]">
+                  <InventoryField label="Receiving condition">
+                    <select
+                      aria-label={`Receiving condition ${index + 1}`}
+                      value={line.exceptionKind}
+                      disabled={busy}
+                      onChange={(event) =>
+                        onChange(line.key, {
+                          exceptionKind: event.target.value as MutationLineDraft["exceptionKind"],
+                          exceptionNote: event.target.value === "none" ? "" : line.exceptionNote,
+                        })
+                      }
+                      className={inventoryFieldClass}
+                    >
+                      <option value="none">Matches order</option>
+                      <option value="short">Short</option>
+                      <option value="over">Over</option>
+                      <option value="damaged">Damaged</option>
+                      <option value="rejected">Rejected</option>
+                      <option value="substituted">Substituted</option>
+                      <option value="missing">Missing</option>
+                      <option value="unexpected">Unexpected</option>
+                    </select>
+                  </InventoryField>
+                  <InventoryField label="Exception evidence">
+                    <input
+                      aria-label={`Receiving exception note ${index + 1}`}
+                      required={line.exceptionKind !== "none"}
+                      maxLength={2_000}
+                      value={line.exceptionNote}
+                      disabled={busy || line.exceptionKind === "none"}
+                      placeholder={line.exceptionKind === "none" ? "No exception" : "Describe damage, substitution, or quantity discrepancy"}
+                      onChange={(event) => onChange(line.key, { exceptionNote: event.target.value })}
+                      className={inventoryFieldClass}
+                    />
+                  </InventoryField>
+                </div>
+              ) : null}
             </div>
           );
         })}
@@ -879,6 +929,8 @@ function InventoryMutationDialog({
           quantity: quantityInputValue(line.remaining),
           acceptedQuantity: quantityInputValue(line.remaining),
           unitPrice: (line.unitPriceCents / 100).toFixed(2),
+          exceptionKind: "none" as const,
+          exceptionNote: "",
         }));
     }
     if (dialog.kind === "transfer-review") {
@@ -889,6 +941,8 @@ function InventoryMutationDialog({
         quantity: quantityInputValue(line.sentQuantity),
         acceptedQuantity: quantityInputValue(line.sentQuantity),
         unitPrice: "",
+        exceptionKind: "none" as const,
+        exceptionNote: "",
       }));
     }
     return firstItem
@@ -900,6 +954,8 @@ function InventoryMutationDialog({
             quantity: "",
             acceptedQuantity: "",
             unitPrice: "",
+            exceptionKind: "none",
+            exceptionNote: "",
           },
         ]
       : [];
@@ -922,6 +978,8 @@ function InventoryMutationDialog({
         quantity: "",
         acceptedQuantity: "",
         unitPrice: "",
+        exceptionKind: "none",
+        exceptionNote: "",
       },
     ]);
   }
@@ -955,6 +1013,163 @@ function InventoryMutationDialog({
       return null;
     }
     return parsed;
+  }
+
+  if (dialog.kind === "purchase-order-review") {
+    const reviewOrder = dialog.order;
+    const own = reviewOrder.createdByUserId === workspace.identity.userId;
+    const decide = async (approve: boolean, form: HTMLFormElement) => {
+      const note = String(new FormData(form).get("note") || "") || null;
+      const succeeded = await onRun(
+        approve
+          ? "Purchase order independently approved and unlocked for receiving."
+          : "Purchase order rejected and cancelled; it cannot be received.",
+        () =>
+          reviewPurchaseOrderAction({
+            requestId: dialog.requestId,
+            purchaseOrderId: reviewOrder.id,
+            approve,
+            note,
+          }),
+      );
+      if (succeeded) onClose();
+    };
+    return (
+      <ModalFrame
+        title="Review purchase order"
+        description={`${reviewOrder.vendorName} · ${reviewOrder.poNumber} · created by ${reviewOrder.createdBy}.`}
+        labelledBy="purchase-order-review-dialog"
+        notice={notice}
+        onClose={onClose}
+        returnFocus={returnFocus}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void decide(true, event.currentTarget);
+          }}
+        >
+          <div className="grid gap-4 px-5 py-5 sm:px-7">
+            <div className="grid grid-cols-2 divide-x divide-[var(--line)] border-y border-[var(--line)]">
+              <Metric
+                label="Total"
+                value={formatMoney(reviewOrder.totalCents, model.currencyCode)}
+                detail={`${reviewOrder.lineCount} lines`}
+              />
+              <Metric
+                label="Expected"
+                value={dateLabel(reviewOrder.expectedOn)}
+                detail={reviewOrder.vendorName}
+              />
+            </div>
+            <InventoryField label="Review note">
+              <textarea
+                name="note"
+                rows={4}
+                maxLength={2_000}
+                disabled={busy || own}
+                className={inventoryTextAreaClass}
+              />
+            </InventoryField>
+            <div
+              className={cn(
+                "flex items-start gap-3 rounded-xl p-3 text-xs leading-4",
+                own
+                  ? "bg-[var(--warning-soft)] text-[var(--warning)]"
+                  : "bg-[var(--accent-soft)]/55 text-[var(--accent-strong)]",
+              )}
+            >
+              <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+              {own
+                ? "You created this order. A different approver must review it."
+                : "Approval unlocks receiving. Rejection cancels the order. Both decisions remain in the audit trail."}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="quiet"
+                disabled={busy}
+                onClick={onClose}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={busy || own}
+                onClick={(event) =>
+                  void decide(false, event.currentTarget.form!)
+                }
+              >
+                Reject & cancel
+              </Button>
+              <Button type="submit" variant="accent" disabled={busy || own}>
+                {busy ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <Check className="size-4" />
+                )}
+                Approve for receiving
+              </Button>
+            </div>
+          </div>
+        </form>
+      </ModalFrame>
+    );
+  }
+
+  if (dialog.kind === "delivery-exception-review") {
+    const delivery = dialog.delivery;
+    const own = delivery.receivedByUserId === workspace.identity.userId;
+    const decide = async (approve: boolean, form: HTMLFormElement) => {
+      const succeeded = await onRun(
+        approve
+          ? "Receiving exceptions approved; the corrective delivery posted once."
+          : "Receiving exceptions rejected; disputed stock was not posted.",
+        () => reviewDeliveryExceptionsAction({
+          requestId: dialog.requestId,
+          postingRequestId: dialog.postingRequestId,
+          deliveryId: delivery.id,
+          approve,
+          note: String(new FormData(form).get("note") || "") || null,
+        }),
+      );
+      if (succeeded) onClose();
+    };
+    return (
+      <ModalFrame
+        title="Review receiving exceptions"
+        description={`${delivery.vendorName}${delivery.poNumber ? ` · ${delivery.poNumber}` : ""} · received by ${delivery.receivedBy}.`}
+        labelledBy="delivery-exception-review-dialog"
+        notice={notice}
+        onClose={onClose}
+      >
+        <form onSubmit={(event) => { event.preventDefault(); void decide(true, event.currentTarget); }}>
+          <div className="grid gap-4 px-5 py-5 sm:px-7">
+            <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
+              {(delivery.exceptions ?? []).map((exception) => (
+                <div key={`${exception.inventoryItemId}:${exception.kind}`} className="grid gap-1 py-3 text-xs sm:grid-cols-[1fr_auto]">
+                  <span><strong>{exception.itemName}</strong> · {sentenceCase(exception.kind)}</span>
+                  <span className="numeric">Proposed {quantityLabel(exception.proposedAcceptedQuantity)} {exception.unitSymbol}</span>
+                  <span className="text-[var(--ink-faint)] sm:col-span-2">{exception.note}</span>
+                </div>
+              ))}
+            </div>
+            <InventoryField label="Review note">
+              <textarea name="note" rows={3} maxLength={2_000} disabled={busy || own} className={inventoryTextAreaClass} />
+            </InventoryField>
+            <div className={cn("rounded-xl p-3 text-xs", own ? "bg-[var(--warning-soft)] text-[var(--warning)]" : "bg-[var(--accent-soft)] text-[var(--accent-strong)]")}>
+              {own ? "A different authorized receiver must review your exception evidence." : "Approval creates a separate linked corrective delivery. Rejection preserves zero posted quantity for every exception line."}
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="quiet" disabled={busy} onClick={onClose}>Cancel</Button>
+              <Button variant="danger" disabled={busy || own} onClick={(event) => void decide(false, event.currentTarget.form!)}>Reject</Button>
+              <Button type="submit" variant="accent" disabled={busy || own}>Approve & post correction</Button>
+            </div>
+          </div>
+        </form>
+      </ModalFrame>
+    );
   }
 
   if (dialog.kind === "purchase-order") {
@@ -1165,6 +1380,8 @@ function InventoryMutationDialog({
                     unitPriceCents: line.parsedPrice!,
                     lotCode: null,
                     expiresOn: null,
+                    exceptionKind: line.exceptionKind,
+                    exceptionNote: line.exceptionNote.trim() || null,
                   })),
                 }),
             );
@@ -1206,9 +1423,9 @@ function InventoryMutationDialog({
             />
             <div className="flex items-start gap-3 rounded-xl bg-[var(--accent-soft)]/55 p-3 text-xs leading-4 text-[var(--accent-strong)]">
               <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-              The server rejects over-receipt against this PO and derives the
-              base-unit quantity and cost. Receipt-file linking remains a
-              separate evidence-bound action.
+              Matching lines post once. Any damaged, short, rejected, substituted,
+              or otherwise exceptional line posts zero until a different authorized
+              receiver reviews its evidence and approves a linked corrective delivery.
             </div>
             <div className="flex justify-end gap-2">
               <Button
@@ -1786,6 +2003,7 @@ export function LiveInventoryWorkspace({
   const canCountCreate = can("inventory.count.create");
   const canCountApprove = can("inventory.count.approve");
   const canPurchase = can("inventory.purchase.create");
+  const canPurchaseApprove = can("inventory.purchase.approve");
   const canReceive = can("inventory.receive");
   const canTransferCreate = can("inventory.transfer.create");
   const canTransferApprove = can("inventory.transfer.approve");
@@ -1798,6 +2016,7 @@ export function LiveInventoryWorkspace({
       "inventory.vendor.manage",
       "inventory.price.manage",
       "inventory.purchase.create",
+      "inventory.purchase.approve",
       "inventory.receive",
     ].some((capability) =>
       hasCapability(
@@ -1830,7 +2049,8 @@ export function LiveInventoryWorkspace({
     );
   const visibleTabs = tabs.filter((tab) => {
     if (tab.id === "count") return canCountCreate || canCountApprove;
-    if (tab.id === "orders") return canPurchase || canReceive;
+    if (tab.id === "orders")
+      return canPurchase || canPurchaseApprove || canReceive;
     if (tab.id === "transfers") return canTransferCreate || canTransferApprove;
     if (tab.id === "vendors") return canSeeVendors;
     if (tab.id === "recipes") return canSeeRecipes;
@@ -1869,6 +2089,9 @@ export function LiveInventoryWorkspace({
   const [reviewNote, setReviewNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const countDraftKey = model
+    ? `le-yard:inventory-count-draft:v1:${workspace.organization.id}:${workspace.activeLocation.id}:${workspace.identity.userId}`
+    : null;
 
   const realtime = useRealtimeInvalidation({
     enabled: Boolean(model),
@@ -1877,6 +2100,21 @@ export function LiveInventoryWorkspace({
     organizationId: workspace.organization.id,
     locationId: workspace.activeLocation.id,
   });
+
+  useEffect(() => {
+    if (!countOpen || !countDraftKey || !countSubmissionId || !model) return;
+    localDraftSet(
+      countDraftKey,
+      JSON.stringify({
+        schemaVersion: 1,
+        submissionId: countSubmissionId,
+        itemIds: model.items.map((item) => item.id).sort(),
+        values: countValues,
+        notes: countNotes,
+        updatedAt: new Date().toISOString(),
+      }),
+    );
+  }, [countDraftKey, countNotes, countOpen, countSubmissionId, countValues, model]);
 
   const visibleItems = useMemo(() => {
     if (!model) return [];
@@ -1937,11 +2175,46 @@ export function LiveInventoryWorkspace({
   };
 
   function openCount() {
-    setCountSubmissionId(crypto.randomUUID());
-    setCountValues(
-      Object.fromEntries(liveModel.items.map((item) => [item.id, ""])),
+    let draft: {
+      schemaVersion?: unknown;
+      submissionId?: unknown;
+      itemIds?: unknown;
+      values?: unknown;
+      notes?: unknown;
+    } | null = null;
+    if (countDraftKey) {
+      try {
+        draft = JSON.parse(localDraftGet(countDraftKey) ?? "null");
+      } catch {
+        localDraftRemove(countDraftKey);
+      }
+    }
+    const itemIds = liveModel.items.map((item) => item.id).sort();
+    const matchingDraft =
+      draft?.schemaVersion === 1 &&
+      typeof draft.submissionId === "string" &&
+      Array.isArray(draft.itemIds) &&
+      JSON.stringify(draft.itemIds) === JSON.stringify(itemIds) &&
+      draft.values !== null &&
+      typeof draft.values === "object";
+    setCountSubmissionId(
+      matchingDraft ? (draft!.submissionId as string) : crypto.randomUUID(),
     );
-    setCountNotes("");
+    setCountValues(
+      matchingDraft
+        ? Object.fromEntries(
+            itemIds.map((id) => [
+              id,
+              typeof (draft!.values as Record<string, unknown>)[id] === "string"
+                ? (draft!.values as Record<string, string>)[id]
+                : "",
+            ]),
+          )
+        : Object.fromEntries(itemIds.map((id) => [id, ""])),
+    );
+    setCountNotes(
+      matchingDraft && typeof draft!.notes === "string" ? draft!.notes : "",
+    );
     setNotice("");
     setCountOpen(true);
   }
@@ -2005,6 +2278,7 @@ export function LiveInventoryWorkspace({
       }
       setCountOpen(false);
       setCountSubmissionId(null);
+      if (countDraftKey) localDraftRemove(countDraftKey);
       setActiveTab("count");
       setNotice(
         "Full count submitted. A different manager must review it before stock changes.",
@@ -2132,7 +2406,7 @@ export function LiveInventoryWorkspace({
                 onClick={openCount}
               >
                 <ClipboardCheck className="size-4" />
-                Start full count
+                Start or resume full count
               </Button>
             ) : null}
           </>
@@ -2463,7 +2737,7 @@ export function LiveInventoryWorkspace({
                     {model.orders.map((order) => {
                       const orderCanReceive =
                         canReceive &&
-                        ["submitted", "partially_received"].includes(
+                        ["approved", "partially_received"].includes(
                           order.status,
                         ) &&
                         order.lines.length > 0;
@@ -2493,6 +2767,23 @@ export function LiveInventoryWorkspace({
                           >
                             {sentenceCase(order.status)}
                           </StatusPill>
+                          {canPurchaseApprove &&
+                          order.status === "submitted" ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                openMutationDialog({
+                                  kind: "purchase-order-review",
+                                  requestId: crypto.randomUUID(),
+                                  order,
+                                })
+                              }
+                            >
+                              <ShieldCheck className="size-3.5" />
+                              Review
+                            </Button>
+                          ) : null}
                           {orderCanReceive ? (
                             <Button
                               size="sm"
@@ -2566,7 +2857,23 @@ export function LiveInventoryWorkspace({
                           )}{" "}
                           accepted
                         </span>
-                        <StatusPill tone="positive">Posted</StatusPill>
+                        <StatusPill tone={delivery.exceptionStatus === "pending_review" ? "warning" : delivery.exceptionStatus === "rejected" ? "danger" : "positive"}>
+                          {delivery.exceptionStatus === "pending_review" ? "Exception review" : sentenceCase(delivery.exceptionStatus ?? "posted")}
+                        </StatusPill>
+                        {canReceive && delivery.exceptionStatus === "pending_review" ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => openMutationDialog({
+                              kind: "delivery-exception-review",
+                              requestId: crypto.randomUUID(),
+                              postingRequestId: crypto.randomUUID(),
+                              delivery,
+                            })}
+                          >
+                            <ShieldCheck className="size-3.5" /> Review exceptions
+                          </Button>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -2873,13 +3180,22 @@ export function LiveInventoryWorkspace({
                           <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[var(--line)] pt-4">
                             <div>
                               <p className="text-[12px] text-[var(--ink-faint)]">
-                                Ingredient cost
+                                Batch cost
                               </p>
                               <p className="numeric mt-1 text-sm font-semibold">
-                                {formatMoney(
-                                  recipe.knownCostCents,
-                                  model.currencyCode,
-                                )}
+                                {recipe.batchCostCents === null
+                                  ? "—"
+                                  : formatMoney(recipe.batchCostCents, model.currencyCode)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[12px] text-[var(--ink-faint)]">
+                                Per portion
+                              </p>
+                              <p className="numeric mt-1 text-sm font-semibold">
+                                {recipe.portionCostCents === null
+                                  ? "—"
+                                  : formatMoney(recipe.portionCostCents, model.currencyCode)}
                               </p>
                             </div>
                             <div>
@@ -2893,6 +3209,21 @@ export function LiveInventoryWorkspace({
                                       recipe.menuPriceCents,
                                       model.currencyCode,
                                     )}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[12px] text-[var(--ink-faint)]">
+                                Food cost
+                              </p>
+                              <p className={cn(
+                                "numeric mt-1 text-sm font-semibold",
+                                recipe.foodCostPercent !== null && recipe.foodCostPercent > 30
+                                  ? "text-[var(--warning)]"
+                                  : "text-[var(--ink)]",
+                              )}>
+                                {recipe.foodCostPercent === null
+                                  ? "—"
+                                  : `${recipe.foodCostPercent.toFixed(1)}%`}
                               </p>
                             </div>
                           </div>
@@ -3044,7 +3375,17 @@ export function LiveInventoryWorkspace({
             onClose={() => {
               if (!busy) {
                 setCountOpen(false);
+                setNotice("Count draft saved on this device.");
+              }
+            }}
+            onDiscard={() => {
+              if (!busy) {
+                if (countDraftKey) localDraftRemove(countDraftKey);
+                setCountOpen(false);
                 setCountSubmissionId(null);
+                setCountValues({});
+                setCountNotes("");
+                setNotice("Count draft discarded. No stock changed.");
               }
             }}
             onSubmit={submitCount}

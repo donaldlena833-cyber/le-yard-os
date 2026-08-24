@@ -23,6 +23,7 @@ import {
 } from "@/app/actions/workflows/team-admin";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { LiveTeamMember, LiveTeamModel } from "@/data/read-models/team";
@@ -168,6 +169,12 @@ function LiveTeamContent({
   const [locationFilter, setLocationFilter] = useState("all");
   const [selectedId, setSelectedId] = useState(data.members[0]?.membershipId ?? "");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [accessReview, setAccessReview] = useState<{
+    formData: FormData;
+    role: string;
+    locations: string[];
+    primary: string | null;
+  } | null>(null);
   const [state, formAction, pending] = useActionState(
     administerTeamMemberAction,
     initialActionState,
@@ -326,7 +333,24 @@ function LiveTeamContent({
                 <section className={cn((selected.detailAccess === "private" || selected.detailAccess === "not_configured") && "lg:col-span-2")}>
                   <SectionHeading eyebrow="Security" title="Account access" detail="Every change is checked by the database" />
                   {canTarget ? (
-                    <form key={`${selected.membershipId}:${selected.role}:${selected.locationIds.join(",")}`} action={formAction} className="space-y-4 rounded-2xl border border-[var(--line)] p-4">
+                    <form
+                      key={`${selected.membershipId}:${selected.role}:${selected.locationIds.join(",")}:${selected.primaryLocationId ?? "none"}`}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const formData = new FormData(event.currentTarget);
+                        const locationIds = formData.getAll("locationIds").map(String);
+                        const primaryLocationId = String(formData.get("primaryLocationId") ?? "") || null;
+                        setAccessReview({
+                          formData,
+                          role: roleLabel[String(formData.get("role")) as AppRole] ?? String(formData.get("role")),
+                          locations: locationIds.map((id) => workspace.locations.find((location) => location.id === id)?.name ?? id),
+                          primary: primaryLocationId
+                            ? workspace.locations.find((location) => location.id === primaryLocationId)?.name ?? primaryLocationId
+                            : null,
+                        });
+                      }}
+                      className="space-y-4 rounded-2xl border border-[var(--line)] p-4"
+                    >
                       <input type="hidden" name="membershipId" value={selected.membershipId} />
                       <input type="hidden" name="intent" value="update_access" />
                       <label>
@@ -339,14 +363,19 @@ function LiveTeamContent({
                         <legend className="mb-2 text-xs font-semibold">Location access</legend>
                         <div className="space-y-2">
                           {workspace.locations.map((location) => (
-                            <label key={location.id} className="flex items-center gap-2 rounded-xl bg-[var(--canvas)] px-3 py-2.5 text-xs">
-                              <input type="checkbox" name="locationIds" value={location.id} defaultChecked={selected.locationIds.includes(location.id)} className="size-4 accent-[var(--accent)]" />
-                              {location.name}
-                            </label>
+                            <div key={location.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-xl bg-[var(--canvas)] px-3 py-2.5 text-xs">
+                              <input aria-label={`Give access to ${location.name}`} type="checkbox" name="locationIds" value={location.id} defaultChecked={selected.locationIds.includes(location.id)} className="size-4 accent-[var(--accent)]" />
+                              <span>{location.name}</span>
+                              <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink-faint)]">
+                                <input aria-label={`Make ${location.name} primary`} type="radio" name="primaryLocationId" value={location.id} defaultChecked={selected.primaryLocationId === location.id} className="size-3.5 accent-[var(--accent)]" />
+                                Primary
+                              </label>
+                            </div>
                           ))}
                         </div>
+                        <p className="mt-2 text-[11px] leading-4 text-[var(--ink-faint)]">The primary location is used as the employee home location. It must also be selected for access.</p>
                       </fieldset>
-                      <Button type="submit" variant="secondary" size="sm" disabled={pending} className="w-full">{pending ? "Saving…" : "Save role & locations"}</Button>
+                      <Button type="submit" variant="secondary" size="sm" disabled={pending} className="w-full">{pending ? "Saving…" : "Review role & locations"}</Button>
                     </form>
                   ) : (
                     <div className="flex items-start gap-3 rounded-2xl bg-[var(--canvas)] p-4 text-xs leading-4 text-[var(--ink-faint)]">
@@ -390,6 +419,29 @@ function LiveTeamContent({
       {canInvite ? (
         <TeamInviteDialog open={inviteOpen} onClose={() => setInviteOpen(false)} organizationId={workspace.organization.id} locations={workspace.locations} roles={invitableRolesForActor(workspace.role)} actorRole={workspace.role} />
       ) : null}
+      <ConfirmActionDialog
+        open={Boolean(accessReview)}
+        labelledBy="confirm-team-access-change"
+        title="Save this access change?"
+        description="Review the exact role and location scope. This changes what the teammate can open and which location is treated as home."
+        confirmLabel="Confirm & save access"
+        confirmVariant="accent"
+        busy={pending}
+        onClose={() => setAccessReview(null)}
+        onConfirm={() => {
+          if (!accessReview) return;
+          formAction(accessReview.formData);
+          setAccessReview(null);
+        }}
+      >
+        {accessReview ? (
+          <dl className="grid gap-3 rounded-[16px] bg-[var(--canvas)] p-4 text-xs">
+            <div><dt className="font-semibold text-[var(--ink-faint)]">Role</dt><dd className="mt-1">{accessReview.role}</dd></div>
+            <div><dt className="font-semibold text-[var(--ink-faint)]">Location access</dt><dd className="mt-1">{accessReview.locations.join(" · ") || "Organization-wide / none"}</dd></div>
+            <div><dt className="font-semibold text-[var(--ink-faint)]">Primary location</dt><dd className="mt-1">{accessReview.primary ?? "None"}</dd></div>
+          </dl>
+        ) : null}
+      </ConfirmActionDialog>
     </PageFrame>
   );
 }

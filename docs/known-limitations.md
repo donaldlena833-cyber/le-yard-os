@@ -1,8 +1,21 @@
 # Known limitations
 
-This document is intentionally candid. It prevents a polished local workspace from being mistaken for an authorized production system.
+This document is intentionally candid. The authoritative current release state is [Phase 2 production release and system grade](phase-2-production-release-and-system-grade-2026-08-20.md). Entries below the current-state section are retained as a historical pre-production risk register; where they describe an unconnected playground, repository-only migrations, disabled public booking, or missing production deployment, they are superseded by the release record.
 
-## Production blockers
+## Current production limitations
+
+- The Supabase project is still on the Free plan. The isolated PostgreSQL 17 restore simulation passes, but managed database backup/PITR, private Storage recovery, approved RPO/RTO, retention, support level, and leaked-password protection are not yet production-qualified.
+- One of two active Owners has verified TOTP. The other Owner must complete MFA enrollment and recovery-access proof before broad use.
+- Production RLS has been exercised read-only with two Owners, one Manager, and one employee. Dedicated Chef/Host job-mode, denied/expired, cross-location, and physical-device sessions still belong in the controlled service rehearsal.
+- Public booking and email configuration are live, but no explicitly approved end-to-end provider delivery/reconciliation was performed in this release. SMS and push remain disabled. Toast remains read-only and has no approved live rehearsal evidence.
+- The physical floor, service pacing, accessibility paths, Prep, receiving, blind count, delivery exception, closeout, correction/Undo, slow-network, and reconnect paths still require one opening-to-close rehearsal on the actual restaurant phones/tablets.
+- Owner Intelligence is implemented behind proposal, exact confirmation, fingerprint, audit, and bounded Undo. No production provider is enabled. The local Sub2API handoff remains blocked on Donald's Mac Local Network permission, personal acceptance, and OAuth session.
+- Automated accessibility passes on desktop and 390 px routes, but VoiceOver and physical iPad/phone acceptance remain.
+- Supabase reports 487 performance notices after all 40 repeated-Auth RLS warnings were removed: 374 unindexed foreign keys, 35 unused indexes, and 78 multiple permissive policies. These require traffic-informed profiling; they must not be mechanically changed at the expense of authorization correctness.
+- Retention remains unset, and provider/source integrations do not yet supply sufficient fresh evidence for full revenue, payroll, COGS, or inventory confidence.
+- The verified production deployments were built from the shared Phase 2 worktree, which remains dirty. A reviewed release commit must select the intended files before the next production change; bulk-staging the existing tree could capture unrelated user work.
+
+## Historical pre-production risk register (superseded where noted above)
 
 - The two approved Owner identities and verified work emails still need to be supplied before production bootstrap; the repository no longer assumes personal names.
 - The owner supplied `858 9th Ave, New York, NY 10019`; remaining restaurant/location identity, brand assets, job codes, and final operational rules have not been approved.
@@ -25,7 +38,7 @@ This document is intentionally candid. It prevents a polished local workspace fr
 - Provider status in Today separates snapshot-read freshness from upstream sync evidence and degrades never-synced/stale sources using conservative adapter thresholds. Those thresholds and actual provider timestamps still require production-like acceptance; a green local read is not provider-health proof.
 - Live model calls are intentionally outside this release at the owner's direction. No AI provider key is requested or configured, and no restaurant data is sent to a model provider.
 
-## Data and persistence
+## Historical data and persistence notes
 
 - Workspace pages run on a rich synthetic demo store only when `NEXT_PUBLIC_DEMO_MODE=true`. Client-side playground changes reset, are not shared between the two owners, and must not be treated as saved restaurant records.
 - The physical address is owner-supplied. Staff, job codes, schedules, messages, receipts, inventory, guests, closeouts, tips, payroll-support outputs, and reports around it remain synthetic mock content.
@@ -51,7 +64,7 @@ This document is intentionally candid. It prevents a polished local workspace fr
 - Users can save in-app notification preferences and encrypted browser push subscriptions. Reservation-change push delivery is implemented with transactional claim leases, exact-token completion, non-replay of uncertain provider attempts, invalid-subscription blocking, and bounded retry of explicit provider rejections. It remains inactive until the server kill switch, VAPID keys, encryption key, scheduled worker, monitoring, and Owner location switch are independently approved and configured.
 - The invitation action safely provisions new Supabase Auth invitees and can reissue expired or revoked invitations for the same pending identity. Adding an already-registered Auth user to a second organization still requires a dedicated service-only identity-resolution/provisioning path plus an existing-account acceptance email; no browser path is allowed to enumerate accounts or overwrite that user's password. The migration and server branch are locally implementable, but delivery and end-to-end acceptance cannot be certified without production-like SMTP and Auth redirect configuration.
 
-## Policies and compliance
+## Historical policy and compliance notes
 
 - The playground shows unpublished owner assumptions for evaluation: shifts longer than six hours have a 30-minute unpaid break; an overtime display uses a 1.5 multiplier subject to applicable law; customer tips are voluntary with no automatic gratuity; and an event fee is displayed as 10% and kept separate from tips. These values are not a complete or approved policy. Break timing, workweek definition, employee eligibility/exemptions, regular-rate inputs, fee tax/accounting treatment, tip-distribution eligibility, and approval workflows still require professional and owner review.
 - Warnings, calculations, and mock schedules do not determine or certify labor-law, wage, tax, gratuity, payroll, or scheduling compliance. In particular, the interface must not treat a break before or after a shift as a legally compliant meal period without review of the applicable timing rules.
@@ -61,7 +74,7 @@ This document is intentionally candid. It prevents a polished local workspace fr
 - Guest consent fields store provenance but do not establish the restaurant's legal marketing policy.
 - A fail-closed disposable PostgreSQL 17 restore drill now validates an authenticated archive manifest, exact migration bundle, forced RLS/grants, deterministic synthetic data, local cluster identity, `template1`, cleanup, and repository-state binding. This does not configure managed Supabase backups, private Storage recovery, retention, or an approved RPO/RTO; Owners must still select and verify those platform controls.
 
-## Integrations and AI
+## Historical integration and AI notes
 
 - Toast access can be product/account dependent and may be read-only. The application cannot assume write access.
 - Resy synchronization depends on an approved integration arrangement; there is no assumed unrestricted public API.
@@ -70,7 +83,7 @@ This document is intentionally candid. It prevents a polished local workspace fr
 - AI proposals cannot automatically finalize payroll, tips, punch edits, inventory adjustments, or guest changes.
 - Forecast quality remains limited until approved sales, reservation, schedule, time, and inventory sources are fresh and complete.
 
-## Verification environment
+## Historical verification-environment notes
 
 - The portable migration/catalog check runs without Docker. Native pgTAP role-behavior tests, Supabase database lint, Auth, Storage, and Realtime acceptance still require Docker or a connected nonproduction Supabase project.
 - This shared parent workspace contains multiple lockfiles. The project pins Next.js output tracing to its own directory and uses the verified webpack dev/build commands; a standalone installation can reevaluate Turbopack.
@@ -78,6 +91,6 @@ This document is intentionally candid. It prevents a polished local workspace fr
 - The client-error endpoint uses a bounded in-memory per-instance rate limit. It prevents local floods but is not a globally coordinated quota across serverless instances; production monitoring should add a durable or platform-level limiter if abuse is observed.
 - `/api/health` verifies configuration readiness without disclosing dependency flags. It does not replace active Supabase availability monitoring or connected smoke tests.
 
-## Required final acceptance
+## Historical final-acceptance statement
 
 The public Vercel Production playground is suitable only for product familiarization and feedback; it does not satisfy connected or live-production acceptance. Before launching the real back office, rerun all unit, RLS, desktop/mobile browser, accessibility, signed-storage, auth/MFA, realtime, backup-restore, and integration tests against an isolated production-like Supabase preview. Resolve every item in the owner runbook's launch gate and obtain separate explicit live-production approval.

@@ -48,11 +48,35 @@ test("opens the booking and waitlist workflows from the host stand", async ({
   await expect(booking).toBeHidden();
   await expect(bookButton).toBeFocused();
 
+  await bookButton.click();
+  await booking.getByLabel("Guest name").fill("E2E Demo Booker");
+  await booking.getByRole("button", { name: "Save reservation" }).click();
+  await expect(booking).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: /E2E Demo Booker/ }),
+  ).toBeVisible();
+
   await waitlistButton.click();
   const waitlist = page.getByRole("dialog", { name: "Add to waitlist" });
   await expect(waitlist).toBeVisible();
   await expect(waitlist.getByLabel("Guest name")).toBeVisible();
-  await waitlist.getByRole("button", { name: "Close", exact: true }).click();
+  await waitlist.getByLabel("Guest name").fill("E2E Waitlist Guest");
+  await waitlist.getByLabel("Mobile phone").fill("2125550188");
+  await waitlist.getByRole("button", { name: "Add guest" }).click();
+  await expect(waitlist).toBeHidden();
+  await showReservationView(page, "Service");
+  await expect(page.getByText("E2E Waitlist Guest · 2")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText(serviceDate)).toBeVisible();
+  await showReservationView(page, "Book");
+  await expect(
+    page.getByRole("button", { name: /E2E Demo Booker/ }),
+  ).toBeVisible();
+  await showReservationView(page, "Service");
+  await expect(page.getByText("E2E Waitlist Guest · 2")).toBeVisible();
+
+  await showReservationView(page, "Book");
 
   await page.getByRole("button", { name: /Maya Rivera/ }).click();
   await expect(

@@ -16,6 +16,10 @@ import {
   configuredReservationDeliveryAdapters,
 } from "@/lib/reservations/delivery-readiness.server";
 import { assertPublicReservationInventoryEnabled } from "@/lib/reservations/public-booking-policy.server";
+import {
+  assertPublicReleaseAllowsBusinessDate,
+  loadPublicReleaseState,
+} from "@/lib/reservations/public-release-control.server";
 import { scheduleReservationMessageDelivery } from "@/lib/reservations/message-delivery-trigger.server";
 
 const createSchema = z
@@ -104,6 +108,14 @@ export async function POST(request: Request) {
         400,
         "invalid_slot",
         "The selected time does not match this booking.",
+      );
+    const releaseState = await loadPublicReleaseState(client);
+    assertPublicReleaseAllowsBusinessDate(releaseState, slot.businessDate);
+    if (slot.releaseId !== releaseState.releaseId)
+      throw new BookingApiError(
+        409,
+        "slot_release_changed",
+        "Booking availability changed. Choose a time again.",
       );
     await enforceBookingRateLimit(request, client, 6, 60);
     await enforceBookingContactRateLimit(

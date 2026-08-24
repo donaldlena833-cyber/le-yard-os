@@ -90,6 +90,7 @@ const model: ReservationHostModel = {
       partySize: 2,
       quotedWaitMinutes: 20,
       status: "waiting",
+      deliveryStatus: null,
       notes: null,
       createdAt: "2026-08-09T22:00:00.000Z",
     },
@@ -113,6 +114,7 @@ const model: ReservationHostModel = {
     ready: false,
     onlineBookingEnabled: false,
     messagingEnabled: false,
+    staffPushEnabled: false,
     tableCount: 0,
     seatCount: 0,
   },
@@ -130,7 +132,10 @@ describe("Today reservation snapshot adapter", () => {
       "post_service",
     );
 
-    const slice = deriveTodayReservationSlice(model, "2026-08-09T22:00:00.000Z");
+    const slice = deriveTodayReservationSlice(
+      model,
+      "2026-08-09T22:00:00.000Z",
+    );
     expect(slice.freshness).toEqual({
       source: "tenant_reservation_snapshot",
       observedAt: "2026-08-09T22:00:00.000Z",
@@ -155,7 +160,10 @@ describe("Today reservation snapshot adapter", () => {
   });
 
   it("keeps guest-owned pending holds neutral and dates every staff exception link", () => {
-    const slice = deriveTodayReservationSlice(model, "2026-08-09T22:00:00.000Z");
+    const slice = deriveTodayReservationSlice(
+      model,
+      "2026-08-09T22:00:00.000Z",
+    );
 
     expect(slice.pendingHoldCount).toBe(2);
     expect(slice.exceptions.map((exception) => exception.id)).toEqual([
@@ -165,9 +173,14 @@ describe("Today reservation snapshot adapter", () => {
       "waitlist",
       "pacing",
     ]);
-    expect(slice.exceptions.map((exception) => exception.label).join(" ")).not.toMatch(
-      /verify pending/i,
-    );
-    expect(slice.exceptions.every((exception) => exception.destination === "/reservations?date=2026-08-09")).toBe(true);
+    expect(
+      slice.exceptions.map((exception) => exception.label).join(" "),
+    ).not.toMatch(/verify pending/i);
+    expect(
+      slice.exceptions.every(
+        (exception) =>
+          exception.destination === "/reservations?date=2026-08-09",
+      ),
+    ).toBe(true);
   });
 });

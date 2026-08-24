@@ -149,9 +149,13 @@ describe("reservation host capability affordances", () => {
     const edit = screen.getByRole("button", { name: "Edit floor" });
     expect(edit).toHaveProperty("disabled", false);
     fireEvent.click(edit);
-    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review & save" })).toHaveProperty(
+      "disabled",
+      true,
+    );
     expect(
-      screen.getByText(/Drag any table with a finger or pointer/i),
+      screen.getByText(/Floor draft opened\. Nothing saves until you review and confirm/i),
     ).toBeTruthy();
   });
 

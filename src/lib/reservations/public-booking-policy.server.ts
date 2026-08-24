@@ -1,25 +1,9 @@
 import "server-only";
 
-import { BookingApiError } from "./api-auth.server";
-
-export function isPublicReservationInventoryEnabled(
-  configured = process.env.RESERVATION_PUBLIC_BOOKING_ENABLED,
-) {
-  return configured === "true";
-}
-
-export function assertPublicReservationInventoryEnabled(options?: {
-  existingManagementSessionAuthorized?: boolean;
-}) {
-  if (
-    isPublicReservationInventoryEnabled() ||
-    options?.existingManagementSessionAuthorized
-  )
-    return;
-
-  throw new BookingApiError(
-    503,
-    "booking_unavailable",
-    "Online reservations are temporarily unavailable. Please call the restaurant.",
-  );
-}
+// Compatibility exports for callers that have not yet moved to the explicit
+// emergency-gate names. A true value only means the emergency pause is open;
+// database release control remains the sole positive booking authority.
+export {
+  assertPublicReservationEmergencyGateOpen as assertPublicReservationInventoryEnabled,
+  isPublicReservationEmergencyGateOpen as isPublicReservationInventoryEnabled,
+} from "./public-release-control.server";

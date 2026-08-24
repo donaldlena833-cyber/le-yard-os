@@ -13,10 +13,10 @@ export default async function GuestsPage({
 }: {
   searchParams: Promise<{ q?: string | string[] }>;
 }) {
-  if (isDemoMode) return <GuestsWorkspace />;
   const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/guests", resolution.context);
+  if (isDemoMode || resolution.context.mode === "demo") return <GuestsWorkspace />;
   const params = await searchParams;
   const search = (Array.isArray(params.q) ? params.q[0] : params.q ?? "")
     .trim()

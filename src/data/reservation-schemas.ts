@@ -58,6 +58,22 @@ export const transitionReservationInputSchema = z.object({
   note: z.string().trim().max(2_000).nullable(),
 });
 
+export const correctReservationStatusInputSchema = z.object({
+  requestId: uuid,
+  locationId: uuid,
+  reservationId: uuid,
+  expectedVersion: z.number().int().positive(),
+  reason: lifecycleReason,
+});
+
+export const reservationStatusCorrectionResultSchema = z.object({
+  id: uuid,
+  status: reservationStatus,
+  version: z.number().int().positive(),
+  correctedEventId: z.number().int().positive(),
+  replayed: z.boolean(),
+}).strict();
+
 export const modifyReservationInputSchema = z.object({
   requestId: uuid,
   locationId: uuid,
@@ -177,6 +193,27 @@ export const moveReservationTableInputSchema = z.object({
   positionY: z.number().min(0).max(1),
 });
 
+export const saveReservationFloorPositionsInputSchema = z.object({
+  requestId: uuid,
+  locationId: uuid,
+  moves: z.array(z.object({
+    tableId: uuid,
+    fromX: z.number().min(0).max(1),
+    fromY: z.number().min(0).max(1),
+    toX: z.number().min(0).max(1),
+    toY: z.number().min(0).max(1),
+  }).strict()).min(1).max(50),
+});
+
+export const reservationFloorSaveResultSchema = z.object({
+  moves: z.array(z.object({
+    tableId: uuid,
+    positionX: z.coerce.number().min(0).max(1),
+    positionY: z.coerce.number().min(0).max(1),
+  }).strict()),
+  replayed: z.boolean(),
+}).strict();
+
 export const installReservationDraftInputSchema = z.object({
   requestId: uuid,
   locationId: uuid,
@@ -264,6 +301,9 @@ export type SaveReservationWithGuestInput = z.infer<
 export type TransitionReservationInput = z.infer<
   typeof transitionReservationInputSchema
 >;
+export type CorrectReservationStatusInput = z.infer<
+  typeof correctReservationStatusInputSchema
+>;
 export type ModifyReservationInput = z.infer<
   typeof modifyReservationInputSchema
 >;
@@ -296,6 +336,9 @@ export type SetReservationTableStatusInput = z.infer<
 >;
 export type MoveReservationTableInput = z.infer<
   typeof moveReservationTableInputSchema
+>;
+export type SaveReservationFloorPositionsInput = z.infer<
+  typeof saveReservationFloorPositionsInputSchema
 >;
 export type InstallReservationDraftInput = z.infer<
   typeof installReservationDraftInputSchema

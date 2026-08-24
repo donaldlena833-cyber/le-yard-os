@@ -69,6 +69,8 @@ export function ReservationSetupWorkspace({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [installConfirmOpen, setInstallConfirmOpen] = useState(false);
+  const [installConfirmation, setInstallConfirmation] = useState("");
   const [exceptionKind, setExceptionKind] =
     useState<ServiceShiftExceptionKind>("closure");
   const [selectedShiftId, setSelectedShiftId] = useState(
@@ -80,6 +82,7 @@ export function ReservationSetupWorkspace({
   const configurePermissionId = useId();
   const overridePermissionId = useId();
   const revokeDialogTitleId = useId();
+  const installDialogTitleId = useId();
   const { requestIdFor, rotateRequestId } = useStableRequestIds();
   const canConfigure = model.permissions.configure;
   const canOverride = model.permissions.override;
@@ -120,6 +123,8 @@ export function ReservationSetupWorkspace({
     );
     if (result.ok) {
       rotateRequestId("reservation-install-draft");
+      setInstallConfirmOpen(false);
+      setInstallConfirmation("");
       router.refresh();
     }
   }
@@ -335,9 +340,11 @@ export function ReservationSetupWorkspace({
             <Button
               className="mt-5 w-full"
               variant="secondary"
-              onClick={installDraft}
+              onClick={() => setInstallConfirmOpen(true)}
               disabled={busy || !canConfigure}
-              aria-describedby={canConfigure ? undefined : configurePermissionId}
+              aria-describedby={
+                canConfigure ? undefined : configurePermissionId
+              }
             >
               {busy ? "Installing…" : "Install or reset draft"}
             </Button>
@@ -409,6 +416,7 @@ export function ReservationSetupWorkspace({
                   className="mt-3 size-4 accent-[var(--accent-strong)]"
                   type="checkbox"
                   name="enableOnline"
+                  defaultChecked={model.configuration.onlineBookingEnabled}
                   disabled={!canConfigure}
                 />
               </label>
@@ -421,6 +429,7 @@ export function ReservationSetupWorkspace({
                   className="mt-3 size-4 accent-[var(--accent-strong)]"
                   type="checkbox"
                   name="enableMessaging"
+                  defaultChecked={model.configuration.messagingEnabled}
                   disabled={!canConfigure}
                 />
               </label>
@@ -433,6 +442,7 @@ export function ReservationSetupWorkspace({
                   className="mt-3 size-4 accent-[var(--accent-strong)]"
                   type="checkbox"
                   name="enableStaffPush"
+                  defaultChecked={model.configuration.staffPushEnabled}
                   disabled={!canConfigure}
                 />
               </label>
@@ -508,10 +518,7 @@ export function ReservationSetupWorkspace({
             {serviceShiftError}
           </InlineNotice>
         ) : !serviceShifts.shifts.length ? (
-          <InlineNotice
-            className="mt-5"
-            title="No materialized service"
-          >
+          <InlineNotice className="mt-5" title="No materialized service">
             No approved recurring service applies to this operating date.
             Configure and approve a service period before recording an
             exception.
@@ -558,7 +565,8 @@ export function ReservationSetupWorkspace({
                           Pacing
                         </span>
                         <strong className="mt-1 block">
-                          {shift.pacingCoverLimit} / {shift.pacingIntervalMinutes}m
+                          {shift.pacingCoverLimit} /{" "}
+                          {shift.pacingIntervalMinutes}m
                         </strong>
                       </div>
                       <div className="rounded-xl bg-[var(--canvas)] p-3">
@@ -724,11 +732,7 @@ export function ReservationSetupWorkspace({
                         ))}
                       </select>
                     </FormField>
-                    <FormField
-                      id="service-exception-end"
-                      label="Ends"
-                      required
-                    >
+                    <FormField id="service-exception-end" label="Ends" required>
                       <select
                         name="effectiveEndsAt"
                         defaultValue={boundaryOptions.at(-1)?.value}
@@ -744,9 +748,10 @@ export function ReservationSetupWorkspace({
                   </div>
                 ) : (
                   <InlineNotice tone="info" title="Whole-service policy">
-                    Booking buffers apply to the full {selectedShift?.name ?? "service"}
-                    {" "}shift. They change the first and last bookable start;
-                    they do not change the physical opening time.
+                    Booking buffers apply to the full{" "}
+                    {selectedShift?.name ?? "service"} shift. They change the
+                    first and last bookable start; they do not change the
+                    physical opening time.
                   </InlineNotice>
                 )}
                 {exceptionKind === "pacing_override" ? (
@@ -848,7 +853,10 @@ export function ReservationSetupWorkspace({
                   variant="accent"
                   className="w-full"
                   disabled={
-                    busy || !canOverride || !selectedShift || !boundaryOptions.length
+                    busy ||
+                    !canOverride ||
+                    !selectedShift ||
+                    !boundaryOptions.length
                   }
                 >
                   <CalendarClock className="size-4" />
@@ -859,6 +867,43 @@ export function ReservationSetupWorkspace({
           </div>
         )}
       </section>
+      <ConfirmActionDialog
+        open={installConfirmOpen}
+        labelledBy={installDialogTitleId}
+        title="Reset the reservation draft?"
+        description={
+          <>
+            This replaces the current floor, tables, combinations, and service
+            draft. Public booking, guest messaging, and staff push will all be
+            turned off. The server records a restorable snapshot and refuses the
+            reset while future guest commitments exist.
+          </>
+        }
+        confirmLabel="Reset draft"
+        onClose={() => {
+          setInstallConfirmOpen(false);
+          setInstallConfirmation("");
+        }}
+        onConfirm={installDraft}
+        busy={busy}
+        confirmDisabled={
+          installConfirmation.trim() !== workspace.activeLocation.name
+        }
+      >
+        <FormField
+          id="reservation-draft-reset-confirmation"
+          label={`Type ${workspace.activeLocation.name} to confirm`}
+          description="This confirmation is case-sensitive."
+          required
+        >
+          <input
+            autoComplete="off"
+            value={installConfirmation}
+            onChange={(event) => setInstallConfirmation(event.target.value)}
+            disabled={busy}
+          />
+        </FormField>
+      </ConfirmActionDialog>
       <ConfirmActionDialog
         open={Boolean(revokeTarget)}
         labelledBy={revokeDialogTitleId}

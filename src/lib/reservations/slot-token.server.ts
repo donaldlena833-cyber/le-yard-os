@@ -4,9 +4,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { BookingApiError } from "./api-auth.server";
 
 export interface BookingSlotPayload {
-  version: 1;
+  version: 2;
   clientId: string;
   locationId: string;
+  releaseId: string;
+  businessDate: string;
   startsAt: string;
   durationMinutes: number;
   partySize: number;
@@ -30,7 +32,7 @@ function signature(encoded: string) {
 }
 
 export function createBookingSlotToken(payload: Omit<BookingSlotPayload, "version" | "expiresAt">) {
-  const body: BookingSlotPayload = { ...payload, version: 1, expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() };
+  const body: BookingSlotPayload = { ...payload, version: 2, expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() };
   const encoded = Buffer.from(JSON.stringify(body)).toString("base64url");
   return `${encoded}.${signature(encoded)}`;
 }
@@ -43,6 +45,6 @@ export function verifyBookingSlotToken(token: string, clientId: string): Booking
   if (!valid) throw new BookingApiError(400, "invalid_slot", "The selected time is invalid or expired.");
   let payload: BookingSlotPayload;
   try { payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as BookingSlotPayload; } catch { throw new BookingApiError(400, "invalid_slot", "The selected time is invalid or expired."); }
-  if (payload.version !== 1 || payload.clientId !== clientId || new Date(payload.expiresAt) <= new Date() || !Array.isArray(payload.tableIds) || !payload.tableIds.length) throw new BookingApiError(400, "invalid_slot", "The selected time is invalid or expired.");
+  if (payload.version !== 2 || payload.clientId !== clientId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.releaseId) || !/^\d{4}-\d{2}-\d{2}$/.test(payload.businessDate) || new Date(payload.expiresAt) <= new Date() || !Array.isArray(payload.tableIds) || !payload.tableIds.length) throw new BookingApiError(400, "invalid_slot", "The selected time is invalid or expired.");
   return payload;
 }

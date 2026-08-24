@@ -6,12 +6,14 @@ import {
   approveReservationDraftInputSchema,
   assignReservationTablesInputSchema,
   cancelReservationInputSchema,
+  correctReservationStatusInputSchema,
   configureServiceShiftExceptionInputSchema,
   installReservationDraftInputSchema,
   modifyReservationInputSchema,
   moveReservationTableInputSchema,
   reservationLifecycleHeadInputSchema,
   saveReservationInputSchema,
+  saveReservationFloorPositionsInputSchema,
   saveReservationWithGuestInputSchema,
   saveWaitlistEntryInputSchema,
   revokeServiceShiftExceptionInputSchema,
@@ -24,12 +26,14 @@ import {
   approveReservationDraft,
   assignReservationTables,
   cancelReservation,
+  correctReservationStatus,
   configureServiceShiftException,
   installReservationDraft,
   loadReservationLifecycleHead,
   modifyReservation,
   moveReservationTable,
   saveReservation,
+  saveReservationFloorPositions,
   saveReservationWithGuest,
   saveWaitlistEntry,
   revokeServiceShiftException,
@@ -91,6 +95,17 @@ export async function saveReservationWithGuestAction(input: unknown) {
   return result;
 }
 
+export async function saveReservationFloorPositionsAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "reservation.floor_positions.save",
+    schema: saveReservationFloorPositionsInputSchema,
+    input,
+    run: saveReservationFloorPositions,
+  });
+  refreshOnSuccess(result);
+  return result;
+}
+
 export async function installReservationDraftAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.install_draft",
@@ -119,6 +134,17 @@ export async function transitionReservationAction(input: unknown) {
     schema: transitionReservationInputSchema,
     input,
     run: transitionReservation,
+  });
+  refreshOnSuccess(result);
+  return result;
+}
+
+export async function correctReservationStatusAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "reservation.status.correct",
+    schema: correctReservationStatusInputSchema,
+    input,
+    run: correctReservationStatus,
   });
   refreshOnSuccess(result);
   return result;

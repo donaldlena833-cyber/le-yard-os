@@ -76,11 +76,21 @@ function escapeHtml(value: string) {
 
 function displayDateTime(value: string | null) {
   if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.valueOf())) return null;
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "full",
     timeStyle: "short",
     timeZone: "America/New_York",
-  }).format(new Date(value));
+  }).format(date);
+}
+
+export function reservationEmailSender(configuredFrom: string) {
+  const match = configuredFrom.match(/^(?:(.*?)\s*<)?\s*([^<>\s]+@[^<>\s]+)\s*>?$/);
+  if (!match) return configuredFrom;
+  const address = match[2]!.toLowerCase();
+  if (address.split("@", 1)[0] !== "reservations") return configuredFrom;
+  return `Le Yard Reservations Team <${address}>`;
 }
 
 export async function sendReservationOutboxMessage(input: {
@@ -219,10 +229,11 @@ export async function sendReservationOutboxMessage(input: {
   if (input.channel === "email") {
     if (!input.email) return { state: "failed", providerMessageId: null };
     const apiKey = process.env.RESEND_API_KEY?.trim();
-    const from = process.env.RESERVATION_EMAIL_FROM?.trim();
+    const configuredFrom = process.env.RESERVATION_EMAIL_FROM?.trim();
     const replyTo = process.env.RESERVATION_EMAIL_REPLY_TO?.trim();
-    if (!apiKey || !from)
+    if (!apiKey || !configuredFrom)
       return { state: "not_configured", providerMessageId: null };
+    const from = reservationEmailSender(configuredFrom);
     return fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {

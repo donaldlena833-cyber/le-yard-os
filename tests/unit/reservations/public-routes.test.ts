@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   contactRateLimit: vi.fn(),
   verifySlot: vi.fn(),
   availability: vi.fn(),
+  releaseState: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -49,6 +50,16 @@ vi.mock("@/lib/reservations/public-availability.server", () => ({
   loadPublicAvailability: mocks.availability,
 }));
 
+vi.mock(
+  "@/lib/reservations/public-release-control.server",
+  async (importOriginal) => {
+    const actual = await importOriginal<
+      typeof import("@/lib/reservations/public-release-control.server")
+    >();
+    return { ...actual, loadPublicReleaseState: mocks.releaseState };
+  },
+);
+
 const client = {
   id: "99999999-9999-4999-8999-999999999999",
   organizationId: "11111111-1111-4111-8111-111111111111",
@@ -80,7 +91,9 @@ beforeEach(() => {
   mocks.verifySlot.mockReturnValue({
     locationId: client.locationId,
     partySize: 2,
-    startsAt: "2026-08-12T23:00:00.000Z",
+    releaseId: "77777777-7777-4777-8777-777777777777",
+    businessDate: "2026-12-12",
+    startsAt: "2026-12-13T00:00:00.000Z",
     durationMinutes: 90,
     tableIds: ["33333333-3333-4333-8333-333333333333"],
   });
@@ -91,6 +104,17 @@ beforeEach(() => {
   process.env.RESERVATION_EMAIL_FROM = "reservations@leyard.example";
   process.env.RESERVATION_SMS_DELIVERY_ENABLED = "false";
   process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "true";
+  mocks.releaseState.mockResolvedValue({
+    state: "pilot",
+    acceptReservationsFrom: "2026-12-01",
+    publicInventoryPercent: 25,
+    bookingApproved: true,
+    supportReady: true,
+    bookingEnabled: true,
+    releaseId: "77777777-7777-4777-8777-777777777777",
+    version: 2,
+    updatedAt: "2026-08-24T20:00:00.000Z",
+  });
   mocks.availability.mockResolvedValue({
     location: {
       id: client.locationId,
@@ -112,8 +136,8 @@ afterEach(() => {
 });
 
 describe("public reservation API contracts", () => {
-  it("keeps new public holds disabled unless the deployment switch is exactly true", async () => {
-    delete process.env.RESERVATION_PUBLIC_BOOKING_ENABLED;
+  it("lets the emergency environment gate pause new public reservations", async () => {
+    process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "false";
     const { POST } = await import("@/app/api/v1/reservations/route");
     const response = await POST(
       new Request("https://os.example/api/v1/reservations", {
@@ -141,8 +165,8 @@ describe("public reservation API contracts", () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
-  it("keeps new availability disabled before API authentication", async () => {
-    process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "TRUE";
+  it("fails closed on an invalid emergency-gate value before API authentication", async () => {
+    process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "invalid";
     const { GET } = await import("@/app/api/v1/availability/route");
     const response = await GET(
       new Request(
@@ -156,6 +180,44 @@ describe("public reservation API contracts", () => {
     expect(mocks.authenticate).not.toHaveBeenCalled();
     expect(mocks.rateLimit).not.toHaveBeenCalled();
     expect(mocks.availability).not.toHaveBeenCalled();
+  });
+
+  it("does not let an open environment gate authorize a closed database release", async () => {
+    delete process.env.RESERVATION_PUBLIC_BOOKING_ENABLED;
+    mocks.releaseState.mockResolvedValueOnce({
+      state: "pilot",
+      acceptReservationsFrom: "2026-12-01",
+      publicInventoryPercent: 25,
+      bookingApproved: false,
+      supportReady: false,
+      bookingEnabled: false,
+      releaseId: "77777777-7777-4777-8777-777777777777",
+      version: 1,
+      updatedAt: "2026-08-24T20:00:00.000Z",
+    });
+    const { POST } = await import("@/app/api/v1/reservations/route");
+    const response = await POST(
+      new Request("https://os.example/api/v1/reservations", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": "55555555-5555-4555-8555-555555555555",
+        },
+        body: JSON.stringify({
+          slotToken: "x".repeat(80),
+          partySize: 2,
+          firstName: "Ada",
+          lastName: "Lovelace",
+          email: "ada@example.com",
+          phone: "+1 212 555 0100",
+        }),
+      }),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      error: { code: "booking_unavailable" },
+    });
+    expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
   it("preserves availability for a valid existing management session while new inventory is off", async () => {
@@ -264,6 +326,26 @@ describe("public reservation API contracts", () => {
     expect(mocks.contactRateLimit.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.rpc.mock.invocationCallOrder[0]!,
     );
+  });
+
+  it("returns only the safe public release contract and reflects an emergency pause", async () => {
+    process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "false";
+    const { GET } = await import("@/app/api/v1/public/release-state/route");
+    const response = await GET(
+      new Request("https://os.example/api/v1/public/release-state"),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      data: {
+        state: "pilot",
+        acceptReservationsFrom: "2026-12-01",
+        publicInventoryPercent: 25,
+        bookingApproved: true,
+        supportReady: true,
+        bookingEnabled: false,
+        releaseId: "77777777-7777-4777-8777-777777777777",
+      },
+    });
   });
 
   it("does not spend create quotas on malformed JSON", async () => {

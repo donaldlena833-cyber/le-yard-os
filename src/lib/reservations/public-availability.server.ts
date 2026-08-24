@@ -12,6 +12,12 @@ import {
   type BookingApiClientContext,
 } from "./api-auth.server";
 import { assertPublicReservationInventoryEnabled } from "./public-booking-policy.server";
+import {
+  assertPublicReleaseAllowsBusinessDate,
+  effectivePublicPacingCoverLimit,
+  loadPublicReleaseState,
+  type PublicReleaseState,
+} from "./public-release-control.server";
 import { createBookingSlotToken } from "./slot-token.server";
 import {
   reservationDurationFitsServiceWindow,
@@ -56,9 +62,19 @@ export async function loadPublicAvailability(
   client: BookingApiClientContext,
   businessDate: string,
   partySize: number,
-  options?: { existingManagementSessionAuthorized?: boolean },
+  options?: {
+    existingManagementSessionAuthorized?: boolean;
+    releaseState?: PublicReleaseState;
+  },
 ) {
   assertPublicReservationInventoryEnabled(options);
+  const releaseState =
+    options?.releaseState ?? (await loadPublicReleaseState(client));
+  if (!options?.existingManagementSessionAuthorized)
+    assertPublicReleaseAllowsBusinessDate(releaseState, businessDate);
+  const publicInventoryPercent = options?.existingManagementSessionAuthorized
+    ? 100
+    : releaseState.publicInventoryPercent;
   const admin = createAdminClient();
   const reservationRpc = admin.rpc.bind(admin) as unknown as (
     name: string,
@@ -323,12 +339,17 @@ export async function loadPublicAvailability(
         )
       )
         continue;
+      const publicCoverLimit = effectivePublicPacingCoverLimit(
+        policy.pacingCoverLimit,
+        publicInventoryPercent,
+      );
+      if (publicCoverLimit < partySize) continue;
       if (
         !isPacingAvailable({
           startsAt,
           partySize,
           intervalMinutes: policy.pacingIntervalMinutes,
-          coverLimit: policy.pacingCoverLimit,
+          coverLimit: publicCoverLimit,
           reservations,
         })
       )
@@ -354,6 +375,8 @@ export async function loadPublicAvailability(
         slotToken: createBookingSlotToken({
           clientId: client.id,
           locationId: client.locationId,
+          releaseId: releaseState.releaseId,
+          businessDate,
           startsAt,
           durationMinutes,
           partySize,
@@ -371,6 +394,7 @@ export async function loadPublicAvailability(
     },
     businessDate,
     partySize,
+    releaseId: releaseState.releaseId,
     slots,
   };
 }

@@ -147,8 +147,8 @@ export function createDemoReservationModel(
     },
     combinations: [["4", "5"], ["6", "7"], ["8", "9"], ["10", "11"], ["12", "13"], ["14", "15"], ["16", "17"]].map(([left, right]) => ({ id: `demo-combination-${left}-${right}`, label: `${left} + ${right}`, minCapacity: 5, maxCapacity: Number(left) < 10 ? 10 : 8, tableIds: [`demo-table-${left}`, `demo-table-${right}`], isActive: true })),
     waitlist: [
-      { id: "demo-wait-1", displayName: "Jamie Lee", partySize: 2, quotedWaitMinutes: 20, status: "waiting", notes: "Bar is fine", createdAt: timeAt(18, 5) },
-      { id: "demo-wait-2", displayName: "Sam Ortiz", partySize: 4, quotedWaitMinutes: 35, status: "notified", notes: null, createdAt: timeAt(18, 12) },
+      { id: "demo-wait-1", displayName: "Jamie Lee", partySize: 2, quotedWaitMinutes: 20, status: "waiting", deliveryStatus: null, notes: "Bar is fine", createdAt: timeAt(18, 5) },
+      { id: "demo-wait-2", displayName: "Sam Ortiz", partySize: 4, quotedWaitMinutes: 35, status: "notified", deliveryStatus: "sent", notes: null, createdAt: timeAt(18, 12) },
     ],
     metrics: {
       covers,
@@ -168,6 +168,6 @@ export function createDemoReservationModel(
         .reduce((sum, reservation) => sum + reservation.partySize, 0),
       limit: 14,
     })),
-    configuration: { ready: true, onlineBookingEnabled: false, messagingEnabled: false, tableCount: 17, seatCount: 68 },
+    configuration: { ready: true, onlineBookingEnabled: false, messagingEnabled: false, staffPushEnabled: false, tableCount: 17, seatCount: 68 },
   };
 }

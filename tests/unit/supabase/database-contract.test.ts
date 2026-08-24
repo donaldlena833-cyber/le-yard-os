@@ -55,6 +55,7 @@ function finalMigratedObjectNames(
     Functions: new Set(),
     Enums: new Set(),
   };
+  const functionDefinitionCounts = new Map<string, number>();
   const events = source.matchAll(
     /\b(?:(create)(?:\s+or\s+replace)?\s+(?:materialized\s+)?(table|view|function|type)(?:\s+if\s+not\s+exists)?\s+public\.([a-z0-9_]+)|(drop)\s+(?:materialized\s+)?(table|view|function|type)(?:\s+if\s+exists)?\s+public\.([a-z0-9_]+)|(alter)\s+function\s+public\.([a-z0-9_]+)\s*\([^)]*\)\s+rename\s+to\s+([a-z0-9_]+))/gi,
   );
@@ -67,9 +68,24 @@ function finalMigratedObjectNames(
     const renamedTo = event[9];
     if (createdKind && createdName) {
       names[publicObjectKind(createdKind)].add(createdName);
+      if (createdKind.toLowerCase() === "function") {
+        functionDefinitionCounts.set(
+          createdName,
+          (functionDefinitionCounts.get(createdName) ?? 0) + 1,
+        );
+      }
     }
     if (droppedKind && droppedName) {
-      names[publicObjectKind(droppedKind)].delete(droppedName);
+      if (droppedKind.toLowerCase() === "function") {
+        const remaining = Math.max(
+          0,
+          (functionDefinitionCounts.get(droppedName) ?? 0) - 1,
+        );
+        functionDefinitionCounts.set(droppedName, remaining);
+        if (remaining === 0) names.Functions.delete(droppedName);
+      } else {
+        names[publicObjectKind(droppedKind)].delete(droppedName);
+      }
     }
     if (renamedFrom && renamedTo) {
       names.Functions.delete(renamedFrom);

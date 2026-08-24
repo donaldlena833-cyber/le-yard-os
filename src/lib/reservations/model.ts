@@ -130,6 +130,7 @@ export interface WaitlistSummary {
   partySize: number;
   quotedWaitMinutes: number | null;
   status: string;
+  deliveryStatus: "queued" | "sending" | "sent" | "failed" | null;
   notes: string | null;
   createdAt: string;
 }
@@ -193,6 +194,7 @@ export interface ReservationHostModel {
     ready: boolean;
     onlineBookingEnabled: boolean;
     messagingEnabled: boolean;
+    staffPushEnabled: boolean;
     tableCount: number;
     seatCount: number;
   };

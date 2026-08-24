@@ -150,6 +150,26 @@ export function bookingContactRateLimitBucketHashes(input: {
   };
 }
 
+export function guestInterestContactRateLimitBucketHashes(input: {
+  clientId: string;
+  path: string;
+  email: string;
+  phone?: string | null;
+}) {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const normalizedPhone = input.phone?.replace(/\D/g, "") || null;
+  return {
+    email: sha256(
+      `guest-interest-contact:v1\0${input.clientId}\0${input.path}\0email\0${sha256(normalizedEmail)}`,
+    ),
+    phone: normalizedPhone
+      ? sha256(
+          `guest-interest-contact:v1\0${input.clientId}\0${input.path}\0phone\0${sha256(normalizedPhone)}`,
+        )
+      : null,
+  };
+}
+
 export function bookingRateLimitBucketHashes(input: {
   clientId: string;
   abuseIdentity: string;
@@ -250,6 +270,53 @@ export async function enforceBookingContactRateLimit(
       429,
       "contact_rate_limited",
       "Too many reservation attempts were made for these contact details. Try again later.",
+    );
+}
+
+export async function enforceGuestInterestContactRateLimit(
+  request: Request,
+  client: BookingApiClientContext,
+  email: string,
+  phone?: string | null,
+) {
+  const configuredLimit = Number(
+    process.env.GUEST_INTEREST_CONTACT_RATE_LIMIT_PER_HOUR ?? "6",
+  );
+  const limit =
+    Number.isInteger(configuredLimit) &&
+    configuredLimit >= 1 &&
+    configuredLimit <= 50
+      ? configuredLimit
+      : 6;
+  const bucketHashes = guestInterestContactRateLimitBucketHashes({
+    clientId: client.id,
+    path: new URL(request.url).pathname,
+    email,
+    phone,
+  });
+  const admin = createAdminClient();
+  const claims = await Promise.all(
+    Object.values(bucketHashes)
+      .filter((bucketHash): bucketHash is string => Boolean(bucketHash))
+      .map((bucketHash) =>
+        admin.rpc("service_claim_booking_rate_limit", {
+          p_bucket_hash: bucketHash,
+          p_limit: limit,
+          p_window_seconds: 3_600,
+        }),
+      ),
+  );
+  if (claims.some((claim) => claim.error))
+    throw new BookingApiError(
+      503,
+      "rate_limit_unavailable",
+      "Signup protection is temporarily unavailable.",
+    );
+  if (claims.some((claim) => !(claim.data as { allowed?: boolean }).allowed))
+    throw new BookingApiError(
+      429,
+      "contact_rate_limited",
+      "Too many signup attempts were made for these contact details. Try again later.",
     );
 }
 

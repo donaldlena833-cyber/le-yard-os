@@ -115,7 +115,7 @@ describe("inventory workflow validation", () => {
       deliveredAt: "2026-08-02T14:00:00.000Z",
       invoiceNumber: "INV-1042",
       notes: null,
-      lines: [{ inventoryItemId: ids.item, unitId: ids.unit, quantity: 2.5, acceptedQuantity: 2, unitPriceCents: 375, lotCode: null, expiresOn: null }],
+      lines: [{ inventoryItemId: ids.item, unitId: ids.unit, quantity: 2.5, acceptedQuantity: 2, unitPriceCents: 375, lotCode: null, expiresOn: null, exceptionKind: "none", exceptionNote: null }],
     }).success).toBe(true);
   });
 

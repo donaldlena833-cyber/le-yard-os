@@ -1,9 +1,17 @@
 import "server-only";
 
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
-import { hasAnyCapability, KITCHEN_CAPABILITIES } from "@/lib/permissions/capabilities";
+import {
+  hasAnyCapability,
+  KITCHEN_CAPABILITIES,
+} from "@/lib/permissions/capabilities";
 import { createClient } from "@/lib/supabase/server";
-import { localDateKey, readFailure, readSuccess, type LiveReadResult } from "./shared";
+import {
+  localDateKey,
+  readFailure,
+  readSuccess,
+  type LiveReadResult,
+} from "./shared";
 
 export interface LiveInventoryItem {
   id: string;
@@ -63,6 +71,10 @@ export interface LivePurchaseOrder {
   vendorName: string;
   poNumber: string;
   status: string;
+  createdByUserId: string;
+  createdBy: string;
+  approvedBy: string | null;
+  approvedAt: string | null;
   orderedOn: string | null;
   expectedOn: string | null;
   subtotalCents: number;
@@ -92,7 +104,18 @@ export interface LiveInventoryDelivery {
   deliveredAt: string;
   invoiceNumber: string | null;
   receivedBy: string;
+  receivedByUserId?: string;
   notes: string | null;
+  exceptionStatus?: string;
+  exceptionReviewNote?: string | null;
+  exceptions?: Array<{
+    inventoryItemId: string;
+    itemName: string;
+    unitSymbol: string;
+    kind: string;
+    proposedAcceptedQuantity: number;
+    note: string;
+  }>;
   lines: Array<{
     id: string;
     inventoryItemId: string;
@@ -158,16 +181,20 @@ export interface LiveRecipe {
   yieldUnit: string;
   menuPriceCents: number | null;
   ingredientCount: number;
-  knownCostCents: number;
+  batchCostCents: number | null;
+  portionCostCents: number | null;
+  foodCostPercent: number | null;
   missingCostCount: number;
 }
 
 export interface LiveInventoryCatalog {
-  units: Array<LiveInventoryUnit & {
-    isBase: boolean;
-    isActive: boolean;
-    updatedAt: string;
-  }>;
+  units: Array<
+    LiveInventoryUnit & {
+      isBase: boolean;
+      isActive: boolean;
+      updatedAt: string;
+    }
+  >;
   conversions: Array<{
     id: string;
     fromUnitId: string;
@@ -184,10 +211,12 @@ export interface LiveInventoryCatalog {
     isActive: boolean;
     updatedAt: string;
   }>;
-  vendors: Array<LiveInventoryVendor & {
-    accountNumber: string | null;
-    isActive: boolean;
-  }>;
+  vendors: Array<
+    LiveInventoryVendor & {
+      accountNumber: string | null;
+      isActive: boolean;
+    }
+  >;
   items: Array<{
     id: string;
     name: string;
@@ -264,11 +293,13 @@ export async function loadLiveInventory(
   workspace: WorkspaceContextValue,
 ): Promise<LiveReadResult<LiveInventoryModel>> {
   if (
-    workspace.role !== "owner"
-    && workspace.role !== "admin"
-    && !hasAnyCapability(workspace.capabilities, KITCHEN_CAPABILITIES)
+    workspace.role !== "owner" &&
+    workspace.role !== "admin" &&
+    !hasAnyCapability(workspace.capabilities, KITCHEN_CAPABILITIES)
   ) {
-    return readFailure("A kitchen or inventory capability is required at this location.");
+    return readFailure(
+      "A kitchen or inventory capability is required at this location.",
+    );
   }
   try {
     const supabase = await createClient();
@@ -289,10 +320,16 @@ export async function loadLiveInventory(
     ]);
     const location = locationResult.data;
     const organization = organizationResult.data;
-    if (locationResult.error || organizationResult.error || !location || !organization) {
+    if (
+      locationResult.error ||
+      organizationResult.error ||
+      !location ||
+      !organization
+    ) {
       return readFailure();
     }
     const date = localDateKey(new Date(), location.timezone);
+    const observedAt = new Date().toISOString();
 
     const [
       itemResult,
@@ -309,118 +346,147 @@ export async function loadLiveInventory(
       wasteResult,
       transferResult,
       recipeResult,
+      recipeCostResult,
       priceResult,
       locationChoiceResult,
     ] = await Promise.all([
-        supabase
-          .from("inventory_items")
-          .select("id, category_id, base_unit_id, name, sku, description, track_inventory, is_active")
-          .eq("organization_id", organizationId)
-          .order("name"),
-        supabase
-          .from("measurement_units")
-          .select("*")
-          .eq("organization_id", organizationId)
-          .order("name"),
-        supabase
-          .from("unit_conversions")
-          .select("*")
-          .eq("organization_id", organizationId),
-        supabase
-          .from("inventory_categories")
-          .select("*")
-          .eq("organization_id", organizationId),
-        supabase
-          .from("inventory_on_hand")
-          .select("inventory_item_id, quantity_on_hand, last_movement_at")
-          .eq("organization_id", organizationId)
-          .eq("location_id", locationId),
-        supabase
-          .from("inventory_par_levels")
-          .select("id, location_id, inventory_item_id, par_quantity, reorder_quantity, effective_from")
-          .eq("organization_id", organizationId)
-          .order("effective_from", { ascending: false }),
-        supabase
-          .from("inventory_counts")
-          .select("id, status, count_type, counted_at, counted_by, approved_by, approved_at, notes")
-          .eq("organization_id", organizationId)
-          .eq("location_id", locationId)
-          .order("counted_at", { ascending: false })
-          .limit(24),
-        supabase
-          .from("vendors")
-          .select("id, name, account_number, contact_name, email, phone, payment_terms, is_active")
-          .eq("organization_id", organizationId)
-          .order("name"),
-        supabase
-          .from("vendor_items")
-          .select("*")
-          .eq("organization_id", organizationId)
-          .order("created_at"),
-        supabase
-          .from("purchase_orders")
-          .select("id, vendor_id, po_number, status, ordered_on, expected_on, subtotal_cents, tax_cents, shipping_cents")
-          .eq("organization_id", organizationId)
-          .eq("location_id", locationId)
-          .order("created_at", { ascending: false })
-          .limit(40),
-        supabase
-          .from("deliveries")
-          .select("id, vendor_id, purchase_order_id, delivered_at, invoice_number, received_by, notes")
-          .eq("organization_id", organizationId)
-          .eq("location_id", locationId)
-          .order("delivered_at", { ascending: false })
-          .limit(40),
-        supabase
-          .from("waste_records")
-          .select("id, inventory_item_id, unit_id, quantity, reason_code, estimated_cost_cents, occurred_at, notes, status, recorded_by, approved_by, approved_at, review_note")
-          .eq("organization_id", organizationId)
-          .eq("location_id", locationId)
-          .order("occurred_at", { ascending: false })
-          .limit(80),
-        supabase
-          .from("inventory_transfers")
-          .select("id, from_location_id, to_location_id, status, created_by, reviewed_by, reviewed_at, notes, review_note, created_at")
-          .eq("organization_id", organizationId)
-          .or(`from_location_id.eq.${locationId},to_location_id.eq.${locationId}`)
-          .order("created_at", { ascending: false })
-          .limit(60),
-        supabase
-          .from("recipes")
-          .select("id, name, yield_quantity, yield_unit_id, menu_price_cents, is_active")
-          .eq("organization_id", organizationId)
-          .order("name"),
-        supabase
-          .from("item_price_history")
-          .select("id, inventory_item_id, vendor_id, unit_id, price_quantity, unit_price_cents, effective_at, source_type")
-          .eq("organization_id", organizationId)
-          .order("effective_at", { ascending: false })
-          .limit(2_000),
-        supabase
-          .from("locations")
-          .select("id, name")
-          .eq("organization_id", organizationId)
-          .eq("is_active", true)
-          .order("name"),
-      ]);
-    if ([
-      itemResult,
-      unitResult,
-      conversionResult,
-      categoryResult,
-      onHandResult,
-      parResult,
-      countResult,
-      vendorResult,
-      vendorItemResult,
-      orderResult,
-      deliveryResult,
-      wasteResult,
-      transferResult,
-      recipeResult,
-      priceResult,
-      locationChoiceResult,
-    ].some((queryResult) => queryResult.error)) {
+      supabase
+        .from("inventory_items")
+        .select(
+          "id, category_id, base_unit_id, name, sku, description, track_inventory, is_active",
+        )
+        .eq("organization_id", organizationId)
+        .order("name"),
+      supabase
+        .from("measurement_units")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .order("name"),
+      supabase
+        .from("unit_conversions")
+        .select("*")
+        .eq("organization_id", organizationId),
+      supabase
+        .from("inventory_categories")
+        .select("*")
+        .eq("organization_id", organizationId),
+      supabase
+        .from("inventory_on_hand")
+        .select("inventory_item_id, quantity_on_hand, last_movement_at")
+        .eq("organization_id", organizationId)
+        .eq("location_id", locationId),
+      supabase
+        .from("inventory_par_levels")
+        .select(
+          "id, location_id, inventory_item_id, par_quantity, reorder_quantity, effective_from",
+        )
+        .eq("organization_id", organizationId)
+        .order("effective_from", { ascending: false }),
+      supabase
+        .from("inventory_counts")
+        .select(
+          "id, status, count_type, counted_at, counted_by, approved_by, approved_at, notes",
+        )
+        .eq("organization_id", organizationId)
+        .eq("location_id", locationId)
+        .order("counted_at", { ascending: false })
+        .limit(24),
+      supabase
+        .from("vendors")
+        .select(
+          "id, name, account_number, contact_name, email, phone, payment_terms, is_active",
+        )
+        .eq("organization_id", organizationId)
+        .order("name"),
+      supabase
+        .from("vendor_items")
+        .select("*")
+        .eq("organization_id", organizationId)
+        .order("created_at"),
+      supabase
+        .from("purchase_orders")
+        .select(
+          "id, vendor_id, po_number, status, ordered_on, expected_on, subtotal_cents, tax_cents, shipping_cents, created_by, approved_by, approved_at",
+        )
+        .eq("organization_id", organizationId)
+        .eq("location_id", locationId)
+        .order("created_at", { ascending: false })
+        .limit(40),
+      supabase
+        .from("deliveries")
+        .select(
+          "id, vendor_id, purchase_order_id, delivered_at, invoice_number, received_by, notes",
+        )
+        .eq("organization_id", organizationId)
+        .eq("location_id", locationId)
+        .order("delivered_at", { ascending: false })
+        .limit(40),
+      supabase
+        .from("waste_records")
+        .select(
+          "id, inventory_item_id, unit_id, quantity, reason_code, estimated_cost_cents, occurred_at, notes, status, recorded_by, approved_by, approved_at, review_note",
+        )
+        .eq("organization_id", organizationId)
+        .eq("location_id", locationId)
+        .order("occurred_at", { ascending: false })
+        .limit(80),
+      supabase
+        .from("inventory_transfers")
+        .select(
+          "id, from_location_id, to_location_id, status, created_by, reviewed_by, reviewed_at, notes, review_note, created_at",
+        )
+        .eq("organization_id", organizationId)
+        .or(`from_location_id.eq.${locationId},to_location_id.eq.${locationId}`)
+        .order("created_at", { ascending: false })
+        .limit(60),
+      supabase
+        .from("recipes")
+        .select(
+          "id, name, yield_quantity, yield_unit_id, menu_price_cents, is_active",
+        )
+        .eq("organization_id", organizationId)
+        .order("name"),
+      supabase.rpc("recipe_cost_snapshot", {
+        p_organization_id: organizationId,
+        p_location_id: locationId,
+        p_observed_at: observedAt,
+      }),
+      supabase
+        .from("item_price_history")
+        .select(
+          "id, inventory_item_id, vendor_id, unit_id, price_quantity, unit_price_cents, effective_at, source_type",
+        )
+        .eq("organization_id", organizationId)
+        .order("effective_at", { ascending: false })
+        .limit(2_000),
+      supabase
+        .from("locations")
+        .select("id, name")
+        .eq("organization_id", organizationId)
+        .eq("is_active", true)
+        .order("name"),
+    ]);
+    if (
+      [
+        itemResult,
+        unitResult,
+        conversionResult,
+        categoryResult,
+        onHandResult,
+        parResult,
+        countResult,
+        vendorResult,
+        vendorItemResult,
+        orderResult,
+        deliveryResult,
+        wasteResult,
+        transferResult,
+        recipeResult,
+        recipeCostResult,
+        priceResult,
+        locationChoiceResult,
+      ].some((queryResult) => queryResult.error)
+    ) {
       return readFailure();
     }
 
@@ -473,16 +539,25 @@ export async function loadLiveInventory(
 
     const countIds = (countResult.data ?? []).map((count) => count.id);
     const orderIds = (orderResult.data ?? []).map((order) => order.id);
-    const deliveryIds = (deliveryResult.data ?? []).map((delivery) => delivery.id);
-    const transferIds = (transferResult.data ?? []).map((transfer) => transfer.id);
+    const deliveryIds = (deliveryResult.data ?? []).map(
+      (delivery) => delivery.id,
+    );
+    const transferIds = (transferResult.data ?? []).map(
+      (transfer) => transfer.id,
+    );
     const recipeIds = (recipeResult.data ?? []).map((recipe) => recipe.id);
     const profileIds = [
       ...(countResult.data ?? []).flatMap((row) =>
         row.approved_by ? [row.counted_by, row.approved_by] : [row.counted_by],
       ),
+      ...(orderResult.data ?? []).flatMap((row) =>
+        row.approved_by ? [row.created_by, row.approved_by] : [row.created_by],
+      ),
       ...(deliveryResult.data ?? []).map((row) => row.received_by),
       ...(wasteResult.data ?? []).flatMap((row) =>
-        row.approved_by ? [row.recorded_by, row.approved_by] : [row.recorded_by],
+        row.approved_by
+          ? [row.recorded_by, row.approved_by]
+          : [row.recorded_by],
       ),
       ...(transferResult.data ?? []).flatMap((row) =>
         row.reviewed_by ? [row.created_by, row.reviewed_by] : [row.created_by],
@@ -500,14 +575,18 @@ export async function loadLiveInventory(
       countIds.length
         ? supabase
             .from("inventory_count_lines")
-            .select("id, inventory_count_id, inventory_item_id, unit_id, expected_quantity, counted_quantity, unit_cost_cents")
+            .select(
+              "id, inventory_count_id, inventory_item_id, unit_id, expected_quantity, counted_quantity, unit_cost_cents",
+            )
             .eq("organization_id", organizationId)
             .in("inventory_count_id", countIds)
         : emptyResult,
       orderIds.length
         ? supabase
             .from("purchase_order_lines")
-            .select("id, purchase_order_id, inventory_item_id, unit_id, quantity, unit_price_cents, line_total_cents")
+            .select(
+              "id, purchase_order_id, inventory_item_id, unit_id, quantity, unit_price_cents, line_total_cents",
+            )
             .eq("organization_id", organizationId)
             .in("purchase_order_id", orderIds)
         : emptyResult,
@@ -521,14 +600,18 @@ export async function loadLiveInventory(
       transferIds.length
         ? supabase
             .from("inventory_transfer_lines")
-            .select("id, transfer_id, inventory_item_id, unit_id, sent_quantity, received_quantity")
+            .select(
+              "id, transfer_id, inventory_item_id, unit_id, sent_quantity, received_quantity",
+            )
             .eq("organization_id", organizationId)
             .in("transfer_id", transferIds)
         : emptyResult,
       recipeIds.length
         ? supabase
             .from("recipe_ingredients")
-            .select("recipe_id, inventory_item_id, unit_id, quantity, waste_factor")
+            .select(
+              "recipe_id, inventory_item_id, unit_id, quantity, waste_factor",
+            )
             .eq("organization_id", organizationId)
             .in("recipe_id", recipeIds)
         : emptyResult,
@@ -550,22 +633,39 @@ export async function loadLiveInventory(
       return readFailure();
     }
 
-    const allDeliveryIds = [...new Set([
-      ...deliveryIds,
-      ...(orderDeliveryResult.data ?? []).map((delivery) => delivery.id),
-    ])];
-    const deliveryLineResult = allDeliveryIds.length
-      ? await supabase
+    const allDeliveryIds = [
+      ...new Set([
+        ...deliveryIds,
+        ...(orderDeliveryResult.data ?? []).map((delivery) => delivery.id),
+      ]),
+    ];
+    const [deliveryLineResult, deliveryBatchResult, deliveryExceptionResult] = allDeliveryIds.length
+      ? await Promise.all([supabase
           .from("delivery_lines")
-          .select("id, delivery_id, inventory_item_id, unit_id, quantity, accepted_quantity, unit_price_cents, lot_code, expires_on")
+          .select(
+            "id, delivery_id, inventory_item_id, unit_id, quantity, accepted_quantity, unit_price_cents, lot_code, expires_on",
+          )
           .eq("organization_id", organizationId)
-          .in("delivery_id", allDeliveryIds)
-      : { data: [], error: null };
-    if (deliveryLineResult.error) return readFailure();
+          .in("delivery_id", allDeliveryIds),
+        supabase.from("delivery_receiving_batches")
+          .select("delivery_id, status, review_note")
+          .eq("organization_id", organizationId)
+          .in("delivery_id", allDeliveryIds),
+        supabase.from("delivery_receiving_exceptions")
+          .select("delivery_id, inventory_item_id, unit_id, exception_kind, proposed_accepted_quantity, note")
+          .eq("organization_id", organizationId)
+          .in("delivery_id", allDeliveryIds),
+      ])
+      : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
+    if (deliveryLineResult.error || deliveryBatchResult.error || deliveryExceptionResult.error) return readFailure();
 
     const units = new Map(unitRows.map((unit) => [unit.id, unit]));
-    const categories = new Map(categoryRows.map((category) => [category.id, category.name]));
-    const onHand = new Map((onHandResult.data ?? []).map((row) => [row.inventory_item_id, row]));
+    const categories = new Map(
+      categoryRows.map((category) => [category.id, category.name]),
+    );
+    const onHand = new Map(
+      (onHandResult.data ?? []).map((row) => [row.inventory_item_id, row]),
+    );
     const currentPar = new Map<
       string,
       NonNullable<typeof parResult.data>[number]
@@ -575,7 +675,8 @@ export async function loadLiveInventory(
         par.location_id === locationId &&
         par.effective_from <= date &&
         !currentPar.has(par.inventory_item_id)
-      ) currentPar.set(par.inventory_item_id, par);
+      )
+        currentPar.set(par.inventory_item_id, par);
     }
     const latestPrice = new Map<
       string,
@@ -585,10 +686,17 @@ export async function loadLiveInventory(
       const key = `${price.inventory_item_id}:${price.unit_id}`;
       if (!latestPrice.has(key)) latestPrice.set(key, price);
     }
-    const vendors = new Map((vendorResult.data ?? []).map((vendor) => [vendor.id, vendor]));
-    const items = new Map((itemResult.data ?? []).map((item) => [item.id, item]));
+    const vendors = new Map(
+      (vendorResult.data ?? []).map((vendor) => [vendor.id, vendor]),
+    );
+    const items = new Map(
+      (itemResult.data ?? []).map((item) => [item.id, item]),
+    );
     const locations = new Map(
-      (locationChoiceResult.data ?? []).map((locationOption) => [locationOption.id, locationOption.name]),
+      (locationChoiceResult.data ?? []).map((locationOption) => [
+        locationOption.id,
+        locationOption.name,
+      ]),
     );
     const profiles = new Map(
       (profileResult.data ?? []).map((profile) => [
@@ -604,44 +712,55 @@ export async function loadLiveInventory(
       items: (itemResult.data ?? [])
         .filter((item) => item.is_active && item.track_inventory)
         .map((item) => {
-        const movement = onHand.get(item.id);
-        const par = currentPar.get(item.id);
-        const price = latestPrice.get(`${item.id}:${item.base_unit_id}`);
-        const quantity = Number(movement?.quantity_on_hand ?? 0);
-        const cost = price ? Number(price.unit_price_cents) / Number(price.price_quantity) : null;
-        const compatibleUnitIds = new Set([item.base_unit_id]);
-        for (const conversion of conversionRows) {
-          if (!conversion.is_active) continue;
-          if (conversion.item_id !== null && conversion.item_id !== item.id) continue;
-          if (conversion.from_unit_id === item.base_unit_id) {
-            compatibleUnitIds.add(conversion.to_unit_id);
+          const movement = onHand.get(item.id);
+          const par = currentPar.get(item.id);
+          const price = latestPrice.get(`${item.id}:${item.base_unit_id}`);
+          const quantity = Number(movement?.quantity_on_hand ?? 0);
+          const cost = price
+            ? Number(price.unit_price_cents) / Number(price.price_quantity)
+            : null;
+          const compatibleUnitIds = new Set([item.base_unit_id]);
+          for (const conversion of conversionRows) {
+            if (!conversion.is_active) continue;
+            if (conversion.item_id !== null && conversion.item_id !== item.id)
+              continue;
+            if (conversion.from_unit_id === item.base_unit_id) {
+              compatibleUnitIds.add(conversion.to_unit_id);
+            }
+            if (conversion.to_unit_id === item.base_unit_id) {
+              compatibleUnitIds.add(conversion.from_unit_id);
+            }
           }
-          if (conversion.to_unit_id === item.base_unit_id) {
-            compatibleUnitIds.add(conversion.from_unit_id);
-          }
-        }
-        return {
-          id: item.id,
-          name: item.name,
-          sku: item.sku,
-          category: item.category_id ? categories.get(item.category_id) ?? "Uncategorized" : "Uncategorized",
-          baseUnitId: item.base_unit_id,
-          unitSymbol: units.get(item.base_unit_id)?.symbol ?? "unit",
-          onHand: quantity,
-          par: par ? Number(par.par_quantity) : null,
-          reorder: par?.reorder_quantity == null ? null : Number(par.reorder_quantity),
-          lastUnitCostCents: cost,
-          inventoryValueCents: cost === null ? null : Math.round(quantity * cost),
-          lastMovementAt: movement?.last_movement_at ?? null,
-          compatibleUnitIds: [...compatibleUnitIds],
-        };
-      }),
-      units: unitRows.filter((unit) => unit.is_active).map((unit) => ({
-        id: unit.id,
-        name: unit.name,
-        symbol: unit.symbol,
-        dimension: unit.dimension,
-      })),
+          return {
+            id: item.id,
+            name: item.name,
+            sku: item.sku,
+            category: item.category_id
+              ? (categories.get(item.category_id) ?? "Uncategorized")
+              : "Uncategorized",
+            baseUnitId: item.base_unit_id,
+            unitSymbol: units.get(item.base_unit_id)?.symbol ?? "unit",
+            onHand: quantity,
+            par: par ? Number(par.par_quantity) : null,
+            reorder:
+              par?.reorder_quantity == null
+                ? null
+                : Number(par.reorder_quantity),
+            lastUnitCostCents: cost,
+            inventoryValueCents:
+              cost === null ? null : Math.round(quantity * cost),
+            lastMovementAt: movement?.last_movement_at ?? null,
+            compatibleUnitIds: [...compatibleUnitIds],
+          };
+        }),
+      units: unitRows
+        .filter((unit) => unit.is_active)
+        .map((unit) => ({
+          id: unit.id,
+          name: unit.name,
+          symbol: unit.symbol,
+          dimension: unit.dimension,
+        })),
       locations: (locationChoiceResult.data ?? []).map((locationOption) => ({
         id: locationOption.id,
         name: locationOption.name,
@@ -653,7 +772,9 @@ export async function loadLiveInventory(
         countedAt: count.counted_at,
         countedByUserId: count.counted_by,
         countedBy: profiles.get(count.counted_by) ?? "Management",
-        approvedBy: count.approved_by ? profiles.get(count.approved_by) ?? "Management" : null,
+        approvedBy: count.approved_by
+          ? (profiles.get(count.approved_by) ?? "Management")
+          : null,
         approvedAt: count.approved_at,
         notes: count.notes,
         lines: (countLineResult.data ?? [])
@@ -662,32 +783,51 @@ export async function loadLiveInventory(
             id: line.id,
             inventoryItemId: line.inventory_item_id,
             unitId: line.unit_id,
-            expectedQuantity: line.expected_quantity == null ? null : Number(line.expected_quantity),
+            expectedQuantity:
+              line.expected_quantity == null
+                ? null
+                : Number(line.expected_quantity),
             countedQuantity: Number(line.counted_quantity),
-            unitCostCents: line.unit_cost_cents == null ? null : Number(line.unit_cost_cents),
+            unitCostCents:
+              line.unit_cost_cents == null
+                ? null
+                : Number(line.unit_cost_cents),
           })),
       })),
-      vendors: (vendorResult.data ?? []).filter((vendor) => vendor.is_active).map((vendor) => ({
-        id: vendor.id,
-        name: vendor.name,
-        contactName: vendor.contact_name,
-        email: vendor.email,
-        phone: vendor.phone,
-        paymentTerms: vendor.payment_terms,
-      })),
+      vendors: (vendorResult.data ?? [])
+        .filter((vendor) => vendor.is_active)
+        .map((vendor) => ({
+          id: vendor.id,
+          name: vendor.name,
+          contactName: vendor.contact_name,
+          email: vendor.email,
+          phone: vendor.phone,
+          paymentTerms: vendor.payment_terms,
+        })),
       orders: (orderResult.data ?? []).map((order) => ({
         id: order.id,
         vendorId: order.vendor_id,
         vendorName: vendors.get(order.vendor_id)?.name ?? "Vendor",
         poNumber: order.po_number,
         status: order.status,
+        createdByUserId: order.created_by,
+        createdBy: profiles.get(order.created_by) ?? "Management",
+        approvedBy: order.approved_by
+          ? (profiles.get(order.approved_by) ?? "Management")
+          : null,
+        approvedAt: order.approved_at,
         orderedOn: order.ordered_on,
         expectedOn: order.expected_on,
         subtotalCents: Number(order.subtotal_cents),
         taxCents: Number(order.tax_cents),
         shippingCents: Number(order.shipping_cents),
-        totalCents: Number(order.subtotal_cents) + Number(order.tax_cents) + Number(order.shipping_cents),
-        lineCount: (orderLineResult.data ?? []).filter((line) => line.purchase_order_id === order.id).length,
+        totalCents:
+          Number(order.subtotal_cents) +
+          Number(order.tax_cents) +
+          Number(order.shipping_cents),
+        lineCount: (orderLineResult.data ?? []).filter(
+          (line) => line.purchase_order_id === order.id,
+        ).length,
         lines: (orderLineResult.data ?? [])
           .filter((line) => line.purchase_order_id === order.id)
           .map((line) => {
@@ -697,16 +837,22 @@ export async function loadLiveInventory(
                 .map((delivery) => delivery.id),
             );
             const receivedQuantity = (deliveryLineResult.data ?? [])
-              .filter((deliveryLine) =>
-                matchingDeliveryIds.has(deliveryLine.delivery_id) &&
-                deliveryLine.inventory_item_id === line.inventory_item_id &&
-                deliveryLine.unit_id === line.unit_id,
+              .filter(
+                (deliveryLine) =>
+                  matchingDeliveryIds.has(deliveryLine.delivery_id) &&
+                  deliveryLine.inventory_item_id === line.inventory_item_id &&
+                  deliveryLine.unit_id === line.unit_id,
               )
-              .reduce((sum, deliveryLine) => sum + Number(deliveryLine.accepted_quantity), 0);
+              .reduce(
+                (sum, deliveryLine) =>
+                  sum + Number(deliveryLine.accepted_quantity),
+                0,
+              );
             return {
               id: line.id,
               inventoryItemId: line.inventory_item_id,
-              itemName: items.get(line.inventory_item_id)?.name ?? "Inventory item",
+              itemName:
+                items.get(line.inventory_item_id)?.name ?? "Inventory item",
               unitId: line.unit_id,
               unitSymbol: units.get(line.unit_id)?.symbol ?? "unit",
               quantity: Number(line.quantity),
@@ -718,7 +864,9 @@ export async function loadLiveInventory(
       })),
       deliveries: (deliveryResult.data ?? []).map((delivery) => {
         const order = delivery.purchase_order_id
-          ? (orderResult.data ?? []).find((candidate) => candidate.id === delivery.purchase_order_id)
+          ? (orderResult.data ?? []).find(
+              (candidate) => candidate.id === delivery.purchase_order_id,
+            )
           : null;
         return {
           id: delivery.id,
@@ -729,13 +877,29 @@ export async function loadLiveInventory(
           deliveredAt: delivery.delivered_at,
           invoiceNumber: delivery.invoice_number,
           receivedBy: profiles.get(delivery.received_by) ?? "Management",
+          receivedByUserId: delivery.received_by,
           notes: delivery.notes,
+          exceptionStatus:
+            (deliveryBatchResult.data ?? []).find((batch) => batch.delivery_id === delivery.id)?.status ?? "posted",
+          exceptionReviewNote:
+            (deliveryBatchResult.data ?? []).find((batch) => batch.delivery_id === delivery.id)?.review_note ?? null,
+          exceptions: (deliveryExceptionResult.data ?? [])
+            .filter((exception) => exception.delivery_id === delivery.id)
+            .map((exception) => ({
+              inventoryItemId: exception.inventory_item_id,
+              itemName: items.get(exception.inventory_item_id)?.name ?? "Inventory item",
+              unitSymbol: units.get(exception.unit_id)?.symbol ?? "unit",
+              kind: exception.exception_kind,
+              proposedAcceptedQuantity: Number(exception.proposed_accepted_quantity),
+              note: exception.note,
+            })),
           lines: (deliveryLineResult.data ?? [])
             .filter((line) => line.delivery_id === delivery.id)
             .map((line) => ({
               id: line.id,
               inventoryItemId: line.inventory_item_id,
-              itemName: items.get(line.inventory_item_id)?.name ?? "Inventory item",
+              itemName:
+                items.get(line.inventory_item_id)?.name ?? "Inventory item",
               unitId: line.unit_id,
               unitSymbol: units.get(line.unit_id)?.symbol ?? "unit",
               quantity: Number(line.quantity),
@@ -754,27 +918,34 @@ export async function loadLiveInventory(
         unitSymbol: units.get(record.unit_id)?.symbol ?? "unit",
         quantity: Number(record.quantity),
         reasonCode: record.reason_code,
-        estimatedCostCents: record.estimated_cost_cents == null ? null : Number(record.estimated_cost_cents),
+        estimatedCostCents:
+          record.estimated_cost_cents == null
+            ? null
+            : Number(record.estimated_cost_cents),
         occurredAt: record.occurred_at,
         notes: record.notes,
         status: record.status,
         recordedByUserId: record.recorded_by,
         recordedBy: profiles.get(record.recorded_by) ?? "Management",
-        reviewedBy: record.approved_by ? profiles.get(record.approved_by) ?? "Management" : null,
+        reviewedBy: record.approved_by
+          ? (profiles.get(record.approved_by) ?? "Management")
+          : null,
         approvedAt: record.approved_at,
         reviewNote: record.review_note,
       })),
       transfers: (transferResult.data ?? []).map((transfer) => ({
         id: transfer.id,
         fromLocationId: transfer.from_location_id,
-        fromLocationName: locations.get(transfer.from_location_id) ?? "Source location",
+        fromLocationName:
+          locations.get(transfer.from_location_id) ?? "Source location",
         toLocationId: transfer.to_location_id,
-        toLocationName: locations.get(transfer.to_location_id) ?? "Destination location",
+        toLocationName:
+          locations.get(transfer.to_location_id) ?? "Destination location",
         status: transfer.status,
         createdByUserId: transfer.created_by,
         createdBy: profiles.get(transfer.created_by) ?? "Management",
         reviewedBy: transfer.reviewed_by
-          ? profiles.get(transfer.reviewed_by) ?? "Management"
+          ? (profiles.get(transfer.reviewed_by) ?? "Management")
           : null,
         reviewedAt: transfer.reviewed_at,
         notes: transfer.notes,
@@ -785,42 +956,45 @@ export async function loadLiveInventory(
           .map((line) => ({
             id: line.id,
             inventoryItemId: line.inventory_item_id,
-            itemName: items.get(line.inventory_item_id)?.name ?? "Inventory item",
+            itemName:
+              items.get(line.inventory_item_id)?.name ?? "Inventory item",
             unitId: line.unit_id,
             unitSymbol: units.get(line.unit_id)?.symbol ?? "unit",
             sentQuantity: Number(line.sent_quantity),
-            receivedQuantity: line.received_quantity == null
-              ? null
-              : Number(line.received_quantity),
+            receivedQuantity:
+              line.received_quantity == null
+                ? null
+                : Number(line.received_quantity),
           })),
       })),
-      recipes: (recipeResult.data ?? []).filter((recipe) => recipe.is_active).map((recipe) => {
-        const ingredients = (ingredientResult.data ?? []).filter((row) => row.recipe_id === recipe.id);
-        let knownCostCents = 0;
-        let missingCostCount = 0;
-        for (const ingredient of ingredients) {
-          const price = latestPrice.get(`${ingredient.inventory_item_id}:${ingredient.unit_id}`);
-          if (!price) {
-            missingCostCount += 1;
-            continue;
-          }
-          knownCostCents += Math.round(
-            Number(ingredient.quantity) *
-              (Number(price.unit_price_cents) / Number(price.price_quantity)) /
-              (1 - Number(ingredient.waste_factor)),
-          );
-        }
-        return {
-          id: recipe.id,
-          name: recipe.name,
-          yieldQuantity: Number(recipe.yield_quantity),
-          yieldUnit: units.get(recipe.yield_unit_id)?.symbol ?? "unit",
-          menuPriceCents: recipe.menu_price_cents == null ? null : Number(recipe.menu_price_cents),
-          ingredientCount: ingredients.length,
-          knownCostCents,
-          missingCostCount,
-        };
-      }),
+      recipes: (recipeCostResult.data ?? []).flatMap((recipe): LiveRecipe[] =>
+        recipe.recipeId && recipe.name && recipe.yieldUnitId
+          ? [{
+              id: recipe.recipeId,
+              name: recipe.name,
+              yieldQuantity: Number(recipe.yieldQuantity),
+              yieldUnit: units.get(recipe.yieldUnitId)?.symbol ?? "unit",
+              menuPriceCents:
+                recipe.menuPriceCents == null
+                  ? null
+                  : Number(recipe.menuPriceCents),
+              ingredientCount: Number(recipe.ingredientCount ?? 0),
+              batchCostCents:
+                recipe.batchCostCents == null
+                  ? null
+                  : Number(recipe.batchCostCents),
+              portionCostCents:
+                recipe.portionCostCents == null
+                  ? null
+                  : Number(recipe.portionCostCents),
+              foodCostPercent:
+                recipe.foodCostPercent == null
+                  ? null
+                  : Number(recipe.foodCostPercent),
+              missingCostCount: Number(recipe.missingCostCount ?? 0),
+            }]
+          : [],
+      ),
       catalog: {
         units: unitRows.map((unit) => ({
           id: unit.id,
@@ -874,9 +1048,10 @@ export async function loadLiveInventory(
           purchaseUnitId: vendorItem.purchase_unit_id,
           vendorSku: vendorItem.vendor_sku,
           packQuantity: Number(vendorItem.pack_quantity),
-          lastPriceCents: vendorItem.last_price_cents == null
-            ? null
-            : Number(vendorItem.last_price_cents),
+          lastPriceCents:
+            vendorItem.last_price_cents == null
+              ? null
+              : Number(vendorItem.last_price_cents),
           isPreferred: vendorItem.is_preferred,
           isActive: vendorItem.is_active,
         })),
@@ -895,7 +1070,8 @@ export async function loadLiveInventory(
           locationId: par.location_id,
           inventoryItemId: par.inventory_item_id,
           parQuantity: Number(par.par_quantity),
-          reorderQuantity: par.reorder_quantity == null ? null : Number(par.reorder_quantity),
+          reorderQuantity:
+            par.reorder_quantity == null ? null : Number(par.reorder_quantity),
           effectiveFrom: par.effective_from,
         })),
         recipes: (recipeResult.data ?? []).map((recipe) => ({
@@ -903,9 +1079,10 @@ export async function loadLiveInventory(
           name: recipe.name,
           yieldQuantity: Number(recipe.yield_quantity),
           yieldUnitId: recipe.yield_unit_id,
-          menuPriceCents: recipe.menu_price_cents == null
-            ? null
-            : Number(recipe.menu_price_cents),
+          menuPriceCents:
+            recipe.menu_price_cents == null
+              ? null
+              : Number(recipe.menu_price_cents),
           isActive: recipe.is_active,
           ingredients: (ingredientResult.data ?? [])
             .filter((ingredient) => ingredient.recipe_id === recipe.id)

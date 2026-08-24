@@ -9,15 +9,18 @@ import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.serv
 export const metadata: Metadata = { title: "Integrations" };
 
 export default async function IntegrationsPage() {
-  if (isDemoMode) return <IntegrationsWorkspace />;
   const resolution = await resolveWorkspaceSession();
-  if (resolution.status !== "ready" || resolution.context.mode !== "live") return null;
+  if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/integrations", resolution.context);
+  if (isDemoMode || resolution.context.mode === "demo") return <IntegrationsWorkspace />;
   return (
     <LiveIntegrationsWorkspace
       key={resolution.context.activeLocation.id}
       workspace={resolution.context}
       result={await loadLiveIntegrations(resolution.context)}
+      manualCsvProcessorEnabled={
+        process.env.LE_YARD_MANUAL_CSV_PROCESSOR_ENABLED?.trim() === "true"
+      }
     />
   );
 }

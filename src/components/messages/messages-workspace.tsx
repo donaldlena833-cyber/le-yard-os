@@ -29,6 +29,8 @@ import { Button } from "@/components/ui/button";
 import { PageFrame } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import { demoIds, demoWorkspace } from "@/lib/demo";
+import { appSurface } from "@/lib/app-surface";
+import { canAccessDemoChannel } from "@/lib/permissions/demo-channel-access";
 import { cn } from "@/lib/utils";
 import type { ChatChannel, ChatMessage } from "@/types";
 
@@ -43,7 +45,9 @@ const realPlaygroundPeople = demoWorkspace.people.filter(
         demoIds.people.mateo,
       ].includes(person.id as never)),
 );
-const messageStorageKey = `le-yard:internal-messages:${demoIds.organization}`;
+function demoMessageStorageKey(organizationId: string, principalId: string) {
+  return `le-yard:internal-messages:${organizationId}:${principalId}:${appSurface}`;
+}
 
 function localMessageId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -280,6 +284,10 @@ function MessageBubble({
 export function MessagesWorkspace() {
   const workspace = useWorkspaceContext();
   const currentUserId = workspace.identity.userId;
+  const messageStorageKey = demoMessageStorageKey(
+    workspace.organization.id,
+    currentUserId,
+  );
   const timeZone = workspace.activeLocation.timeZone ?? "UTC";
   const [selectedChannelId, setSelectedChannelId] =
     useState<string>("channel-all-staff");
@@ -337,7 +345,7 @@ export function MessagesWorkspace() {
       broadcastRef.current?.close();
       broadcastRef.current = null;
     };
-  }, []);
+  }, [messageStorageKey]);
 
   function persistMessages(next: ChatMessage[]) {
     setMessages(next);
@@ -355,6 +363,7 @@ export function MessagesWorkspace() {
   const visibleChannels = useMemo(
     () =>
       demoWorkspace.chatChannels
+        .filter((channel) => canAccessDemoChannel(channel, workspace))
         .filter(
           (channel) =>
             !channel.locationId ||
@@ -378,14 +387,16 @@ export function MessagesWorkspace() {
             .toLowerCase()
             .includes(channelQuery.trim().toLowerCase()),
         ),
-    [channelQuery, workspace.locations],
+    [channelQuery, workspace],
   );
   const selectedChannel = useMemo(
     () =>
       visibleChannels.find((channel) => channel.id === selectedChannelId) ??
       visibleChannels[0] ??
-      demoWorkspace.chatChannels[0],
-    [selectedChannelId, visibleChannels],
+      demoWorkspace.chatChannels.find((channel) =>
+        canAccessDemoChannel(channel, workspace),
+      )!,
+    [selectedChannelId, visibleChannels, workspace],
   );
   const channelMessages = messages.filter(
     (message) => message.channelId === selectedChannel.id,
@@ -415,6 +426,9 @@ export function MessagesWorkspace() {
   }
 
   function sendMessage(formData: FormData) {
+    if (!selectedChannel || !canAccessDemoChannel(selectedChannel, workspace)) {
+      return;
+    }
     const body = String(formData.get("message") ?? "").trim();
     if (!body && !attachment) return;
     const now = new Date().toISOString();

@@ -59,6 +59,20 @@ export default async function RootLayout({
       data-scroll-behavior="smooth"
       suppressHydrationWarning
     >
+      <head>
+        {/*
+          Keep the Apple-specific tag explicit. Some framework/browser
+          combinations emit only the generic mobile-web-app-capable tag, but
+          iOS uses this exact declaration to launch a Home Screen install
+          without Safari's URL field and bottom toolbar.
+        */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <link
+          rel="apple-touch-icon"
+          sizes="192x192"
+          href="/icons/icon-192.png"
+        />
+      </head>
       <body>
         {children}
         <ServiceWorkerRegister />

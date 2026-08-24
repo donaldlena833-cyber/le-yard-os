@@ -11,6 +11,7 @@ import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { createClient } from "@/lib/supabase/server";
 import type { UserScopedSupabaseClient } from "@/data/types";
 import type { ReportKind } from "@/types";
+import { canAccessReportKind } from "@/lib/permissions/report-access";
 import {
   isIsoCalendarDate,
   localDateKey,
@@ -108,10 +109,10 @@ function locationName(base: BaseContext, locationId: string): string {
   return base.locationById.get(locationId)?.name ?? "Location";
 }
 
-function latest(values: Array<string | null | undefined>, fallback: string): string {
-  return values.reduce<string>(
-    (current, value) => (value && value > current ? value : current),
-    fallback,
+function latest(values: Array<string | null | undefined>): string | null {
+  return values.reduce<string | null>(
+    (current, value) => (value && (!current || value > current) ? value : current),
+    null,
   );
 }
 
@@ -143,7 +144,7 @@ function reportView(input: {
   title: string;
   description: string;
   sourceLabel: string;
-  freshnessAt: string;
+  freshnessAt: string | null;
   coverageNote: string;
   metrics: ReportMetric[];
   columns: ReportView["columns"];
@@ -262,7 +263,6 @@ async function buildPeopleReport(base: BaseContext, kind: "labor" | "attendance"
       ...evidence.breaks.map((item) => item.updated_at),
       ...evidence.corrections.map((item) => item.updated_at),
     ],
-    base.generatedAt,
   );
 
   if (kind === "overtime") {
@@ -422,7 +422,6 @@ async function buildPeopleReport(base: BaseContext, kind: "labor" | "attendance"
         sourceLabel: "Time entries + approved tip allocations",
         freshnessAt: latest(
           [freshness, ...runs.map((run) => run.updated_at), ...allocations.map((item) => item.created_at)],
-          base.generatedAt,
         ),
         coverageNote:
           "Payroll transmission, wage calculation, taxes, deductions, and filing remain outside Le Yard OS. Only approved/corrected time and approved tip runs are included in readiness totals.",
@@ -565,7 +564,6 @@ async function buildTipsReport(base: BaseContext) {
       sourceLabel: "Tip runs + source evidence",
       freshnessAt: latest(
         [...runs.map((run) => run.updated_at), ...sources.map((source) => source.created_at)],
-        base.generatedAt,
       ),
       coverageNote:
         "Service charges are displayed separately and are included in the pool only when the approved policy explicitly marks them distributable. Draft/calculated rows are not payroll-ready.",
@@ -626,7 +624,7 @@ async function buildCloseoutReport(base: BaseContext, kind: "sales_to_labor" | "
         title: "Shift performance",
         description: "Closeout sales, covers, comps, voids, and workflow state by service shift.",
         sourceLabel: "Shift closeouts",
-        freshnessAt: latest(closeouts.map((row) => row.updated_at), base.generatedAt),
+        freshnessAt: latest(closeouts.map((row) => row.updated_at)),
         coverageNote:
           "No subjective performance score is generated. Rows preserve the submitted closeout facts and approval state.",
         metrics: [
@@ -694,7 +692,6 @@ async function buildCloseoutReport(base: BaseContext, kind: "sales_to_labor" | "
       sourceLabel: "Approved closeouts + time entries",
       freshnessAt: latest(
         [...closeouts.map((row) => row.updated_at), ...timeEvidence.entries.map((entry) => entry.updated_at)],
-        base.generatedAt,
       ),
       coverageNote:
         "This is net sales per paid labor hour, not labor-cost percentage. Wage rates and payroll burden are not estimated; only approved closeouts contribute sales.",
@@ -764,7 +761,7 @@ async function buildMoneyReport(base: BaseContext, kind: "receipts" | "expenses"
         title: "Receipts",
         description: "Receipt and invoice documents by document date and review state.",
         sourceLabel: "Receipt records",
-        freshnessAt: latest(rows.map((row) => row.updated_at), base.generatedAt),
+        freshnessAt: latest(rows.map((row) => row.updated_at)),
         coverageNote:
           "Only records with a document date in the selected range are included. OCR suggestions remain unverified until human review.",
         metrics: [
@@ -838,7 +835,7 @@ async function buildMoneyReport(base: BaseContext, kind: "receipts" | "expenses"
       title: "Expenses",
       description: "Recorded expenses by category, vendor, and location.",
       sourceLabel: "Expense records",
-      freshnessAt: latest(rows.map((row) => row.updated_at), base.generatedAt),
+      freshnessAt: latest(rows.map((row) => row.updated_at)),
       coverageNote:
         "This view includes entered expense records only. It does not infer accruals, taxes, or accounting classifications.",
       metrics: [
@@ -950,7 +947,6 @@ async function buildInventoryReport(
         sourceLabel: "Inventory counts + count lines",
         freshnessAt: latest(
           [...counts.map((row) => row.updated_at), ...lines.map((line) => line.created_at)],
-          base.generatedAt,
         ),
         coverageNote:
           "Pending counts are shown for review but do not change on-hand inventory. Cost variance is shown only where a canonical unit cost was snapshotted.",
@@ -1006,7 +1002,7 @@ async function buildInventoryReport(
         title: "Cost of goods sold",
         description: "Period COGS reconciliations from inventory and purchasing records.",
         sourceLabel: "COGS periods",
-        freshnessAt: latest(rows.map((row) => row.updated_at), base.generatedAt),
+        freshnessAt: latest(rows.map((row) => row.updated_at)),
         coverageNote:
           "COGS is opening inventory plus purchases and transfers in, less transfers out and closing inventory. Only approved periods are included in the headline total.",
         metrics: [
@@ -1075,7 +1071,7 @@ async function buildInventoryReport(
         title: "Waste",
         description: "Recorded waste quantities, reason codes, estimated cost, and approval state.",
         sourceLabel: "Waste records",
-        freshnessAt: latest(rows.map((row) => row.created_at), base.generatedAt),
+        freshnessAt: latest(rows.map((row) => row.created_at)),
         coverageNote:
           "Estimated cost is reported only when present. Pending waste records are visible but are not treated as approved ledger adjustments.",
         metrics: [
@@ -1155,7 +1151,7 @@ async function buildInventoryReport(
       title: "Vendor pricing",
       description: "Item price history by vendor and purchase unit.",
       sourceLabel: "Item price history",
-      freshnessAt: latest(rows.map((row) => row.created_at), base.generatedAt),
+      freshnessAt: latest(rows.map((row) => row.created_at)),
       coverageNote:
         `Price history is organization-wide because its source records do not carry a location. ${base.filters.locationId === "all" ? "The current scope includes the organization." : "The selected location does not narrow this report."} Price change compares with the immediately older matching item/vendor/unit record available inside the selected range. Unit conversions are not inferred.`,
       metrics: [
@@ -1283,7 +1279,6 @@ async function buildGuestActivityReport(base: BaseContext) {
       sourceLabel: "Guest visits + reservations",
       freshnessAt: latest(
         [...visits.map((row) => row.created_at), ...reservations.map((row) => row.updated_at)],
-        base.generatedAt,
       ),
       coverageNote:
         "Spend is included only on visit records where it was supplied. Reservations without a linked guest remain visible and are not silently deduplicated.",
@@ -1325,7 +1320,9 @@ export async function loadLiveReport(
   kind: ReportKind,
   filters: ReportFilters,
 ): Promise<LiveReadResult<LiveReportsModel>> {
-  if (workspace.role === "employee") return readFailure("Management access is required.");
+  if (!canAccessReportKind(workspace, kind)) {
+    return readFailure("This report requires a capability that is not assigned to you.");
+  }
   if (
     !reportKinds.has(kind) ||
     !isIsoCalendarDate(filters.startsOn) ||

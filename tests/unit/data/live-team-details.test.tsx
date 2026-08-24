@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/files";
 import { createJobRoleDefinitionAction } from "@/app/actions/workflows/people-configuration";
 import { decideTimeOffAction } from "@/app/actions/workflows/people-operations";
+import { administerTeamMemberAction } from "@/app/actions/workflows/team-admin";
 import { LiveTeamWorkspace } from "@/components/team/live-team-workspace";
 import type { LiveTeamMember, LiveTeamModel } from "@/data/read-models/team";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
@@ -101,6 +102,7 @@ function member(overrides: Partial<LiveTeamMember> = {}): LiveTeamMember {
     membershipStatus: "active",
     employmentStatus: "active",
     locationIds: [locationId],
+    primaryLocationId: locationId,
     jobRoles: [
       {
         id: "60000000-0000-4000-8000-000000000001",
@@ -208,6 +210,32 @@ function model(teamMember: LiveTeamMember): LiveTeamModel {
 }
 
 describe("connected Team employee details", () => {
+  it("reviews the explicit primary location before saving account access", async () => {
+    vi.mocked(administerTeamMemberAction).mockResolvedValue({
+      status: "success",
+      message: "Role and location access updated.",
+    });
+    render(
+      <LiveTeamWorkspace
+        workspace={workspace("owner")}
+        model={{ ok: true, data: model(member()) }}
+      />,
+    );
+
+    expect(screen.getByLabelText("Make Main Dining Room primary")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Review role & locations" }));
+
+    const dialog = screen.getByRole("alertdialog", { name: "Save this access change?" });
+    expect(within(dialog).getAllByText("Main Dining Room").length).toBeGreaterThan(0);
+    expect(administerTeamMemberAction).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Confirm & save access" }));
+    await waitFor(() => expect(administerTeamMemberAction).toHaveBeenCalledOnce());
+    const submitted = vi.mocked(administerTeamMemberAction).mock.calls[0][1] as FormData;
+    expect(submitted.get("primaryLocationId")).toBe(locationId);
+    expect(submitted.getAll("locationIds")).toEqual([locationId]);
+  });
+
   it("guides an empty tenant through explicit role setup without assumed values", () => {
     render(
       <LiveTeamWorkspace

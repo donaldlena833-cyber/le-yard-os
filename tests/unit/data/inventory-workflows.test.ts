@@ -129,7 +129,7 @@ describe("extended inventory workflow RPC contracts", () => {
       deliveredAt: "2026-08-02T14:00:00.000Z",
       invoiceNumber: "INV-1042",
       notes: null,
-      lines: [{ inventoryItemId: ids.item, unitId: ids.unit, quantity: 2, acceptedQuantity: 1.75, unitPriceCents: 375, lotCode: "LOT-1", expiresOn: "2026-08-09" }],
+      lines: [{ inventoryItemId: ids.item, unitId: ids.unit, quantity: 2, acceptedQuantity: 1.75, unitPriceCents: 375, lotCode: "LOT-1", expiresOn: "2026-08-09", exceptionKind: "none", exceptionNote: null }],
     });
     await submitWasteRecord(workflow, {
       requestId: ids.request,
@@ -165,7 +165,7 @@ describe("extended inventory workflow RPC contracts", () => {
     const commandCalls = rpc.mock.calls.filter(([name]) => name !== "has_capability");
     expect(commandCalls.map(([name]) => name)).toEqual([
       "create_purchase_order",
-      "receive_inventory_delivery",
+      "receive_inventory_delivery_with_exceptions",
       "submit_waste_record",
       "review_waste_record",
       "create_inventory_transfer",
@@ -180,7 +180,7 @@ describe("extended inventory workflow RPC contracts", () => {
       ["p_approve", "p_lines", "p_note", "p_request_id", "p_transfer_id"],
     ]);
     expect(commandCalls[0][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, quantity: 2, unit_price_cents: 375, notes: null }]);
-    expect(commandCalls[1][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, quantity: 2, accepted_quantity: 1.75, unit_price_cents: 375, lot_code: "LOT-1", expires_on: "2026-08-09" }]);
+    expect(commandCalls[1][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, quantity: 2, accepted_quantity: 1.75, unit_price_cents: 375, lot_code: "LOT-1", expires_on: "2026-08-09", exception_kind: "none", exception_note: null }]);
     expect(commandCalls[5][1].p_lines).toEqual([{ inventory_item_id: ids.item, unit_id: ids.unit, received_quantity: 2.75 }]);
     for (const [, args] of commandCalls) {
       expect(args).not.toHaveProperty("organization_id");

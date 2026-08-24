@@ -7,6 +7,8 @@ import {
   liveReportFromRequest,
 } from "../live-report-request";
 import { reportFromRequest } from "../report-request";
+import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
+import { canAccessReportKind } from "@/lib/permissions/report-access";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +70,13 @@ export async function GET(request: Request) {
 
   const report = reportFromRequest(request);
   if ("error" in report) return Response.json({ error: report.error }, { status: 400 });
+  const resolution = await resolveWorkspaceSession();
+  if (resolution.status !== "ready") {
+    return Response.json({ error: "Sign in to export a report." }, { status: 401 });
+  }
+  if (!canAccessReportKind(resolution.context, report.kind)) {
+    return Response.json({ error: "This report export is not authorized." }, { status: 403 });
+  }
 
   const csv = buildReportCsv(report.view, report.filters);
   const filename = `le-yard-${report.kind}-${report.filters.startsOn}-${report.filters.endsOn}.csv`;

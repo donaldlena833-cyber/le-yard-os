@@ -18,31 +18,13 @@ export async function GET() {
       { status: 503, headers: { "cache-control": "no-store" } },
     );
 
-  try {
-    const response = await fetch("https://api.resend.com/domains", {
-      headers: { authorization: `Bearer ${apiKey}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(5_000),
-    });
-    if (!response.ok) throw new Error("resend_unavailable");
-    const body = (await response.json()) as {
-      data?: Array<{ name?: unknown; status?: unknown }>;
-    };
-    const domain = body.data?.find(
-      (item) => item.name === domainName,
-    );
-    const state = domain?.status === "verified" ? "ready" : "pending";
-    return NextResponse.json(
-      { state },
-      {
-        status: state === "ready" ? 200 : 503,
-        headers: { "cache-control": "no-store" },
-      },
-    );
-  } catch {
-    return NextResponse.json(
-      { state: "unavailable" },
-      { status: 503, headers: { "cache-control": "no-store" } },
-    );
-  }
+  // The production Resend key is intentionally restricted to sending access.
+  // Such a key cannot call the Domains API, so probing that endpoint would
+  // report a false outage even while delivery is healthy. DNS/provider
+  // verification is a deployment-time check; runtime readiness confirms that
+  // the restricted credential and a syntactically valid sender are configured.
+  return NextResponse.json(
+    { state: "ready", senderDomain: domainName },
+    { headers: { "cache-control": "no-store" } },
+  );
 }

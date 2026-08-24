@@ -8,6 +8,8 @@ import {
   createInventoryTransferInputSchema,
   createPurchaseOrderInputSchema,
   receiveInventoryDeliveryInputSchema,
+  reviewDeliveryExceptionsInputSchema,
+  reviewPurchaseOrderInputSchema,
   recordInventoryItemCostInputSchema,
   reviewInventoryTransferInputSchema,
   reviewWasteRecordInputSchema,
@@ -20,6 +22,8 @@ import {
   createInventoryTransfer,
   createPurchaseOrder,
   receiveInventoryDelivery,
+  reviewDeliveryExceptions,
+  reviewPurchaseOrder,
   recordInventoryItemCost,
   reviewInventoryTransfer,
   reviewWasteRecord,
@@ -88,6 +92,28 @@ export async function receiveInventoryDeliveryAction(input: unknown) {
     schema: receiveInventoryDeliveryInputSchema,
     input,
     run: receiveInventoryDelivery,
+  });
+  if (result.ok && result.persisted) revalidatePath("/inventory");
+  return result;
+}
+
+export async function reviewDeliveryExceptionsAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "inventory.delivery_exception_review",
+    schema: reviewDeliveryExceptionsInputSchema,
+    input,
+    run: reviewDeliveryExceptions,
+  });
+  if (result.ok && result.persisted) revalidatePath("/inventory");
+  return result;
+}
+
+export async function reviewPurchaseOrderAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "inventory.purchase_order_review",
+    schema: reviewPurchaseOrderInputSchema,
+    input,
+    run: reviewPurchaseOrder,
   });
   if (result.ok && result.persisted) revalidatePath("/inventory");
   return result;

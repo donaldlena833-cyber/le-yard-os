@@ -37,6 +37,7 @@ import { useRouter } from "next/navigation";
 import {
   type FormEvent,
   type ReactNode,
+  useEffect,
   useId,
   useMemo,
   useRef,
@@ -44,7 +45,8 @@ import {
   useTransition,
 } from "react";
 import {
-  moveReservationTableAction,
+  correctReservationStatusAction,
+  saveReservationFloorPositionsAction,
   saveReservationWithGuestAction,
   saveWaitlistEntryAction,
   seatWaitlistEntryAction,
@@ -116,15 +118,55 @@ const assignableReservationStatuses = new Set<ReservationStatus>([
 const fieldClass =
   "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base outline-none focus:border-[var(--accent)] sm:text-sm";
 const stateStyles: Record<ReservationPhysicalTableState, string> = {
-  available:
-    "border-[#ded8ca] bg-[#f8f4e9] text-[#1c1d1a]",
-  occupied:
-    "border-[#94c0a0] bg-[#d6ead9] text-[#1e5f39]",
-  needs_reset:
-    "border-[#d4ae69] bg-[#f4dfae] text-[#73501f]",
-  blocked:
-    "border-[#5c5e58] bg-[#3d3f3a] text-[#aaa99f] opacity-75",
+  available: "border-[#ded8ca] bg-[#f8f4e9] text-[#1c1d1a]",
+  occupied: "border-[#94c0a0] bg-[#d6ead9] text-[#1e5f39]",
+  needs_reset: "border-[#d4ae69] bg-[#f4dfae] text-[#73501f]",
+  blocked: "border-[#5c5e58] bg-[#3d3f3a] text-[#aaa99f] opacity-75",
 };
+
+type FloorPositionMove = {
+  tableId: string;
+  label: string;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+};
+
+function demoReservationStorageKey(workspace: WorkspaceContextValue) {
+  return `le-yard:reservations:${workspace.organization.id}:${workspace.activeLocation.id}:${workspace.identity.userId}`;
+}
+
+function readDemoReservationStorage(key: string) {
+  try {
+    return typeof window.localStorage?.getItem === "function"
+      ? window.localStorage.getItem(key)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDemoReservationStorage(key: string, value: string) {
+  try {
+    if (typeof window.localStorage?.setItem === "function") {
+      window.localStorage.setItem(key, value);
+    }
+  } catch {
+    // A private/restricted browser may deny storage. Demo mutations still work
+    // for the active tab and must not turn a successful action into an error.
+  }
+}
+
+function removeDemoReservationStorage(key: string) {
+  try {
+    if (typeof window.localStorage?.removeItem === "function") {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // Corrupt or unavailable demo storage is safely ignored.
+  }
+}
 
 function availabilityTables(
   model: ReservationHostModel,
@@ -202,12 +244,14 @@ function Dialog({
   detail,
   onClose,
   returnFocusTarget,
+  busy = false,
   children,
 }: {
   title: string;
   detail: string;
   onClose: () => void;
   returnFocusTarget?: HTMLElement | null;
+  busy?: boolean;
   children: ReactNode;
 }) {
   const titleId = useId();
@@ -215,7 +259,7 @@ function Dialog({
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={busy ? () => undefined : onClose}
       labelledBy={titleId}
       initialFocusSelector="[autofocus]"
       position="responsive-sheet"
@@ -238,6 +282,7 @@ function Dialog({
           variant="quiet"
           onClick={onClose}
           aria-label="Close"
+          disabled={busy}
         >
           <X className="size-4" />
         </Button>
@@ -290,9 +335,11 @@ function DraggableFloorTable({
         table.shape === "round" ? "rounded-full" : "rounded-[10px]",
         stateStyles[table.state],
         !editing && "hover:z-20 hover:brightness-[1.04]",
-        editing && "cursor-grab touch-none ring-1 ring-white/25 active:cursor-grabbing",
+        editing &&
+          "cursor-grab touch-none ring-1 ring-white/25 active:cursor-grabbing",
         isDragging && "z-40 scale-[1.03] shadow-[0_18px_36px_rgba(0,0,0,.42)]",
-        isSelectedInterval && "ring-2 ring-[#d2a24b] ring-offset-2 ring-offset-[#191b18]",
+        isSelectedInterval &&
+          "ring-2 ring-[#d2a24b] ring-offset-2 ring-offset-[#191b18]",
         isSelected && "ring-2 ring-white ring-offset-2 ring-offset-[#191b18]",
       )}
       style={{
@@ -431,34 +478,36 @@ function FloorPlan({
           </>
         ) : null}
         {model.floorNow.tables.map((table) => {
-        const occupyingReservation = table.occupyingReservationId
-          ? model.reservations.find(
-              (entry) => entry.id === table.occupyingReservationId,
-            ) ?? null
-          : null;
-        const isSelectedInterval = Boolean(
-          selected?.tableIds.includes(table.id),
-        );
-        return (
-          <DraggableFloorTable
-            key={table.id}
-            table={table}
-            editing={editing}
-            occupyingReservation={occupyingReservation}
-            isSelectedInterval={isSelectedInterval}
-            isSelected={selectedTableId === table.id}
-            onActivate={() =>
-              selected && canAssignTables
-                ? onAssignTable(table.id)
-                : occupyingReservation
-                  ? onSelectReservation(occupyingReservation.id)
-                  : onSelectTable(table.id)
-            }
-          />
-        );
+          const occupyingReservation = table.occupyingReservationId
+            ? (model.reservations.find(
+                (entry) => entry.id === table.occupyingReservationId,
+              ) ?? null)
+            : null;
+          const isSelectedInterval = Boolean(
+            selected?.tableIds.includes(table.id),
+          );
+          return (
+            <DraggableFloorTable
+              key={table.id}
+              table={table}
+              editing={editing}
+              occupyingReservation={occupyingReservation}
+              isSelectedInterval={isSelectedInterval}
+              isSelected={selectedTableId === table.id}
+              onActivate={() =>
+                selected && canAssignTables
+                  ? onAssignTable(table.id)
+                  : occupyingReservation
+                    ? onSelectReservation(occupyingReservation.id)
+                    : onSelectTable(table.id)
+              }
+            />
+          );
         })}
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-white/10 bg-[#242622]/90 px-3 py-1 text-[9px] font-semibold uppercase tracking-[.14em] text-[#a6a89f] backdrop-blur">
-          {editing ? "Drag tables · positions save automatically" : "Floor now · verify on site"}
+          {editing
+            ? "Draft mode · review before saving"
+            : "Floor now · verify on site"}
         </div>
       </div>
     </DndContext>
@@ -484,15 +533,23 @@ export function ReservationsWorkspace({
   }
   const model =
     modelState.source === incomingModel ? modelState.value : incomingModel;
+  const demoStorageKey = demoReservationStorageKey(workspace);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [assignmentMode, setAssignmentMode] = useState(false);
   const [layoutEditing, setLayoutEditing] = useState(false);
-  const [movingTableId, setMovingTableId] = useState<string | null>(null);
-  const [lastTableMove, setLastTableMove] = useState<{
-    tableId: string;
-    label: string;
-    from: { x: number; y: number };
+  const [layoutReviewOpen, setLayoutReviewOpen] = useState(false);
+  const [floorDraftOriginal, setFloorDraftOriginal] = useState<
+    Record<string, { x: number; y: number; label: string }>
+  >({});
+  const [lastFloorSave, setLastFloorSave] = useState<{
+    moves: FloorPositionMove[];
+  } | null>(null);
+  const [lastStatusChange, setLastStatusChange] = useState<{
+    reservationId: string;
+    fromStatus: ReservationStatus;
+    toStatus: ReservationStatus;
+    resultingVersion: number;
   } | null>(null);
   const [filter, setFilter] = useState<
     "all" | "upcoming" | "arrived" | "seated"
@@ -515,6 +572,7 @@ export function ReservationsWorkspace({
   const currentBookPermissionId = useId();
   const configurationPermissionId = useId();
   const noShowConfirmTitleId = useId();
+  const floorReviewTitleId = useId();
   const { requestIdFor, rotateRequestId } = useStableRequestIds();
   const selected =
     model?.reservations.find((reservation) => reservation.id === selectedId) ??
@@ -564,14 +622,63 @@ export function ReservationsWorkspace({
     locationId: workspace.activeLocation.id,
   });
 
+  useEffect(() => {
+    if (workspace.mode !== "demo" || !incomingModel) return;
+    let cancelled = false;
+    try {
+      const raw = readDemoReservationStorage(demoStorageKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as {
+        version?: number;
+        businessDate?: string;
+        model?: ReservationHostModel;
+      };
+      if (
+        saved.version !== 1 ||
+        saved.businessDate !== incomingModel.businessDate ||
+        !saved.model
+      )
+        return;
+      const savedModel = saved.model;
+      window.queueMicrotask(() => {
+        if (cancelled) return;
+        setModelState({
+          source: incomingModel,
+          value: {
+            ...savedModel,
+            permissions: incomingModel.permissions,
+            configuration: incomingModel.configuration,
+          },
+        });
+      });
+    } catch {
+      removeDemoReservationStorage(demoStorageKey);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [demoStorageKey, incomingModel, workspace.mode]);
+
   function updateModel(
     update: (current: ReservationHostModel) => ReservationHostModel,
   ) {
-    setModelState((current) =>
-      current.value
-        ? { ...current, value: update(current.value) }
-        : current,
-    );
+    setModelState((current) => {
+      if (!current.value) return current;
+      const value = update(current.value);
+      if (workspace.mode === "demo" && typeof window !== "undefined") {
+        window.queueMicrotask(() => {
+          writeDemoReservationStorage(
+            demoStorageKey,
+            JSON.stringify({
+              version: 1,
+              businessDate: value.businessDate,
+              model: value,
+            }),
+          );
+        });
+      }
+      return { ...current, value };
+    });
   }
 
   function reconcileInBackground() {
@@ -581,6 +688,7 @@ export function ReservationsWorkspace({
   function updateReservationStatus(
     reservationId: string,
     status: ReservationStatus,
+    version?: number,
   ) {
     updateModel((current) => {
       const reservation = current.reservations.find(
@@ -597,10 +705,20 @@ export function ReservationsWorkspace({
             occupyingReservationId: reservationId,
           };
         }
-        if (status === "completed" && table.occupyingReservationId === reservationId) {
+        if (
+          status === "completed" &&
+          table.occupyingReservationId === reservationId
+        ) {
           return {
             ...table,
             state: "needs_reset" as const,
+            occupyingReservationId: null,
+          };
+        }
+        if (table.occupyingReservationId === reservationId) {
+          return {
+            ...table,
+            state: "available" as const,
             occupyingReservationId: null,
           };
         }
@@ -609,22 +727,22 @@ export function ReservationsWorkspace({
       return {
         ...current,
         reservations: current.reservations.map((entry) =>
-          entry.id === reservationId ? { ...entry, status } : entry,
+          entry.id === reservationId
+            ? { ...entry, status, version: version ?? entry.version }
+            : entry,
         ),
         floorNow: { ...current.floorNow, tables },
       };
     });
   }
 
-  function updateReservationTables(
-    reservationId: string,
-    tableIds: string[],
-  ) {
+  function updateReservationTables(reservationId: string, tableIds: string[]) {
     updateModel((current) => {
       const labels = tableIds
         .map(
           (tableId) =>
-            current.floorNow.tables.find((table) => table.id === tableId)?.label,
+            current.floorNow.tables.find((table) => table.id === tableId)
+              ?.label,
         )
         .filter((label): label is string => Boolean(label));
       return {
@@ -688,47 +806,115 @@ export function ReservationsWorkspace({
     }));
   }
 
-  async function moveTable(
+  function stageTableMove(
     tableId: string,
     positionX: number,
     positionY: number,
-    recordUndo = true,
   ) {
     if (!model?.permissions.configure) {
-      setMessage("Moving floor tables requires reservation configuration access.");
+      setMessage(
+        "Moving floor tables requires reservation configuration access.",
+      );
       return;
     }
     const table = model.floorNow.tables.find((entry) => entry.id === tableId);
     if (!table || (table.x === positionX && table.y === positionY)) return;
-    const previous = { x: table.x, y: table.y };
+    setFloorDraftOriginal((current) => current[tableId]
+      ? current
+      : { ...current, [tableId]: { x: table.x, y: table.y, label: table.label } });
     updateTablePosition(tableId, positionX, positionY);
-    setMovingTableId(tableId);
-    setMessage(`Table ${table.label} moved. Saving position…`);
-    if (workspace.mode === "demo") {
-      setMovingTableId(null);
-      if (recordUndo)
-        setLastTableMove({ tableId, label: table.label, from: previous });
-      setMessage(`Table ${table.label} moved. Position saved.`);
-      return;
+    setMessage(`Table ${table.label} moved in the draft. Review changes before saving.`);
+  }
+
+  const floorDraftMoves = Object.entries(floorDraftOriginal)
+    .map(([tableId, original]) => {
+      const current = model?.floorNow.tables.find((table) => table.id === tableId);
+      return current && (current.x !== original.x || current.y !== original.y)
+        ? {
+            tableId,
+            label: original.label,
+            fromX: original.x,
+            fromY: original.y,
+            toX: current.x,
+            toY: current.y,
+          }
+        : null;
+    })
+    .filter((move): move is FloorPositionMove => Boolean(move))
+    .sort((left, right) => left.label.localeCompare(right.label));
+
+  function discardFloorDraft() {
+    for (const [tableId, original] of Object.entries(floorDraftOriginal)) {
+      updateTablePosition(tableId, original.x, original.y);
     }
-    const payload = { tableId, positionX, positionY };
-    const scope = `reservation-table-move-${tableId}`;
-    const response = await moveReservationTableAction({
+    setFloorDraftOriginal({});
+    setLayoutReviewOpen(false);
+    setLayoutEditing(false);
+    setMessage("Floor draft discarded. No positions were saved.");
+  }
+
+  async function saveFloorMoves(moves: FloorPositionMove[], undo = false) {
+    if (!moves.length) return false;
+    if (workspace.mode === "demo") {
+      if (!undo) setLastFloorSave({ moves });
+      else {
+        for (const move of moves) updateTablePosition(move.tableId, move.toX, move.toY);
+        setLastFloorSave(null);
+      }
+      setFloorDraftOriginal({});
+      setLayoutReviewOpen(false);
+      setLayoutEditing(false);
+      setMessage(undo ? "Demo: floor save undone." : `Demo: ${moves.length} floor change${moves.length === 1 ? "" : "s"} saved.`);
+      return true;
+    }
+    const payload = {
+      locationId: workspace.activeLocation.id,
+      moves: moves.map((move) => ({
+        tableId: move.tableId,
+        fromX: move.fromX,
+        fromY: move.fromY,
+        toX: move.toX,
+        toY: move.toY,
+      })),
+    };
+    const scope = undo ? "reservation-floor-undo" : "reservation-floor-save";
+    setBusy(true);
+    const response = await saveReservationFloorPositionsAction({
       ...payload,
       requestId: requestIdFor(scope, payload),
     });
-    setMovingTableId(null);
+    setBusy(false);
     if (!response.ok) {
-      updateTablePosition(tableId, previous.x, previous.y);
-      if (recordUndo) setLastTableMove(null);
       setMessage(response.message);
-      return;
+      return false;
     }
     rotateRequestId(scope);
-    if (recordUndo)
-      setLastTableMove({ tableId, label: table.label, from: previous });
-    setMessage(`Table ${table.label} moved. Position saved.`);
+    if (undo) setLastFloorSave(null);
+    else setLastFloorSave({ moves });
+    setFloorDraftOriginal({});
+    setLayoutReviewOpen(false);
+    setLayoutEditing(false);
+    setMessage(undo
+      ? "Floor save undone as a new audited layout change."
+      : `${moves.length} floor change${moves.length === 1 ? "" : "s"} saved after review.`);
     reconcileInBackground();
+    return true;
+  }
+
+  async function undoLastFloorSave() {
+    if (!lastFloorSave) return;
+    const inverse = lastFloorSave.moves.map((move) => ({
+      ...move,
+      fromX: move.toX,
+      fromY: move.toY,
+      toX: move.fromX,
+      toY: move.fromY,
+    }));
+    const saved = await saveFloorMoves(inverse, true);
+    if (workspace.mode === "demo") return;
+    if (saved) {
+      for (const move of inverse) updateTablePosition(move.tableId, move.toX, move.toY);
+    }
   }
 
   function beginTableAssignment() {
@@ -741,7 +927,9 @@ export function ReservationsWorkspace({
     }
     setAssignmentMode(true);
     setSelectedTableId(null);
-    setMessage(`Choose a table for ${selected.guest.displayName}, or use best fit.`);
+    setMessage(
+      `Choose a table for ${selected.guest.displayName}, or use best fit.`,
+    );
     showMobileView("floor");
   }
 
@@ -816,9 +1004,16 @@ export function ReservationsWorkspace({
       return;
     }
     if (workspace.mode === "demo") {
-      updateReservationStatus(selected.id, targetStatus);
+      const resultingVersion = selected.version + 1;
+      updateReservationStatus(selected.id, targetStatus, resultingVersion);
+      setLastStatusChange({
+        reservationId: selected.id,
+        fromStatus: selected.status,
+        toStatus: targetStatus,
+        resultingVersion,
+      });
       setMessage(
-        `Demo: ${selected.guest.displayName} moved to ${targetStatus.replaceAll("_", " ")}.`,
+        `Demo: ${selected.guest.displayName} moved to ${targetStatus.replaceAll("_", " ")}. Undo is available.`,
       );
       return;
     }
@@ -833,9 +1028,70 @@ export function ReservationsWorkspace({
     setMessage(response.ok ? "Reservation updated." : response.message);
     if (response.ok) {
       rotateRequestId(`reservation-transition-${selected.id}`);
-      updateReservationStatus(selected.id, targetStatus);
+      const resultingVersion = response.mode === "live"
+        && typeof response.data === "object"
+        && response.data !== null
+        && "version" in response.data
+        && typeof response.data.version === "number"
+        ? response.data.version
+        : selected.version + 1;
+      updateReservationStatus(selected.id, targetStatus, resultingVersion);
+      setLastStatusChange({
+        reservationId: selected.id,
+        fromStatus: selected.status,
+        toStatus: targetStatus,
+        resultingVersion,
+      });
+      setMessage("Reservation updated. Undo is available for 15 minutes.");
       reconcileInBackground();
     }
+  }
+
+  async function undoLastStatusChange() {
+    if (!lastStatusChange) return;
+    const change = lastStatusChange;
+    if (workspace.mode === "demo") {
+      updateReservationStatus(
+        change.reservationId,
+        change.fromStatus,
+        change.resultingVersion + 1,
+      );
+      setLastStatusChange(null);
+      setMessage("Demo: reservation status restored.");
+      return;
+    }
+    setBusy(true);
+    const payload = {
+      locationId: workspace.activeLocation.id,
+      reservationId: change.reservationId,
+      expectedVersion: change.resultingVersion,
+      reason: "Undone by the host from the reservation book.",
+    };
+    const response = await correctReservationStatusAction({
+      ...payload,
+      requestId: requestIdFor(
+        `reservation-status-correction-${change.reservationId}`,
+        payload,
+      ),
+    });
+    setBusy(false);
+    if (!response.ok) {
+      setMessage(response.message);
+      return;
+    }
+    rotateRequestId(`reservation-status-correction-${change.reservationId}`);
+    updateReservationStatus(
+      change.reservationId,
+      change.fromStatus,
+      response.mode === "live" ? response.data.version : change.resultingVersion + 1,
+    );
+    setLastStatusChange(null);
+    setMessage(
+      change.toStatus === "completed"
+        ? "Completion reopened and the prior table allocation was restored."
+        : "Reservation status restored.",
+    );
+    reconcileInBackground();
   }
 
   async function assignTables(tableIds: string[], label: string) {
@@ -1014,6 +1270,10 @@ export function ReservationsWorkspace({
     const displayName = String(data.get("displayName") ?? "").trim();
     const partySize = Number(data.get("partySize"));
     const durationMinutes = Number(data.get("durationMinutes"));
+    if (!displayName || !Number.isInteger(partySize) || partySize < 1) {
+      setMessage("Guest name and a valid party size are required.");
+      return;
+    }
     if (
       !Number.isInteger(durationMinutes) ||
       durationMinutes < 15 ||
@@ -1022,15 +1282,6 @@ export function ReservationsWorkspace({
       setMessage("Turn time must be a whole number from 15 to 720 minutes.");
       return;
     }
-    if (workspace.mode === "demo") {
-      setMessage(
-        `Demo: ${displayName} added to the ${bookMode === "walk_in" ? "walk-in book" : "day book"}.`,
-      );
-      setBookMode(null);
-      return;
-    }
-    setBusy(true);
-    setMessage("");
     const nowParts = localDateTimeParts(
       new Date().toISOString(),
       readyModel.timeZone,
@@ -1075,6 +1326,91 @@ export function ReservationsWorkspace({
       tableIds: suggestions[0]?.tableIds ?? [],
     };
     const reservationScope = `reservation-create-${displayName}`;
+    if (workspace.mode === "demo") {
+      const requestId = requestIdFor(reservationScope, payload);
+      const reservationId = `demo-reservation-${requestId}`;
+      const guestId = `demo-guest-${requestId}`;
+      const endsAt = new Date(
+        new Date(tentative).valueOf() + durationMinutes * 60_000,
+      ).toISOString();
+      const replayed = readyModel.reservations.some(
+        (entry) => entry.id === reservationId,
+      );
+      updateModel((current) => {
+        if (current.reservations.some((entry) => entry.id === reservationId))
+          return current;
+        const tableLabels = payload.tableIds
+          .map(
+            (tableId) =>
+              current.floorNow.tables.find((table) => table.id === tableId)
+                ?.label,
+          )
+          .filter((label): label is string => Boolean(label));
+        const reservation: ReservationSummary = {
+          id: reservationId,
+          version: 1,
+          startsAt: tentative,
+          durationMinutes,
+          partySize,
+          status: bookMode === "walk_in" ? "arrived" : "booked",
+          source: payload.source,
+          bookingChannel: "staff",
+          tableLabel: tableLabels.length ? tableLabels.join(" + ") : null,
+          tableIds: payload.tableIds,
+          specialRequests: payload.specialRequests,
+          policyEvidenceCaptured: false,
+          lastRevision: null,
+          guest: {
+            id: guestId,
+            displayName,
+            email: payload.email,
+            phone: payload.phone,
+            vip: false,
+            allergies: null,
+            preferences: null,
+            visitCount: 0,
+            lifetimeSpendCents: 0,
+          },
+        };
+        const allocations = payload.tableIds.map((tableId) => ({
+          id: `demo-allocation-${requestId}-${tableId}`,
+          tableId,
+          reservationId,
+          startsAt: tentative,
+          endsAt,
+          expiresAt: null,
+          state: "committed" as const,
+        }));
+        return {
+          ...current,
+          reservations: [...current.reservations, reservation].sort((a, b) =>
+            a.startsAt.localeCompare(b.startsAt),
+          ),
+          intervalInventory: {
+            ...current.intervalInventory,
+            allocations: [
+              ...current.intervalInventory.allocations,
+              ...allocations,
+            ],
+          },
+          metrics: {
+            ...current.metrics,
+            covers: current.metrics.covers + partySize,
+            remaining: current.metrics.remaining + partySize,
+          },
+        };
+      });
+      setSelectedId(reservationId);
+      setMessage(
+        replayed
+          ? `Demo replay: ${displayName} was already in the book; no duplicate was created.`
+          : `Demo: ${displayName} added to the ${bookMode === "walk_in" ? "walk-in book" : "day book"}.`,
+      );
+      setBookMode(null);
+      return;
+    }
+    setBusy(true);
+    setMessage("");
     const response = await saveReservationWithGuestAction({
       ...payload,
       requestId: requestIdFor(reservationScope, payload),
@@ -1105,25 +1441,73 @@ export function ReservationsWorkspace({
       return;
     }
     const data = new FormData(event.currentTarget);
-    if (workspace.mode === "demo") {
+    const displayName = String(data.get("displayName") ?? "").trim();
+    const phone = String(data.get("phone") ?? "").trim();
+    const partySize = Number(data.get("partySize"));
+    const quotedWaitMinutes = Number(data.get("quotedWaitMinutes"));
+    if (
+      !displayName ||
+      !phone ||
+      !Number.isInteger(partySize) ||
+      partySize < 1 ||
+      !Number.isInteger(quotedWaitMinutes) ||
+      quotedWaitMinutes < 0
+    ) {
       setMessage(
-        `Demo: ${String(data.get("displayName"))} added to the waitlist.`,
+        "Guest name, phone, party size, and a valid quote are required.",
       );
-      setWaitlistOpen(false);
       return;
     }
     const payload = {
       locationId: workspace.activeLocation.id,
       guestId: null,
-      displayName: String(data.get("displayName")),
+      displayName,
       email: String(data.get("email") || "").trim() || null,
-      phone: String(data.get("phone") || "").trim(),
-      partySize: Number(data.get("partySize")),
+      phone,
+      partySize,
       desiredFrom: null,
       desiredTo: null,
-      quotedWaitMinutes: Number(data.get("quotedWaitMinutes")),
+      quotedWaitMinutes,
       notes: String(data.get("notes") || "").trim() || null,
     };
+    if (workspace.mode === "demo") {
+      const requestId = requestIdFor("waitlist-create", payload);
+      const entryId = `demo-waitlist-${requestId}`;
+      const replayed = readyModel.waitlist.some(
+        (entry) => entry.id === entryId,
+      );
+      updateModel((current) => {
+        if (current.waitlist.some((entry) => entry.id === entryId))
+          return current;
+        return {
+          ...current,
+          waitlist: [
+            ...current.waitlist,
+            {
+              id: entryId,
+              displayName,
+              partySize,
+              quotedWaitMinutes,
+              status: "waiting",
+              deliveryStatus: null,
+              notes: payload.notes,
+              createdAt: readyModel.floorNow.observedAt,
+            },
+          ],
+          metrics: {
+            ...current.metrics,
+            waitlist: current.metrics.waitlist + 1,
+          },
+        };
+      });
+      setMessage(
+        replayed
+          ? `Demo replay: ${displayName} was already waiting; no duplicate was created.`
+          : `Demo: ${displayName} added to the waitlist.`,
+      );
+      setWaitlistOpen(false);
+      return;
+    }
     setBusy(true);
     const response = await saveWaitlistEntryAction({
       ...payload,
@@ -1154,10 +1538,18 @@ export function ReservationsWorkspace({
       updateModel((current) => ({
         ...current,
         waitlist: current.waitlist.map((entry) =>
-          entry.id === entryId ? { ...entry, status: targetStatus } : entry,
+          entry.id === entryId
+            ? {
+                ...entry,
+                status: targetStatus,
+                deliveryStatus: targetStatus === "notified" ? "sent" as const : entry.deliveryStatus,
+              }
+            : entry,
         ),
       }));
-      setMessage(`Demo: waitlist guest moved to ${targetStatus}.`);
+      setMessage(targetStatus === "notified"
+        ? "Demo: table-ready message delivered; the 15-minute offer clock started."
+        : `Demo: waitlist guest moved to ${targetStatus}.`);
       return;
     }
     const payload = { waitlistEntryId: entryId, targetStatus, note: null };
@@ -1168,17 +1560,23 @@ export function ReservationsWorkspace({
       requestId: requestIdFor(scope, payload),
     });
     setBusy(false);
-    setMessage(
-      response.ok
-        ? `Waitlist guest moved to ${targetStatus}.`
-        : response.message,
-    );
+    setMessage(response.ok
+      ? targetStatus === "notified"
+        ? "Table-ready delivery queued. The 15-minute offer clock starts only after provider acceptance."
+        : `Waitlist guest moved to ${targetStatus}.`
+      : response.message);
     if (response.ok) {
       rotateRequestId(scope);
       updateModel((current) => ({
         ...current,
         waitlist: current.waitlist.map((entry) =>
-          entry.id === entryId ? { ...entry, status: targetStatus } : entry,
+          entry.id === entryId
+            ? {
+                ...entry,
+                status: targetStatus,
+                deliveryStatus: targetStatus === "notified" ? "queued" as const : entry.deliveryStatus,
+              }
+            : entry,
         ),
       }));
       reconcileInBackground();
@@ -1322,9 +1720,7 @@ export function ReservationsWorkspace({
     });
     setBusy(false);
     setMessage(
-      response.ok
-        ? `Party seated at ${suggestion.label}.`
-        : response.message,
+      response.ok ? `Party seated at ${suggestion.label}.` : response.message,
     );
     if (response.ok) {
       rotateRequestId(scope);
@@ -1388,6 +1784,7 @@ export function ReservationsWorkspace({
               aria-describedby={waitlistActionDescription}
               onClick={(event) => {
                 setDialogTrigger(event.currentTarget);
+                setMessage("");
                 setWaitlistOpen(true);
               }}
             >
@@ -1400,6 +1797,7 @@ export function ReservationsWorkspace({
               aria-describedby={operationDescription}
               onClick={(event) => {
                 setDialogTrigger(event.currentTarget);
+                setMessage("");
                 setBookMode("reservation");
               }}
             >
@@ -1421,30 +1819,32 @@ export function ReservationsWorkspace({
         >
           <span>{message}</span>
           <div className="flex items-center gap-1">
-            {lastTableMove ? (
+            {lastFloorSave ? (
               <Button
                 variant="quiet"
                 size="sm"
-                disabled={Boolean(movingTableId)}
-                onClick={() => {
-                  const move = lastTableMove;
-                  setLastTableMove(null);
-                  void moveTable(
-                    move.tableId,
-                    move.from.x,
-                    move.from.y,
-                    false,
-                  );
-                }}
+                disabled={busy}
+                onClick={() => void undoLastFloorSave()}
               >
-                Undo
+                Undo floor save
+              </Button>
+            ) : null}
+            {lastStatusChange ? (
+              <Button
+                variant="quiet"
+                size="sm"
+                disabled={busy}
+                onClick={() => void undoLastStatusChange()}
+              >
+                Undo status
               </Button>
             ) : null}
             <button
               type="button"
               onClick={() => {
                 setMessage("");
-                setLastTableMove(null);
+                setLastFloorSave(null);
+                setLastStatusChange(null);
               }}
               aria-label="Dismiss reservation notice"
               className="focus-ring -m-2 flex size-11 shrink-0 items-center justify-center rounded-lg"
@@ -1525,7 +1925,8 @@ export function ReservationsWorkspace({
                 : "bg-[var(--ink-faint)]",
             )}
           />
-          Online booking {model.configuration.onlineBookingEnabled ? "live" : "off"}
+          Online booking{" "}
+          {model.configuration.onlineBookingEnabled ? "live" : "off"}
         </span>
       </div>
 
@@ -1578,6 +1979,7 @@ export function ReservationsWorkspace({
                 aria-describedby={waitlistActionDescription}
                 onClick={(event) => {
                   setDialogTrigger(event.currentTarget);
+                  setMessage("");
                   setBookMode("walk_in");
                 }}
               >
@@ -1671,33 +2073,52 @@ export function ReservationsWorkspace({
             title="Floor plan"
             detail={
               layoutEditing
-                ? "Drag any table with a finger or pointer. Every move saves automatically."
+                ? `${floorDraftMoves.length} draft change${floorDraftMoves.length === 1 ? "" : "s"}. Drag freely, then review or discard.`
                 : assignmentMode && selected
-                ? `Assignment mode · choose a table for ${selected.guest.displayName}, or cancel below.`
-                : selected
-                ? `The outline shows ${selected.guest.displayName}’s selected interval; table color still means physical state now.`
-                : "Table colors show observed physical state, never future availability."
+                  ? `Assignment mode · choose a table for ${selected.guest.displayName}, or cancel below.`
+                  : selected
+                    ? `The outline shows ${selected.guest.displayName}’s selected interval; table color still means physical state now.`
+                    : "Table colors show observed physical state, never future availability."
             }
             action={
-              <Button
-                variant={layoutEditing ? "accent" : "secondary"}
-                size="sm"
-                disabled={Boolean(movingTableId) || !model.permissions.configure}
-                aria-describedby={configurationDescription}
-                onClick={() => {
-                  setLayoutEditing((current) => !current);
-                  setAssignmentMode(false);
-                  setSelectedTableId(null);
-                  setMessage(
-                    layoutEditing
-                      ? "Floor editing finished."
-                      : "Floor editing on. Drag a table to move it.",
-                  );
-                }}
-              >
-                {layoutEditing ? <Check className="size-4" /> : <Move className="size-4" />}
-                {layoutEditing ? "Done" : "Edit floor"}
-              </Button>
+              layoutEditing ? (
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={busy}
+                    onClick={discardFloorDraft}
+                  >
+                    Discard
+                  </Button>
+                  <Button
+                    variant="accent"
+                    size="sm"
+                    disabled={busy || floorDraftMoves.length === 0}
+                    onClick={() => setLayoutReviewOpen(true)}
+                  >
+                    <Check className="size-4" />
+                    Review & save
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={!model.permissions.configure}
+                  aria-describedby={configurationDescription}
+                  onClick={() => {
+                    setLayoutEditing(true);
+                    setFloorDraftOriginal({});
+                    setAssignmentMode(false);
+                    setSelectedTableId(null);
+                    setMessage("Floor draft opened. Nothing saves until you review and confirm.");
+                  }}
+                >
+                  <Move className="size-4" />
+                  Edit floor
+                </Button>
+              )
             }
           />
           <FloorPlan
@@ -1718,12 +2139,12 @@ export function ReservationsWorkspace({
             onAssignTable={assignTable}
             canAssignTables={Boolean(
               canOperate &&
-                assignmentMode &&
-                selected &&
-                assignableReservationStatuses.has(selected.status),
+              assignmentMode &&
+              selected &&
+              assignableReservationStatuses.has(selected.status),
             )}
             editing={layoutEditing}
-            onMoveTable={moveTable}
+            onMoveTable={stageTableMove}
           />
           {assignmentMode && selected ? (
             <InlineNotice
@@ -1732,8 +2153,8 @@ export function ReservationsWorkspace({
               className="mt-3"
             >
               <p>
-                Choose one available table on the floor, or let the exact-interval
-                inventory select the best approved fit.
+                Choose one available table on the floor, or let the
+                exact-interval inventory select the best approved fit.
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
@@ -2024,10 +2445,26 @@ export function ReservationsWorkspace({
                 </p>
                 {selected.lastRevision ? (
                   <p className="mt-1">
-                    Last staff {selected.lastRevision.kind === "staff_cancelled" ? "cancellation" : "edit"} recorded {dateTimeLabel(selected.lastRevision.changedAt, model.timeZone)}. Previous commitment: {dateTimeLabel(selected.lastRevision.previousReservedAt, model.timeZone)} for {selected.lastRevision.previousPartySize} guests.
+                    Last staff{" "}
+                    {selected.lastRevision.kind === "staff_cancelled"
+                      ? "cancellation"
+                      : "edit"}{" "}
+                    recorded{" "}
+                    {dateTimeLabel(
+                      selected.lastRevision.changedAt,
+                      model.timeZone,
+                    )}
+                    . Previous commitment:{" "}
+                    {dateTimeLabel(
+                      selected.lastRevision.previousReservedAt,
+                      model.timeZone,
+                    )}{" "}
+                    for {selected.lastRevision.previousPartySize} guests.
                   </p>
                 ) : (
-                  <p className="mt-1">No prior staff revision is attached to this record.</p>
+                  <p className="mt-1">
+                    No prior staff revision is attached to this record.
+                  </p>
                 )}
                 <p className="mt-1">
                   {selected.policyEvidenceCaptured
@@ -2063,6 +2500,7 @@ export function ReservationsWorkspace({
                 aria-describedby={waitlistActionDescription}
                 onClick={(event) => {
                   setDialogTrigger(event.currentTarget);
+                  setMessage("");
                   setWaitlistOpen(true);
                 }}
               >
@@ -2078,7 +2516,11 @@ export function ReservationsWorkspace({
                         {entry.displayName} · {entry.partySize}
                       </p>
                       <p className="mt-1 text-[10px] text-[var(--ink-faint)]">
-                        {entry.status} {entry.notes ? `· ${entry.notes}` : ""}
+                        {entry.status === "notified" && entry.deliveryStatus !== "sent"
+                          ? entry.deliveryStatus === "failed"
+                            ? "delivery failed · retry scheduled"
+                            : "notification queued"
+                          : entry.status} {entry.notes ? `· ${entry.notes}` : ""}
                       </p>
                     </div>
                     <StatusPill
@@ -2100,7 +2542,7 @@ export function ReservationsWorkspace({
                         Notify
                       </Button>
                     ) : null}
-                    {entry.status === "notified" ? (
+                    {entry.status === "notified" && entry.deliveryStatus === "sent" ? (
                       <Button
                         variant="quiet"
                         size="sm"
@@ -2158,13 +2600,26 @@ export function ReservationsWorkspace({
         <Dialog
           title={bookMode === "walk_in" ? "Add walk-in" : "New reservation"}
           detail="Guest context and the best-fitting available table are saved together."
-          onClose={() => setBookMode(null)}
+          onClose={() => {
+            if (!busy) setBookMode(null);
+          }}
           returnFocusTarget={dialogTrigger}
+          busy={busy}
         >
           <form
             onSubmit={submitBooking}
             className="mt-6 grid grid-cols-2 gap-4"
           >
+            {message ? (
+              <InlineNotice
+                className="col-span-2"
+                tone="danger"
+                announce="assertive"
+                title="Reservation not saved"
+              >
+                {message}
+              </InlineNotice>
+            ) : null}
             <label className="col-span-2">
               <span className="mb-1.5 block text-xs font-semibold">
                 Guest name
@@ -2243,7 +2698,11 @@ export function ReservationsWorkspace({
               />
             </label>
             <div className="col-span-2 mt-2 flex justify-end gap-2">
-              <Button variant="quiet" onClick={() => setBookMode(null)}>
+              <Button
+                variant="quiet"
+                onClick={() => setBookMode(null)}
+                disabled={busy}
+              >
                 Cancel
               </Button>
               <Button
@@ -2267,13 +2726,26 @@ export function ReservationsWorkspace({
         <Dialog
           title="Add to waitlist"
           detail="Capture the quote now; offer and seating transitions stay in the service trail."
-          onClose={() => setWaitlistOpen(false)}
+          onClose={() => {
+            if (!busy) setWaitlistOpen(false);
+          }}
           returnFocusTarget={dialogTrigger}
+          busy={busy}
         >
           <form
             onSubmit={submitWaitlist}
             className="mt-6 grid grid-cols-2 gap-4"
           >
+            {message ? (
+              <InlineNotice
+                className="col-span-2"
+                tone="danger"
+                announce="assertive"
+                title="Waitlist guest not saved"
+              >
+                {message}
+              </InlineNotice>
+            ) : null}
             <label className="col-span-2">
               <span className="mb-1.5 block text-xs font-semibold">
                 Guest name
@@ -2337,7 +2809,11 @@ export function ReservationsWorkspace({
               />
             </label>
             <div className="col-span-2 flex justify-end gap-2">
-              <Button variant="quiet" onClick={() => setWaitlistOpen(false)}>
+              <Button
+                variant="quiet"
+                onClick={() => setWaitlistOpen(false)}
+                disabled={busy}
+              >
                 Cancel
               </Button>
               <Button
@@ -2381,6 +2857,29 @@ export function ReservationsWorkspace({
           }}
         />
       ) : null}
+      <ConfirmActionDialog
+        open={layoutReviewOpen}
+        labelledBy={floorReviewTitleId}
+        title="Save these floor changes?"
+        description={`${floorDraftMoves.length} table position${floorDraftMoves.length === 1 ? "" : "s"} will change together. If another manager changed the floor, nothing will be saved until you review the latest layout.`}
+        confirmLabel="Confirm & save floor"
+        confirmVariant="accent"
+        busy={busy}
+        confirmDisabled={floorDraftMoves.length === 0}
+        onClose={() => setLayoutReviewOpen(false)}
+        onConfirm={async () => { await saveFloorMoves(floorDraftMoves); }}
+      >
+        <ul className="space-y-2 text-sm">
+          {floorDraftMoves.map((move) => (
+            <li key={move.tableId} className="rounded-xl bg-[var(--canvas)] p-3">
+              <strong>{move.label}</strong>
+              <span className="ml-2 text-[var(--ink-faint)]">
+                ({move.fromX.toFixed(3)}, {move.fromY.toFixed(3)}) → ({move.toX.toFixed(3)}, {move.toY.toFixed(3)})
+              </span>
+            </li>
+          ))}
+        </ul>
+      </ConfirmActionDialog>
       <ConfirmActionDialog
         open={noShowConfirmOpen && Boolean(selected)}
         labelledBy={noShowConfirmTitleId}
