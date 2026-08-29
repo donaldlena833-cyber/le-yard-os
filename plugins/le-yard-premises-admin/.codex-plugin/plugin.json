@@ -1,0 +1,28 @@
+{
+  "name": "le-yard-premises-admin",
+  "version": "0.1.0",
+  "description": "Cited lease, premises, permit, and filing administration for Le Yard.",
+  "author": {
+    "name": "Le Yard",
+    "url": "https://leyardny.com"
+  },
+  "homepage": "https://github.com/donaldlena833-cyber/le-yard-os/blob/main/docs/chatgpt-plugin-marketplace.md",
+  "repository": "https://github.com/donaldlena833-cyber/le-yard-os",
+  "keywords": ["restaurant", "lease", "premises", "permits", "filings"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Le Yard Premises Admin",
+    "shortDescription": "Track cited obligations and deadlines",
+    "longDescription": "Turns supplied leases, amendments, agency records, and filing materials into a cited obligation register, deadline tracker, issue list, and review packet without making legal conclusions or representing drafts as filed.",
+    "developerName": "Le Yard",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://leyardny.com",
+    "brandColor": "#C89B3C",
+    "defaultPrompt": [
+      "Build a cited obligation and deadline tracker from these documents.",
+      "Compare this lease amendment with the signed base lease.",
+      "Prepare an evidence-backed premises issue list for professional review."
+    ]
+  }
+}

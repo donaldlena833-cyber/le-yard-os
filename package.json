@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:plugins": "node scripts/validate-plugin-marketplace.mjs && node --test plugins/le-yard-menu-costing/skills/le-yard-menu-costing/scripts/calculate-menu-cost.test.mjs",
     "test:db:pglite": "node scripts/verify-migrations-pglite.mjs",
     "test:intelligence:subscription": "node scripts/verify-codex-subscription.mjs",
     "test:bootstrap:pglite": "node scripts/verify-owner-bootstrap-pglite.mjs",
@@ -55,7 +56,7 @@
     "release:verify-containment": "node scripts/verify-production-containment.mjs",
     "import:opening-menu": "node scripts/import-le-yard-opening-menu.mjs",
     "booking:create-client": "node scripts/create-booking-api-client.mjs",
-    "verify": "npm run lint && npm run types:database:check && npm run typecheck && npm run test && npm run test:integration && npm run build",
+    "verify": "npm run test:plugins && npm run lint && npm run types:database:check && npm run typecheck && npm run test && npm run test:integration && npm run build",
     "verify:full": "npm run verify && npm run test:e2e && npm audit --audit-level=high",
     "verify:connected": "npm run verify:full && npm run test:rls && npm run test:db:lint && npm run test:e2e:connected"
   },

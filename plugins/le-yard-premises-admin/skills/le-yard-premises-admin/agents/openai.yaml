@@ -1,0 +1,5 @@
+interface:
+  display_name: "Le Yard Premises Admin"
+  short_description: "Lease and filing evidence control"
+  brand_color: "#C89B3C"
+  default_prompt: "Use $le-yard-premises-admin to build a cited obligations and deadline tracker."

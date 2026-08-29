@@ -1,0 +1,28 @@
+{
+  "name": "le-yard-marketing",
+  "version": "0.1.0",
+  "description": "Approval-gated campaign briefs and channel drafts for Le Yard.",
+  "author": {
+    "name": "Le Yard",
+    "url": "https://leyardny.com"
+  },
+  "homepage": "https://github.com/donaldlena833-cyber/le-yard-os/blob/main/docs/chatgpt-plugin-marketplace.md",
+  "repository": "https://github.com/donaldlena833-cyber/le-yard-os",
+  "keywords": ["restaurant", "marketing", "campaigns", "copy", "brand"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Le Yard Marketing",
+    "shortDescription": "Create on-brand drafts with release gates",
+    "longDescription": "Turns approved Le Yard facts and campaign decisions into channel-ready drafts, claim evidence, and review checklists while keeping private operating context out of public copy and separating drafts from publication.",
+    "developerName": "Le Yard",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://leyardny.com",
+    "brandColor": "#C89B3C",
+    "defaultPrompt": [
+      "Turn this approved brief into channel-ready Le Yard drafts.",
+      "Audit these claims against current public sources before release.",
+      "Adapt this campaign for web, email, and social without publishing it."
+    ]
+  }
+}

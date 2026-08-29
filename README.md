@@ -68,6 +68,12 @@ flowchart LR
 
 The tenant hierarchy is `organization -> locations`. Every public tenant table carries `organization_id`; location-owned records also carry or inherit `location_id`. RLS, composite foreign keys, application permissions, and signed storage paths all enforce that boundary.
 
+## ChatGPT workspace plugins
+
+The repository now carries a GitHub-importable Le Yard OS marketplace at `.agents/plugins/marketplace.json`. Its first five skill-only plugins cover vendor research, menu costing, premises administration, operating reports, and marketing. They declare no connected apps or MCP servers, so importing the catalog does not grant access to Le Yard OS or any third-party service. Workspace admins must review installation roles and app permissions separately.
+
+See the [ChatGPT Business GitHub plugin marketplace runbook](docs/chatgpt-plugin-marketplace.md) for the exact import values, permission model, daily-sync behavior, change control, and acceptance gates.
+
 ## Local quick start
 
 Requirements:
@@ -113,6 +119,7 @@ Version 0.2 adds capability-backed operational authoring and service control. In
 
 ```bash
 npm run lint
+npm run test:plugins
 npm run types:database:check
 npm run typecheck
 npm run test
@@ -159,6 +166,8 @@ src/types/                Shared domain contracts
 supabase/migrations/      Forward-only schema, RLS, storage, integrity, and audit
 supabase/seed.sql         Synthetic local-only tenant data
 scripts/                  Portable schema, bootstrap, and security verifiers
+.agents/plugins/          GitHub-importable ChatGPT workspace marketplace
+plugins/                  Le Yard role-scoped plugin packages and skills
 tests/unit/               Permission, tip, report, AI, and data-layer tests
 tests/rls/                Catalog and behavioral RLS proof
 tests/e2e/                Desktop/mobile workflow and accessibility checks
@@ -177,6 +186,7 @@ docs/                     Operational and technical handoff
 - [Integration framework](docs/integrations.md)
 - [Inventory catalog configuration](docs/inventory-catalog.md)
 - [Operations security configuration](docs/operations-security-configuration.md)
+- [ChatGPT Business plugin marketplace](docs/chatgpt-plugin-marketplace.md)
 - [Known limitations](docs/known-limitations.md)
 
 ## Deployment boundary

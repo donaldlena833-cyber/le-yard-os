@@ -111,7 +111,7 @@ function assert(condition, message, evidence = undefined) {
 function claims(role, userId) {
   return JSON.stringify({
     role,
-    ...(userId ? { sub: userId, aal: "aal1" } : {}),
+    ...(userId ? { sub: userId, aal: "aal2" } : {}),
   });
 }
 

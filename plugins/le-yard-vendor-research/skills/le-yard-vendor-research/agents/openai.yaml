@@ -1,0 +1,5 @@
+interface:
+  display_name: "Le Yard Vendor Research"
+  short_description: "Evidence-led supplier comparison"
+  brand_color: "#C89B3C"
+  default_prompt: "Use $le-yard-vendor-research to compare suppliers for this purchase."

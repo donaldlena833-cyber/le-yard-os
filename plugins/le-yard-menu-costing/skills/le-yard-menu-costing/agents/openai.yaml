@@ -1,0 +1,5 @@
+interface:
+  display_name: "Le Yard Menu Costing"
+  short_description: "Recipe costs with explicit evidence"
+  brand_color: "#C89B3C"
+  default_prompt: "Use $le-yard-menu-costing to cost this recipe and flag missing inputs."

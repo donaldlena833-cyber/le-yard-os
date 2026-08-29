@@ -1,0 +1,28 @@
+{
+  "name": "le-yard-ops-reporting",
+  "version": "0.1.0",
+  "description": "Source-aware operating briefs and exception reporting for Le Yard OS.",
+  "author": {
+    "name": "Le Yard",
+    "url": "https://leyardny.com"
+  },
+  "homepage": "https://github.com/donaldlena833-cyber/le-yard-os/blob/main/docs/chatgpt-plugin-marketplace.md",
+  "repository": "https://github.com/donaldlena833-cyber/le-yard-os",
+  "keywords": ["restaurant", "operations", "reporting", "briefs", "kpi"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Le Yard Ops Reporting",
+    "shortDescription": "Turn OS evidence into trusted briefs",
+    "longDescription": "Builds manager and owner reports from scoped Le Yard OS evidence while preserving location, date, freshness, truncation, permissions, and the boundary between connected records and synthetic demonstrations.",
+    "developerName": "Le Yard",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://leyardny.com",
+    "brandColor": "#C89B3C",
+    "defaultPrompt": [
+      "Prepare a verified weekly operations brief from these OS exports.",
+      "Explain the largest operating exceptions without filling data gaps.",
+      "Check this report for source, scope, freshness, and truncation risks."
+    ]
+  }
+}
