@@ -23,6 +23,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run test:plugins
       - run: npm run lint
       - run: npm run types:database:check
       - run: npm run typecheck

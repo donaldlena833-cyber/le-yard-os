@@ -1,0 +1,28 @@
+{
+  "name": "le-yard-menu-costing",
+  "version": "0.1.0",
+  "description": "Evidence-aware recipe, portion, and menu-price costing for Le Yard.",
+  "author": {
+    "name": "Le Yard",
+    "url": "https://leyardny.com"
+  },
+  "homepage": "https://github.com/donaldlena833-cyber/le-yard-os/blob/main/docs/chatgpt-plugin-marketplace.md",
+  "repository": "https://github.com/donaldlena833-cyber/le-yard-os",
+  "keywords": ["restaurant", "recipes", "food-cost", "menu-engineering"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Le Yard Menu Costing",
+    "shortDescription": "Cost recipes without inventing prices",
+    "longDescription": "Normalizes compatible recipe and purchase units, applies explicit yield or waste assumptions, and calculates batch, portion, food-cost, margin, and target-price evidence while keeping missing inputs visible.",
+    "developerName": "Le Yard",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://leyardny.com",
+    "brandColor": "#C89B3C",
+    "defaultPrompt": [
+      "Cost this recipe and show every source and assumption.",
+      "Compare current menu prices with target food-cost percentages.",
+      "Find the missing inputs that prevent a trustworthy plate cost."
+    ]
+  }
+}

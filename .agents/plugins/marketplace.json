@@ -1,0 +1,68 @@
+{
+  "name": "le-yard-os",
+  "interface": {
+    "displayName": "Le Yard OS"
+  },
+  "plugins": [
+    {
+      "name": "le-yard-vendor-research",
+      "source": {
+        "source": "local",
+        "path": "./plugins/le-yard-vendor-research"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "le-yard-menu-costing",
+      "source": {
+        "source": "local",
+        "path": "./plugins/le-yard-menu-costing"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "le-yard-premises-admin",
+      "source": {
+        "source": "local",
+        "path": "./plugins/le-yard-premises-admin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "le-yard-ops-reporting",
+      "source": {
+        "source": "local",
+        "path": "./plugins/le-yard-ops-reporting"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "le-yard-marketing",
+      "source": {
+        "source": "local",
+        "path": "./plugins/le-yard-marketing"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

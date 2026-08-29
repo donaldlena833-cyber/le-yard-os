@@ -1,0 +1,28 @@
+{
+  "name": "le-yard-vendor-research",
+  "version": "0.1.0",
+  "description": "Evidence-led restaurant supplier research and comparison for Le Yard.",
+  "author": {
+    "name": "Le Yard",
+    "url": "https://leyardny.com"
+  },
+  "homepage": "https://github.com/donaldlena833-cyber/le-yard-os/blob/main/docs/chatgpt-plugin-marketplace.md",
+  "repository": "https://github.com/donaldlena833-cyber/le-yard-os",
+  "keywords": ["restaurant", "vendors", "procurement", "sourcing"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Le Yard Vendor Research",
+    "shortDescription": "Compare suppliers with traceable evidence",
+    "longDescription": "Researches restaurant suppliers, normalizes product and quote evidence, and produces decision-ready shortlists without turning research into an order or supplier commitment.",
+    "developerName": "Le Yard",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "websiteURL": "https://leyardny.com",
+    "brandColor": "#C89B3C",
+    "defaultPrompt": [
+      "Compare these suppliers against Le Yard's exact requirements.",
+      "Build a sourced shortlist for this restaurant purchase.",
+      "Audit this quote matrix for missing evidence and hidden cost."
+    ]
+  }
+}

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Le Yard Marketing"
+  short_description: "On-brand drafts with release gates"
+  brand_color: "#C89B3C"
+  default_prompt: "Use $le-yard-marketing to turn this approved brief into channel-ready drafts."

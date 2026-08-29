@@ -1,0 +1,5 @@
+interface:
+  display_name: "Le Yard Ops Reporting"
+  short_description: "Source-aware restaurant reporting"
+  brand_color: "#C89B3C"
+  default_prompt: "Use $le-yard-ops-reporting to prepare a verified weekly operations brief."
