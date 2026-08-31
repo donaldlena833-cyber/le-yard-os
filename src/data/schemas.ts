@@ -169,7 +169,37 @@ export const submitCloseoutInputSchema = z
     cashTipsCents: cents,
     notes: longNote,
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.grossSalesCents - value.compsCents - value.voidsCents !==
+      value.netSalesCents
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["netSalesCents"],
+        message: "Gross sales less comps and voids must equal net sales.",
+      });
+    }
+    if (value.cashSalesCents + value.cardSalesCents !== value.netSalesCents) {
+      context.addIssue({
+        code: "custom",
+        path: ["cardSalesCents"],
+        message: "Cash and card tenders must equal net sales.",
+      });
+    }
+    if (
+      value.actualCashCents !== null &&
+      value.actualCashCents !== value.expectedCashCents &&
+      (value.notes?.trim().length ?? 0) < 8
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["notes"],
+        message: "Explain the cash variance or link a recorded correction.",
+      });
+    }
+  });
 
 export const approveCloseoutInputSchema = z
   .object({

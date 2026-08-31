@@ -1,4 +1,7 @@
 import type { Json } from "@/types/database.generated";
+import { isFullServiceDayPreview } from "@/lib/demo";
+import { createSyntheticPosFixture } from "@/lib/simulation/check-adapter.ts";
+import { fullServiceDayScenario } from "@/lib/simulation/full-service-day-v1.ts";
 
 export interface IncomeCurrentMetrics {
   liveNetSalesCents: number | null;
@@ -261,6 +264,118 @@ export function parseIncomeOperatingModel(
 }
 
 export function createDemoIncomeModel(): IncomeOperatingModel {
+  if (isFullServiceDayPreview) {
+    const scenario = fullServiceDayScenario;
+    const posFixture = createSyntheticPosFixture(scenario);
+    const revenueByHour = new Map([
+      [11, 42_000],
+      [12, 48_000],
+      [13, 36_000],
+      [18, 70_000],
+      [19, 84_000],
+      [20, 98_000],
+      [21, 96_000],
+      [22, 72_000],
+    ]);
+    const coversByHour = new Map([
+      [11, 12],
+      [12, 12],
+      [13, 12],
+      [18, 12],
+      [19, 12],
+      [20, 12],
+      [21, 12],
+      [22, 12],
+    ]);
+    const checksByHour = new Map([
+      [11, 4],
+      [12, 4],
+      [13, 4],
+      [18, 3],
+      [19, 4],
+      [20, 4],
+      [21, 3],
+      [22, 3],
+    ]);
+    return {
+      observedAt: scenario.observedAt,
+      organizationId: "org-le-yard-demo",
+      locationId: "loc-garden-demo",
+      businessDate: scenario.businessDate,
+      timeZone: scenario.timeZone,
+      currencyCode: scenario.currencyCode,
+      historyDays: 0,
+      windowStartsAt: scenario.startsAt,
+      windowEndsAt: scenario.endsAt,
+      current: {
+        liveNetSalesCents: scenario.expectations.netSalesCents,
+        liveGrossSalesCents: scenario.expectations.grossSalesCents,
+        salesCovers: scenario.expectations.fullDayCovers,
+        salesCheckCount: posFixture.checks.length,
+        closeoutNetSalesCents: null,
+        closeoutCount: 0,
+        approvedCloseoutCount: 0,
+        laborMinutes: 6_300,
+        laborKnownRateMinutes: 0,
+        laborCostCents: 0,
+        activeTimeEntryCount: scenario.roster.length,
+        recordedExpenseCents: 0,
+        recordedExpenseCount: 0,
+        receivedInventoryCostCents: 0,
+        approvedWasteCostCents: 0,
+        wasteMissingCostCount: 0,
+        trackedContributionCents: scenario.expectations.netSalesCents,
+      },
+      hourly: Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        revenueCents: revenueByHour.get(hour) ?? 0,
+        checkCount: checksByHour.get(hour) ?? 0,
+        salesCovers: coversByHour.get(hour) ?? 0,
+        salesSampleDays: revenueByHour.has(hour) ? 1 : 0,
+        reservationCount:
+          hour === 18 ? scenario.floor.assignments.length : 0,
+        reservationCovers:
+          hour === 18 ? scenario.floor.targetPeakCovers : 0,
+        laborMinutes: hour >= 9 && hour <= 23 ? 420 : 0,
+        laborCostCents: 0,
+      })),
+      sources: [
+        {
+          key: "sales_checks",
+          label: "Synthetic POS check adapter",
+          lastObservedAt: scenario.observedAt,
+          recordCount: posFixture.checks.length,
+          grain: "item_level_check_fixture",
+          freshness: "current",
+        },
+        {
+          key: "time_entries",
+          label: "Synthetic fixed-clock roster",
+          lastObservedAt: scenario.observedAt,
+          recordCount: scenario.roster.length,
+          grain: "scenario_shift",
+          freshness: "current",
+        },
+        {
+          key: "expenses",
+          label: "No scenario expenses",
+          lastObservedAt: scenario.observedAt,
+          recordCount: 0,
+          grain: "business_date",
+          freshness: "current",
+        },
+        {
+          key: "closeouts",
+          label: "One daily close at 11:50 PM",
+          lastObservedAt: null,
+          recordCount: 0,
+          grain: "daily_closeout",
+          freshness: "unavailable",
+        },
+      ],
+    };
+  }
+
   const observedAt = "2026-08-10T19:15:00-04:00";
   return {
     observedAt,

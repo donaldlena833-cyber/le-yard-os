@@ -108,6 +108,8 @@ export function createConnectedAcceptanceEvidence(input) {
       attestationProtocol,
       attestationSchemaFloor,
       readOnlyBrowserMatrix: true,
+      connectedSoakSessions: 14,
+      authoritativeRefreshP95BudgetMs: 3000,
       mutationProbeEnabled: false,
       developerSmokeEvidence: false,
     },

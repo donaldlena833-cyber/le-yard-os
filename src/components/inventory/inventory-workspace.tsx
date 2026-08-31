@@ -22,7 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, PageHeader, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Surface } from "@/components/ui/surface";
-import { demoIds, demoWorkspace } from "@/lib/demo";
+import { demoIds, demoWorkspace, isFullServiceDayPreview } from "@/lib/demo";
+import { createSyntheticPosFixture } from "@/lib/simulation/check-adapter.ts";
+import { fullServiceDayScenario } from "@/lib/simulation/full-service-day-v1.ts";
 import { cn, formatMoney } from "@/lib/utils";
 import type { InventoryUnit, WasteRecord } from "@/types";
 
@@ -48,6 +50,7 @@ const playgroundPurchaseOrders = demoWorkspace.purchaseOrders.filter(
 const playgroundVendors = demoWorkspace.vendors;
 const playgroundRecipes = demoWorkspace.recipes;
 const emptyCountLines: typeof demoWorkspace.inventoryCounts[number]["lines"] = [];
+const scenarioInventory = createSyntheticPosFixture();
 
 export function InventoryWorkspace() {
   const workspace = useWorkspaceContext();
@@ -124,6 +127,22 @@ export function InventoryWorkspace() {
           <Button variant="accent" onClick={() => setActiveTab("count")}><ClipboardCheck className="size-4" /> Start count</Button>
         </>}
       />
+
+      {isFullServiceDayPreview ? (
+        <section aria-label="Pressure test inventory reconciliation" className="mt-6 rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)] sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="eyebrow">Full-service-day-v1</p><h2 className="mt-2 text-xl font-semibold tracking-[-0.03em]">Recipe usage → waste → blind count</h2></div>
+            <StatusPill tone="warning">Synthetic · fixed 8:00 PM</StatusPill>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric label="Consumption" value={`${scenarioInventory.recipeConsumption.length} lines`} detail="Sold and comped recipes" />
+            <Metric label="Structured waste" value={`${scenarioInventory.waste.length} movements`} detail="Quality damage + service misfire" />
+            <Metric label="Count expectations" value={`${scenarioInventory.inventoryExpectations.length} items`} detail="Every expected ending quantity ≥ 0" />
+            <Metric label="Blind variance" value="Resolved" detail="First count preserved; final count reconciles" />
+          </div>
+          <p className="mt-4 text-xs text-[var(--ink-faint)]">Source: synthetic POS check adapter + scenario ledger · Fresh at {fullServiceDayScenario.observedAt}</p>
+        </section>
+      ) : null}
 
       <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Surface variant="raised" className="min-h-36"><Metric className="px-5 first:pl-5" label="Inventory value" value={formatMoney(Math.round(inventoryValue))} detail="Latest approved quantities" /></Surface>

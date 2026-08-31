@@ -1,4 +1,5 @@
-import { demoWorkspace } from "../../lib/demo";
+import { demoWorkspace, isFullServiceDayPreview } from "../../lib/demo";
+import { fullServiceDayScenario } from "../../lib/simulation/full-service-day-v1.ts";
 import { formatMoney } from "../../lib/utils";
 import type { ReportKind } from "../../types";
 
@@ -72,8 +73,8 @@ export interface ReportView {
 
 export const DEFAULT_REPORT_FILTERS: ReportFilters = {
   locationId: "all",
-  startsOn: "2026-07-01",
-  endsOn: "2026-08-01",
+  startsOn: isFullServiceDayPreview ? fullServiceDayScenario.businessDate : "2026-07-01",
+  endsOn: isFullServiceDayPreview ? fullServiceDayScenario.businessDate : "2026-08-01",
 };
 
 const reportKinds = new Set(REPORT_CATALOG.map((report) => report.kind));
@@ -456,9 +457,13 @@ function salesLaborReport(filters: ReportFilters): ReportView {
     kind: "sales_to_labor",
     title: "Sales / labor",
     description: "Net sales compared with recorded worked hours by location.",
-    sourceLabel: "Approved closeouts + timecards",
+    sourceLabel: isFullServiceDayPreview
+      ? "Synthetic full-day closeout + fixed-clock roster"
+      : "Approved closeouts + timecards",
     freshnessAt: latest([...closeouts, ...cards]),
-    coverageNote: "Sales per worked hour is available. Labor-cost percentage waits for approved wage-rate data.",
+    coverageNote: isFullServiceDayPreview
+      ? "Local deterministic totals only. Connected closeout, payroll, and physical rehearsal evidence remain blocked."
+      : "Sales per worked hour is available. Labor-cost percentage waits for approved wage-rate data.",
     metrics: [
       { label: "Net sales", value: formatMoney(totalSales), detail: `${closeouts.length} closeouts` },
       { label: "Worked hours", value: hours(totalMinutes), detail: `${cards.length} timecards` },

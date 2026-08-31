@@ -101,7 +101,11 @@ fixture UUID/revision, email, password, attestation secret, screenshots, video,
 trace, or database row data.
 
 The evidence says `allReleaseAcceptanceChecksPassed: true` only when the signed
-preflight and every connected Playwright check passed. Failure, cancellation,
+preflight, every connected Playwright check, and the mandatory fourteen-session
+role/storage/refresh soak passed. The soak creates fourteen fresh browser/Auth
+contexts, covers every positive and negative role, refuses unexpected business
+writes, checks client-storage isolation and sign-out cleanup, and enforces the three-second authoritative
+refresh p95 budget. Failure, cancellation,
 skip, or a browser step that never ran remains non-passing evidence. The GitHub
 artifact and job logs are acceptance evidence; local developer-smoke output is
 not.

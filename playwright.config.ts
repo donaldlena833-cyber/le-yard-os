@@ -56,6 +56,8 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_APP_URL: baseURL,
       NEXT_PUBLIC_DEMO_MODE: "true",
+      NEXT_PUBLIC_SERVICE_SIMULATION:
+        process.env.NEXT_PUBLIC_SERVICE_SIMULATION ?? "",
       NEXT_TELEMETRY_DISABLED: "1",
     },
   },

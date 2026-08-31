@@ -3,6 +3,10 @@ import {
   localDateKey,
   zonedLocalToIso,
 } from "@/data/read-models/local-time";
+import {
+  fullServiceDayScenario,
+  legacySaturdaySimulationId,
+} from "@/lib/simulation/full-service-day-v1.ts";
 import { isReservationAllocationActiveAt } from "./floor-projection";
 import type {
   ReservationFloorTableSummary,
@@ -18,9 +22,9 @@ const tablePlan = [
   ["6", 4, 0.55, 0.61, 0.13, 0.08], ["7", 6, 0.81, 0.61, 0.17, 0.08],
   ["8", 4, 0.55, 0.46, 0.13, 0.08], ["9", 6, 0.81, 0.46, 0.17, 0.08],
   ["10", 4, 0.55, 0.31, 0.13, 0.08], ["11", 4, 0.81, 0.31, 0.13, 0.08],
-  ["12", 4, 0.55, 0.19, 0.13, 0.08], ["13", 4, 0.81, 0.19, 0.13, 0.08],
+  ["12", 2, 0.55, 0.19, 0.13, 0.08], ["13", 2, 0.81, 0.19, 0.13, 0.08],
   ["14", 4, 0.55, 0.07, 0.13, 0.08], ["15", 4, 0.81, 0.07, 0.13, 0.08],
-  ["16", 4, 0.21, 0.19, 0.13, 0.08], ["17", 4, 0.21, 0.07, 0.13, 0.08],
+  ["16", 2, 0.21, 0.19, 0.13, 0.08], ["17", 2, 0.21, 0.07, 0.13, 0.08],
 ] as const;
 
 const guests = [
@@ -41,10 +45,209 @@ const demoReservationPermissions: ReservationHostPermissions = {
   configure: true,
 };
 
+function isFullServiceReservationPreview(): boolean {
+  return [fullServiceDayScenario.id, legacySaturdaySimulationId].includes(
+    process.env.NEXT_PUBLIC_SERVICE_SIMULATION ?? "",
+  );
+}
+
+export function createFullServiceReservationModel(
+  permissions: ReservationHostPermissions = demoReservationPermissions,
+): ReservationHostModel {
+  const scenario = fullServiceDayScenario;
+  const observedAt = scenario.observedAt;
+  const durationMinutes = 270;
+  const reservations: ReservationHostModel["reservations"] =
+    scenario.floor.assignments.map((assignment, index) => ({
+      id: `scenario-reservation-${String(index + 1).padStart(2, "0")}`,
+      version: 2,
+      startsAt: assignment.startsAt,
+      durationMinutes,
+      partySize: assignment.partySize,
+      status: "seated",
+      source:
+        assignment.source === "web"
+          ? "le_yard_web"
+          : assignment.source === "walk_in"
+            ? "walk_in"
+            : assignment.source,
+      bookingChannel: assignment.source === "web" ? "web" : "staff",
+      tableLabel: assignment.tableLabel,
+      tableIds: [`demo-table-${assignment.tableLabel}`],
+      specialRequests:
+        assignment.guestSignal === "allergy"
+          ? "Shellfish allergy — acknowledged at pre-shift"
+          : assignment.guestSignal === "birthday"
+            ? "Birthday candle requested"
+            : assignment.guestSignal === "late"
+              ? "Late six-top — arrival and table reset tracked"
+              : null,
+      policyEvidenceCaptured: assignment.source === "web",
+      lastRevision: null,
+      guest: {
+        id: `scenario-guest-${String(index + 1).padStart(2, "0")}`,
+        displayName:
+          assignment.source === "walk_in"
+            ? "Walk-in replacement"
+            : `Synthetic Party ${String(index + 1).padStart(2, "0")}`,
+        email: `party.${String(index + 1).padStart(2, "0")}@example.invalid`,
+        phone: `+1 212 555 ${String(7000 + index)}`,
+        vip: assignment.guestSignal === "vip",
+        allergies:
+          assignment.guestSignal === "allergy" ? "Shellfish" : null,
+        preferences:
+          assignment.guestSignal === "birthday"
+            ? "Birthday"
+            : assignment.guestSignal === "late"
+              ? "Late arrival"
+              : null,
+        visitCount: assignment.guestSignal === "vip" ? 12 : 1,
+        lifetimeSpendCents: assignment.guestSignal === "vip" ? 185_000 : 0,
+      },
+    }));
+
+  reservations.push({
+    id: "scenario-reservation-no-show",
+    version: 2,
+    startsAt: "2026-04-18T18:45:00-04:00",
+    durationMinutes: 90,
+    partySize: 4,
+    status: "no_show",
+    source: "le_yard_web",
+    bookingChannel: "web",
+    tableLabel: null,
+    tableIds: [],
+    specialRequests: null,
+    policyEvidenceCaptured: true,
+    lastRevision: null,
+    guest: {
+      id: "scenario-guest-no-show",
+      displayName: "Synthetic No-show",
+      email: "no-show@example.invalid",
+      phone: "+1 212 555 7099",
+      vip: false,
+      allergies: null,
+      preferences: null,
+      visitCount: 1,
+      lifetimeSpendCents: 0,
+    },
+  });
+
+  const allocations: ReservationInventoryAllocationSummary[] = reservations
+    .filter((reservation) => reservation.status === "seated")
+    .flatMap((reservation) =>
+      reservation.tableIds.map((tableId) => ({
+        id: `scenario-allocation-${reservation.id}-${tableId}`,
+        tableId,
+        reservationId: reservation.id,
+        startsAt: reservation.startsAt,
+        endsAt: "2026-04-18T22:30:00-04:00",
+        expiresAt: null,
+        state: "committed" as const,
+      })),
+    );
+  const byTable = new Map(
+    reservations.flatMap((reservation) =>
+      reservation.tableIds.map((tableId) => [tableId, reservation] as const),
+    ),
+  );
+  const tables: ReservationFloorTableSummary[] = tablePlan.map(
+    ([label, capacity, x, y, width, height]) => ({
+      id: `demo-table-${label}`,
+      areaId: "demo-main-dining",
+      label,
+      minCapacity: capacity === 6 ? 3 : 1,
+      maxCapacity: capacity,
+      isBookable: true,
+      x,
+      y,
+      width,
+      height,
+      rotation: 0,
+      shape: capacity === 2 ? "round" : "rectangle",
+      state: "occupied",
+      occupyingReservationId: byTable.get(`demo-table-${label}`)?.id ?? null,
+      lastChangedAt: observedAt,
+    }),
+  );
+
+  return {
+    permissions,
+    businessDate: scenario.businessDate,
+    timeZone: scenario.timeZone,
+    currencyCode: scenario.currencyCode,
+    serviceName: "Dinner · pressure test",
+    serviceWindow: "6:00 PM–10:30 PM",
+    reservations,
+    floorNow: {
+      observedAt,
+      businessDateAtObservation: scenario.businessDate,
+      tables,
+      activeAllocations: allocations,
+    },
+    intervalInventory: {
+      windowStartsAt: scenario.servicePeriods[1]!.startsAt,
+      windowEndsAt: scenario.servicePeriods[1]!.endsAt,
+      allocations,
+    },
+    combinations: [
+      ["4", "5"], ["6", "7"], ["8", "9"], ["10", "11"],
+      ["12", "13"], ["14", "15"], ["16", "17"],
+    ].map(([left, right]) => ({
+      id: `demo-combination-${left}-${right}`,
+      label: `${left} + ${right}`,
+      minCapacity: 5,
+      maxCapacity: Number(left) < 10 ? 10 : 8,
+      tableIds: [`demo-table-${left}`, `demo-table-${right}`],
+      isActive: true,
+    })),
+    waitlist: [],
+    metrics: {
+      covers: scenario.floor.targetPeakCovers,
+      seated: scenario.floor.targetPeakCovers,
+      remaining: 0,
+      waitlist: 0,
+      pendingHoldCount: 0,
+    },
+    pacing: [1, 2, 3, 4, 5].map((wave) => {
+      const assignments = scenario.floor.assignments.filter(
+        (assignment) => assignment.wave === wave,
+      );
+      return {
+        startsAt: assignments[0]!.startsAt,
+        label: new Intl.DateTimeFormat("en-US", {
+          timeZone: scenario.timeZone,
+          hour: "numeric",
+          minute: "2-digit",
+        }).format(new Date(assignments[0]!.startsAt)),
+        covers: assignments.reduce(
+          (total, assignment) => total + assignment.partySize,
+          0,
+        ),
+        limit: scenario.floor.pacingLimitPerWave,
+      };
+    }),
+    configuration: {
+      ready: true,
+      onlineBookingEnabled: false,
+      messagingEnabled: false,
+      staffPushEnabled: false,
+      tableCount: scenario.floor.tableCount,
+      seatCount: scenario.floor.seatCount,
+    },
+  };
+}
+
 export function createDemoReservationModel(
   businessDate: string,
   permissions: ReservationHostPermissions = demoReservationPermissions,
 ): ReservationHostModel {
+  if (
+    businessDate === fullServiceDayScenario.businessDate &&
+    isFullServiceReservationPreview()
+  ) {
+    return createFullServiceReservationModel(permissions);
+  }
   const timeZone = "America/New_York";
   const timeAt = (hour: number, minute: number) => zonedLocalToIso(businessDate, `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`, timeZone)!;
   const observedAt = new Date().toISOString();

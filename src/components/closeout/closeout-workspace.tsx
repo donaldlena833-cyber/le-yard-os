@@ -445,6 +445,10 @@ export function CloseoutWorkspace() {
       setMessage("Cash and card sales must reconcile exactly to net sales before submission.");
       return;
     }
+    if (financial.cashVariance !== 0 && draft.notes.trim().length < 8) {
+      setMessage("Explain the cash variance or record the linked correction before submission.");
+      return;
+    }
     if (!calculation || !calculation.reconciliation.balanced) {
       setMessage("Calculate and review an exactly reconciled tip pool before submission.");
       return;

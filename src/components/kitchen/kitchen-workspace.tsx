@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { PageFrame, PageHeader, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Surface } from "@/components/ui/surface";
+import { isFullServiceDayPreview } from "@/lib/demo";
+import { createSyntheticPosFixture } from "@/lib/simulation/check-adapter.ts";
+import { fullServiceDayScenario } from "@/lib/simulation/full-service-day-v1.ts";
 
 type Ingredient = { name: string; quantity: number; unit: "g" | "ml" | "each"; costPerUnit: number };
 type Recipe = { id: string; name: string; yield: number; yieldUnit: string; active: boolean; ingredients: Ingredient[] };
@@ -16,6 +19,8 @@ const starterRecipes: Recipe[] = [
   { id: "toast", name: "Tomato toast", yield: 1, yieldUnit: "plate", active: true, ingredients: [{ name: "Roma tomatoes", quantity: 180, unit: "g", costPerUnit: 0.012 }, { name: "Sourdough", quantity: 90, unit: "g", costPerUnit: 0.014 }, { name: "Basil oil", quantity: 12, unit: "ml", costPerUnit: 0.021 }] },
   { id: "beurre", name: "Brown butter beurre blanc", yield: 12, yieldUnit: "oz", active: true, ingredients: [{ name: "Butter", quantity: 340, unit: "g", costPerUnit: 0.014 }, { name: "White wine", quantity: 180, unit: "ml", costPerUnit: 0.009 }, { name: "Shallot", quantity: 45, unit: "g", costPerUnit: 0.011 }] },
 ];
+
+const scenarioPos = createSyntheticPosFixture();
 
 function recipeCost(recipe: Recipe) {
   return recipe.ingredients.reduce((sum, ingredient) => sum + ingredient.quantity * ingredient.costPerUnit, 0);
@@ -67,9 +72,18 @@ export function KitchenWorkspace() {
         eyebrow="Kitchen · Main dining room"
         status={<StatusPill tone="positive" dot>Kitchen</StatusPill>}
         title="Recipes & portion cost"
-        detail="Define every measurable plate component so purchasing, inventory, and menu costing share one reliable source."
+        detail={isFullServiceDayPreview ? "Full-service-day-v1 · fixed at 8:00 PM · recipe usage and count expectations from the synthetic POS adapter." : "Define every measurable plate component so purchasing, inventory, and menu costing share one reliable source."}
         actions={<Button variant="accent" onClick={addRecipe} disabled={!canEdit}><Plus className="size-4" /> New recipe</Button>}
       />
+      {isFullServiceDayPreview ? (
+        <section aria-label="Pressure test kitchen projection" className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Surface variant="outlined"><p className="eyebrow">Now</p><p className="mt-3 text-lg font-semibold">60 covers at peak</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">Entrée delay linked to manager recovery.</p></Surface>
+          <Surface variant="outlined"><p className="eyebrow">Prep usage</p><p className="numeric mt-3 text-lg font-semibold">{scenarioPos.prepUsage.length} recipe lines</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">Planned, used, and remaining portions reconcile.</p></Surface>
+          <Surface variant="outlined"><p className="eyebrow">Availability</p><p className="mt-3 text-lg font-semibold">Oysters 86</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">Equal-price seafood substitution approved.</p></Surface>
+          <Surface variant="outlined"><p className="eyebrow">Close</p><p className="numeric mt-3 text-lg font-semibold">{scenarioPos.waste.length} waste movements</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">Final count is nonnegative and the blind variance resolves.</p></Surface>
+          <p className="sr-only">Source {fullServiceDayScenario.id}, fresh at {fullServiceDayScenario.observedAt}.</p>
+        </section>
+      ) : null}
       {notice ? <p role="status" className="mt-5 rounded-2xl border border-[var(--positive)]/15 bg-[var(--positive-soft)] px-4 py-3 text-sm text-[var(--positive)]">{notice}</p> : null}
       <section className="mt-8 grid gap-8 xl:grid-cols-[.72fr_1.28fr]">
         <div>

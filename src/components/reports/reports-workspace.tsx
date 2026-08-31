@@ -19,7 +19,7 @@ import { ResponsiveDataView } from "@/components/ui/responsive-data-view";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { StatusPill } from "@/components/ui/status-pill";
-import { demoWorkspace } from "@/lib/demo";
+import { demoWorkspace, isFullServiceDayPreview } from "@/lib/demo";
 import { canAccessReportKind } from "@/lib/permissions/report-access";
 import { cn } from "@/lib/utils";
 import type { ReportKind } from "@/types";
@@ -143,7 +143,11 @@ export function ReportsWorkspace() {
     [workspace],
   );
   const [kind, setKind] = useState<ReportKind>(
-    () => authorizedCatalog[0]?.kind ?? "labor",
+    () =>
+      isFullServiceDayPreview &&
+      authorizedCatalog.some((entry) => entry.kind === "sales_to_labor")
+        ? "sales_to_labor"
+        : authorizedCatalog[0]?.kind ?? "labor",
   );
   const [filters, setFilters] = useState<ReportFilters>(DEFAULT_REPORT_FILTERS);
   const effectiveKind = authorizedCatalog.some((entry) => entry.kind === kind)
@@ -174,11 +178,11 @@ export function ReportsWorkspace() {
       <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
           <div className="flex items-center gap-2">
-            <StatusPill tone="positive" dot>Source-backed</StatusPill>
+            <StatusPill tone={isFullServiceDayPreview ? "warning" : "positive"} dot>{isFullServiceDayPreview ? "Local replay passed · release blocked" : "Source-backed"}</StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">Synthetic workspace · {demoWorkspace.asOf.slice(0, 10)}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Reports</h2>
-          <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Operational evidence, freshness, and exports in one working surface.</p>
+          <p className="mt-1 text-[13px] text-[var(--ink-faint)]">{isFullServiceDayPreview ? "One synthetic ledger drives the displayed closeout totals; connected and physical gates are not passed." : "Operational evidence, freshness, and exports in one working surface."}</p>
         </div>
 
         <div className="grid gap-2 sm:grid-cols-[minmax(180px,1fr)_170px_170px]">

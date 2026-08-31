@@ -567,6 +567,70 @@ export type Database = {
         }
         Relationships: []
       };
+      "cash_movements": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "business_date": string
+          "closeout_id": string | null
+          "movement_kind": string
+          "amount_cents": number
+          "actor_id": string
+          "note": string
+          "correction_of_id": string | null
+          "simulation_run_id": string | null
+          "created_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "business_date": string
+          "closeout_id"?: string | null
+          "movement_kind": string
+          "amount_cents": number
+          "actor_id": string
+          "note": string
+          "correction_of_id"?: string | null
+          "simulation_run_id"?: string | null
+          "created_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "business_date"?: string
+          "closeout_id"?: string | null
+          "movement_kind"?: string
+          "amount_cents"?: number
+          "actor_id"?: string
+          "note"?: string
+          "correction_of_id"?: string | null
+          "simulation_run_id"?: string | null
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_movements_correction_of_id_fkey"
+            columns: ["correction_of_id"]
+            referencedRelation: "cash_movements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_movements_organization_id_closeout_id_fkey"
+            columns: ["organization_id","closeout_id"]
+            referencedRelation: "shift_closeouts"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "cash_movements_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
       "chat_attachments": {
         Row: {
           "id": string
@@ -9655,6 +9719,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: unknown
       };
+      "guard_cash_movement_append_only": {
+        Args: Record<PropertyKey, never>
+        Returns: unknown
+      };
       "guard_chat_message_scope": {
         Args: Record<PropertyKey, never>
         Returns: unknown
@@ -11620,6 +11688,7 @@ export const DatabaseObjectNames = {
       "backup_runs",
       "booking_api_clients",
       "capability_definitions",
+      "cash_movements",
       "chat_attachments",
       "chat_channel_members",
       "chat_channels",
@@ -11855,6 +11924,7 @@ export const DatabaseObjectNames = {
       "finalize_employee_document",
       "get_pos_labor_sync_status",
       "guard_active_owner_count",
+      "guard_cash_movement_append_only",
       "guard_chat_message_scope",
       "guard_chat_read_position",
       "guard_closeout_attachment_mutation",

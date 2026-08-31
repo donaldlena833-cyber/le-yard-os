@@ -28,6 +28,10 @@ import {
   isSaturdayServicePreview,
   saturdayServiceSimulation,
 } from "@/lib/demo";
+import {
+  fullServiceDayScenario,
+} from "@/lib/simulation/full-service-day-v1.ts";
+import { buildScenarioNowProjection } from "@/lib/simulation/engine.ts";
 import { cn } from "@/lib/utils";
 
 const team = [
@@ -49,22 +53,24 @@ type TodayAction = {
 
 const initialActions: TodayAction[] = [];
 
+const scenarioNow = buildScenarioNowProjection();
+
 const saturdayServiceActions: TodayAction[] = [
   {
-    id: "table-nine-delay",
+    id: "table-pressure",
     icon: Clock3,
     tone: "danger",
-    title: "Table 9 is 18 minutes behind pace",
-    detail: "Party of 6 · entrées fired at 7:31 PM · server requested a manager touch.",
+    title: "Table race and late six-top recovered",
+    detail: "Confirm the single winning allocation and the distinct no-show / walk-in states.",
     href: `/reservations?date=${saturdayServiceSimulation.businessDate}`,
     actionLabel: "Review in Reservations",
   },
   {
-    id: "filet-running-low",
+    id: "oysters-86",
     icon: ChefHat,
     tone: "warning",
-    title: "Filet au poivre is running low",
-    detail: "8 portions remain · 11 later covers have ordered steak on comparable Saturdays.",
+    title: "Oysters are 86",
+    detail: "Equal-price seafood substitution is approved; confirm FOH and BOH see the same state.",
     href: "/service",
     actionLabel: "Review in Service",
   },
@@ -72,32 +78,115 @@ const saturdayServiceActions: TodayAction[] = [
     id: "break-window",
     icon: UsersRound,
     tone: "warning",
-    title: "Two break windows need adjustment",
-    detail: "Irini and Leo cross six hours tonight; no break timing has been approved yet.",
+    title: "Station and break coverage changed",
+    detail: "One late arrival and one peak break conflict have recorded reassignments.",
     href: "/schedule",
     actionLabel: "Review in Schedule",
   },
+  {
+    id: "kitchen-delay",
+    icon: Utensils,
+    tone: "danger",
+    title: "Entrée station delay",
+    detail: "Manager touch and affected-table recovery must remain linked to the incident.",
+    href: "/tasks",
+    actionLabel: "Review in Tasks & SOPs",
+  },
 ];
 
-const saturdayTeam = [
-  { name: "Donald", role: "Owner · floor", shift: "4:00–11:30", station: "Dining room" },
-  { name: "Maris", role: "Owner · host", shift: "4:30–12:00", station: "Door" },
-  { name: "Mateo", role: "Executive chef", shift: "2:30–11:30", station: "Expo" },
-  { name: "Irini", role: "Server", shift: "4:30–11:00", station: "Section 2" },
-  { name: "Aisha", role: "FOH manager", shift: "3:30–12:00", station: "Floor" },
-  { name: "Priya", role: "Bartender", shift: "4:00–12:00", station: "Bar" },
-  { name: "Leo", role: "Line cook", shift: "2:30–11:30", station: "Sauté" },
-  { name: "Imani", role: "Server", shift: "5:00–11:30", station: "Section 1" },
-];
+const saturdayTeam = fullServiceDayScenario.roster.slice(0, 8).map((person) => ({
+  name: person.label,
+  role: person.role,
+  shift: `${new Date(person.startsAt).toLocaleTimeString("en-US", { timeZone: fullServiceDayScenario.timeZone, hour: "numeric", minute: "2-digit" })}–${new Date(person.endsAt).toLocaleTimeString("en-US", { timeZone: fullServiceDayScenario.timeZone, hour: "numeric", minute: "2-digit" })}`,
+  station: person.station,
+}));
 
-export function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string }) {
+function ScenarioCrewTodayWorkspace({
+  firstName,
+  view,
+}: {
+  firstName: string;
+  view: "employee" | "chef";
+}) {
+  const chefView = view === "chef";
+  const lanes = chefView
+    ? {
+        now: ["60 dinner covers seated", "Entrée delay at expo", "Oysters 86 across FOH and BOH"],
+        exceptions: [
+          { label: "Entrée recovery", href: "/tasks" },
+          { label: "Seafood substitution", href: "/service" },
+          { label: "Waste and count evidence", href: "/inventory" },
+        ],
+        next: ["Complete final courses", "Freeze recipe usage at 10:30 PM"],
+        close: ["Waste · temperatures · equipment", "Manager owns money and approval"],
+      }
+    : {
+        now: ["Section assignment is current", "60 dinner covers in the room", "Oysters replaced with approved seafood item"],
+        exceptions: [
+          { label: "Table recovery", href: "/reservations" },
+          { label: "Break reassignment", href: "/schedule" },
+          { label: "Current 86 list", href: "/service" },
+        ],
+        next: ["Reconnect exercise at 8:30 PM", "Final parties complete by 10:30 PM"],
+        close: ["Complete station side work", "Tips post only after approval"],
+      };
+
+  return (
+    <PageFrame>
+      <section className="rounded-[26px] bg-[var(--graphite)] px-5 py-7 text-white shadow-[var(--shadow-raised)] sm:px-7">
+        <StatusPill tone="neutral" className="bg-white/[0.08] text-white/70">Synthetic pressure test</StatusPill>
+        <h2 className="mt-5 text-3xl font-medium tracking-[-0.05em]">{chefView ? "Kitchen at peak" : `Your service, ${firstName}`}</h2>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-white/60">
+          {chefView
+            ? "Only kitchen, availability, Prep, waste, and close responsibilities are shown."
+            : "Only your station, guest signals, current exceptions, and close duties are shown."}
+        </p>
+        <p className="mt-5 text-xs text-white/45">{scenarioNow.sourceLabel} · {scenarioNow.freshnessLabel}</p>
+      </section>
+      <div className="mt-6 grid gap-4 lg:grid-cols-4">
+        {([
+          ["Now", lanes.now],
+          ["Exceptions", lanes.exceptions],
+          ["Next", lanes.next],
+          ["Close", lanes.close],
+        ] as const).map(([title, entries]) => (
+          <section key={title} className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)]">
+            <h3 className="text-xs font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">{title}</h3>
+            <div className="mt-4 space-y-3">
+              {entries.map((entry) => {
+                const label = typeof entry === "string" ? entry : entry.label;
+                return typeof entry === "string" ? (
+                  <p key={label} className="border-t border-[var(--line)] pt-3 text-sm leading-5 first:border-0 first:pt-0">{label}</p>
+                ) : (
+                  <Link key={label} href={entry.href} className="focus-ring flex min-h-10 items-center justify-between gap-2 border-t border-[var(--line)] pt-3 text-sm font-semibold first:border-0 first:pt-0">
+                    {label}<ArrowRight className="size-3.5 text-[var(--accent-strong)]" />
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </PageFrame>
+  );
+}
+
+export function SaturdayServiceTodayWorkspace({
+  firstName,
+  view = "management",
+}: {
+  firstName: string;
+  view?: "management" | "employee" | "chef";
+}) {
+  if (view !== "management") {
+    return <ScenarioCrewTodayWorkspace firstName={firstName} view={view} />;
+  }
   const pacing = [
-    { label: "5 PM", covers: 18, width: "38%" },
-    { label: "6 PM", covers: 27, width: "58%" },
-    { label: "7 PM", covers: 46, width: "100%" },
-    { label: "8 PM", covers: 39, width: "85%", current: true },
-    { label: "9 PM", covers: 24, width: "52%" },
-    { label: "10 PM", covers: 9, width: "20%" },
+    { label: "6:00", covers: 12, width: "86%" },
+    { label: "6:15", covers: 12, width: "86%" },
+    { label: "6:30", covers: 12, width: "86%" },
+    { label: "6:45", covers: 12, width: "86%" },
+    { label: "7:00", covers: 12, width: "86%", current: true },
   ];
 
   return (
@@ -109,19 +198,19 @@ export function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string
             <div className="flex flex-wrap items-center gap-2">
               <StatusPill tone="positive" dot className="bg-white/[0.08] text-[#93d0ad]">In service</StatusPill>
               <StatusPill tone="neutral" className="bg-white/[0.08] text-white/70">Synthetic preview</StatusPill>
-              <span className="text-xs text-white/55">Saturday · April 18 · five months open</span>
+              <span className="text-xs text-white/55">Saturday · April 18 · fixed-clock rehearsal</span>
             </div>
             <h2 className="mt-5 text-[clamp(2rem,4.2vw,4rem)] leading-none font-medium tracking-[-0.065em]">
-              Saturday night, {firstName}.
+              Full room, {firstName}.
             </h2>
             <p className="mt-4 max-w-xl text-sm leading-6 text-white/60">
-              You are entering Le Yard at the peak of dinner service. Every record in this preview is synthetic and every owner workflow is available to explore.
+              One synthetic service ledger drives Host, floor, kitchen, inventory, income, and the daily close. No provider delivery or production inventory is enabled.
             </p>
           </div>
           <div className="flex items-end gap-8 border-t border-white/10 pt-5 xl:border-0 xl:pt-0">
             <div>
               <p className="text-xs tracking-[0.12em] text-white/55 uppercase">Simulated time</p>
-              <p className="numeric mt-2 text-3xl font-medium tracking-[-0.05em]">8:00 PM</p>
+              <p className="numeric mt-2 text-3xl font-medium tracking-[-0.05em]">{scenarioNow.simulatedTimeLabel}</p>
             </div>
             <div>
               <p className="text-xs tracking-[0.12em] text-white/55 uppercase">Service state</p>
@@ -131,28 +220,28 @@ export function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string
         </div>
       </section>
 
-      <section aria-label="Saturday service metrics" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Covers" value="163" detail="128 booked · 35 walk-in" />
-        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Seated so far" value="112" detail="68.7% of projected covers" />
-        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Net sales" value="$8.4k" detail="$12.7k projected close" />
-        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Labor" value="13 on" detail="1 late · 2 break windows" />
+      <section aria-label="Full-day service metrics" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Full day" value="96 covers" detail="36 lunch · 60 dinner" />
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Dinner peak" value="60 seated" detail="17 of 17 tables occupied" />
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Net sales" value="$5,460" detail="$4,200 dinner · $70 per cover" />
+        <Metric className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] !px-4 shadow-[var(--shadow-card)]" label="Roster" value={`${scenarioNow.metrics.onShift} on`} detail="Synthetic fixed-clock assignments" />
       </section>
 
       <div className="mt-8 grid gap-8 xl:grid-cols-[1.45fr_.8fr] xl:gap-12">
         <div className="space-y-9">
           <section>
             <SectionHeading
-              eyebrow="Service now"
-              title="Dining room pulse"
-              detail="Host, floor, kitchen, and sales context at the simulated 8:00 PM moment."
+              eyebrow="Now"
+              title="The room at peak"
+              detail={`${scenarioNow.sourceLabel} · ${scenarioNow.freshnessLabel}`}
               action={<Link href={`/reservations?date=${saturdayServiceSimulation.businessDate}`} className="focus-ring inline-flex min-h-10 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">Open reservations <ArrowRight className="size-3" /></Link>}
             />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                { icon: UsersRound, label: "Dining room", value: "14 tables", note: "11 seated · 2 reset · 1 open" },
-                { icon: Clock3, label: "Average turn", value: "94 min", note: "6 min above Saturday target" },
-                { icon: ChefHat, label: "Kitchen", value: "17 open", note: "8 entrées firing · 9 on hold" },
-                { icon: CircleDollarSign, label: "Average check", value: "$74", note: "$3 above five-month average" },
+                { icon: UsersRound, label: "Dining room", value: "17 tables", note: "60 active covers · no oversell" },
+                { icon: Clock3, label: "Five waves", value: "12 each", note: "Every wave is below the 14-cover limit" },
+                { icon: ChefHat, label: "Kitchen", value: "Delay open", note: "Manager touch linked to the source incident" },
+                { icon: CircleDollarSign, label: "Dinner average", value: "$70", note: "Net sales per completed cover" },
               ].map((item) => (
                 <div key={item.label} className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)]">
                   <item.icon className="size-4 text-[var(--accent-strong)]" />
@@ -166,7 +255,7 @@ export function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string
 
           <div className="grid gap-8 lg:grid-cols-[.85fr_1.15fr]">
             <section>
-              <SectionHeading eyebrow="Reservations" title="Pacing" detail="163 projected covers · current hour highlighted" />
+              <SectionHeading eyebrow="Next" title="Locked arrival waves" detail="60 dinner covers · 12 per wave · limit 14" />
               <div className="space-y-3 rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-card)]">
                 {pacing.map((period) => (
                   <div key={period.label} className="grid grid-cols-[44px_1fr_32px] items-center gap-3">
@@ -181,7 +270,7 @@ export function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string
             </section>
 
             <section>
-              <SectionHeading eyebrow="Team" title="Who’s operating" detail="8 key team members shown · 13 clocked in" />
+              <SectionHeading eyebrow="Roster" title="Who’s operating" detail={`8 shown · ${scenarioNow.metrics.onShift} on at the fixed clock`} />
               <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
                 {saturdayTeam.map((person, index) => (
                   <div key={person.name} className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--line)] px-4 py-3 first:border-0 sm:grid-cols-[1fr_100px_92px]">
@@ -200,7 +289,7 @@ export function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string
 
         <aside className="space-y-9">
           <section>
-            <SectionHeading eyebrow="Needs attention" title={`${saturdayServiceActions.length} source-linked exceptions`} detail="Open the source workflow to investigate. These cards do not resolve records." />
+            <SectionHeading eyebrow="Exceptions" title={`${saturdayServiceActions.length} source-linked actions`} detail="Open the source workflow to investigate. These cards do not resolve records." />
             <div className="overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
               {saturdayServiceActions.map((action) => {
                 const Icon = action.icon;
@@ -222,13 +311,13 @@ export function SaturdayServiceTodayWorkspace({ firstName }: { firstName: string
           </section>
 
           <section>
-            <SectionHeading eyebrow="Five-month context" title="Compared with prior Saturdays" />
+            <SectionHeading eyebrow="Close" title="One full-day reconciliation" />
             <div className="space-y-4 rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)]">
               {[
-                ["Cover pace", "+12%", "Ahead of the 145-cover average"],
-                ["Net sales pace", "+8%", "Average check is carrying the gain"],
-                ["Ticket time", "+6 min", "Entrée station is the current constraint"],
-                ["Guest recovery", "1 open", "Manager touch requested at table 9"],
+                ["Gross → net", "$5,460", "$5,560 gross − $60 comps − $40 voids"],
+                ["Tenders", "$5,460", "$1,092 cash + $4,368 card"],
+                ["Tips", "$1,066.80", "$226.80 lunch + $840 dinner"],
+                ["Expected drawer", "$552", "$300 bank + cash sales − paid-out − drop"],
               ].map(([label, value, note]) => (
                 <div key={label} className="flex items-start justify-between gap-4 border-b border-[var(--line)] pb-4 last:border-0 last:pb-0">
                   <div><p className="text-sm font-semibold">{label}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{note}</p></div>
@@ -336,9 +425,22 @@ export function TodayWorkspace() {
   const workspace = useWorkspaceContext();
   const firstName = workspace.identity.displayName.trim().split(/\s+/)[0] || "there";
 
+  if (isSaturdayServicePreview) {
+    return (
+      <SaturdayServiceTodayWorkspace
+        firstName={firstName}
+        view={
+          workspace.role === "employee"
+            ? "employee"
+            : workspace.persona === "chef"
+              ? "chef"
+              : "management"
+        }
+      />
+    );
+  }
   if (workspace.role === "employee") return <EmployeeTodayWorkspace />;
   if (workspace.persona === "chef") return <ChefTodayWorkspace />;
-  if (isSaturdayServicePreview) return <SaturdayServiceTodayWorkspace firstName={firstName} />;
 
   return (
     <PageFrame>

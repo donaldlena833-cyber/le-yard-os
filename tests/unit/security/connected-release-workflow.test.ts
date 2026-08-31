@@ -191,6 +191,10 @@ describe("connected preview release workflow", () => {
     expect(evidence.previewDeploymentBindingSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(evidence.databaseFixtureBindingSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(evidence.allReleaseAcceptanceChecksPassed).toBe(true);
+    expect(evidence.executionContract).toMatchObject({
+      connectedSoakSessions: 14,
+      authoritativeRefreshP95BudgetMs: 3_000,
+    });
     expect(serialized).not.toContain(previewOrigin);
     expect(serialized).not.toContain(new URL(previewOrigin).hostname);
     expect(serialized).not.toContain(targetId);
