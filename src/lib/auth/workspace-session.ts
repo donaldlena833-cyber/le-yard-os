@@ -318,6 +318,14 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
   const memberships = (membershipResult.data ?? []) as WorkspaceMembershipRow[];
   if (!memberships.length) return { status: "no_access", identity };
 
+  // Check before fetching protected workspace data: RLS intentionally hides
+  // sensitive rows from password-only management sessions.
+  if (memberships.some((membership) => requiresOwnerMfaGate({
+    mode: "live",
+    role: membership.role,
+    identity: { aal: normalizeAssuranceLevel(claims.aal) },
+  }))) return { status: "mfa_required", identity };
+
   const organizationIds = [...new Set(memberships.map((membership) => membership.organization_id))];
   const [organizationResult, locationResult, locationMembershipResult] = await Promise.all([
     supabase
@@ -411,7 +419,7 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
     ...jobContext,
   };
 
-  if (process.env.LE_YARD_REQUIRE_MANAGEMENT_MFA === "true" && requiresOwnerMfaGate({
+  if (requiresOwnerMfaGate({
     mode: resolvedContext.mode,
     role: resolvedContext.role,
     identity: resolvedContext.identity,

@@ -143,7 +143,7 @@ comment on column public.cash_movements.simulation_run_id is
 -- This repository intentionally fingerprints the complete runtime schema. Any
 -- later migration must close by capturing its own reviewed catalog head.
 update private.runtime_schema_contract_expected expected
-set migration_head = '20260831063256',
+set migration_head = '20260904195313',
     table_fingerprint = snapshot.value ->> 'tableFingerprint',
     function_fingerprint = snapshot.value ->> 'functionFingerprint',
     access_fingerprint = snapshot.value ->> 'accessFingerprint',

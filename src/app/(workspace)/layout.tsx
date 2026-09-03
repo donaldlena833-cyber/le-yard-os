@@ -5,6 +5,7 @@ import { WorkspaceProvider } from "@/components/providers/workspace-provider";
 import { AppShell } from "@/components/shell/app-shell";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { Button } from "@/components/ui/button";
+import { MfaGate } from "@/components/auth/mfa-gate";
 import {
   resolveWorkspaceSession,
   type WorkspaceSessionResolution,
@@ -49,7 +50,7 @@ function WorkspaceAccessState({
       eyebrow: "Additional verification",
       title: "Multi-factor authentication required",
       detail:
-        "Owner and Admin workspace access requires a verified MFA session. Complete the MFA challenge, then sign in again.",
+        "Verify with your authenticator to open your workspace.",
     },
   }[resolution.status];
   const Icon = content.icon;
@@ -70,6 +71,7 @@ function WorkspaceAccessState({
         <p className="eyebrow mt-5">{content.eyebrow}</p>
         <h1 className="mt-2 text-2xl font-medium tracking-[-0.045em]">{content.title}</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--ink-faint)]">{content.detail}</p>
+        {resolution.status === "mfa_required" ? <MfaGate /> : null}
         {resolution.identity ? (
           <div className="mt-6 rounded-2xl bg-[var(--canvas)] px-4 py-3">
             <p className="text-xs font-semibold">{resolution.identity.displayName}</p>
