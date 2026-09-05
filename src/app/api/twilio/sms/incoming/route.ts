@@ -28,6 +28,7 @@ export async function POST(request: Request) {
   const messageSid = params.get("MessageSid") ?? "";
   const optOutType = params.get("OptOutType")?.toUpperCase() ?? null;
   const guest = from.startsWith("+") ? await findGuestByPhone(from).catch(() => null) : null;
+  const senderLabel = guest?.display_name || from || "Guest";
 
   await logCommunicationEvent({
     eventType: "sms.inbound",
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
     });
     await notifyOwnersOfCommunication({
       title: "Private-event lead",
-      body: `${guest?.display_name ?? from || "A guest"}: ${body.slice(0, 220)}`,
+      body: `${senderLabel}: ${body.slice(0, 220)}`,
       eventType: "private_event_lead",
     });
     response.message(
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
   } else {
     await notifyOwnersOfCommunication({
       title: "New Le Yard text",
-      body: `${guest?.display_name ?? from || "Guest"}: ${body.slice(0, 220)}`,
+      body: `${senderLabel}: ${body.slice(0, 220)}`,
       eventType: "sms_inbound",
     });
   }
