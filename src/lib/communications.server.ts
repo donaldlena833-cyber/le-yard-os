@@ -71,10 +71,10 @@ export async function revokeServiceSmsConsent(input: { phone: string; evidence: 
 export async function hasServiceSmsConsent(phone: string) {
   const tenant = await resolveLeYardTenant();
   const { data, error } = await createAdminClient().from("integration_events")
-    .select("event_type,created_at").eq("organization_id", tenant.organizationId)
+    .select("event_type,occurred_at").eq("organization_id", tenant.organizationId)
     .in("event_type", ["sms.consent.granted", "sms.consent.revoked"])
     .contains("metadata", { phone: normalizeE164(phone), purpose: "guest_care" })
-    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    .order("occurred_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error("SMS consent could not be checked.");
   return data?.event_type === "sms.consent.granted";
 }
