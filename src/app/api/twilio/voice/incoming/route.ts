@@ -4,6 +4,10 @@ import {
   findGuestByPhone,
 } from "@/lib/communications.server";
 import {
+  elevenLabsConfigured,
+  registerElevenLabsTwilioCall,
+} from "@/lib/elevenlabs.server";
+import {
   readTwilioForm,
   twilioAbsoluteUrl,
   twilioForwardNumbers,
@@ -17,6 +21,7 @@ export async function POST(request: Request) {
     return new Response("Forbidden", { status: 403 });
 
   const from = params.get("From") ?? "";
+  const to = params.get("To") ?? "";
   const callSid = params.get("CallSid") ?? "";
   const guest = from.startsWith("+") ? await findGuestByPhone(from).catch(() => null) : null;
 
@@ -31,6 +36,37 @@ export async function POST(request: Request) {
       direction: "inbound",
     },
   });
+
+  if (
+    process.env.TWILIO_INBOUND_MODE?.trim().toLowerCase() === "ai" &&
+    elevenLabsConfigured()
+  ) {
+    try {
+      const aiTwiml = await registerElevenLabsTwilioCall({
+        fromNumber: from,
+        toNumber: to,
+        callSid,
+        guestId: guest?.id,
+        guestName: guest?.display_name,
+      });
+      await logCommunicationEvent({
+        eventType: "voice.ai.connected",
+        message: "Inbound call routed to ElevenLabs.",
+        metadata: { callSid, from, guestId: guest?.id },
+      });
+      return xmlResponse(aiTwiml);
+    } catch (error) {
+      await logCommunicationEvent({
+        eventType: "voice.ai.fallback",
+        message: "ElevenLabs routing failed; falling back to human ring group.",
+        severity: "warning",
+        metadata: {
+          callSid,
+          error: error instanceof Error ? error.message.slice(0, 400) : "unknown",
+        },
+      });
+    }
+  }
 
   const response = new twilio.twiml.VoiceResponse();
   const dial = response.dial({
