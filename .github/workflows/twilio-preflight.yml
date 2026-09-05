@@ -1,0 +1,102 @@
+name: Twilio isolated preflight
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/twilio-preflight.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/lib/*twilio*'
+      - 'src/lib/*communications*'
+      - 'src/app/api/twilio/**'
+      - 'src/app/api/internal/communications/**'
+      - 'tests/unit/twilio*'
+      - 'scripts/twilio-*.mjs'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: twilio-preflight-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/twilio-comms'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/twilio-comms
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Restore coverage dependency and generate synchronized lockfile
+        run: |
+          npm pkg set 'devDependencies.@vitest/coverage-v8=^4.1.10'
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit only package manifests to this feature branch
+        run: |
+          if ! git diff --quiet -- package.json package-lock.json; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add package.json package-lock.json
+            git commit -m 'fix: synchronize Twilio SDK lockfile and restore coverage tooling'
+            git push origin HEAD:feature/twilio-comms
+          fi
+      - name: Clean dependency installation
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Collect source and installed Next.js documentation for review
+        if: always()
+        run: |
+          mkdir -p /tmp/twilio-preflight
+          git archive --format=tar.gz -o /tmp/twilio-preflight/source.tar.gz HEAD
+          if [ -d node_modules/next/dist/docs ]; then
+            tar -czf /tmp/twilio-preflight/next-docs.tar.gz -C node_modules/next/dist docs
+          fi
+          git rev-parse HEAD > /tmp/twilio-preflight/commit.txt
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+      - name: Database type contract
+        id: dbtypes
+        continue-on-error: true
+        run: npm run types:database:check
+      - name: Type check
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+      - name: Unit tests
+        id: tests
+        continue-on-error: true
+        run: npm run test
+      - name: Production build without live provider credentials
+        id: build
+        continue-on-error: true
+        run: npm run build
+      - name: Upload review artifacts (no credentials or production data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twilio-preflight
+          path: /tmp/twilio-preflight/
+          retention-days: 3
+      - name: Report checks accurately
+        if: always()
+        env:
+          LINT: ${{ steps.lint.outcome }}
+          DBTYPES: ${{ steps.dbtypes.outcome }}
+          TYPECHECK: ${{ steps.typecheck.outcome }}
+          TESTS: ${{ steps.tests.outcome }}
+          BUILD: ${{ steps.build.outcome }}
+        run: |
+          printf 'lint=%s\ndatabase-types=%s\ntypecheck=%s\ntests=%s\nbuild=%s\n' "$LINT" "$DBTYPES" "$TYPECHECK" "$TESTS" "$BUILD"
+          for outcome in "$LINT" "$DBTYPES" "$TYPECHECK" "$TESTS" "$BUILD"; do
+            [ "$outcome" = success ] || exit 1
+          done
