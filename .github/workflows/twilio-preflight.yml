@@ -1,5 +1,4 @@
 name: Twilio isolated preflight
-
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -7,80 +6,59 @@ on:
       - '.github/workflows/twilio-preflight.yml'
       - 'package.json'
       - 'package-lock.json'
-      - 'src/lib/*twilio*'
-      - 'src/lib/*communications*'
+      - 'src/lib/**'
       - 'src/app/api/twilio/**'
       - 'src/app/api/internal/communications/**'
       - 'tests/unit/twilio*'
       - 'scripts/twilio-*.mjs'
-
 permissions:
   contents: read
-
 concurrency:
   group: twilio-preflight-${{ github.event.pull_request.number }}
   cancel-in-progress: true
-
 jobs:
   verify:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feature/twilio-comms'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: feature/twilio-comms
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - name: Restore coverage dependency and generate synchronized lockfile
-        run: |
-          npm pkg set 'devDependencies.@vitest/coverage-v8=^4.1.10'
-          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - name: Commit only package manifests to this feature branch
-        run: |
-          if ! git diff --quiet -- package.json package-lock.json; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add package.json package-lock.json
-            git commit -m 'fix: synchronize Twilio SDK lockfile and restore coverage tooling'
-            git push origin HEAD:feature/twilio-comms
-          fi
-      - name: Clean dependency installation
+      - name: Clean locked dependency installation
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Collect source and installed Next.js documentation for review
-        if: always()
+      - name: Collect source for review
         run: |
           mkdir -p /tmp/twilio-preflight
           git archive --format=tar.gz -o /tmp/twilio-preflight/source.tar.gz HEAD
-          if [ -d node_modules/next/dist/docs ]; then
-            tar -czf /tmp/twilio-preflight/next-docs.tar.gz -C node_modules/next/dist docs
-          fi
           git rev-parse HEAD > /tmp/twilio-preflight/commit.txt
+      - name: Provisioning safety tests with fake carrier
+        id: provisioning
+        continue-on-error: true
+        run: node --test scripts/twilio-configure.test.mjs | tee /tmp/twilio-preflight/provisioning.log
       - name: Lint
         id: lint
         continue-on-error: true
-        run: npm run lint
+        run: npm run lint | tee /tmp/twilio-preflight/lint.log
       - name: Database type contract
         id: dbtypes
         continue-on-error: true
-        run: npm run types:database:check
+        run: npm run types:database:check | tee /tmp/twilio-preflight/database-types.log
       - name: Type check
         id: typecheck
         continue-on-error: true
-        run: npm run typecheck
-      - name: Unit tests
+        run: npm run typecheck | tee /tmp/twilio-preflight/typecheck.log
+      - name: Unit tests (no live provider credentials)
         id: tests
         continue-on-error: true
-        run: npm run test
-      - name: Production build without live provider credentials
+        run: npm run test | tee /tmp/twilio-preflight/tests.log
+      - name: Production build (no live provider credentials)
         id: build
         continue-on-error: true
-        run: npm run build
-      - name: Upload review artifacts (no credentials or production data)
+        run: npm run build | tee /tmp/twilio-preflight/build.log
+      - name: Upload test artifacts (no credentials or production data)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -90,13 +68,17 @@ jobs:
       - name: Report checks accurately
         if: always()
         env:
+          PROVISIONING: ${{ steps.provisioning.outcome }}
           LINT: ${{ steps.lint.outcome }}
           DBTYPES: ${{ steps.dbtypes.outcome }}
           TYPECHECK: ${{ steps.typecheck.outcome }}
           TESTS: ${{ steps.tests.outcome }}
           BUILD: ${{ steps.build.outcome }}
         run: |
-          printf 'lint=%s\ndatabase-types=%s\ntypecheck=%s\ntests=%s\nbuild=%s\n' "$LINT" "$DBTYPES" "$TYPECHECK" "$TESTS" "$BUILD"
-          for outcome in "$LINT" "$DBTYPES" "$TYPECHECK" "$TESTS" "$BUILD"; do
+          printf 'provisioning=%s\nlint=%s\ndatabase-types=%s\ntypecheck=%s\ntests=%s\nbuild=%s\n' "$PROVISIONING" "$LINT" "$DBTYPES" "$TYPECHECK" "$TESTS" "$BUILD"
+          for outcome in "$PROVISIONING" "$LINT" "$DBTYPES" "$TYPECHECK" "$TESTS" "$BUILD"; do
             [ "$outcome" = success ] || exit 1
           done
+    defaults:
+      run:
+        shell: bash
