@@ -1,5 +1,6 @@
 import "server-only";
-import { createHmac, timingSafeEqual } from "node:crypto";
+
+import twilio from "twilio";
 
 function required(name: string) {
   const value = process.env[name]?.trim();
@@ -7,17 +8,40 @@ function required(name: string) {
   return value;
 }
 
-export function twilioConfig() {
+export function twilioAccountSid() {
+  return required("TWILIO_ACCOUNT_SID");
+}
+
+export function twilioAuthToken() {
+  // Twilio uses the Auth Token to validate webhook signatures even when API
+  // requests use an API key. Keep this server-only.
+  return required("TWILIO_AUTH_TOKEN");
+}
+
+export function twilioPhoneNumber() {
+  return required(
+    process.env.TWILIO_FROM_NUMBER?.trim()
+      ? "TWILIO_FROM_NUMBER"
+      : "TWILIO_PHONE_NUMBER",
+  );
+}
+
+export function twilioForwardNumbers() {
   return {
-    accountSid: required("TWILIO_ACCOUNT_SID"),
-    authToken: required("TWILIO_AUTH_TOKEN"),
-    phoneNumber: required("TWILIO_PHONE_NUMBER"),
-    donaldNumber: required("TWILIO_FORWARD_DONALD"),
-    marisNumber: required("TWILIO_FORWARD_MARIS"),
+    donald: normalizeE164(required("TWILIO_FORWARD_DONALD")),
+    maris: normalizeE164(required("TWILIO_FORWARD_MARIS")),
   };
 }
 
-function escapeXml(value: string) {
+export function twilioRestClient() {
+  const accountSid = twilioAccountSid();
+  const keySid = process.env.TWILIO_API_KEY_SID?.trim();
+  const keySecret = process.env.TWILIO_API_KEY_SECRET?.trim();
+  if (keySid && keySecret) return twilio(keySid, keySecret, { accountSid });
+  return twilio(accountSid, twilioAuthToken());
+}
+
+export function escapeXml(value: string) {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -37,64 +61,102 @@ export function twimlVoice(body: string) {
   return `<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`;
 }
 
+export function twimlMessaging(body = "") {
+  return `<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`;
+}
+
 export function say(text: string) {
   return `<Say>${escapeXml(text)}</Say>`;
 }
 
 export function normalizeE164(value: string) {
   const trimmed = value.trim();
-  if (!/^\+[1-9]\d{7,14}$/.test(trimmed)) throw new Error("Phone number must be E.164.");
+  if (!/^\+[1-9]\d{7,14}$/.test(trimmed))
+    throw new Error("Phone number must be E.164.");
   return trimmed;
 }
 
+export function twilioAbsoluteUrl(path: string) {
+  const configured =
+    process.env.TWILIO_PUBLIC_BASE_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (!configured) throw new Error("TWILIO_PUBLIC_BASE_URL is required.");
+  const base = new URL(configured.endsWith("/") ? configured : `${configured}/`);
+  return new URL(path.replace(/^\//, ""), base).toString();
+}
+
 export function publicRequestUrl(request: Request) {
-  const explicit = process.env.TWILIO_PUBLIC_BASE_URL?.trim();
   const current = new URL(request.url);
-  if (!explicit) return current.toString();
-  const base = new URL(explicit.endsWith("/") ? explicit : `${explicit}/`);
+  const configured = process.env.TWILIO_PUBLIC_BASE_URL?.trim();
+  if (!configured) return current.toString();
+  const base = new URL(configured.endsWith("/") ? configured : `${configured}/`);
   return new URL(`${current.pathname}${current.search}`, base).toString();
 }
 
 export async function readTwilioForm(request: Request) {
   const text = await request.text();
-  const params = new URLSearchParams(text);
-  return { params, text };
+  return { params: new URLSearchParams(text), text };
 }
 
-export function validateTwilioRequest(request: Request, params: URLSearchParams) {
+function twilioFormObject(params: URLSearchParams) {
+  const output: Record<string, string | string[]> = {};
+  for (const [key, value] of params.entries()) {
+    const current = output[key];
+    if (current === undefined) output[key] = value;
+    else if (Array.isArray(current)) current.push(value);
+    else output[key] = [current, value];
+  }
+  return output;
+}
+
+export function validateTwilioRequest(
+  request: Request,
+  params: URLSearchParams,
+) {
   const signature = request.headers.get("x-twilio-signature")?.trim();
   if (!signature) return false;
-  const token = process.env.TWILIO_AUTH_TOKEN?.trim();
-  if (!token) throw new Error("TWILIO_AUTH_TOKEN is required.");
-  const sorted = [...params.entries()].sort(([aKey, aValue], [bKey, bValue]) =>
-    aKey === bKey ? aValue.localeCompare(bValue) : aKey.localeCompare(bKey),
+  return twilio.validateRequest(
+    twilioAuthToken(),
+    signature,
+    publicRequestUrl(request),
+    twilioFormObject(params),
   );
-  const payload = publicRequestUrl(request) + sorted.map(([key, value]) => `${key}${value}`).join("");
-  const expected = createHmac("sha1", token).update(payload).digest("base64");
-  const left = Buffer.from(signature);
-  const right = Buffer.from(expected);
-  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+export function requireValidTwilioRequest(
+  request: Request,
+  params: URLSearchParams,
+) {
+  if (!validateTwilioRequest(request, params))
+    throw new Response("Forbidden", { status: 403 });
 }
 
 export async function sendTwilioMessage(to: string, body: string) {
-  const config = twilioConfig();
   const target = normalizeE164(to);
-  const form = new URLSearchParams({ To: target, From: config.phoneNumber, Body: body });
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(config.accountSid)}/Messages.json`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Basic ${Buffer.from(`${config.accountSid}:${config.authToken}`).toString("base64")}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: form,
-      cache: "no-store",
-    },
-  );
-  if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(`Twilio SMS failed (${response.status}): ${detail.slice(0, 500)}`);
-  }
-  return response.json() as Promise<{ sid: string; status: string }>;
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
+  return twilioRestClient().messages.create({
+    to: target,
+    body,
+    ...(messagingServiceSid
+      ? { messagingServiceSid }
+      : { from: twilioPhoneNumber() }),
+    statusCallback: twilioAbsoluteUrl("/api/twilio/sms/status"),
+  });
+}
+
+export async function createTwilioCall(input: {
+  to: string;
+  url: string;
+  statusCallback?: string;
+}) {
+  return twilioRestClient().calls.create({
+    to: normalizeE164(input.to),
+    from: twilioPhoneNumber(),
+    url: input.url,
+    method: "POST",
+    statusCallback:
+      input.statusCallback ?? twilioAbsoluteUrl("/api/twilio/voice/status"),
+    statusCallbackMethod: "POST",
+    statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+  });
 }
