@@ -11,16 +11,22 @@ export async function POST(request: Request) {
   if (!validateTwilioRequest(request, params))
     return new Response("Forbidden", { status: 403 });
 
-  const staff = new URL(request.url).searchParams.get("staff") ?? "staff";
+  const url = new URL(request.url);
+  const staff = url.searchParams.get("staff") ?? "staff";
+  const context = (url.searchParams.get("context") ?? "").slice(0, 120);
   const response = new twilio.twiml.VoiceResponse();
+  const action = new URL(twilioAbsoluteUrl("/api/twilio/voice/screen-result"));
+  action.searchParams.set("staff", staff);
   const gather = response.gather({
     input: ["dtmf"],
     numDigits: 1,
     timeout: 4,
-    action: `${twilioAbsoluteUrl("/api/twilio/voice/screen-result")}?staff=${encodeURIComponent(staff)}`,
+    action: action.toString(),
     method: "POST",
   });
-  gather.say("Le Yard call. Press 1 to accept.");
+  gather.say(
+    context ? `Le Yard call. ${context}. Press 1 to accept.` : "Le Yard call. Press 1 to accept.",
+  );
   response.hangup();
   return xmlResponse(response.toString());
 }
