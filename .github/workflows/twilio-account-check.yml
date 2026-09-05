@@ -1,0 +1,40 @@
+name: Le Yard Twilio account check (read only)
+on:
+  push:
+    branches: [ops/twilio-account-access]
+    paths:
+      - '.github/workflows/twilio-account-check.yml'
+      - 'scripts/twilio-account-audit.py'
+      - 'scripts/test_twilio_account_audit.py'
+      - 'docs/twilio-account-access.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: le-yard-twilio-account-check
+  cancel-in-progress: false
+jobs:
+  audit:
+    if: github.repository == 'donaldlena833-cyber/le-yard-os' && github.ref == 'refs/heads/ops/twilio-account-access' && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: le-yard-phone
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Test account-audit safety (no credentials)
+        run: python3 scripts/test_twilio_account_audit.py
+      - name: Read Twilio account without changing configuration
+        env:
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+        run: python3 scripts/twilio-account-audit.py
+      - name: Save non-secret status only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twilio-account-status
+          path: ${{ runner.temp }}/twilio-account-audit.json
+          retention-days: 1
+          if-no-files-found: ignore
