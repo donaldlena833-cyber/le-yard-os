@@ -134,8 +134,8 @@ async function resolveOwnerIntelligenceContext() {
   if (resolution.status !== "ready" || resolution.context.mode !== "live") {
     return { ok: false as const, message: "A connected tenant session is required." };
   }
-  if (resolution.context.role !== "owner" || resolution.context.identity.aal !== "aal2") {
-    return { ok: false as const, message: "Ask Le Yard intelligence requires your owner account with MFA verified." };
+  if (resolution.context.role !== "owner") {
+    return { ok: false as const, message: "Ask Le Yard intelligence requires your authorized owner account." };
   }
   const supabase = await createClient();
   const { data: authorized, error } = await supabase.rpc("can_use_owner_intelligence", {

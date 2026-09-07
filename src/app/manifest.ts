@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import {
   defaultWorkspacePath,
   isHostSurface,
+  isPhoneSurface,
   surfaceProductName,
 } from "@/lib/app-surface";
 
@@ -10,7 +11,7 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: surfaceProductName,
     short_name: "Le Yard",
-    description: isHostSurface
+    description: isPhoneSurface ? "The shared Le Yard phone for calls, texts, and voicemail." : isHostSurface
       ? "The private reservation book and guest CRM for Le Yard."
       : "The private operating system for modern restaurant teams.",
     start_url: defaultWorkspacePath,
@@ -20,7 +21,7 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#f2f0e9",
     theme_color: "#171a17",
     categories: ["business", "food", "productivity"],
-    shortcuts: isHostSurface ? [
+    shortcuts: isPhoneSurface ? [{ name: "Shared phone", url: "/phone" }] : isHostSurface ? [
       {
         name: "Host stand",
         short_name: "Reservations",

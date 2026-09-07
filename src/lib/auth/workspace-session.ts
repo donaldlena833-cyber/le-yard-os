@@ -24,7 +24,6 @@ import {
 import { readWorkspacePreference } from "@/lib/auth/workspace-preference.server";
 import { localDateKey } from "@/data/read-models/local-time";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
-import { requiresOwnerMfaGate } from "@/lib/auth/mfa";
 import { retryJwtIssuedAtFuture } from "@/lib/auth/jwt-clock-skew-retry";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -38,7 +37,7 @@ export type WorkspaceSessionResolution =
   | { status: "ready"; context: WorkspaceContextValue }
   | { status: "unauthenticated" }
   | {
-      status: "no_access" | "no_location" | "configuration_error" | "data_error" | "mfa_required";
+      status: "no_access" | "no_location" | "configuration_error" | "data_error";
       identity?: { displayName: string; email: string | null };
     };
 
@@ -318,14 +317,6 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
   const memberships = (membershipResult.data ?? []) as WorkspaceMembershipRow[];
   if (!memberships.length) return { status: "no_access", identity };
 
-  // Check before fetching protected workspace data: RLS intentionally hides
-  // sensitive rows from password-only management sessions.
-  if (memberships.some((membership) => requiresOwnerMfaGate({
-    mode: "live",
-    role: membership.role,
-    identity: { aal: normalizeAssuranceLevel(claims.aal) },
-  }))) return { status: "mfa_required", identity };
-
   const organizationIds = [...new Set(memberships.map((membership) => membership.organization_id))];
   const [organizationResult, locationResult, locationMembershipResult] = await Promise.all([
     supabase
@@ -418,14 +409,6 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
     capabilities,
     ...jobContext,
   };
-
-  if (requiresOwnerMfaGate({
-    mode: resolvedContext.mode,
-    role: resolvedContext.role,
-    identity: resolvedContext.identity,
-  })) {
-    return { status: "mfa_required", identity };
-  }
 
   return { status: "ready", context: resolvedContext };
 }

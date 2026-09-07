@@ -50,18 +50,12 @@ export function selectTotpFactorState(
     : { kind: "enroll" };
 }
 
-export function requiresOwnerMfaGate({
-  mode,
-  role,
-  identity,
-}: {
+/** Permanent policy: authenticated members never need a second factor. */
+export function requiresOwnerMfaGate(session: {
   mode: "demo" | "live";
   role: AppRole;
   identity: { aal: AssuranceLevel };
 }): boolean {
-  return (
-    mode === "live" &&
-    (role === "owner" || role === "admin") &&
-    identity.aal !== "aal2"
-  );
+  void session;
+  return false;
 }

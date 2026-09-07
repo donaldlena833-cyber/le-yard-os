@@ -382,12 +382,12 @@ try {
            (select count(*)::integer from public.startup_workspaces) as visible_workspaces
   `);
   if (
-    aal1Authority.rows[0]?.can_manage !== false ||
-    aal1Authority.rows[0]?.pending_mfa !== true ||
-    aal1Authority.rows[0]?.visible_workspaces !== 0
+    aal1Authority.rows[0]?.can_manage !== true ||
+    aal1Authority.rows[0]?.pending_mfa !== false ||
+    aal1Authority.rows[0]?.visible_workspaces !== 1
   ) {
     throw new Error(
-      `AAL1 management barrier failed: ${JSON.stringify(aal1Authority.rows[0])}`,
+      `Password-only management authorization failed: ${JSON.stringify(aal1Authority.rows[0])}`,
     );
   }
   await expectDatabaseError(
@@ -395,18 +395,8 @@ try {
       'le-yard-opening', 2,
       jsonb_build_object('version', 2)
     )`,
-    "42501",
-    "AAL1 Opening Room save",
-  );
-  await expectDatabaseError(
-    `select public.manage_location_release_control(
-      '94000000-0000-4000-8000-000000000001',
-      '20000000-0000-4000-8000-000000000001',
-      '30000000-0000-4000-8000-000000000001',
-      1, 'pilot', '2026-12-01', 25, true, true
-    )`,
-    "22023",
-    "AAL1 release-control command",
+    "23514",
+    "Password-only save still validates the workspace contract",
   );
   await db.exec(`
     select set_config(
@@ -612,7 +602,7 @@ try {
     );
   }
   process.stdout.write(
-    "PASS release authority, AAL2 management, and strict Opening Room optimistic contract\n",
+    "PASS release authority, password-only management, and strict Opening Room optimistic contract\n",
   );
 
   const storageScopeChecks = await db.query(`
@@ -909,14 +899,12 @@ try {
       false
     );
   `);
-  await expectDatabaseError(
+  await db.exec(
     `insert into storage.objects (id, bucket_id, name, owner_id) values (
       '90000000-0000-4000-8000-000000000033', 'receipts',
       '20000000-0000-4000-8000-000000000001/global/owner-aal1-global.pdf',
       '10000000-0000-4000-8000-000000000001'
     )`,
-    "42501",
-    "AAL1 owner sensitive storage insert",
   );
   await db.exec(`
     select set_config(
@@ -932,7 +920,7 @@ try {
     reset role;
   `);
   process.stdout.write(
-    "PASS strict storage path, tenant/location, role, and AAL2 Owner policies\n",
+    "PASS strict storage path, tenant/location, role, and password-only Owner policies\n",
   );
 
   // The synthetic seed is a fixed business snapshot, while the clock-in RPC
@@ -1675,15 +1663,15 @@ try {
     ownerAal1.locations !== 2 ||
     ownerAal1.organization_memberships < 1 ||
     ownerAal1.profiles < 5 ||
-    ownerAal1.employees !== 0 ||
-    ownerAal1.receipts !== 0 ||
-    ownerAal1.tasks !== 0 ||
-    ownerAal1.audit_events !== 0 ||
+    ownerAal1.employees < 1 ||
+    ownerAal1.receipts < 1 ||
+    ownerAal1.tasks < 1 ||
+    ownerAal1.audit_events < 1 ||
     ownerAal1.invitations !== 0 ||
     ownerAal1.storage_objects < 1
   ) {
     throw new Error(
-      `AAL1 Owner sensitive-read barrier failed: ${JSON.stringify(ownerAal1)}`,
+      `Password-only Owner tenant reads failed: ${JSON.stringify(ownerAal1)}`,
     );
   }
   await db.exec(`
@@ -4730,8 +4718,8 @@ try {
       '20000000-0000-4000-8000-000000000001'
     ) as allowed
   `);
-  if (ownerAal1Intelligence.rows[0]?.allowed) {
-    throw new Error("Owner intelligence accepted an AAL1 session");
+  if (!ownerAal1Intelligence.rows[0]?.allowed) {
+    throw new Error("Owner intelligence rejected an authorized password-only session");
   }
   await db.exec(`
     select set_config(
@@ -4831,7 +4819,7 @@ try {
     throw new Error(`Owner intelligence evidence is incomplete: ${JSON.stringify(intelligenceEvidence.rows[0])}`);
   }
   process.stdout.write(
-    "PASS owner-only AAL2 intelligence, exact confirmation, task execution, and audited undo\n",
+    "PASS authorized password-only owner intelligence, exact confirmation, task execution, and audited undo\n",
   );
 
   await db.exec(`

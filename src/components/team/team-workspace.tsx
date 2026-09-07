@@ -383,7 +383,7 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
 
             <section>
               <SectionHeading eyebrow="Security" title="Account access" />
-              <dl className="space-y-3 rounded-2xl border border-[var(--line)] p-4 text-xs"><div className="flex justify-between gap-4"><dt className="text-[var(--ink-faint)]">Sign-in</dt><dd className="font-semibold">{selected.authUserId ? "Active account" : "Invitation pending"}</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--ink-faint)]">MFA</dt><dd className="font-semibold">{selectedMembership?.mfaEnabled ? "Enabled" : selectedRole === "owner" ? "Required" : "Available"}</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--ink-faint)]">Scope</dt><dd className="text-right font-semibold">{selectedMembership?.organizationWide ? "All locations" : `${selected.locationIds.length} location${selected.locationIds.length === 1 ? "" : "s"}`}</dd></div></dl>
+              <dl className="space-y-3 rounded-2xl border border-[var(--line)] p-4 text-xs"><div className="flex justify-between gap-4"><dt className="text-[var(--ink-faint)]">Sign-in</dt><dd className="font-semibold">{selected.authUserId ? "Active account" : "Invitation pending"}</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--ink-faint)]">MFA</dt><dd className="font-semibold">Disabled</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--ink-faint)]">Scope</dt><dd className="text-right font-semibold">{selectedMembership?.organizationWide ? "All locations" : `${selected.locationIds.length} location${selected.locationIds.length === 1 ? "" : "s"}`}</dd></div></dl>
             </section>
           </div>
         </aside>
@@ -437,7 +437,7 @@ function ConnectedTeamWorkspace({ workspace }: { workspace: WorkspaceContextValu
         <Metric label="Access role" value={roleLabel[workspace.role]} detail="Active organization membership" />
         <Metric label="Locations" value={String(workspace.locations.length)} detail={workspace.organizationWide ? "Organization-wide access" : "Assigned access"} />
         <Metric label="Current location" value={workspace.activeLocation.name} detail="Selected on the server" />
-        <Metric label="Session" value="Password" detail={workspace.identity.aal === "aal2" ? "Optional MFA also verified" : "Authenticated access"} />
+        <Metric label="Session" value="Password" detail="Authenticated access" />
       </section>
 
       <section className="mt-6 rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] p-6 sm:p-8">
@@ -456,7 +456,7 @@ function ConnectedTeamWorkspace({ workspace }: { workspace: WorkspaceContextValu
               {isAuthorizedRole
                 ? workspace.role === "admin"
                   ? "You can invite admins, managers, and employees. Owner access is not offered and is rejected server-side."
-                  : "You can invite all access roles. New owners create their own password; MFA remains optional."
+                  : "You can invite all access roles. New owners create their own password; sign-in uses a password."
                 : "Managers and employees can view team operations, but cannot create accounts or assign access."}
             </p>
           </div>

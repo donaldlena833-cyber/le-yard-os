@@ -270,7 +270,7 @@ export function AssistantWorkspace() {
         </div>
       </section>
 
-      <p className="mt-6 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />Owner beta: operational evidence included in a question is processed through your local Codex subscription session. Access is limited to your explicitly authorized owner account with MFA.</p>
+      <p className="mt-6 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />Owner beta: operational evidence included in a question is processed through your local Codex subscription session. Access is limited to your explicitly authorized owner account.</p>
 
       <ConfirmActionDialog
         open={confirmationOpen && Boolean(ownerAnswer?.proposal)}

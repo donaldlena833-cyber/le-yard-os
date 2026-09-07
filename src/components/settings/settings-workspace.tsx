@@ -26,7 +26,6 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { signOutAction } from "@/app/actions/auth";
-import { MfaEnrollment } from "@/components/settings/mfa-enrollment";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
@@ -90,7 +89,7 @@ function OrganizationPanel() {
       </section>
 
       <section>
-        <SectionHeading title="Owner accounts" detail="MFA can be enabled for Owner and Admin access when the deployment is ready. Passwords are never retrievable by the app." />
+        <SectionHeading title="Owner accounts" detail="Owner and Admin accounts use password sign-in. Passwords are never retrievable by the app." />
         <div className="border-y border-[var(--line)]">
           {owners.map((owner, index) => (
             <div key={owner.id} className="flex items-center gap-3 border-t border-[var(--line)] py-4 first:border-0">
@@ -225,16 +224,14 @@ function OperatingDraftPanel() {
 }
 
 function SecurityPanel() {
-  const mfaEnabled = demoWorkspace.memberships.filter((membership) => membership.mfaEnabled).length;
   return (
     <div className="space-y-9">
       <section>
-        <SectionHeading title="Multi-factor authentication" detail="Owners are blocked from production operations until a verified second factor is present." />
-        <MfaEnrollment />
+        <SectionHeading title="Password sign-in" detail="All accounts use password sign-in without a second factor or geographic login restriction." />
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <div className="rounded-[16px] bg-[var(--canvas)] p-4"><p className="text-xs text-[var(--ink-faint)]">Required role</p><p className="mt-2 text-xs font-semibold">Owners</p></div>
-          <div className="rounded-[16px] bg-[var(--canvas)] p-4"><p className="text-xs text-[var(--ink-faint)]">MFA status</p><p className="numeric mt-2 text-xs font-semibold">{mfaEnabled} of {demoWorkspace.memberships.length} marked</p></div>
-          <div className="rounded-[16px] bg-[var(--canvas)] p-4"><p className="text-xs text-[var(--ink-faint)]">Other roles</p><p className="mt-2 text-xs font-semibold">Optional</p></div>
+          <div className="rounded-[16px] bg-[var(--canvas)] p-4"><p className="text-xs text-[var(--ink-faint)]">MFA status</p><p className="numeric mt-2 text-xs font-semibold">Disabled</p></div>
+          <div className="rounded-[16px] bg-[var(--canvas)] p-4"><p className="text-xs text-[var(--ink-faint)]">Other roles</p><p className="mt-2 text-xs font-semibold">Password</p></div>
         </div>
       </section>
 

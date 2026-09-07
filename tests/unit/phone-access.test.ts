@@ -4,9 +4,9 @@ vi.mock("@/lib/auth/workspace-session",()=>({resolveWorkspaceSession:async()=>st
 vi.mock("@/lib/communications.server",()=>({resolveLeYardTenant:async()=>({organizationId:"org",locationId:"location"})}));
 import {requirePhoneAccess} from "@/lib/phone-access.server";
 beforeEach(()=>{state.session={status:"ready",context:{mode:"live",identity:{aal:"aal2"},role:"owner",organization:{id:"org"},activeLocation:{id:"location"}}};});
-it("allows a live Le Yard owner with MFA",async()=>{expect((await requirePhoneAccess()).role).toBe("owner");});
+it("allows a live Le Yard owner",async()=>{expect((await requirePhoneAccess()).role).toBe("owner");});
 it("rejects a session that has not completed sign-in",async()=>{state.session.status="unauthenticated";await expect(requirePhoneAccess()).rejects.toMatchObject({status:401});});
 it.each([['mode','demo'],['role','employee'],['role','manager']])("rejects %s=%s",async(key,value)=>{Object.assign(state.session.context,{[key]:value});await expect(requirePhoneAccess()).rejects.toMatchObject({status:403});});
-it("rejects AAL1 even if membership is owner",async()=>{state.session.context.identity.aal="aal1";await expect(requirePhoneAccess()).rejects.toMatchObject({status:403});});
+it("allows password-only owner access",async()=>{state.session.context.identity.aal="aal1";expect((await requirePhoneAccess()).role).toBe("owner");});
 it("rejects a different organization",async()=>{state.session.context.organization.id="other";await expect(requirePhoneAccess()).rejects.toMatchObject({status:403});});
 it("rejects a different location",async()=>{state.session.context.activeLocation.id="other";await expect(requirePhoneAccess()).rejects.toMatchObject({status:403});});

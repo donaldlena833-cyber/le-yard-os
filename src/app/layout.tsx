@@ -5,6 +5,7 @@ import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register"
 import { publicEnv } from "@/lib/env";
 import {
   isHostSurface,
+  isPhoneSurface,
   surfaceProductName,
 } from "@/lib/app-surface";
 import "./globals.css";
@@ -25,7 +26,7 @@ export const metadata: Metadata = {
     default: surfaceProductName,
     template: `%s · ${surfaceProductName}`,
   },
-  description: isHostSurface
+  description: isPhoneSurface ? "The shared Le Yard phone for calls, texts, and voicemail." : isHostSurface
     ? "The private reservation book and guest CRM for the Le Yard team."
     : "The private operating system for the Le Yard restaurant team.",
   applicationName: surfaceProductName,

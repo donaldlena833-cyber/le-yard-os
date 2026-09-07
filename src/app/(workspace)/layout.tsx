@@ -1,3 +1,4 @@
+import { isPhoneSurface } from "@/lib/app-surface";
 import { LockKeyhole, LogOut, MapPinOff, ShieldAlert } from "lucide-react";
 import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions/auth";
@@ -5,7 +6,6 @@ import { WorkspaceProvider } from "@/components/providers/workspace-provider";
 import { AppShell } from "@/components/shell/app-shell";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { Button } from "@/components/ui/button";
-import { MfaGate } from "@/components/auth/mfa-gate";
 import {
   resolveWorkspaceSession,
   type WorkspaceSessionResolution,
@@ -45,13 +45,6 @@ function WorkspaceAccessState({
       detail:
         "Your sign-in succeeded, but Le Yard OS could not load the authorized workspace records. Try again, then sign out and back in if this continues.",
     },
-    mfa_required: {
-      icon: ShieldAlert,
-      eyebrow: "Additional verification",
-      title: "Multi-factor authentication required",
-      detail:
-        "Verify with your authenticator to open your workspace.",
-    },
   }[resolution.status];
   const Icon = content.icon;
 
@@ -71,7 +64,6 @@ function WorkspaceAccessState({
         <p className="eyebrow mt-5">{content.eyebrow}</p>
         <h1 className="mt-2 text-2xl font-medium tracking-[-0.045em]">{content.title}</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--ink-faint)]">{content.detail}</p>
-        {resolution.status === "mfa_required" ? <MfaGate /> : null}
         {resolution.identity ? (
           <div className="mt-6 rounded-2xl bg-[var(--canvas)] px-4 py-3">
             <p className="text-xs font-semibold">{resolution.identity.displayName}</p>
@@ -106,7 +98,7 @@ export default async function WorkspaceLayout({
 
   return (
     <WorkspaceProvider value={resolution.context}>
-      <AppShell>{children}</AppShell>
+      {isPhoneSurface ? <div className="min-h-svh bg-[var(--canvas)]"><header className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3"><span className="text-sm font-semibold">Le Yard Phone</span><form action={signOutAction}><Button type="submit" variant="quiet">Sign out</Button></form></header>{children}</div> : <AppShell>{children}</AppShell>}
     </WorkspaceProvider>
   );
 }

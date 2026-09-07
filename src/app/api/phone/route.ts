@@ -45,7 +45,7 @@ export async function POST(request: Request) {
   let claimed = false;
   let requestId = "";
   try {
-    if (request.headers.get("origin") !== new URL(twilioAbsoluteUrl("/")).origin) return json({error:"Forbidden"},403);
+    if (request.headers.get("origin") !== new URL(process.env.NEXT_PUBLIC_APP_URL!).origin) return json({error:"Forbidden"},403);
     const w = await requirePhoneAccess();
     const parsed = schema.safeParse(await request.json().catch(()=>null));
     if (!parsed.success) return json({error:"Check the phone number and message."},400);

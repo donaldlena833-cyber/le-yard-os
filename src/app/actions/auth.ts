@@ -380,7 +380,7 @@ export async function inviteUserAction(
       message:
         beginError.code === "23505"
           ? "This person already has access or a pending invitation."
-          : "The invitation request could not be opened safely. Verify MFA and try again.",
+          : "The invitation request could not be opened safely. Sign in again and retry.",
     };
   }
 

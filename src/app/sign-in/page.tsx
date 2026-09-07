@@ -8,6 +8,7 @@ import { getServerRuntimeConfiguration } from "@/lib/env.server";
 import {
   defaultWorkspacePath,
   isHostSurface,
+  isPhoneSurface,
   surfaceProductName,
 } from "@/lib/app-surface";
 
@@ -45,7 +46,7 @@ export default async function SignInPage({
               {surfaceProductName}
             </p>
             <p className="mt-0.5 text-[10px] tracking-[0.13em] text-white/55 uppercase">
-              {isHostSurface ? "Private host stand" : "Private back office"}
+              {isPhoneSurface ? "Private shared phone" : isHostSurface ? "Private host stand" : "Private back office"}
             </p>
           </div>
         </div>
@@ -64,12 +65,12 @@ export default async function SignInPage({
                 : "Private, tenant-scoped operator access"}
           </p>
           <h1 className="max-w-lg text-[clamp(2.8rem,5vw,5rem)] leading-[0.96] font-medium tracking-[-0.065em]">
-            {isHostSurface
+            {isPhoneSurface ? "One number. Every conversation." : isHostSurface
               ? "Every guest. Every table. One calm service."
               : "Everything behind a great night."}
           </h1>
           <p className="mt-7 max-w-md text-sm leading-6 text-white/55">
-            {isHostSurface
+            {isPhoneSurface ? "Your shared Le Yard number for calls, texts, and voicemail. Sign in with your existing owner or admin account." : isHostSurface
               ? "Run the book, pace the room, and remember the details that turn a reservation into hospitality."
               : "Schedule the team, close the books, watch inventory, and keep every handoff in one quiet place."}
           </p>
@@ -110,7 +111,7 @@ export default async function SignInPage({
             <BrandMark />
             <p className="text-sm font-semibold">{surfaceProductName}</p>
           </div>
-          <p className="eyebrow">{isHostSurface ? "Host access" : "Operator access"}</p>
+          <p className="eyebrow">{isPhoneSurface ? "Phone access" : isHostSurface ? "Host access" : "Operator access"}</p>
           <h2 className="mt-4 text-3xl font-medium tracking-[-0.05em] text-[var(--ink)] sm:text-[2.3rem]">
             Welcome back.
           </h2>

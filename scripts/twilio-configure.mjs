@@ -10,7 +10,8 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const LE_YARD_NUMBER = '+13328779035';
-export const LE_YARD_ORIGIN = 'https://operations.leyardny.com';
+export const LE_YARD_ORIGIN = 'https://phone.leyardny.com';
+const approvedOrigins = new Set([LE_YARD_ORIGIN, 'https://operations.leyardny.com']);
 
 export function readConfig(env = process.env) {
   const required = name => {
@@ -25,7 +26,7 @@ export function readConfig(env = process.env) {
   const keySecret = env.TWILIO_API_KEY_SECRET?.trim();
   if (Boolean(keySid) !== Boolean(keySecret)) throw new Error('Both API key fields are required.');
   const origin = (env.TWILIO_PUBLIC_BASE_URL || LE_YARD_ORIGIN).replace(/\/$/, '');
-  if (origin !== LE_YARD_ORIGIN) throw new Error('Refusing to route the public number to a preview or unapproved host.');
+  if (!approvedOrigins.has(origin)) throw new Error('Refusing to route the public number to a preview or unapproved host.');
   const number = env.TWILIO_FROM_NUMBER || env.TWILIO_PHONE_NUMBER || LE_YARD_NUMBER;
   if (number !== LE_YARD_NUMBER) throw new Error('This script configures only the existing Le Yard business number.');
   const serviceSid = env.TWILIO_MESSAGING_SERVICE_SID?.trim();

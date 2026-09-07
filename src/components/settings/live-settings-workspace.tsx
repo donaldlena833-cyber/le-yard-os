@@ -33,7 +33,6 @@ import {
   saveExpenseCategoryAction,
   setExpenseCategoryActiveAction,
 } from "@/app/actions/workflows/configuration";
-import { MfaEnrollment } from "@/components/settings/mfa-enrollment";
 import { CapabilityConfiguration } from "@/components/settings/capability-configuration";
 import { RetentionPolicyConfiguration } from "@/components/settings/retention-policy-configuration";
 import { Avatar } from "@/components/ui/avatar";
@@ -295,10 +294,9 @@ function SecurityPanel({ workspace }: { workspace: WorkspaceContextValue }) {
     <div className="space-y-9">
       <section>
         <SectionHeading
-          title="Optional multi-factor authentication"
-          detail="Password access is sufficient during this rollout phase. Enrolled factors remain available as an optional account safeguard."
+          title="Password sign-in"
+          detail="Sign in with your email and password. Two-factor authentication and geographic login restrictions are disabled."
         />
-        <MfaEnrollment />
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <div className="rounded-[16px] bg-[var(--canvas)] p-4">
             <p className="text-xs text-[var(--ink-faint)]">Current role</p>
