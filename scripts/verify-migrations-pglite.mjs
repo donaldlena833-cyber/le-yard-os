@@ -5133,6 +5133,17 @@ try {
     );
   }
 
+  await db.exec(`
+    set role authenticated;
+    select set_config('request.jwt.claims', '{"sub":"ffffffff-ffff-4fff-8fff-ffffffffffff","role":"authenticated","aal":"aal1"}', false);
+  `);
+  await expectDatabaseError(
+    `select public.begin_user_invitation_request(null, '20000000-0000-4000-8000-000000000001', null, null, 'employee', '{}'::uuid[], null, null)`,
+    "42501", "Unassigned password-only actor cannot open an invitation request",
+  );
+  await db.exec('reset role');
+  process.stdout.write("PASS invitation request rejects missing tenant membership\n");
+
   process.stdout.write(
     `PASS catalog ${counts.table_count}/${counts.table_count} public tables use forced RLS\n`,
   );
