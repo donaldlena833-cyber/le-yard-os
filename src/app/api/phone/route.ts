@@ -21,9 +21,9 @@ export async function GET(request: Request) {
     const [incoming, outgoing, callsIn, callsOut, voicemail] = await Promise.all([
       client.messages.list({ to: business, ...(phone ? { from: phone } : {}), limit: 60 }),
       client.messages.list({ from: business, ...(phone ? { to: phone } : {}), limit: 60 }),
-      client.calls.list({ to: business, limit: 40 }),
-      client.calls.list({ from: business, limit: 40 }),
-      createAdminClient().from("integration_events").select("id,metadata,occurred_at")
+      phone ? Promise.resolve([]) : client.calls.list({ to: business, limit: 40 }),
+      phone ? Promise.resolve([]) : client.calls.list({ from: business, limit: 40 }),
+      phone ? Promise.resolve({ data: [], error: null }) : createAdminClient().from("integration_events").select("id,metadata,occurred_at")
         .eq("organization_id", w.organization.id).eq("event_type", "voice.voicemail")
         .order("occurred_at", { ascending: false }).limit(30),
     ]);

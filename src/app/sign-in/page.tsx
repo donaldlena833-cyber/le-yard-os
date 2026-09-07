@@ -91,7 +91,7 @@ export default async function SignInPage({
                 ]
               : [
                   ["RLS", "Tenant isolation"],
-                  ["2-step", "Owner verification"],
+                  ["Password", "Account sign-in"],
                   ["Private", "Operational records"],
                 ]
           ).map(([value, label]) => (
@@ -141,7 +141,7 @@ export default async function SignInPage({
             <p>
               {playgroundMode
                 ? "This is a nonproduction playground. Passwords are stored only as salted server-side hashes; MFA and Supabase accounts come later."
-                : "Owners and admins verify with an authenticator after signing in. Passwords are never visible to administrators."}
+                : "Sign in with your existing password. No authenticator or location check is required. Passwords are never visible to administrators."}
             </p>
           </div>
           <p className="mt-6 inline-flex items-center gap-1.5 text-[11px] font-semibold text-[var(--ink-soft)]">

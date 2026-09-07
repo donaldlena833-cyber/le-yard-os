@@ -17,7 +17,7 @@ export function isDestinationAllowedForAppSurface(pathname: string): boolean {
 }
 export function isRequestPathAllowedForAppSurface(pathname: string): boolean {
   if (isPhoneSurface) {
-    return ["/", "/sign-in", "/invite", "/phone", "/manifest.webmanifest", "/offline.html", "/sw.js", "/api/health", "/api/phone", "/api/phone/media"].includes(pathname)
+    return ["/", "/sign-in", "/invite", "/phone", "/manifest.webmanifest", "/offline.html", "/offline.css", "/sw.js", "/api/health", "/api/phone", "/api/phone/media"].includes(pathname)
       || pathname.startsWith("/auth/") || pathname.startsWith("/api/twilio/")
       || pathname.startsWith("/api/internal/communications/") || pathname.startsWith("/icons/");
   }

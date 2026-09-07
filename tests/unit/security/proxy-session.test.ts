@@ -50,6 +50,12 @@ interface SupabaseCookieAdapter {
 }
 
 describe("session proxy", () => {
+  it("returns JSON 401 for an unauthenticated API request", async () => {
+    const response = await updateSession(new NextRequest("https://ops.example.com/api/phone"));
+    expect(response.status).toBe(401);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("location")).toBeNull();
+  });
   beforeEach(() => {
     state.runtime = {
       ready: true,

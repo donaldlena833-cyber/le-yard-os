@@ -352,6 +352,12 @@ export async function updateSession(
   }
 
   if (!data?.claims && !isPublicPath) {
+    if (request.nextUrl.pathname.startsWith("/api/")) {
+      return applyAuthMutations(NextResponse.json(
+        { error: "Your session expired. Sign in again." },
+        { status: 401, headers: { "Cache-Control": "private, no-store" } },
+      ));
+    }
     const signInUrl = new URL("/sign-in", runtime.appUrl!);
     signInUrl.searchParams.set(
       "next",
