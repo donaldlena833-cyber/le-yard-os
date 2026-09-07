@@ -4,6 +4,10 @@ import type {
   OwnerDraftOperatingAssumptions,
   WeeklyAvailability,
 } from "../../types";
+import {
+  fullServiceDayScenario,
+  legacySaturdaySimulationId,
+} from "../simulation/full-service-day-v1.ts";
 
 export const demoIds = {
   organization: "org-le-yard-demo",
@@ -396,15 +400,18 @@ const demoWorkspaceBase: DemoWorkspace = {
   ],
 };
 
-export const saturdayServiceSimulation = {
-  id: "saturday-service",
-  label: "Saturday service simulation",
-  businessDate: "2026-04-18",
-  observedAt: "2026-04-18T20:00:00-04:00",
-  openedOn: "2025-11-18",
+export const serviceSimulation = {
+  id: fullServiceDayScenario.id,
+  label: fullServiceDayScenario.label,
+  businessDate: fullServiceDayScenario.businessDate,
+  observedAt: fullServiceDayScenario.observedAt,
+  openedOn: fullServiceDayScenario.openedOn,
   monthsInService: 5,
   synthetic: true,
 } as const;
+
+/** @deprecated Use serviceSimulation. Kept for existing preview links and tests. */
+export const saturdayServiceSimulation = serviceSimulation;
 
 const SATURDAY_SERVICE_DATE_SHIFT_DAYS = -105;
 
@@ -440,17 +447,17 @@ export function createSaturdayServiceWorkspace(): DemoWorkspace {
   const shifted = shiftSimulationDates(demoWorkspaceBase);
   return {
     ...shifted,
-    asOf: saturdayServiceSimulation.observedAt,
+    asOf: serviceSimulation.observedAt,
     ownerDraftOperatingAssumptions: {
       ...shifted.ownerDraftOperatingAssumptions,
       updatedAt: "2026-04-16T12:00:00-04:00",
     },
     organizations: shifted.organizations.map((organization) => ({
       ...organization,
-      name: "Le Yard — Saturday Service Preview",
-      slug: "le-yard-saturday-preview",
-      createdAt: `${saturdayServiceSimulation.openedOn}T10:00:00-05:00`,
-      updatedAt: saturdayServiceSimulation.observedAt,
+      name: "Le Yard — Full-Day Pressure Test",
+      slug: "le-yard-full-service-preview",
+      createdAt: `${serviceSimulation.openedOn}T10:00:00-05:00`,
+      updatedAt: serviceSimulation.observedAt,
     })),
     locations: shifted.locations.map((location, index) =>
       index === 0
@@ -458,17 +465,72 @@ export function createSaturdayServiceWorkspace(): DemoWorkspace {
             ...location,
             name: "Le Yard",
             slug: "le-yard",
-            updatedAt: saturdayServiceSimulation.observedAt,
+            updatedAt: serviceSimulation.observedAt,
           }
         : location,
+    ),
+    closeouts: shifted.closeouts.map((closeout, index) =>
+      index === 0
+        ? {
+            ...closeout,
+            id: "closeout-full-service-day-v1",
+            businessDate: serviceSimulation.businessDate,
+            preparedBy: demoIds.people.aisha,
+            approvedBy: null,
+            approvedAt: null,
+            status: "draft",
+            covers: fullServiceDayScenario.expectations.fullDayCovers,
+            grossSalesCents: fullServiceDayScenario.expectations.grossSalesCents,
+            netSalesCents: fullServiceDayScenario.expectations.netSalesCents,
+            cashSalesCents: fullServiceDayScenario.expectations.cashSalesCents,
+            cardSalesCents: fullServiceDayScenario.expectations.cardSalesCents,
+            compsCents: fullServiceDayScenario.expectations.compsCents,
+            voidsCents: fullServiceDayScenario.expectations.voidsCents,
+            expectedCashCents:
+              fullServiceDayScenario.expectations.expectedClosingDrawerCents,
+            actualCashCents:
+              fullServiceDayScenario.expectations.expectedClosingDrawerCents,
+            cashVarianceCents: 0,
+            notes:
+              "Synthetic full-day closeout working copy; independent Owner approval remains required.",
+            createdAt: "2026-04-18T23:00:00-04:00",
+            updatedAt: "2026-04-18T23:35:00-04:00",
+          }
+        : closeout,
+    ),
+    tipPoolRuns: shifted.tipPoolRuns.map((run, index) =>
+      index === 0
+        ? {
+            ...run,
+            id: "tip-run-full-service-day-v1",
+            businessDate: serviceSimulation.businessDate,
+            cashTipsCents: 21_336,
+            cardTipsCents: 85_344,
+            serviceChargesCents: 0,
+            adjustmentsCents: 0,
+            distributableCents: fullServiceDayScenario.expectations.tipsCents,
+            status: "draft",
+            approvedBy: null,
+            approvedAt: null,
+            explanation:
+              "Synthetic lunch and dinner cash and card tips; exact-cent independent approval required.",
+            createdAt: "2026-04-18T23:35:00-04:00",
+            updatedAt: "2026-04-18T23:35:00-04:00",
+          }
+        : run,
     ),
   };
 }
 
-export const isSaturdayServicePreview =
-  process.env.NEXT_PUBLIC_SERVICE_SIMULATION === saturdayServiceSimulation.id;
+export const isFullServiceDayPreview = [
+  serviceSimulation.id,
+  legacySaturdaySimulationId,
+].includes(process.env.NEXT_PUBLIC_SERVICE_SIMULATION ?? "");
 
-export const demoWorkspace: DemoWorkspace = isSaturdayServicePreview
+/** @deprecated Use isFullServiceDayPreview. */
+export const isSaturdayServicePreview = isFullServiceDayPreview;
+
+export const demoWorkspace: DemoWorkspace = isFullServiceDayPreview
   ? createSaturdayServiceWorkspace()
   : demoWorkspaceBase;
 

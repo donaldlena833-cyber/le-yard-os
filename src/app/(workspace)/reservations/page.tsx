@@ -8,6 +8,8 @@ import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.serv
 import { createDemoReservationModel } from "@/lib/reservations/demo";
 import { deriveReservationHostPermissions } from "@/lib/reservations/model";
 import { resolveSelectedReservationDate } from "@/lib/reservations/selected-date";
+import { isFullServiceDayPreview } from "@/lib/demo";
+import { fullServiceDayScenario } from "@/lib/simulation/full-service-day-v1.ts";
 
 export const metadata: Metadata = { title: "Reservations" };
 
@@ -19,10 +21,10 @@ export default async function ReservationsPage({ searchParams }: { searchParams:
   requireWorkspaceRouteAccess("/reservations", resolution.context);
   const timeZone = resolution.context.activeLocation.timeZone;
   if (!timeZone) return null;
-  const selectedDate = resolveSelectedReservationDate(
-    requested,
-    timeZone,
-  );
+  const selectedDate =
+    isFullServiceDayPreview && !requested
+      ? fullServiceDayScenario.businessDate
+      : resolveSelectedReservationDate(requested, timeZone);
   if (isDemoMode) {
     const result = {
         ok: true as const,

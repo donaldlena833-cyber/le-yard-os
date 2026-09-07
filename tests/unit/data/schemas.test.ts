@@ -43,9 +43,9 @@ const closeout = {
   businessDate: "2026-08-01",
   shiftLabel: "Dinner",
   grossSalesCents: 100_00,
-  netSalesCents: 90_00,
+  netSalesCents: 97_00,
   cashSalesCents: 20_00,
-  cardSalesCents: 70_00,
+  cardSalesCents: 77_00,
   expectedCashCents: 20_00,
   actualCashCents: 19_95,
   covers: 40,
@@ -287,6 +287,15 @@ describe("workflow action schemas", () => {
   it("rejects invalid financial values and impossible report ranges", () => {
     expect(
       submitCloseoutInputSchema.safeParse({ ...closeout, grossSalesCents: -1 }).success,
+    ).toBe(false);
+    expect(
+      submitCloseoutInputSchema.safeParse({ ...closeout, netSalesCents: 96_00 }).success,
+    ).toBe(false);
+    expect(
+      submitCloseoutInputSchema.safeParse({ ...closeout, cardSalesCents: 76_00 }).success,
+    ).toBe(false);
+    expect(
+      submitCloseoutInputSchema.safeParse({ ...closeout, notes: null }).success,
     ).toBe(false);
     expect(
       requestReportExportInputSchema.safeParse({

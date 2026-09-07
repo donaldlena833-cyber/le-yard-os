@@ -1101,12 +1101,13 @@ try {
       false
     );
     insert into public.shift_closeouts (
-      id, organization_id, location_id, business_date, shift_label, submitted_by
+      id, organization_id, location_id, business_date, shift_label,
+      actual_cash_cents, submitted_by
     ) values (
       'a3000000-0000-4000-8000-000000000001',
       '20000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
-      date '2026-08-01', 'guard-test',
+      date '2026-08-01', 'guard-test', 0,
       '10000000-0000-4000-8000-000000000001'
     );
     insert into public.closeout_attachments (
@@ -2370,7 +2371,8 @@ try {
     );
     insert into public.shift_closeouts (
       id, organization_id, location_id, business_date, shift_label,
-      gross_sales_cents, net_sales_cents, card_tips_cents, cash_tips_cents,
+      gross_sales_cents, net_sales_cents, cash_sales_cents, card_sales_cents,
+      comps_cents, actual_cash_cents, card_tips_cents, cash_tips_cents,
       service_charges_cents, submitted_by
     ) values (
       'b5050000-0000-4000-8000-000000000001',
@@ -2378,7 +2380,7 @@ try {
       '30000000-0000-4000-8000-000000000001',
       (clock_timestamp() at time zone 'America/New_York')::date,
       'security-follow-up-tip-run',
-      100000, 90000, 9000, 1000, 0,
+      100000, 90000, 0, 90000, 10000, 0, 9000, 1000, 0,
       '10000000-0000-4000-8000-000000000004'
     );
     select set_config(
@@ -2557,14 +2559,15 @@ try {
   await db.exec(`
     insert into public.shift_closeouts (
       id, organization_id, location_id, business_date, shift_label,
-      gross_sales_cents, net_sales_cents, card_tips_cents, submitted_by
+      gross_sales_cents, net_sales_cents, cash_sales_cents, card_sales_cents,
+      comps_cents, actual_cash_cents, card_tips_cents, submitted_by
     ) values (
       'b5200000-0000-4000-8000-000000000001',
       '20000000-0000-4000-8000-000000000001',
       '30000000-0000-4000-8000-000000000001',
       (clock_timestamp() at time zone 'America/New_York')::date,
       'maker-checker-closeout',
-      100000, 90000, 0,
+      100000, 90000, 0, 90000, 10000, 0, 0,
       '10000000-0000-4000-8000-000000000004'
     );
   `);
@@ -5061,6 +5064,53 @@ try {
   }
   process.stdout.write(
     "PASS frozen RPC grants, evidence revokes, and notification trigger catalog\n",
+  );
+
+  await expectDatabaseError(
+    `
+      insert into public.shift_closeouts (
+        id, organization_id, location_id, business_date, shift_label,
+        gross_sales_cents, net_sales_cents, cash_sales_cents, card_sales_cents,
+        comps_cents, voids_cents, actual_cash_cents, submitted_by
+      ) values (
+        'd9000000-0000-4000-8000-000000000001',
+        '20000000-0000-4000-8000-000000000001',
+        '30000000-0000-4000-8000-000000000001',
+        date '2026-08-31', 'invalid-reconciliation',
+        10000, 9000, 2000, 7000, 200, 100, 0,
+        '10000000-0000-4000-8000-000000000001'
+      )
+    `,
+    "23514",
+    "gross-to-net closeout mismatch",
+  );
+  await db.exec(`
+    insert into public.cash_movements (
+      id, organization_id, location_id, business_date, movement_kind,
+      amount_cents, actor_id, note, simulation_run_id
+    ) values (
+      'd9100000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      '30000000-0000-4000-8000-000000000001',
+      date '2026-08-31', 'opening_bank', 30000,
+      '10000000-0000-4000-8000-000000000001',
+      'Synthetic append-only opening bank', 'pglite-cash-run'
+    )
+  `);
+  await expectDatabaseError(
+    `update public.cash_movements set amount_cents = 29900
+     where id = 'd9100000-0000-4000-8000-000000000001'`,
+    "42501",
+    "cash movement update",
+  );
+  await expectDatabaseError(
+    `delete from public.cash_movements
+     where id = 'd9100000-0000-4000-8000-000000000001'`,
+    "42501",
+    "cash movement delete",
+  );
+  process.stdout.write(
+    "PASS closeout arithmetic constraints and append-only cash corrections\n",
   );
 
   const coverage = await db.query(`
