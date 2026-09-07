@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     if (!/^\+1[2-9]\d{9}$/.test(to) || to===twilioPhoneNumber()) return json({error:"Use a +1 destination other than the Le Yard number."},400);
     if (input.action==="sms" && (!twilioSmsEnabled() || !input.body)) return json({error:"Texting is not enabled or the message is empty."},400);
     if (input.action==="call" && (process.env.TWILIO_OUTBOUND_ENABLED!=="true" || !input.staff)) return json({error:"Calling is not enabled or no cellphone was selected."},400);
-    if (input.action==="call" && Object.values(twilioForwardNumbers()).includes(to)) return json({error:"Choose a destination other than either forwarding cellphone."},400);
+    if (input.action==="call" && input.staff && twilioForwardNumbers()[input.staff]===to) return json({error:"Choose a destination different from the cellphone receiving your callback."},400);
     const admin = createAdminClient();
     const organizationId=w.organization.id; requestId=input.requestId;
     const fingerprint=createHash("sha256").update(JSON.stringify({...input,to,requestId:undefined})).digest("hex");
