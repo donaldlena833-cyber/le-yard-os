@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   MessageCircleMore,
   PlugZap,
+  Phone,
   ReceiptText,
   RadioTower,
   Settings2,
@@ -62,6 +63,7 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/service", label: "Service Control", icon: RadioTower },
       { href: "/time-clock", label: "Time Clock", icon: Timer, mobile: true },
       { href: "/messages", label: "Messages", icon: MessageCircleMore, mobile: true },
+      { href: "/phone", label: "Phone", icon: Phone, roles: ["owner", "admin"] },
     ],
   },
   {
@@ -164,6 +166,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/vendors": { title: "Vendors", detail: "Prices and purchasing" },
   "/kitchen": { title: "Kitchen", detail: "Recipes and production" },
   "/earnings": { title: "Earnings", detail: "Pay periods, tips, and hourly pay" },
+  "/phone": { title: "Phone", detail: "Shared Le Yard calls, texts and voicemail" },
   "/messages": { title: "Messages", detail: "Internal channels" },
   "/closeout": { title: "Money", detail: "Closeout, cash, and tips" },
   "/income": { title: "Income", detail: "Live revenue, costs, labor, and hourly demand" },

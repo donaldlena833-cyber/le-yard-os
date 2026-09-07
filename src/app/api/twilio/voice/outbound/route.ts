@@ -1,3 +1,4 @@
+import { requirePhoneAccess } from "@/lib/phone-access.server";
 import { z } from "zod";
 import { resolveLeYardTenant, logCommunicationEvent } from "@/lib/communications.server";
 import { createClient } from "@/lib/supabase/server";
@@ -11,6 +12,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Outbound calling is not activated." }, { status: 503 });
   if (request.headers.get("origin") !== new URL(twilioAbsoluteUrl("/")).origin)
     return Response.json({ error: "Forbidden" }, { status: 403 });
+  try { await requirePhoneAccess(); } catch (error) { return error instanceof Response ? error : Response.json({ error: "Phone unavailable" }, { status: 503 }); }
   const client = await createClient();
   const { data: authData } = await client.auth.getUser();
   if (!authData.user) return Response.json({ error: "Unauthorized" }, { status: 401 });

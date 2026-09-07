@@ -98,7 +98,7 @@ export async function notifyOwnersOfCommunication(input: { title: string; body: 
   if (!memberships.length) return;
   const { error: insertError } = await admin.from("notifications").insert(memberships.map((membership) => ({
     organization_id: tenant.organizationId, user_id: membership.user_id, notification_type: input.eventType,
-    title: input.title, body: input.body, action_url: "/reservations", entity_type: null, entity_id: null,
+    title: input.title, body: input.body, action_url: "/phone", entity_type: null, entity_id: null,
   })));
   if (insertError) console.error("communications_owner_notification_failed");
 }

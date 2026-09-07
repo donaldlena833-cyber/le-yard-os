@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     message: bridged ? "Inbound call was answered." : `Inbound call ended ${status}.`,
     severity: bridged ? "info" : "warning", metadata: { callSid, from, dialStatus: status, bridged } });
   const response = new twilio.twiml.VoiceResponse();
-  if (bridged || status === "completed") { response.hangup(); return xmlResponse(response.toString()); }
+  if (bridged) { response.hangup(); return xmlResponse(response.toString()); }
   if (twilioSmsEnabled() && process.env.TWILIO_MISSED_CALL_SMS_ENABLED?.trim() === "true") {
     const gather = response.gather({ input: ["dtmf"], numDigits: 1, timeout: 5,
       action: twilioAbsoluteUrl("/api/twilio/voice/missed-consent"), method: "POST" });

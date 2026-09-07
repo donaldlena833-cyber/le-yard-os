@@ -1,5 +1,6 @@
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ call: vi.fn(), log: vi.fn(), user: true, member: true }));
+vi.mock("@/lib/phone-access.server", () => ({ requirePhoneAccess: async () => ({}) }));
 vi.mock("@/lib/communications.server", () => ({
   resolveLeYardTenant: async () => ({ organizationId: "test-organization", locationId: "test-location" }),
   logCommunicationEvent: mocks.log,
