@@ -104,7 +104,7 @@ export async function configure(client, config, { apply = false, channel = 'voic
   if (channel !== 'messaging') await probeFn(config, 'voice');
   if (channel !== 'voice') await probeFn(config, 'messaging');
   // Record the exact prior settings before any mutation, outside the repository.
-  const directory = resolve(homedir(), '.le-yard', 'twilio-backups');
+  const directory = resolve(process.env.TWILIO_BACKUP_DIR || resolve(homedir(), '.le-yard', 'twilio-backups'));
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const backup = resolve(directory, `${Date.now()}-${randomUUID()}.json`);
   const pick = (item, keys) => Object.fromEntries(keys.map(key => [key, item[key] ?? null]));
