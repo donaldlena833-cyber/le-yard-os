@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   upload: vi.fn(),
   insert: vi.fn(),
   auth: true,
+  source: vi.fn(),
 }));
 vi.mock("@/lib/elevenlabs.server", () => ({
   validateAgentToolSecret: () => m.auth,
@@ -21,6 +22,7 @@ vi.mock("@/lib/communications.server", () => ({
 }));
 vi.mock("@/lib/communication-groups.server", () => ({
   setCommunicationThreadMode: m.mode,
+  communicationThreadSource: m.source,
 }));
 vi.mock("@/lib/twilio.server", () => ({
   twilioPhoneNumber: () => "+13328779035",
@@ -48,6 +50,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.auth = true;
   m.mode.mockResolvedValue(undefined);
+  m.source.mockResolvedValue(null);
   m.notify.mockResolvedValue(undefined);
   m.download.mockResolvedValue({
     data: null,
@@ -112,4 +115,14 @@ it("does not tell the client a human was notified when owner notification failed
   m.notify.mockRejectedValue(Error("offline"));
   expect((await POST(request())).status).toBe(503);
   expect(m.send).not.toHaveBeenCalled();
+});
+it("links a team handoff to its original message and the team conversation", async () => {
+  const sid = "SM" + "b".repeat(32);
+  m.source.mockResolvedValue({ sid, audience: "team" });
+  expect((await POST(request())).status).toBe(201);
+  expect(m.insert).toHaveBeenCalledWith(expect.objectContaining({source_sid:sid}));
+  expect(m.notify).toHaveBeenCalledWith(expect.objectContaining({
+    title:"Team request needs a human",
+    actionUrl:"/messages?group=team&phone=%2B12125550123",
+  }));
 });

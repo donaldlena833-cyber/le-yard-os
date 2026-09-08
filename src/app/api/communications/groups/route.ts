@@ -66,7 +66,18 @@ export async function GET(request: Request) {
             .eq("location_id", loc)
             .eq("sid", item.data.source_sid)
             .maybeSingle()
-        : { data: null, error: null };
+        : item.data.phone
+          ? await admin
+              .from("communication_messages")
+              .select("sid,media_count,audience")
+              .eq("organization_id", org)
+              .eq("location_id", loc)
+              .eq("phone", item.data.phone)
+              .order("sent_at", { ascending: false })
+              .order("sid", { ascending: false })
+              .limit(1)
+              .maybeSingle()
+          : { data: null, error: null };
       if (source.error) throw source.error;
       return json({
         item: item.data,

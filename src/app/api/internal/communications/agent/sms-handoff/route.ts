@@ -6,7 +6,7 @@ import {
   resolveLeYardTenant,
   notifyOwnersOfCommunication,
 } from "@/lib/communications.server";
-import { setCommunicationThreadMode } from "@/lib/communication-groups.server";
+import { communicationThreadSource, setCommunicationThreadMode } from "@/lib/communication-groups.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendTwilioMessage, twilioPhoneNumber } from "@/lib/twilio.server";
 const schema = z
@@ -62,6 +62,8 @@ export async function POST(request: Request) {
         },
         { status: 409 },
       );
+    const source = await communicationThreadSource(input.phone);
+    const group = source?.audience === "team" ? "team" : "clients";
     const item = await admin.from("communication_cases").insert({
       id: input.requestId,
       organization_id: tenant.organizationId,
@@ -70,14 +72,15 @@ export async function POST(request: Request) {
       title: input.reason,
       body: input.summary,
       phone: input.phone,
+      source_sid: source?.sid ?? null,
     });
     if (item.error) throw item.error;
     await notifyOwnersOfCommunication({
       phone: input.phone,
-      title: "Client needs a human",
+      title: group === "team" ? "Team request needs a human" : "Client needs a human",
       body: input.reason,
       eventType: "sms_human_handoff",
-      actionUrl: "/messages?group=clients",
+      actionUrl: `/messages?group=${group}&phone=${encodeURIComponent(input.phone)}`,
       required: true,
     });
     try {

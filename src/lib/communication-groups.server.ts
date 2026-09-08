@@ -77,6 +77,22 @@ export async function saveCommunicationMessage(input: TranscriptInput) {
   return { internal };
 }
 
+export async function communicationThreadSource(phone: string) {
+  const tenant = await resolveLeYardTenant();
+  const { data, error } = await createAdminClient()
+    .from("communication_messages")
+    .select("sid,audience")
+    .eq("organization_id", tenant.organizationId)
+    .eq("location_id", tenant.locationId)
+    .eq("phone", phone)
+    .order("sent_at", { ascending: false })
+    .order("sid", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error("Conversation source unavailable.");
+  return data;
+}
+
 export async function communicationThreadMode(phone: string) {
   const tenant = await resolveLeYardTenant();
   const { data, error } = await createAdminClient()

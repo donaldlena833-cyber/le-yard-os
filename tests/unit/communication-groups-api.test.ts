@@ -102,3 +102,25 @@ it("scopes every history read and supports PostgreSQL timestamp offsets in keyse
   expect(message.searchParams.get("or")).toContain("sid.lt.SM");
   expect(message.searchParams.get("limit")).toBe("101");
 });
+
+it("finds the correct team conversation for an existing handoff ticket without a source SID", async () => {
+  const { createClient } = await import("@supabase/supabase-js");
+  const urls: URL[] = [];
+  const client = createClient("https://database.example.test", "fixture-key", {
+    global: { fetch: async (input) => {
+      const url = new URL(String(input)); urls.push(url);
+      if(url.pathname.endsWith("communication_case_summaries")) return Response.json([{id:"12345678-1234-4234-8234-123456789abc",source_sid:null,phone:"+12125550123"}]);
+      if(url.pathname.endsWith("communication_messages")) return Response.json([{sid:"SM"+"a".repeat(32),audience:"team",media_count:1}]);
+      return Response.json([]);
+    } }, auth: { persistSession: false },
+  });
+  m.from.mockImplementation((table) => client.from(table));
+  const result = await GET(new Request(origin+"/api/communications/groups?caseId=12345678-1234-4234-8234-123456789abc"));
+  expect(result.status).toBe(200);
+  expect((await result.json()).source.audience).toBe("team");
+  const message=urls.find(u=>u.pathname.endsWith("communication_messages"))!;
+  expect(message.searchParams.get("organization_id")).toBe("eq.org");
+  expect(message.searchParams.get("location_id")).toBe("eq.loc");
+  expect(message.searchParams.get("phone")).toBe("eq.+12125550123");
+  expect(message.searchParams.get("limit")).toBe("1");
+});

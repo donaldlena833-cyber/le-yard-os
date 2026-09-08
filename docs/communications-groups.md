@@ -34,7 +34,7 @@ Messages and tickets have keyset pagination. Search applies to loaded messages. 
 
 ## Release and acceptance
 
-1. Apply `20260908120000_communications_groups.sql` to the existing shared database. It adds four private tables, the ticket status view, employee-number lookup, a private MMS bucket, and the updated runtime schema fingerprint.
+1. Apply `20260908120000_communications_groups.sql` and `20260908120001_communications_force_rls.sql` to the existing shared database. Together they add four private tables with forced row-level security, the ticket status view, employee-number lookup, a private MMS bucket, and the updated runtime schema fingerprint.
 2. Deploy this revision to each surface that uses the shared Le Yard OS runtime contract, including Operations, Phone, and Host. Coordinate the migration and deployments because the contract requires the new migration head. Verify all affected `/api/health` responses and signed-in pages.
 3. Run history reconciliation with `--apply`; verify prior SMS/MMS and author labels in the signed-in Groups page.
 4. Wire the external SMS agent's human-escalation tool to the endpoint and its automated sends through the guarded path.
