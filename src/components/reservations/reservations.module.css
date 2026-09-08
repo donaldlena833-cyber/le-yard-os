@@ -1,0 +1,178 @@
+.floor {
+  position: relative;
+  width: 100%;
+  margin: 0 auto;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 22px;
+  background: var(--inner);
+  box-shadow: inset 0 3px 10px color-mix(in srgb, var(--text) 4%, transparent), inset 0 1px 0 var(--ring), var(--shadow-raised);
+}
+.floor[data-editing="true"] {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.zone {
+  position: absolute;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--card) 50%, transparent);
+  box-shadow: inset 0 0 0 1px var(--track), inset 0 1px 0 var(--ring);
+}
+.zoneLabel {
+  position: absolute;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 550;
+  letter-spacing: 0.3px;
+}
+.floorTable {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  min-height: 44px;
+  min-width: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: var(--button);
+  color: var(--strong);
+  box-shadow: var(--shadow-button);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 650;
+  transition: box-shadow 150ms, filter 150ms;
+}
+.floorTable[data-state="occupied"] {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+.floorTable[data-state="needs_reset"] {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.floorTable[data-state="blocked"] {
+  background: color-mix(in srgb, var(--muted) 15%, var(--inner));
+  color: var(--muted);
+}
+.floorTable[data-editing="true"] {
+  cursor: grab;
+  touch-action: none;
+}
+.floorTable[data-editing="true"]:active { cursor: grabbing; }
+.floorTable[data-dragging="true"] {
+  z-index: 40;
+  box-shadow: var(--shadow-raised), 0 15px 25px color-mix(in srgb, var(--text) 16%, transparent);
+}
+.floorTable[data-interval="true"] {
+  outline: 2px dashed var(--primary);
+  outline-offset: 3px;
+}
+.floorTable[data-selected="true"] {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.floorTable:hover { z-index: 20; filter: brightness(1.04); }
+.floorTable:focus-visible {
+  z-index: 30;
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+.partyCount {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--strong);
+  box-shadow: var(--shadow-button);
+  font-size: 12px;
+  line-height: 16px;
+}
+.floorCaption {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  max-width: calc(100% - 24px);
+  transform: translateX(-50%);
+  padding: 7px 12px;
+  border-radius: 22px;
+  background: var(--card);
+  color: var(--muted);
+  box-shadow: var(--shadow-button);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 550;
+  text-align: center;
+}
+.floorLegend { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; margin-top: 16px; color: var(--muted); font-size: 12px; line-height: 16px; }
+.filterBar {
+  display: flex;
+  gap: 4px;
+  padding: 5px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  border-radius: 18px;
+  background: var(--inner);
+  box-shadow: inset 0 1px 3px color-mix(in srgb, var(--text) 4%, transparent);
+}
+.filter {
+  flex: 1;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: 13px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 550;
+  text-transform: capitalize;
+  transition: background 160ms, color 160ms, box-shadow 160ms;
+}
+.filter[aria-pressed="true"] { background: var(--button); color: var(--text); box-shadow: var(--shadow-button); }
+.reservationRow {
+  position: relative;
+  display: grid;
+  width: 100%;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow-raised);
+  text-align: left;
+  transition: background-color 160ms, box-shadow 160ms, transform 160ms;
+}
+.reservationRow > :last-child { max-width: 92px; white-space: normal; text-align: center; }
+.reservationRow:hover { background: var(--button); }
+.reservationRow:active { transform: scale(0.99); }
+.reservationRow[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 7%, var(--card)); }
+.reservationRow[aria-pressed="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+}
+.closeControl { display: flex; width: 40px; height: 40px; flex-shrink: 0; align-items: center; justify-content: center; border-radius: 50%; background: var(--button); color: var(--strong); box-shadow: var(--shadow-button); }
+.recordContext { margin-top: 16px; padding: 12px; border-radius: 14px; background: var(--inner); color: var(--muted); font-size: 12px; line-height: 20px; box-shadow: inset 0 1px 0 var(--ring); }
+.waitlistRow { margin-top: 10px; padding: 12px; border-radius: 14px; background: var(--button); box-shadow: var(--shadow-button); }
+.metricGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 22px; }
+.metricGrid > * { border-radius: 18px; background: var(--card); box-shadow: var(--shadow-raised); }
+.controlCard { border-radius: 18px; background: var(--button); box-shadow: var(--shadow-button); padding: 16px; }
+@media (min-width: 640px) {
+  .floor { aspect-ratio: 16 / 10; }
+  .metricGrid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .floorTable, .filter, .reservationRow { transition: none; }
+}

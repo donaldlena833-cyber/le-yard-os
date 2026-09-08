@@ -138,9 +138,9 @@ const tabs: Array<{ id: Tab; label: string }> = [
 
 const terminalTaskStatuses = new Set(["completed", "cancelled"]);
 const fieldClass =
-  "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-50";
+  "h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-50";
 const textAreaClass =
-  "w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs leading-5 outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-50";
+  "w-full resize-none rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs leading-5 outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-50";
 
 function sentenceCase(value: string) {
   const label = value.replaceAll("_", " ");
@@ -471,7 +471,7 @@ function TaskPanel({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search work"
-              className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-xs outline-none transition-colors focus:border-[var(--accent)]"
+              className="h-10 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] pr-3 pl-9 text-xs outline-none transition-colors focus:border-[var(--accent)]"
             />
           </label>
           {canManage ? (
@@ -795,7 +795,7 @@ function ChecklistResponseForm({
           <span className="mb-1.5 block text-xs font-semibold">
             Private image
           </span>
-          <label className="focus-ring flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs">
+          <label className="focus-ring flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs">
             <ImagePlus className="size-3.5 text-[var(--accent-strong)]" />
             <span className="min-w-0 flex-1 truncate">
               {photo?.name ??
@@ -2896,7 +2896,7 @@ export function LiveTasksWorkspace({
   if (!result.ok)
     return (
       <PageFrame>
-        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center">
+        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-8 text-center">
           <CircleAlert className="mx-auto size-6 text-[var(--warning)]" />
           <h2 className="mt-4 text-xl font-medium">Operations unavailable</h2>
           <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">

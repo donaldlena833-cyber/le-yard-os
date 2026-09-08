@@ -178,7 +178,7 @@ function ShiftCard({
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
       className={cn(
-        "rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 shadow-[0_5px_18px_rgba(25,28,24,.04)]",
+        "rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-3 shadow-[0_5px_18px_rgba(25,28,24,.04)]",
         shift.isOpen && "border-[var(--accent)]/35 bg-[var(--accent-soft)]/25",
         isDragging && "z-20 opacity-70 shadow-xl",
       )}
@@ -396,7 +396,7 @@ function ShiftDialog({
             data-shift-editor-first
             name="date"
             defaultValue={shift?.date ?? schedule.weekDates[0]}
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+            className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
           >
             {schedule.weekDates.map((date) => (
               <option key={date} value={date}>
@@ -411,7 +411,7 @@ function ShiftDialog({
             name="jobRoleId"
             defaultValue={shift?.jobRoleId ?? schedule.jobRoles[0]?.id}
             required
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+            className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
           >
             {schedule.jobRoles.map((role) => (
               <option key={role.id} value={role.id}>
@@ -427,7 +427,7 @@ function ShiftDialog({
             type="time"
             required
             defaultValue={shift?.startLocal ?? "16:00"}
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+            className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
           />
         </label>
         <label>
@@ -437,7 +437,7 @@ function ShiftDialog({
             type="time"
             required
             defaultValue={shift?.endLocal ?? "22:00"}
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+            className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
           />
         </label>
         <label>
@@ -445,7 +445,7 @@ function ShiftDialog({
           <select
             name="employeeId"
             defaultValue={shift?.employeeId ?? ""}
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+            className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
           >
             <option value="">Unassigned</option>
             {schedule.employees.map((employee) => (
@@ -465,7 +465,7 @@ function ShiftDialog({
             min="0"
             max="720"
             defaultValue={shift?.breakMinutes ?? 0}
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+            className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
           />
         </label>
         <label className="sm:col-span-2 flex items-center gap-2 rounded-xl bg-[var(--canvas)] px-3 py-3 text-xs">
@@ -483,7 +483,7 @@ function ShiftDialog({
             name="notes"
             rows={3}
             defaultValue={shift?.notes ?? ""}
-            className="w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-base sm:text-xs"
+            className="w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 py-2 text-base sm:text-xs"
           />
         </label>
         <div className="flex justify-end gap-2 sm:col-span-2">
@@ -1027,7 +1027,7 @@ function LiveScheduleContent({
             >
               <select
                 name="templateId"
-                className="h-11 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                className="h-11 min-w-0 flex-1 rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
               >
                 <option value="">Blank schedule</option>
                 {data.templates.map((template) => (
@@ -1173,7 +1173,7 @@ function LiveScheduleContent({
               name="reason"
               rows={4}
               maxLength={500}
-              className="mt-2 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-base sm:text-sm"
+              className="mt-2 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 py-2 text-base sm:text-sm"
               placeholder="Add context for the manager reviewing coverage."
             />
           </div>

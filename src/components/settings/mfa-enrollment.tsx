@@ -285,7 +285,7 @@ export function MfaEnrollment({
               maxLength={6}
               value={code}
               onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-              className="numeric h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-sm tracking-[.2em] outline-none focus:border-[var(--accent)]"
+              className="numeric h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-sm tracking-[.2em] outline-none focus:border-[var(--accent)]"
               placeholder="000000"
             />
           </label>

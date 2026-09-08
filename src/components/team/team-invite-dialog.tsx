@@ -100,7 +100,7 @@ export function TeamInviteDialog({
                   name="fullName"
                   required
                   autoComplete="name"
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                 />
               </label>
               <label className="sm:col-span-2">
@@ -112,7 +112,7 @@ export function TeamInviteDialog({
                   required
                   type="email"
                   autoComplete="email"
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                 />
               </label>
               <label>
@@ -122,7 +122,7 @@ export function TeamInviteDialog({
                 <select
                   name="role"
                   defaultValue={defaultRole}
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                 >
                   {roles.map((role) => (
                     <option key={role} value={role}>
@@ -138,7 +138,7 @@ export function TeamInviteDialog({
                 <select
                   name="locationId"
                   defaultValue={locations[0]?.id}
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                 >
                   {locations.map((location) => (
                     <option key={location.id} value={location.id}>

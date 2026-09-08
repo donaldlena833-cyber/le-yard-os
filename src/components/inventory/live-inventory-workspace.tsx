@@ -343,7 +343,7 @@ function CountDialog({
                   onChange={(event) =>
                     onValueChange(item.id, event.target.value)
                   }
-                  className="numeric h-11 w-full min-w-0 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-right text-sm font-semibold outline-none transition-colors focus:border-[var(--accent)]"
+                  className="numeric h-11 w-full min-w-0 rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-right text-sm font-semibold outline-none transition-colors focus:border-[var(--accent)]"
                 />
               </div>
             );
@@ -360,7 +360,7 @@ function CountDialog({
                 disabled={busy}
                 onChange={(event) => onNotesChange(event.target.value)}
                 placeholder="Optional context for the independent reviewer"
-                className="w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs outline-none focus:border-[var(--accent)]"
+                className="w-full resize-none rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs outline-none focus:border-[var(--accent)]"
               />
             </label>
             <div className="flex items-start gap-3 rounded-xl bg-[var(--accent-soft)]/55 p-3.5 text-xs leading-4 text-[var(--accent-strong)]">
@@ -595,7 +595,7 @@ function ReviewDialog({
                 disabled={busy || !networkAvailable || isOwnCount}
                 onChange={(event) => onNoteChange(event.target.value)}
                 placeholder="Optional decision context"
-                className="w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs outline-none focus:border-[var(--accent)] disabled:opacity-55"
+                className="w-full resize-none rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs outline-none focus:border-[var(--accent)] disabled:opacity-55"
               />
             </label>
             <div
@@ -716,9 +716,9 @@ interface DeliveryPostingReview {
 }
 
 const inventoryFieldClass =
-  "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-55";
+  "h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-55";
 const inventoryTextAreaClass =
-  "w-full resize-none rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-55";
+  "w-full resize-none rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-55";
 
 function InventoryField({
   label,
@@ -2289,7 +2289,7 @@ export function LiveInventoryWorkspace({
   if (!result.ok) {
     return (
       <PageFrame>
-        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center">
+        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-8 text-center">
           <CircleAlert className="mx-auto size-6 text-[var(--warning)]" />
           <h2 className="mt-4 text-xl font-medium">Inventory unavailable</h2>
           <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">
@@ -2727,7 +2727,7 @@ export function LiveInventoryWorkspace({
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
                       placeholder="Search name, SKU, or category"
-                      className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-xs outline-none focus:border-[var(--accent)]"
+                      className="h-10 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] pr-3 pl-9 text-xs outline-none focus:border-[var(--accent)]"
                     />
                   </label>
                 </div>
@@ -3357,7 +3357,7 @@ export function LiveInventoryWorkspace({
                       return (
                         <article
                           key={recipe.id}
-                          className="group rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-4 transition hover:border-[var(--line-strong)] hover:bg-[var(--paper-strong)]"
+                          className="group rounded-2xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-4 transition hover:border-[var(--line-strong)] hover:bg-[var(--paper-strong)]"
                         >
                           <div className="flex items-start gap-3">
                             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)]">
@@ -3383,7 +3383,7 @@ export function LiveInventoryWorkspace({
                                     record: editableRecipe,
                                   })
                                 }
-                                className="focus-ring flex size-10 shrink-0 items-center justify-center rounded-full border border-[var(--line)] bg-[var(--paper-strong)] text-[var(--ink-faint)] transition hover:border-[var(--line-strong)] hover:text-[var(--ink)]"
+                                className="focus-ring flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--paper-strong)] shadow-[var(--shadow-card)] text-[var(--ink-faint)] transition hover:border-[var(--line-strong)] hover:text-[var(--ink)]"
                               >
                                 <Pencil className="size-4" />
                               </button>

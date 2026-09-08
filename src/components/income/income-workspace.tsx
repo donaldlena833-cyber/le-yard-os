@@ -192,10 +192,10 @@ function HourlyProfile({ model }: { model: IncomeOperatingModel }) {
                   }}
                 />
               </div>
-              <span className="mt-2 text-[11px] font-semibold text-[var(--ink-soft)]">
+              <span className="mt-2 text-xs font-semibold text-[var(--ink-soft)]">
                 {hourLabel(bucket.hour)}
               </span>
-              <span className="mt-1 text-[10px] text-[var(--ink-faint)]">
+              <span className="mt-1 text-xs text-[var(--ink-faint)]">
                 {hourlyMetricLabel(bucket, metric, model)}
               </span>
             </button>
@@ -313,7 +313,7 @@ function SlowBusySummary({ model }: { model: IncomeOperatingModel }) {
       : "average reserved covers per calendar day";
   return (
     <div className="grid gap-3 sm:grid-cols-3">
-      <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)] p-4">
+      <div className="rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
         <p className="eyebrow">Busiest recorded hour</p>
         <p className="mt-2 text-2xl font-medium">
           {summary.busiest
@@ -326,7 +326,7 @@ function SlowBusySummary({ model }: { model: IncomeOperatingModel }) {
             : "No demand evidence is recorded."}
         </p>
       </div>
-      <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)] p-4">
+      <div className="rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
         <p className="eyebrow">Slowest active hour</p>
         <p className="mt-2 text-2xl font-medium">
           {summary.slowest
@@ -337,7 +337,7 @@ function SlowBusySummary({ model }: { model: IncomeOperatingModel }) {
           {summary.observedHourCount} comparable observed hour(s).
         </p>
       </div>
-      <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)] p-4">
+      <div className="rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
         <p className="eyebrow">Coverage to inspect</p>
         <p className="numeric mt-2 text-2xl font-medium">
           {summary.staffedWithoutDemand.length} hour(s)
@@ -456,7 +456,7 @@ function PlanningInsights({
             return (
               <article
                 key={insight.kind}
-                className="flex min-h-[280px] flex-col rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-5"
+                className="flex min-h-[280px] flex-col rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <CalendarRange
@@ -496,7 +496,7 @@ function PlanningInsights({
             return (
               <article
                 key={insight.kind}
-                className="flex min-h-[280px] flex-col rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-5"
+                className="flex min-h-[280px] flex-col rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <UserRoundCheck
@@ -533,7 +533,7 @@ function PlanningInsights({
           return (
             <article
               key={insight.kind}
-              className="flex min-h-[280px] flex-col rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-5"
+              className="flex min-h-[280px] flex-col rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5"
             >
               <div className="flex items-start justify-between gap-3">
                 <DatabaseZap
@@ -667,7 +667,7 @@ export function IncomeWorkspace({
         </div>
         <nav
           aria-label="Income history"
-          className="flex min-h-11 items-center rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] p-1"
+          className="flex min-h-11 items-center rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-1"
         >
           {[7, 28, 56].map((days) => (
             <a
@@ -825,7 +825,7 @@ export function IncomeWorkspace({
                 >
                   <div>
                     <p className="text-xs font-semibold">{source.label}</p>
-                    <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
+                    <p className="mt-1 text-xs text-[var(--ink-faint)]">
                       {source.recordCount} records ·{" "}
                       {source.grain.replaceAll("_", " ")}
                     </p>

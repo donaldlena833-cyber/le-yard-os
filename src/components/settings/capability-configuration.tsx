@@ -91,10 +91,10 @@ export function CapabilityConfiguration({
           title="Job-role capabilities"
           detail="Operational permissions are effective-dated and scoped independently from organization administration."
         />
-        <div className="grid gap-3 rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="grid gap-3 rounded-[18px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <label>
             <span className="mb-1.5 block text-xs font-semibold tracking-[.08em] text-[var(--ink-faint)] uppercase">Job role</span>
-            <select value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[13px]">
+            <select value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)} className="h-10 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-[13px]">
               {data.jobRoles.map((role) => <option key={role.id} value={role.id}>{role.name}{role.active ? "" : " · inactive"}</option>)}
             </select>
           </label>

@@ -5,11 +5,11 @@ export function BrandMark({ className }: { className?: string }) {
     <span
       aria-hidden="true"
       className={cn(
-        "relative inline-flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-[#f2efe6] text-xs font-bold tracking-[-0.08em] text-[#1a1d19] shadow-[inset_0_0_0_1px_rgba(255,255,255,.24)]",
+        "relative inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--button)] text-base font-semibold tracking-[-0.08em] text-[var(--strong)] shadow-[var(--shadow-button)]",
         className,
       )}
     >
-      L<span className="text-[#c98222]">Y</span>
+      L<span className="text-[var(--brass,#9a7846)]">Y</span>
     </span>
   );
 }

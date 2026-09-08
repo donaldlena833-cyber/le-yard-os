@@ -1,25 +1,15 @@
-import {
-  CircleAlert,
-  CircleCheck,
-  Info,
-  TriangleAlert,
-} from "lucide-react";
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export type InlineNoticeTone =
-  | "neutral"
-  | "info"
-  | "success"
-  | "warning"
-  | "danger";
+  "neutral" | "info" | "success" | "warning" | "danger";
 export type InlineNoticeAnnouncement = "off" | "polite" | "assertive";
 
 const toneClasses: Record<InlineNoticeTone, string> = {
   neutral:
     "border-[var(--line)] bg-[var(--canvas-strong)] text-[var(--ink-soft)]",
-  info:
-    "border-[color-mix(in_srgb,var(--accent-strong)_18%,transparent)] bg-[var(--accent-soft)]/55 text-[var(--accent-strong)]",
+  info: "border-[color-mix(in_srgb,var(--accent-strong)_18%,transparent)] bg-[var(--accent-soft)]/55 text-[var(--accent-strong)]",
   success:
     "border-[color-mix(in_srgb,var(--positive)_18%,transparent)] bg-[var(--positive-soft)] text-[var(--positive)]",
   warning:
@@ -36,11 +26,10 @@ const toneIcons = {
   danger: CircleAlert,
 } satisfies Record<InlineNoticeTone, typeof Info>;
 
-export interface InlineNoticeProps
-  extends Omit<
-    HTMLAttributes<HTMLDivElement>,
-    "aria-atomic" | "aria-live" | "children" | "role" | "title"
-  > {
+export interface InlineNoticeProps extends Omit<
+  HTMLAttributes<HTMLDivElement>,
+  "aria-atomic" | "aria-live" | "children" | "role" | "title"
+> {
   children: ReactNode;
   title?: ReactNode;
   tone?: InlineNoticeTone;
@@ -64,7 +53,12 @@ export function InlineNotice({
   ...props
 }: InlineNoticeProps) {
   const ToneIcon = toneIcons[tone];
-  const role = announce === "assertive" ? "alert" : announce === "polite" ? "status" : "note";
+  const role =
+    announce === "assertive"
+      ? "alert"
+      : announce === "polite"
+        ? "status"
+        : "note";
 
   return (
     <div
@@ -73,7 +67,7 @@ export function InlineNotice({
       aria-live={announce === "off" ? undefined : announce}
       aria-atomic={announce === "off" ? undefined : true}
       className={cn(
-        "flex min-w-0 flex-col gap-3 rounded-[16px] border px-4 py-3.5 text-sm leading-5 sm:flex-row sm:items-start",
+        "flex min-w-0 flex-col gap-3 rounded-[16px] shadow-[var(--shadow-card)] px-4 py-3.5 text-sm leading-5 sm:flex-row sm:items-start",
         toneClasses[tone],
         className,
       )}
@@ -89,9 +83,7 @@ export function InlineNotice({
           </span>
         )}
         <div className="min-w-0 flex-1">
-          {title ? (
-            <p className="font-semibold text-current">{title}</p>
-          ) : null}
+          {title ? <p className="font-semibold text-current">{title}</p> : null}
           <div className={cn("text-pretty", title && "mt-1")}>{children}</div>
         </div>
       </div>

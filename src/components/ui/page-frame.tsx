@@ -20,6 +20,7 @@ export function PageFrame({
 }) {
   return (
     <div
+      data-slot="page-frame"
       className={cn(
         "mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-10",
         pageWidths[width],
@@ -48,6 +49,7 @@ export function PageHeader({
 }) {
   return (
     <header
+      data-slot="page-header"
       className={cn(
         "flex flex-col gap-5 border-b border-[var(--line)] pb-6 sm:gap-6 sm:pb-8 lg:flex-row lg:items-end lg:justify-between",
         className,
@@ -60,7 +62,10 @@ export function PageHeader({
             {status}
           </div>
         ) : null}
-        <h2 className="text-[1.75rem] leading-[1.08] font-semibold tracking-[-0.045em] text-balance text-[var(--ink)] sm:text-[2rem] lg:text-[2.25rem]">
+        <h2
+          data-slot="page-title"
+          className="text-[1.75rem] leading-[1.08] font-semibold tracking-[-0.045em] text-balance text-[var(--ink)] sm:text-[2rem] lg:text-[2.25rem]"
+        >
           {title}
         </h2>
         {detail ? (
@@ -128,10 +133,17 @@ export function Metric({
   className?: string;
 }) {
   return (
-    <div className={cn("min-w-0 px-4 py-5 first:pl-0 sm:px-5 sm:py-6", className)}>
-      <p className="text-xs leading-4 font-medium text-[var(--ink-faint)]">{label}</p>
+    <div
+      className={cn("min-w-0 px-4 py-5 first:pl-0 sm:px-5 sm:py-6", className)}
+    >
+      <p className="text-xs leading-4 font-medium text-[var(--ink-faint)]">
+        {label}
+      </p>
       <div className="mt-2.5 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <p className="numeric min-w-0 truncate text-[1.9rem] leading-none font-semibold tracking-[-0.055em] text-[var(--ink)] sm:text-[2.15rem]">
+        <p
+          data-slot="metric-value"
+          className="numeric min-w-0 truncate text-[1.9rem] leading-none font-semibold tracking-[-0.055em] text-[var(--ink)] sm:text-[2.15rem]"
+        >
           {value}
         </p>
         {trend ? (
@@ -148,7 +160,9 @@ export function Metric({
         ) : null}
       </div>
       {detail ? (
-        <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">{detail}</p>
+        <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">
+          {detail}
+        </p>
       ) : null}
     </div>
   );

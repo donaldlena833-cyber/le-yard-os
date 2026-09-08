@@ -245,7 +245,7 @@ export function GuestsWorkspace() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search name, contact, allergy, preference, or tag"
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-4 pl-10 text-xs outline-none focus:border-[var(--accent)]"
+            className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] pr-4 pl-10 text-xs outline-none focus:border-[var(--accent)]"
           />
         </label>
         <div className="flex items-center gap-1 overflow-x-auto">

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -51,6 +51,7 @@ import { safeInternalRedirect } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/types/database.generated";
+import styles from "./shell.module.css";
 import {
   isHostSurface,
   surfaceProductDetail,
@@ -83,7 +84,7 @@ function SignOutButton() {
       type="submit"
       disabled={pending}
       aria-busy={pending}
-      className="focus-ring flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-[13px] font-medium text-white/55 transition-colors hover:bg-white/[0.05] hover:text-white/90 disabled:cursor-wait disabled:opacity-60 lg:min-h-10"
+      className={cn("focus-ring", styles.signOut)}
     >
       {pending ? (
         <LoaderCircle aria-hidden="true" className="size-[15px] shrink-0 animate-spin" />
@@ -232,10 +233,11 @@ function NotificationsControl({ workspace }: { workspace: WorkspaceContextValue 
       open={open}
       onOpenChange={setOpen}
       label="Notifications"
+      contentClassName={styles.notificationPopover}
       triggerLabel={unreadCount ? `Open notifications, ${unreadCount} unread` : "Open notifications"}
       triggerClassName={cn(
         buttonVariants({ variant: "quiet", size: "icon" }),
-        "relative size-11 min-h-11 sm:size-10 sm:min-h-10",
+        styles.iconButton,
       )}
       trigger={
         <>
@@ -244,21 +246,21 @@ function NotificationsControl({ workspace }: { workspace: WorkspaceContextValue 
         </>
       }
     >
-            <div className="flex items-center justify-between gap-3 px-3 py-2">
+            <div className={styles.notificationHeader}>
               <div>
-                <p className="text-sm font-semibold">Notifications</p>
-                <p className="mt-0.5 text-xs text-[var(--ink-faint)]">{unreadCount ? `${unreadCount} unread` : "You’re caught up"}</p>
+                <p className={styles.notificationTitle}>Notifications</p>
+                <p className="mt-0.5 text-xs text-[var(--ink-faint)]">{state === "loading" ? "Refreshing your feed…" : state === "error" ? "Refresh unavailable" : unreadCount ? `${unreadCount} unread` : "You’re caught up"}</p>
               </div>
               <div className="flex items-center gap-1">
-                {workspace.mode === "live" && unreadCount ? <button type="button" onClick={() => void markAllRead()} className="focus-ring flex size-8 items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--canvas)]" aria-label="Mark all notifications read"><CheckCheck className="size-3.5" /></button> : null}
-                <button type="button" aria-label="Close notifications" onClick={() => setOpen(false)} className="focus-ring flex size-8 items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--canvas)]"><X className="size-3.5" /></button>
+                {workspace.mode === "live" && unreadCount ? <button type="button" onClick={() => void markAllRead()} className={cn("focus-ring", styles.iconButton)} aria-label="Mark all notifications read"><CheckCheck className="size-3.5" /></button> : null}
+                <button type="button" aria-label="Close notifications" onClick={() => setOpen(false)} className={cn("focus-ring", styles.iconButton)}><X className="size-3.5" /></button>
               </div>
             </div>
             {state === "loading" ? <p className="px-3 py-8 text-center text-xs text-[var(--ink-faint)]">Loading your feed…</p> : null}
             {state === "error" ? <p role="alert" className="mx-3 my-3 rounded-xl bg-[var(--danger-soft)] px-3 py-3 text-xs leading-4 text-[var(--danger)]">The notification feed could not be refreshed. Try again shortly.</p> : null}
-            {state === "ready" && notifications.length === 0 ? <div className="px-3 py-8 text-center"><p className="text-xs font-semibold">No notifications</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">New tenant-scoped alerts will appear here.</p></div> : null}
+            {state === "ready" && notifications.length === 0 ? <div className="px-3 py-8 text-center"><p className="text-xs font-semibold">No notifications</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">New alerts for your workspace will appear here.</p></div> : null}
             {notifications.map((notification) => (
-              <button key={notification.id} type="button" onClick={() => void markRead(notification)} className="focus-ring flex w-full gap-3 rounded-xl px-3 py-3 text-left hover:bg-[var(--canvas)]">
+              <button key={notification.id} type="button" onClick={() => void markRead(notification)} className={cn("focus-ring", styles.notificationRow)}>
                 <span className={cn("mt-1 size-2 shrink-0 rounded-full", notification.readAt ? "bg-[var(--line-strong)]" : "bg-[var(--accent)]")} />
                 <span className="min-w-0 flex-1"><span className="block text-xs font-semibold">{notification.title}</span>{notification.body ? <span className="mt-1 block text-[13px] text-[var(--ink-faint)]">{notification.body}</span> : null}</span>
                 <time dateTime={notification.createdAt} className="text-xs text-[var(--ink-faint)]">{notificationAge(notification.createdAt)}</time>
@@ -281,36 +283,29 @@ function NavigationLink({
 }) {
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
   const Icon = item.icon;
+  const reducedMotion = useReducedMotion();
 
   return (
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
       onClick={onNavigate}
-      className={cn(
-        "focus-ring group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-colors lg:min-h-10",
-        active
-          ? "bg-white/[0.09] text-white"
-          : "text-white/55 hover:bg-white/[0.05] hover:text-white/90",
-      )}
+      className={cn("focus-ring", styles.navLink)}
     >
-      {active ? (
-        <motion.span
-          layoutId="active-nav"
-          className="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-[#dfa14a]"
-          transition={{ type: "spring", stiffness: 380, damping: 34 }}
-        />
-      ) : null}
-      <Icon className="size-[17px] shrink-0" strokeWidth={active ? 2.1 : 1.7} />
+      <span className={styles.navIcon}>
+        {active ? (
+          <motion.span
+            layoutId="active-nav"
+            className={styles.activeNav}
+            transition={reducedMotion ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 34 }}
+          />
+        ) : null}
+        <Icon className="size-[17px] shrink-0" strokeWidth={active ? 2.1 : 1.7} />
+      </span>
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {showBadges && item.badge ? (
         <span
-          className={cn(
-            "rounded-full px-1.5 py-0.5 text-xs font-bold",
-            active
-              ? "bg-[#dfa14a] text-[#1a1d19]"
-              : "bg-white/10 text-white/65",
-          )}
+          className={styles.badge}
         >
           {item.badge}
         </span>
@@ -327,30 +322,30 @@ function Sidebar({
   workspace: WorkspaceContextValue;
 }) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-width)] flex-col bg-[var(--graphite)] text-white lg:flex">
-      <div className="flex h-[74px] items-center gap-3 px-5">
-        <BrandMark />
+    <aside className={styles.sidebar}>
+      <div className={styles.brand}>
+        <BrandMark className={styles.monogram} />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold tracking-[-0.02em]">
+          <p className={styles.brandTitle}>
             {surfaceProductName}
           </p>
-          <p className="mt-0.5 text-xs font-medium tracking-[0.08em] text-white/55 uppercase">
+          <p className={styles.brandDetail}>
             {surfaceProductDetail}
           </p>
         </div>
       </div>
 
-      <WorkspaceSwitcher key={workspace.activeLocation.id} className="px-3" />
+      <WorkspaceSwitcher key={workspace.activeLocation.id} className="mx-3 mb-5" />
 
-      <nav aria-label="Primary navigation" className="mt-5 flex-1 overflow-y-auto px-3 pb-4">
-        {navigationSections.map((section, index) => {
+      <nav aria-label="Primary navigation" className={styles.nav}>
+        {navigationSections.map((section) => {
           const visibleItems = section.items.filter((item) =>
             isNavItemVisible(item, workspace),
           );
           if (!visibleItems.length) return null;
           return (
-            <div key={section.label} className={cn(index > 0 && "mt-5")}>
-              <p className="mb-1.5 px-3 text-xs font-semibold tracking-[0.16em] text-white/55 uppercase">
+            <div key={section.label} className={styles.navGroup}>
+              <p className={styles.groupLabel}>
                 {section.label}
               </p>
               <div className="space-y-0.5">
@@ -368,17 +363,17 @@ function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-white/[0.07] p-3">
+      <div className={styles.sidebarFooter}>
         {isNavItemVisible(settingsItem, workspace) ? (
           <NavigationLink item={settingsItem} pathname={pathname} />
         ) : null}
-        <div className="mt-2 flex items-center gap-3 px-3 py-2.5">
+        <div className={styles.identity}>
           <Avatar name={workspace.identity.displayName} size="sm" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-white/90">
+            <p className={cn("truncate", styles.identityName)}>
               {workspace.identity.displayName}
             </p>
-            <p className="mt-0.5 truncate text-xs text-white/55">
+            <p className={cn("truncate", styles.identityDetail)}>
               {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : "Password secured"}
             </p>
           </div>
@@ -386,7 +381,7 @@ function Sidebar({
             aria-label={workspace.mode === "demo" ? "Temporary playground session" : "Authenticated password session"}
             className={cn(
               "size-3.5",
-              workspace.mode !== "demo" && workspace.identity.aal === "aal2" ? "text-[#dfa14a]" : "text-white/55",
+              workspace.mode !== "demo" && workspace.identity.aal === "aal2" ? "text-[var(--positive)]" : "text-[var(--muted)]",
             )}
           />
         </div>
@@ -415,19 +410,19 @@ function MobileDrawer({
       initialFocusSelector="[data-drawer-close]"
       width="sm"
       layer="navigation"
-      surface="graphite"
+      surface="paper"
       overlayClassName="lg:hidden"
-      className="px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl"
+      className={styles.drawer}
     >
-            <div className="mb-5 flex h-10 items-center gap-3">
-              <BrandMark />
-              <span id="mobile-navigation-title" className="flex-1 text-sm font-semibold">{surfaceProductName}</span>
+            <div className={styles.drawerHeader}>
+              <BrandMark className={styles.monogram} />
+              <span id="mobile-navigation-title" className={styles.drawerTitle}>{surfaceProductName}</span>
               <button
                 type="button"
                 data-drawer-close
                 aria-label="Close navigation"
                 onClick={onClose}
-                className="focus-ring flex size-11 items-center justify-center rounded-xl bg-white/[0.06] text-white/70 transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-white/[0.12] hover:text-white"
+                className={cn("focus-ring", styles.iconButton)}
               >
                 <X className="size-4" />
               </button>
@@ -438,14 +433,14 @@ function MobileDrawer({
               onSelected={onClose}
             />
             <nav className="flex-1 overflow-y-auto" aria-label="Mobile navigation">
-              {navigationSections.map((section, index) => {
+              {navigationSections.map((section) => {
                 const visibleItems = section.items.filter((item) =>
                   isNavItemVisible(item, workspace),
                 );
                 if (!visibleItems.length) return null;
                 return (
-                  <div key={section.label} className={cn(index > 0 && "mt-5")}>
-                    <p className="mb-1.5 px-3 text-xs font-semibold tracking-[0.16em] text-white/55 uppercase">
+                  <div key={section.label} className={styles.navGroup}>
+                    <p className={styles.groupLabel}>
                       {section.label}
                     </p>
                     {visibleItems.map((item) => (
@@ -460,18 +455,18 @@ function MobileDrawer({
                   </div>
                 );
               })}
-              <div className="mt-5 border-t border-white/[0.07] pt-3">
+              <div className={styles.drawerDivider}>
                 {isNavItemVisible(settingsItem, workspace) ? (
                   <NavigationLink item={settingsItem} pathname={pathname} onNavigate={onClose} />
                 ) : null}
               </div>
             </nav>
-            <div className="mt-3 border-t border-white/[0.07] pt-4 pb-1">
+            <div className={styles.drawerDivider}>
               <div className="flex items-center gap-3 px-3">
                 <Avatar name={workspace.identity.displayName} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-white/90">{workspace.identity.displayName}</p>
-                  <p className="mt-0.5 truncate text-xs text-white/55">
+                  <p className={cn("truncate", styles.identityName)}>{workspace.identity.displayName}</p>
+                  <p className={cn("truncate", styles.identityDetail)}>
                     {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : "Password secured"}
                   </p>
                 </div>
@@ -495,24 +490,13 @@ function MobileNavigationControl({
   href?: string;
   onClick?: () => void;
 }) {
-  const className = cn(
-    "focus-ring group relative flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[13px] font-semibold transition-[background-color,color,transform] duration-200",
-    active
-      ? "bg-[var(--accent-soft)]/45 text-[var(--accent-strong)]"
-      : "text-[var(--ink-faint)] hover:bg-[var(--canvas)] hover:text-[var(--ink-soft)]",
-  );
+  const className = cn("focus-ring", styles.dockControl);
   const content = (
     <>
-      <span
-        aria-hidden="true"
-        className={cn(
-          "flex size-6 items-center justify-center rounded-lg transition-colors",
-          active && "bg-[var(--paper-strong)]/70 shadow-[0_2px_8px_rgba(25,28,24,.06)]",
-        )}
-      >
-        <Icon className="size-[20px]" strokeWidth={active ? 2.3 : 1.8} />
+      <span aria-hidden="true" className={styles.dockIcon}>
+        <Icon className="size-[18px]" strokeWidth={active ? 2.1 : 1.7} />
       </span>
-      <span className="max-w-full truncate leading-none">{label}</span>
+      <span className="max-w-full truncate">{label}</span>
     </>
   );
 
@@ -577,16 +561,16 @@ function ShellContent({ children }: { children: ReactNode }) {
   }, [commandOpen]);
 
   return (
-    <div className="min-h-svh bg-[var(--canvas)]">
+    <div className={styles.shell}>
       <Sidebar pathname={pathname} workspace={workspace} />
 
-      <div className="min-h-svh lg:pl-[var(--sidebar-width)]">
-        <header className="sticky top-0 z-20 flex h-[64px] items-center border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--canvas)_88%,transparent)] px-4 backdrop-blur-xl sm:px-6 lg:h-[74px] lg:px-8">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <BrandMark className="lg:hidden" />
+      <div className={styles.frame}>
+        <header className={styles.header}>
+          <div className={styles.heading}>
+            <BrandMark className={cn(styles.monogram, styles.headerBrand, "lg:hidden")} />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="truncate text-[15px] font-semibold tracking-[-0.02em] text-[var(--ink)] lg:text-base">
+                <h1 className={styles.title}>
                   {meta.title}
                 </h1>
                 {workspace.mode === "demo" && pathname === "/today" ? (
@@ -601,24 +585,24 @@ function ShellContent({ children }: { children: ReactNode }) {
                   </span>
                 ) : null}
               </div>
-              <p className="mt-0.5 truncate text-xs text-[var(--ink-faint)] sm:text-[13px]">
+              <p className={styles.headerDetail}>
                 {headerDetail}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className={styles.actions}>
             <button
               type="button"
               onClick={(event) => {
                 setCommandTrigger(event.currentTarget);
                 setCommandOpen(true);
               }}
-              className="focus-ring hidden h-9 items-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs text-[var(--ink-faint)] transition-[background-color,border-color,color,transform] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:text-[var(--ink)] md:flex"
+              className={cn("focus-ring", styles.searchTrigger)}
             >
               <Search className="size-3.5" />
               <span className="pr-6">Search</span>
-              <span className="flex items-center gap-0.5 rounded border border-[var(--line)] px-1 py-0.5 font-mono text-xs">
+              <span className={styles.shortcut}>
                 <Command className="size-2.5" />K
               </span>
             </button>
@@ -631,7 +615,7 @@ function ShellContent({ children }: { children: ReactNode }) {
                 setCommandTrigger(event.currentTarget);
                 setCommandOpen(true);
               }}
-              className="md:hidden"
+              className={cn(styles.iconButton, styles.mobileSearch)}
             >
               <Search className="size-4" />
             </Button>
@@ -640,7 +624,7 @@ function ShellContent({ children }: { children: ReactNode }) {
               size="icon"
               aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"}
               onClick={toggleTheme}
-              className="hidden sm:inline-flex"
+              className={styles.iconButton}
             >
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
@@ -663,7 +647,7 @@ function ShellContent({ children }: { children: ReactNode }) {
               type="button"
               aria-label="Open navigation"
               onClick={() => setDrawerOpen(true)}
-              className="focus-ring flex size-11 items-center justify-center rounded-xl text-[var(--ink-soft)] transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-[var(--canvas-strong)] lg:hidden"
+              className={cn("focus-ring", styles.iconButton, styles.mobileMenu)}
             >
               <Menu className="size-5" />
             </button>
@@ -672,14 +656,14 @@ function ShellContent({ children }: { children: ReactNode }) {
 
         <ConnectivityStatusNotice />
 
-        <main key={pathname} className="page-enter min-h-[calc(100svh-64px)] pb-[calc(7rem+env(safe-area-inset-bottom))] lg:min-h-[calc(100svh-74px)] lg:pb-8">
+        <main key={pathname} className={cn("page-enter", styles.content)}>
           {children}
         </main>
       </div>
 
       <nav
         aria-label="Primary mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-30 grid min-h-[72px] grid-flow-col auto-cols-fr border-t border-[var(--line)] bg-[color-mix(in_srgb,var(--paper-strong)_96%,transparent)] px-2 pt-1.5 pb-[calc(.375rem+env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(20,23,19,.06)] backdrop-blur-xl lg:hidden"
+        className={styles.dock}
       >
         {visibleMobileNavItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);

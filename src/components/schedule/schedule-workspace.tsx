@@ -519,7 +519,7 @@ function ChefScheduleWorkspace({
                       draggable
                       onDragStart={() => setDraggedId(shift.id)}
                       onDragEnd={() => setDraggedId(null)}
-                      className="mb-2 cursor-grab rounded-[14px] border border-[var(--line)] bg-[var(--paper-strong)] p-3 shadow-sm active:cursor-grabbing"
+                      className="mb-2 cursor-grab rounded-[14px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-3 shadow-sm active:cursor-grabbing"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="text-[13px] font-semibold">
@@ -1141,7 +1141,7 @@ function ManagerScheduleWorkspace() {
       >
         <section
           aria-label="Weekly schedule board"
-          className="mt-5 hidden overflow-x-auto rounded-[18px] border border-[var(--line)] bg-[var(--paper)] md:block"
+          className="mt-5 hidden overflow-x-auto rounded-[18px] bg-[var(--paper)] shadow-[var(--shadow-card)] md:block"
         >
           <div className="grid min-w-[1148px] grid-cols-7">
             {days.map((day) => (
@@ -1362,7 +1362,7 @@ function ManagerScheduleWorkspace() {
                   defaultValue={
                     shiftEditor === "new" ? "Open shift" : shiftEditor.person
                   }
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
                 >
                   <option>Open shift</option>
                   <option>Donald</option>
@@ -1378,7 +1378,7 @@ function ManagerScheduleWorkspace() {
                   defaultValue={
                     shiftEditor === "new" ? "mon" : shiftEditor.dayId
                   }
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
                 >
                   {days.map((day) => (
                     <option key={day.id} value={day.id}>
@@ -1394,7 +1394,7 @@ function ManagerScheduleWorkspace() {
                   defaultValue={
                     shiftEditor === "new" ? "Server" : shiftEditor.role
                   }
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
                 >
                   {Object.keys(roleTone).map((role) => (
                     <option key={role}>{role}</option>
@@ -1410,7 +1410,7 @@ function ManagerScheduleWorkspace() {
                   defaultValue={
                     shiftEditor === "new" ? "5:00p" : shiftEditor.start
                   }
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
                 />
               </label>
               <label>
@@ -1420,7 +1420,7 @@ function ManagerScheduleWorkspace() {
                   defaultValue={
                     shiftEditor === "new" ? "11:00p" : shiftEditor.end
                   }
-                  className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base sm:text-xs"
+                  className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base sm:text-xs"
                 />
               </label>
               <div className="mt-2 flex justify-end gap-2 sm:col-span-2">
@@ -1451,7 +1451,7 @@ function ManagerScheduleWorkspace() {
         onConfirm={confirmReopenShift}
       />
 
-      <div className="mt-8 flex items-center gap-3 rounded-[16px] border border-[var(--line)] bg-[var(--paper)] px-4 py-3 text-xs text-[var(--ink-faint)]">
+      <div className="mt-8 flex items-center gap-3 rounded-[16px] bg-[var(--paper)] shadow-[var(--shadow-card)] px-4 py-3 text-xs text-[var(--ink-faint)]">
         <Sparkles className="size-4 shrink-0 text-[var(--accent)]" />
         <span className="flex-1">
           Schedule note: every shift longer than six hours carries a 30m unpaid

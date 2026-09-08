@@ -245,9 +245,9 @@ function Field({
 }
 
 const fieldClass =
-  "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs outline-none focus:border-[var(--accent)]";
+  "h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs outline-none focus:border-[var(--accent)]";
 const areaClass =
-  "w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-xs leading-5 outline-none focus:border-[var(--accent)]";
+  "w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 py-2.5 text-xs leading-5 outline-none focus:border-[var(--accent)]";
 
 export function LiveGuestsWorkspace({
   workspace,
@@ -313,7 +313,7 @@ export function LiveGuestsWorkspace({
   if (!result.ok || !model) {
     return (
       <PageFrame>
-        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center">
+        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-8 text-center">
           <CircleAlert className="mx-auto size-6 text-[var(--warning)]" />
           <h2 className="mt-4 text-xl font-medium">Guestbook unavailable</h2>
           <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">
@@ -648,7 +648,7 @@ export function LiveGuestsWorkspace({
                       ? "Search name or contact"
                       : "Search guest name"
               }
-              className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-4 pl-10 text-xs outline-none focus:border-[var(--accent)]"
+              className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] pr-4 pl-10 text-xs outline-none focus:border-[var(--accent)]"
             />
           </label>
           <Button type="submit" variant="secondary">
@@ -823,7 +823,7 @@ export function LiveGuestsWorkspace({
         </div>
       ) : null}
 
-      <div className="mt-7 flex items-start gap-3 rounded-[16px] border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3 text-xs leading-4 text-[var(--ink-soft)]">
+      <div className="mt-7 flex items-start gap-3 rounded-[16px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4 py-3 text-xs leading-4 text-[var(--ink-soft)]">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" />
         <span>
           Consent is recorded as a timestamped history, not a mutable checkbox.
@@ -1246,7 +1246,7 @@ export function LiveGuestsWorkspace({
                   className={fieldClass}
                 />
               </Field>
-              <label className="flex h-11 items-center gap-2 self-end rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs font-semibold">
+              <label className="flex h-11 items-center gap-2 self-end rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs font-semibold">
                 <input
                   name="vip"
                   type="checkbox"

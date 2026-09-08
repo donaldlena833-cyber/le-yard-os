@@ -60,7 +60,7 @@ const initialActionState: TeamAdminActionState = { status: "idle" };
 function TeamReadError({ message }: { message: string }) {
   return (
     <PageFrame>
-      <section className="mx-auto mt-[8svh] max-w-xl rounded-[28px] border border-[var(--line)] bg-[var(--paper-strong)] p-7 text-center shadow-[var(--shadow-card)]">
+      <section className="mx-auto mt-[8svh] max-w-xl rounded-[28px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-7 text-center shadow-[var(--shadow-card)]">
         <AlertCircle className="mx-auto size-6 text-[var(--danger)]" />
         <h2 className="mt-4 text-xl font-medium tracking-[-0.04em]">Team directory unavailable</h2>
         <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">{message}</p>
@@ -246,26 +246,26 @@ function LiveTeamContent({
 
       <JobRoleConfigurationPanel workspace={workspace} roles={data.jobRoles} />
 
-      <div className="mt-6 grid min-h-[760px] overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper)] xl:grid-cols-[390px_minmax(0,1fr)]">
+      <div className="mt-6 grid min-h-[760px] overflow-hidden rounded-[22px] bg-[var(--paper)] shadow-[var(--shadow-card)] xl:grid-cols-[390px_minmax(0,1fr)]">
         <section className="border-b border-[var(--line)] xl:border-r xl:border-b-0" aria-label="Team directory">
           <div className="space-y-3 border-b border-[var(--line)] p-4">
             <label className="relative block">
               <span className="sr-only">Search team</span>
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--ink-faint)]" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search people or roles" className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-3 pl-10 text-xs placeholder:text-[var(--ink-faint)]" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search people or roles" className="h-11 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] pr-3 pl-10 text-xs placeholder:text-[var(--ink-faint)]" />
             </label>
             <div className="grid grid-cols-2 gap-2">
               <label className="relative">
                 <span className="sr-only">Filter by role</span>
                 <Filter className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" />
-                <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as "all" | AppRole)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-2 pl-9 text-xs">
+                <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as "all" | AppRole)} className="h-10 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] pr-2 pl-9 text-xs">
                   <option value="all">All access roles</option>
                   {Object.entries(roleLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label>
                 <span className="sr-only">Filter by location</span>
-                <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs">
+                <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="h-10 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-xs">
                   <option value="all">All locations</option>
                   {workspace.locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
                 </select>
@@ -355,7 +355,7 @@ function LiveTeamContent({
                       <input type="hidden" name="intent" value="update_access" />
                       <label>
                         <span className="mb-1.5 block text-xs font-semibold">Access role</span>
-                        <select name="role" defaultValue={selected.role} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs">
+                        <select name="role" defaultValue={selected.role} className="h-10 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs">
                           {Object.entries(roleLabel).filter(([role]) => workspace.role === "owner" || role !== "owner").map(([role, label]) => <option key={role} value={role}>{label}</option>)}
                         </select>
                       </label>
@@ -366,14 +366,14 @@ function LiveTeamContent({
                             <div key={location.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-xl bg-[var(--canvas)] px-3 py-2.5 text-xs">
                               <input aria-label={`Give access to ${location.name}`} type="checkbox" name="locationIds" value={location.id} defaultChecked={selected.locationIds.includes(location.id)} className="size-4 accent-[var(--accent)]" />
                               <span>{location.name}</span>
-                              <label className="flex items-center gap-1.5 text-[11px] text-[var(--ink-faint)]">
+                              <label className="flex items-center gap-1.5 text-xs text-[var(--ink-faint)]">
                                 <input aria-label={`Make ${location.name} primary`} type="radio" name="primaryLocationId" value={location.id} defaultChecked={selected.primaryLocationId === location.id} className="size-3.5 accent-[var(--accent)]" />
                                 Primary
                               </label>
                             </div>
                           ))}
                         </div>
-                        <p className="mt-2 text-[11px] leading-4 text-[var(--ink-faint)]">The primary location is used as the employee home location. It must also be selected for access.</p>
+                        <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">The primary location is used as the employee home location. It must also be selected for access.</p>
                       </fieldset>
                       <Button type="submit" variant="secondary" size="sm" disabled={pending} className="w-full">{pending ? "Saving…" : "Review role & locations"}</Button>
                     </form>

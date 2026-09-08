@@ -70,13 +70,14 @@ export function Modal({
         >
           <motion.div
             ref={dialogRef}
+            data-slot="dialog-surface"
             role={role}
             aria-modal="true"
             aria-labelledby={labelledBy}
             aria-label={ariaLabel}
             tabIndex={-1}
             className={cn(
-              "w-full overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-float)]",
+              "w-full overflow-hidden rounded-[22px] bg-[var(--card)] shadow-[var(--shadow-float)]",
               className,
             )}
             initial={
@@ -103,5 +104,7 @@ export function Modal({
     </AnimatePresence>
   );
 
-  return typeof document === "undefined" ? null : createPortal(modal, document.body);
+  return typeof document === "undefined"
+    ? null
+    : createPortal(modal, document.body);
 }

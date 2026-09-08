@@ -13,10 +13,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("le-yard-theme") as Theme | null;
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem("le-yard-theme");
+    } catch {
+      /* Keep appearance usable when storage is disabled. */
+    }
     const nextTheme =
-      stored ||
-      (window.matchMedia("(prefers-color-scheme: dark)").matches
+      (stored === "light" || stored === "dark" ? stored : null) ||
+      (window.matchMedia?.("(prefers-color-scheme: dark)").matches
         ? "dark"
         : "light");
     const frame = window.requestAnimationFrame(() => {
@@ -32,8 +37,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       toggleTheme: () => {
         setTheme((current) => {
           const nextTheme = current === "light" ? "dark" : "light";
-          document.documentElement.classList.toggle("dark", nextTheme === "dark");
-          window.localStorage.setItem("le-yard-theme", nextTheme);
+          document.documentElement.classList.toggle(
+            "dark",
+            nextTheme === "dark",
+          );
+          try {
+            window.localStorage.setItem("le-yard-theme", nextTheme);
+          } catch {
+            /* The current theme still applies. */
+          }
           return nextTheme;
         });
       },
@@ -41,7 +53,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [theme],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {

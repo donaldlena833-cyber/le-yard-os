@@ -88,9 +88,9 @@ const requestTone: Record<
 };
 
 const fieldClass =
-  "focus-ring h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs placeholder:text-[var(--ink-faint)]";
+  "focus-ring h-10 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs placeholder:text-[var(--ink-faint)]";
 const areaClass =
-  "focus-ring min-h-24 w-full resize-y rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-xs leading-4 placeholder:text-[var(--ink-faint)]";
+  "focus-ring min-h-24 w-full resize-y rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 py-2.5 text-xs leading-4 placeholder:text-[var(--ink-faint)]";
 
 function formatDateOnly(value: string) {
   const date = new Date(`${value}T12:00:00.000Z`);
@@ -295,7 +295,7 @@ function ModalFrame({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="relative max-h-[92svh] w-full overflow-y-auto rounded-t-[24px] border border-[var(--line)] bg-[var(--paper-strong)] shadow-2xl sm:max-w-xl sm:rounded-[24px]"
+        className="relative max-h-[92svh] w-full overflow-y-auto rounded-t-[24px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-2xl sm:max-w-xl sm:rounded-[24px]"
       >
         <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--line)] bg-[var(--paper-strong)] px-5 py-4 sm:px-6">
           <div>

@@ -94,7 +94,7 @@ function dateTime(value: string | null): string {
 function SettingsError({ message }: { message: string }) {
   return (
     <PageFrame>
-      <section className="mx-auto mt-[8svh] max-w-xl rounded-[28px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center">
+      <section className="mx-auto mt-[8svh] max-w-xl rounded-[28px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-8 text-center">
         <CircleAlert className="mx-auto size-6 text-[var(--danger)]" />
         <h2 className="mt-4 text-xl font-medium tracking-[-0.04em]">
           Settings unavailable
@@ -110,7 +110,7 @@ function SettingsError({ message }: { message: string }) {
 function OrganizationPanel({ data }: { data: LiveSettingsModel }) {
   const roles: AppRole[] = ["owner", "admin", "manager", "employee"];
   return (
-    <div className="space-y-9">
+    <div className="space-y-[22px]">
       <section>
         <SectionHeading
           title="Organization profile"
@@ -235,7 +235,7 @@ function LocationsPanel({ data }: { data: LiveSettingsModel }) {
         {data.locations.map((location, index) => (
           <article
             key={location.id}
-            className="rounded-[20px] border border-[var(--line)] bg-[var(--paper)] p-5"
+            className="rounded-[20px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-5"
           >
             <div className="flex items-start justify-between gap-3">
               <span
@@ -291,7 +291,7 @@ function LocationsPanel({ data }: { data: LiveSettingsModel }) {
 
 function SecurityPanel({ workspace }: { workspace: WorkspaceContextValue }) {
   return (
-    <div className="space-y-9">
+    <div className="space-y-[22px]">
       <section>
         <SectionHeading
           title="Password sign-in"
@@ -610,7 +610,7 @@ function NotificationsPanel({
   }
 
   return (
-    <div className="space-y-9">
+    <div className="space-y-[22px]">
       <section>
         <SectionHeading
           title="In-app alerts"
@@ -827,7 +827,7 @@ function ExpenseCategoriesPanel({
 
   if (!data.canManage) {
     return (
-      <section className="rounded-[22px] border border-[var(--line)] bg-[var(--paper)] p-7 text-center">
+      <section className="rounded-[22px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-7 text-center">
         <LockKeyhole className="mx-auto size-5 text-[var(--ink-faint)]" />
         <h3 className="mt-4 text-base font-semibold">
           Owner or Admin access required
@@ -861,7 +861,7 @@ function ExpenseCategoriesPanel({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Smallwares"
-              className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[13px]"
+              className="h-10 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-[13px]"
             />
           </label>
           <label>
@@ -873,7 +873,7 @@ function ExpenseCategoriesPanel({
               value={accountingCode}
               onChange={(event) => setAccountingCode(event.target.value)}
               placeholder="6100"
-              className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-[13px]"
+              className="h-10 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-[13px]"
             />
           </label>
           <div className="flex items-end gap-2">
@@ -985,7 +985,7 @@ function DataPanel({
 }) {
   if (!data.canManage)
     return (
-      <section className="rounded-[22px] border border-[var(--line)] bg-[var(--paper)] p-7 text-center">
+      <section className="rounded-[22px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-7 text-center">
         <LockKeyhole className="mx-auto size-5 text-[var(--ink-faint)]" />
         <h3 className="mt-4 text-base font-semibold">
           Owner or Admin access required
@@ -997,7 +997,7 @@ function DataPanel({
       </section>
     );
   return (
-    <div className="space-y-9">
+    <div className="space-y-[22px]">
       <section>
         <SectionHeading
           title="Retention & recovery"

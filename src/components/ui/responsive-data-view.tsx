@@ -45,6 +45,7 @@ export function ResponsiveDataView<T>({
     <div className={className}>
       <div
         role="region"
+        data-slot="table-region"
         aria-label={label}
         tabIndex={0}
         className="focus-ring hidden overflow-x-auto border-y border-[var(--line)] md:block"
@@ -111,6 +112,7 @@ export function ResponsiveDataView<T>({
       </div>
       <div
         role="list"
+        data-slot="mobile-data-list"
         aria-label={`${label}, mobile view`}
         className="divide-y divide-[var(--line)] border-y border-[var(--line)] md:hidden"
       >

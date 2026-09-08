@@ -103,7 +103,7 @@ export function LiveTimeClockWorkspace({
   if (!result.ok || !model) {
     return (
       <PageFrame>
-        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center">
+        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-8 text-center">
           <AlertTriangle className="mx-auto size-6 text-[var(--warning)]" />
           <h2 className="mt-4 text-xl font-medium">Time clock unavailable</h2>
           <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">
@@ -229,7 +229,7 @@ export function LiveTimeClockWorkspace({
                 title="Today’s roster"
                 detail={`${model.roster.length} scheduled or active team members; punch state comes from Toast`}
               />
-              <div className="overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)]">
+              <div className="overflow-hidden rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
                 {model.roster.map((row, index) => (
                   <div key={row.employeeId} className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--line)] px-4 py-3.5 first:border-t-0 sm:grid-cols-[1fr_130px_150px]">
                     <div className="flex min-w-0 items-center gap-3">
@@ -256,7 +256,7 @@ export function LiveTimeClockWorkspace({
               title="Your recent entries"
               detail="For a missed or incorrect punch, correct the source record in Toast POS"
             />
-            <div className="overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)]">
+            <div className="overflow-hidden rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
               {model.recentEntries.map((entry) => (
                 <div key={entry.id} className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--line)] px-4 py-3.5 first:border-t-0 sm:grid-cols-[1fr_120px_110px]">
                   <div>
@@ -281,7 +281,7 @@ export function LiveTimeClockWorkspace({
 
         <aside>
           <SectionHeading eyebrow="Source health" title="Toast Labor API" detail="Read-only attendance integration" />
-          <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)] p-5">
+          <div className="rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5">
             <div className="flex items-center justify-between gap-3">
               <span className="flex items-center gap-2 text-xs font-semibold"><BadgeCheck className="size-4 text-[var(--accent-strong)]" />Connection</span>
               <StatusPill tone={syncTone}>{model.posSource.connectionStatus.replaceAll("_", " ")}</StatusPill>

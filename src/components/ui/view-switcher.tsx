@@ -63,7 +63,7 @@ export function ViewSwitcher<Id extends string>({
       role="group"
       aria-label={label}
       className={cn(
-        "grid grid-flow-col auto-cols-fr gap-1 rounded-xl bg-[var(--canvas-strong)] p-1",
+        "grid grid-flow-col auto-cols-fr gap-1 rounded-[14px] bg-[var(--inner)] p-1",
         className,
       )}
     >
@@ -82,9 +82,9 @@ export function ViewSwitcher<Id extends string>({
             onClick={() => onValueChange(item.id)}
             onKeyDown={(event) => handleKeyDown(event, index)}
             className={cn(
-              "focus-ring flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
+              "focus-ring flex min-h-10 min-w-0 items-center justify-center gap-2 rounded-[11px] px-3 text-xs font-semibold transition-colors",
               active
-                ? "bg-[var(--paper-strong)] text-[var(--ink)] shadow-sm"
+                ? "bg-[var(--button)] text-[var(--text)] shadow-[var(--shadow-button)]"
                 : "text-[var(--ink-faint)] hover:text-[var(--ink)]",
             )}
           >

@@ -72,14 +72,14 @@ function OrganizationPanel() {
   const organization = { ...demoWorkspace.organizations[0], name: "Le Yard" };
   const owners = demoWorkspace.people.filter((person) => organization.ownerIds.includes(person.id));
   return (
-    <div className="space-y-9">
+    <div className="space-y-[22px]">
       <section>
         <SectionHeading title="Organization profile" detail="Le Yard’s tenant settings and owner controls." />
         <div className="grid gap-4 border-y border-[var(--line)] py-5 sm:grid-cols-2">
-          <label><span className="mb-1.5 block text-xs font-semibold">Legal or operating name</span><input defaultValue={organization.name} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs" /></label>
-          <label><span className="mb-1.5 block text-xs font-semibold">Workspace slug</span><input defaultValue={organization.slug} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs" /></label>
-          <label><span className="mb-1.5 block text-xs font-semibold">Default timezone</span><select defaultValue={organization.timezone} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"><option>America/New_York</option></select></label>
-          <label><span className="mb-1.5 block text-xs font-semibold">Currency</span><select defaultValue={organization.currency} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"><option>USD</option></select></label>
+          <label><span className="mb-1.5 block text-xs font-semibold">Legal or operating name</span><input defaultValue={organization.name} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs" /></label>
+          <label><span className="mb-1.5 block text-xs font-semibold">Workspace slug</span><input defaultValue={organization.slug} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs" /></label>
+          <label><span className="mb-1.5 block text-xs font-semibold">Default timezone</span><select defaultValue={organization.timezone} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"><option>America/New_York</option></select></label>
+          <label><span className="mb-1.5 block text-xs font-semibold">Currency</span><select defaultValue={organization.currency} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"><option>USD</option></select></label>
         </div>
         <div className="mt-4 flex flex-col justify-between gap-4 rounded-[18px] bg-[var(--ink)] p-5 text-[var(--paper)] sm:flex-row sm:items-center">
           <div className="flex items-start gap-3"><MapPin className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" /><div><p className="text-xs font-semibold">Le Yard · Ninth Avenue</p><p className="mt-1 text-xs leading-4 text-white/60">858 9th Ave, New York, NY 10019</p></div></div>
@@ -118,7 +118,7 @@ function LocationsPanel() {
       <SectionHeading title="Restaurant locations" detail="Each location has independent membership scope, operational records, and timezone handling." action={<Button variant="secondary" size="sm" disabled>Add location</Button>} />
       <div className="grid gap-4 sm:grid-cols-2">
         {demoWorkspace.locations.slice(0, 1).map((location, index) => (
-          <article key={location.id} className="rounded-[20px] border border-[var(--line)] bg-[var(--paper)] p-5">
+          <article key={location.id} className="rounded-[20px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-5">
             <div className="flex items-start justify-between gap-3"><span className={cn("flex size-10 items-center justify-center rounded-[13px]", index === 0 ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "bg-[var(--canvas-strong)] text-[var(--ink-faint)]")}><MapPin className="size-4" /></span><StatusPill tone={index === 0 ? "accent" : "neutral"} dot>{index === 0 ? "Owner supplied" : "Synthetic mock"}</StatusPill></div>
             <h3 className="mt-5 text-base font-semibold tracking-[-0.03em]">{index === 0 ? "Le Yard" : location.name}</h3>
             <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">{location.address.line1}<br />{location.address.city}, {location.address.region} {location.address.postalCode}</p>
@@ -225,7 +225,7 @@ function OperatingDraftPanel() {
 
 function SecurityPanel() {
   return (
-    <div className="space-y-9">
+    <div className="space-y-[22px]">
       <section>
         <SectionHeading title="Password sign-in" detail="All accounts use password sign-in without a second factor or geographic login restriction." />
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -260,7 +260,7 @@ function SecurityPanel() {
 function DataPanel() {
   const events = useMemo(() => demoWorkspace.auditEvents.slice().sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)), []);
   return (
-    <div className="space-y-9">
+    <div className="space-y-[22px]">
       <section>
         <SectionHeading title="Retention & recovery" detail="Policies stay unset until the owners approve operational and legal requirements." />
         <div className="grid gap-3 sm:grid-cols-3">

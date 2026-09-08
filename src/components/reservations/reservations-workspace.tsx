@@ -106,6 +106,7 @@ import {
 } from "@/lib/reservations/model";
 import { useRealtimeInvalidation } from "@/lib/realtime/use-realtime-invalidation";
 import { cn, formatMoney } from "@/lib/utils";
+import styles from "./reservations.module.css";
 
 type BookMode = "reservation" | "walk_in";
 const noReservationPostgresBindings = [] as const;
@@ -116,13 +117,8 @@ const assignableReservationStatuses = new Set<ReservationStatus>([
   "arrived",
 ]);
 const fieldClass =
-  "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-base outline-none focus:border-[var(--accent)] sm:text-sm";
-const stateStyles: Record<ReservationPhysicalTableState, string> = {
-  available: "border-[#ded8ca] bg-[#f8f4e9] text-[#1c1d1a]",
-  occupied: "border-[#94c0a0] bg-[#d6ead9] text-[#1e5f39]",
-  needs_reset: "border-[#d4ae69] bg-[#f4dfae] text-[#73501f]",
-  blocked: "border-[#5c5e58] bg-[#3d3f3a] text-[#aaa99f] opacity-75",
-};
+  "h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] sm:text-sm";
+
 
 type FloorPositionMove = {
   tableId: string;
@@ -331,17 +327,14 @@ function DraggableFloorTable({
       {...(editing ? attributes : {})}
       {...(editing ? listeners : {})}
       className={cn(
-        "absolute z-10 flex min-h-11 min-w-11 items-center justify-center border text-xs font-bold shadow-[0_8px_20px_rgba(0,0,0,.16)] transition-[box-shadow,filter] duration-150 focus:z-30 focus:outline-none focus:ring-2 focus:ring-[#d2a24b]",
-        table.shape === "round" ? "rounded-full" : "rounded-[10px]",
-        stateStyles[table.state],
-        !editing && "hover:z-20 hover:brightness-[1.04]",
-        editing &&
-          "cursor-grab touch-none ring-1 ring-white/25 active:cursor-grabbing",
-        isDragging && "z-40 scale-[1.03] shadow-[0_18px_36px_rgba(0,0,0,.42)]",
-        isSelectedInterval &&
-          "ring-2 ring-[#d2a24b] ring-offset-2 ring-offset-[#191b18]",
-        isSelected && "ring-2 ring-white ring-offset-2 ring-offset-[#191b18]",
+        styles.floorTable,
+        table.shape === "round" ? "rounded-full" : "rounded-[12px]",
       )}
+      data-state={table.state}
+      data-editing={editing}
+      data-dragging={isDragging}
+      data-interval={isSelectedInterval}
+      data-selected={isSelected}
       style={{
         left: `${table.x * 100}%`,
         top: `${table.y * 100}%`,
@@ -355,7 +348,7 @@ function DraggableFloorTable({
         <Move className="absolute right-1 top-1 size-3 opacity-55" />
       ) : null}
       {occupyingReservation ? (
-        <span className="absolute -right-1.5 -top-1.5 flex size-4 items-center justify-center rounded-full bg-[#20221f] text-[8px] text-[#f8f4e9]">
+        <span className={styles.partyCount}>
           {occupyingReservation.partySize}
         </span>
       ) : null}
@@ -449,30 +442,28 @@ function FloorPlan({
     >
       <div
         ref={floorRef}
-        className={cn(
-          "relative mx-auto aspect-[3/4] w-full overflow-hidden rounded-[22px] border border-[#343630] bg-[#191b18] shadow-[inset_0_1px_0_rgba(255,255,255,.05),0_18px_45px_rgba(25,27,24,.14)] sm:aspect-[16/10]",
-          editing && "ring-2 ring-[#d2a24b]/70 ring-offset-2",
-        )}
+        className={styles.floor}
+        data-editing={editing}
       >
-        <div className="absolute inset-x-[4%] top-[5%] h-[16%] rounded-[16px] border border-dashed border-[#484b44] bg-white/[.025]">
-          <span className="absolute left-3 top-2 text-[9px] font-semibold uppercase tracking-[.18em] text-[#888b82]">
+        <div className={cn(styles.zone, "inset-x-[4%] top-[5%] h-[16%]")}>
+          <span className={cn(styles.zoneLabel, "left-3 top-2")}>
             Entry · host stand
           </span>
         </div>
-        <div className="absolute bottom-[6%] left-[4%] top-[26%] w-[19%] rounded-[16px] border border-dashed border-[#3f423c] bg-white/[.018]">
-          <span className="absolute bottom-3 left-3 text-[9px] font-semibold uppercase tracking-[.18em] text-[#a6a89f] [writing-mode:vertical-rl]">
+        <div className={cn(styles.zone, "bottom-[6%] left-[4%] top-[26%] w-[19%]")}>
+          <span className={cn(styles.zoneLabel, "bottom-3 left-3 [writing-mode:vertical-rl]")}>
             Service lane
           </span>
         </div>
-        <div className="absolute bottom-[6%] left-[27%] right-[4%] top-[26%] rounded-[18px] border border-[#343730] bg-white/[.012]" />
+        <div className={cn(styles.zone, "bottom-[6%] left-[27%] right-[4%] top-[26%]")} />
         {guidePosition ? (
           <>
             <div
-              className="pointer-events-none absolute inset-y-0 z-30 w-px bg-[#d2a24b]/60"
+              className="pointer-events-none absolute inset-y-0 z-30 w-px bg-[var(--primary)]/60"
               style={{ left: `${guidePosition.x * 100}%` }}
             />
             <div
-              className="pointer-events-none absolute inset-x-0 z-30 h-px bg-[#d2a24b]/60"
+              className="pointer-events-none absolute inset-x-0 z-30 h-px bg-[var(--primary)]/60"
               style={{ top: `${guidePosition.y * 100}%` }}
             />
           </>
@@ -504,7 +495,7 @@ function FloorPlan({
             />
           );
         })}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-white/10 bg-[#242622]/90 px-3 py-1 text-[9px] font-semibold uppercase tracking-[.14em] text-[#a6a89f] backdrop-blur">
+        <div className={styles.floorCaption}>
           {editing
             ? "Draft mode · review before saving"
             : "Floor now · verify on site"}
@@ -1815,7 +1806,7 @@ export function ReservationsWorkspace({
       {message ? (
         <div
           role="status"
-          className="mt-4 flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3 text-sm"
+          className="mt-4 flex items-center justify-between rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4 py-3 text-sm"
         >
           <span>{message}</span>
           <div className="flex items-center gap-1">
@@ -1847,7 +1838,7 @@ export function ReservationsWorkspace({
                 setLastStatusChange(null);
               }}
               aria-label="Dismiss reservation notice"
-              className="focus-ring -m-2 flex size-11 shrink-0 items-center justify-center rounded-lg"
+              className={cn("focus-ring", styles.closeControl)}
             >
               <X className="size-4" />
             </button>
@@ -1879,7 +1870,7 @@ export function ReservationsWorkspace({
         </InlineNotice>
       ) : null}
       {!model.configuration.ready ? (
-        <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-[color-mix(in_srgb,var(--warning)_30%,var(--line))] bg-[var(--warning-soft)] p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 flex flex-col gap-3 rounded-[18px] bg-[var(--warning-soft)] shadow-[var(--shadow-raised)] p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold">
               Finish and approve reservation setup
@@ -1906,7 +1897,7 @@ export function ReservationsWorkspace({
           ) : null}
         </div>
       ) : null}
-      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-4 py-3 text-xs">
+      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-4 py-3 text-xs">
         <span className="font-semibold text-[var(--ink)]">
           {model.metrics.covers} covers
         </span>
@@ -1988,18 +1979,14 @@ export function ReservationsWorkspace({
               </Button>
             }
           />
-          <div className="mb-3 flex gap-1 overflow-x-auto rounded-xl bg-[var(--canvas-strong)] p-1">
+          <div className={styles.filterBar}>
             {(["all", "upcoming", "arrived", "seated"] as const).map(
               (value) => (
                 <button
                   key={value}
                   onClick={() => setFilter(value)}
-                  className={cn(
-                    "focus-ring min-h-11 rounded-lg px-3 text-xs font-semibold capitalize",
-                    filter === value
-                      ? "bg-[var(--paper-strong)] text-[var(--ink)] shadow-sm"
-                      : "text-[var(--ink-faint)]",
-                  )}
+                  aria-pressed={filter === value}
+                  className={cn("focus-ring", styles.filter)}
                 >
                   {value}
                 </button>
@@ -2016,18 +2003,14 @@ export function ReservationsWorkspace({
                   setAssignmentMode(false);
                   showMobileView("service");
                 }}
-                className={cn(
-                  "grid w-full grid-cols-[62px_1fr_auto] items-center gap-3 rounded-2xl border p-3 text-left transition hover:border-[var(--line-strong)] hover:bg-[var(--paper-strong)]",
-                  selectedId === reservation.id
-                    ? "border-[var(--accent)] bg-[var(--accent-soft)]/30"
-                    : "border-transparent bg-[var(--paper)]",
-                )}
+                aria-pressed={selectedId === reservation.id}
+                className={cn("focus-ring", styles.reservationRow)}
               >
                 <div>
                   <p className="numeric text-sm font-bold">
                     {timeLabel(reservation.startsAt, model.timeZone)}
                   </p>
-                  <p className="mt-1 text-[10px] text-[var(--ink-faint)]">
+                  <p className="mt-1 text-xs text-[var(--ink-faint)]">
                     {reservation.durationMinutes}m
                   </p>
                 </div>
@@ -2179,7 +2162,7 @@ export function ReservationsWorkspace({
               </div>
             </InlineNotice>
           ) : null}
-          <div className="mt-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-[10px] leading-4 text-[var(--ink-faint)]">
+          <div className="mt-3 rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 py-2.5 text-xs leading-4 text-[var(--ink-faint)]">
             <strong className="text-[var(--ink-soft)]">
               Observed {timeLabel(model.floorNow.observedAt, model.timeZone)}.
             </strong>{" "}
@@ -2201,13 +2184,13 @@ export function ReservationsWorkspace({
                     Table {selectedTable.label} · {selectedTable.maxCapacity}{" "}
                     seats
                   </p>
-                  <p className="mt-1 text-[10px] capitalize text-[var(--ink-faint)]">
+                  <p className="mt-1 text-xs capitalize text-[var(--ink-faint)]">
                     {selectedTable.state.replaceAll("_", " ")}
                   </p>
                 </div>
                 <button
                   type="button"
-                  className="focus-ring -m-1 flex size-11 items-center justify-center rounded-lg text-[var(--ink-faint)] hover:bg-[var(--canvas-strong)]"
+                  className={cn("focus-ring", styles.closeControl)}
                   onClick={() => setSelectedTableId(null)}
                   aria-label="Close table controls"
                 >
@@ -2245,7 +2228,7 @@ export function ReservationsWorkspace({
               </div>
             </Surface>
           ) : null}
-          <div className="mt-4 flex flex-wrap justify-center gap-3 text-[10px] font-semibold text-[var(--ink-faint)]">
+          <div className={styles.floorLegend}>
             {(["available", "occupied", "needs_reset", "blocked"] as const).map(
               (state) => (
                 <span
@@ -2285,7 +2268,7 @@ export function ReservationsWorkspace({
                   key={bucket.startsAt}
                   className="flex flex-1 flex-col items-center gap-2"
                 >
-                  <span className="text-[10px] font-bold">{bucket.covers}</span>
+                  <span className="text-xs font-bold">{bucket.covers}</span>
                   <div
                     className={cn(
                       "w-full rounded-t-md",
@@ -2297,13 +2280,13 @@ export function ReservationsWorkspace({
                       height: `${Math.max(8, Math.min(100, (bucket.covers / bucket.limit) * 100))}%`,
                     }}
                   />
-                  <span className="text-[9px] text-[var(--ink-faint)]">
+                  <span className="text-xs text-[var(--ink-faint)]">
                     {bucket.label}
                   </span>
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-[10px] text-[var(--ink-faint)]">
+            <p className="mt-4 text-xs text-[var(--ink-faint)]">
               Target: up to {model.pacing[0]?.limit ?? 0} covers per pacing
               interval.
             </p>
@@ -2339,14 +2322,14 @@ export function ReservationsWorkspace({
               </div>
               <div className="mt-5 grid grid-cols-2 gap-2">
                 <div className="rounded-xl bg-[var(--canvas)] p-3">
-                  <p className="text-[10px] text-[var(--ink-faint)]">Party</p>
+                  <p className="text-xs text-[var(--ink-faint)]">Party</p>
                   <p className="mt-1 text-sm font-bold">
                     {selected.partySize} at{" "}
                     {timeLabel(selected.startsAt, model.timeZone)}
                   </p>
                 </div>
                 <div className="rounded-xl bg-[var(--canvas)] p-3">
-                  <p className="text-[10px] text-[var(--ink-faint)]">Table</p>
+                  <p className="text-xs text-[var(--ink-faint)]">Table</p>
                   <p className="mt-1 text-sm font-bold">
                     {selected.tableLabel ?? "Unassigned"}
                   </p>
@@ -2439,7 +2422,7 @@ export function ReservationsWorkspace({
                   and reconcile the change here.
                 </InlineNotice>
               ) : null}
-              <div className="mt-4 rounded-xl border border-[var(--line)] bg-[var(--canvas)] p-3 text-xs leading-5 text-[var(--ink-faint)]">
+              <div className={styles.recordContext}>
                 <p className="font-semibold text-[var(--ink-soft)]">
                   Current record · version {selected.version}
                 </p>
@@ -2487,7 +2470,7 @@ export function ReservationsWorkspace({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold">Waitlist</p>
-                <p className="mt-1 text-[10px] text-[var(--ink-faint)]">
+                <p className="mt-1 text-xs text-[var(--ink-faint)]">
                   {floorMatchesBook
                     ? "Live quote order"
                     : "Open today’s book to seat from the current floor"}
@@ -2507,15 +2490,15 @@ export function ReservationsWorkspace({
                 Add
               </Button>
             </div>
-            <div className="mt-3 divide-y divide-[var(--line)]">
+            <div className="mt-3">
               {model.waitlist.map((entry) => (
-                <div key={entry.id} className="py-3">
+                <div key={entry.id} className={styles.waitlistRow}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold">
                         {entry.displayName} · {entry.partySize}
                       </p>
-                      <p className="mt-1 text-[10px] text-[var(--ink-faint)]">
+                      <p className="mt-1 text-xs text-[var(--ink-faint)]">
                         {entry.status === "notified" && entry.deliveryStatus !== "sent"
                           ? entry.deliveryStatus === "failed"
                             ? "delivery failed · retry scheduled"
@@ -2693,7 +2676,7 @@ export function ReservationsWorkspace({
                 Requests and notes
               </span>
               <textarea
-                className="min-h-24 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-base outline-none focus:border-[var(--accent)] sm:text-sm"
+                className="min-h-24 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] sm:text-sm"
                 name="notes"
               />
             </label>
@@ -2804,7 +2787,7 @@ export function ReservationsWorkspace({
             <label className="col-span-2">
               <span className="mb-1.5 block text-xs font-semibold">Notes</span>
               <textarea
-                className="min-h-20 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-base sm:text-sm"
+                className="min-h-20 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-base sm:text-sm"
                 name="notes"
               />
             </label>

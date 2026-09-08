@@ -607,7 +607,7 @@ export function CloseoutWorkspace() {
             }));
             invalidateCalculation();
           }}
-          className="numeric h-11 w-20 rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2 text-right text-xs font-semibold outline-none disabled:opacity-45"
+          className="numeric h-11 w-20 rounded-lg bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-2 text-right text-xs font-semibold outline-none disabled:opacity-45"
         />
       ),
     },
@@ -616,7 +616,7 @@ export function CloseoutWorkspace() {
       label: "Adjustment",
       align: "right",
       render: (participant) => (
-        <span className="inline-flex h-11 w-24 items-center rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-2">
+        <span className="inline-flex h-11 w-24 items-center rounded-lg bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-2">
           <span className="text-xs text-[var(--ink-faint)]">$</span>
           <input
             aria-label={`${participant.displayName} adjustment`}
@@ -694,7 +694,7 @@ export function CloseoutWorkspace() {
               value={scenario.locationId}
               disabled={locked}
               onChange={(event) => selectLocation(event.target.value)}
-              className="h-10 min-w-[190px] rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[13px] font-semibold outline-none"
+              className="h-10 min-w-[190px] rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-[13px] font-semibold outline-none"
             >
               {demoWorkspace.locations.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
@@ -706,7 +706,7 @@ export function CloseoutWorkspace() {
               value={draft.businessDate}
               disabled={locked}
               onChange={(event) => updateDraft("businessDate", event.target.value)}
-              className="h-10 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-[13px] font-semibold outline-none"
+              className="h-10 rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-[13px] font-semibold outline-none"
             />
           </label>
         </div>
@@ -725,7 +725,7 @@ export function CloseoutWorkspace() {
           <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
             <label className="grid grid-cols-[minmax(0,1fr)_132px] items-center gap-4 py-3">
               <span><span className="block text-[13px] font-semibold">Covers</span><span className="mt-1 block text-xs text-[var(--ink-faint)]">Completed guests for the close</span></span>
-              <input value={draft.covers} disabled={locked} inputMode="numeric" onChange={(event) => updateDraft("covers", event.target.value)} className="numeric h-10 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-right text-xs font-semibold outline-none disabled:opacity-60" />
+              <input value={draft.covers} disabled={locked} inputMode="numeric" onChange={(event) => updateDraft("covers", event.target.value)} className="numeric h-10 rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-right text-xs font-semibold outline-none disabled:opacity-60" />
             </label>
             <MoneyField id="gross-sales" label="Gross sales" value={draft.grossSales} onChange={(value) => updateDraft("grossSales", value)} disabled={locked} />
             <MoneyField id="cash-sales" label="Cash sales" value={draft.cashSales} onChange={(value) => updateDraft("cashSales", value)} disabled={locked} />
@@ -752,7 +752,7 @@ export function CloseoutWorkspace() {
 
           <label className="mt-5 block">
             <span className="mb-2 block text-xs font-semibold">End-of-shift notes</span>
-            <textarea value={draft.notes} disabled={locked} onChange={(event) => updateDraft("notes", event.target.value)} rows={4} className="w-full resize-none rounded-[14px] border border-[var(--line)] bg-[var(--paper-strong)] p-3 text-[13px] leading-5 outline-none disabled:opacity-60" />
+            <textarea value={draft.notes} disabled={locked} onChange={(event) => updateDraft("notes", event.target.value)} rows={4} className="w-full resize-none rounded-[14px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-3 text-[13px] leading-5 outline-none disabled:opacity-60" />
           </label>
 
           <input ref={attachmentRef} aria-label="Attach closeout evidence" type="file" accept="image/*,application/pdf" capture="environment" className="sr-only" onChange={(event) => setAttachmentName(event.target.files?.[0]?.name ?? null)} />
@@ -815,7 +815,7 @@ export function CloseoutWorkspace() {
             const allocation = allocationFor(participant);
             const expanded = expandedEmployee === participant.personId;
             return (
-              <div className="rounded-[16px] border border-[var(--line)] bg-[var(--paper-strong)] p-4">
+              <div className="rounded-[16px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
                 <div className="flex items-start justify-between gap-3">
                   <button
                     type="button"
@@ -879,12 +879,12 @@ export function CloseoutWorkspace() {
                         }));
                         invalidateCalculation();
                       }}
-                      className="numeric mt-1.5 h-11 w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 text-right text-base font-semibold text-[var(--ink)] outline-none disabled:opacity-45"
+                      className="numeric mt-1.5 h-11 w-full rounded-lg bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-right text-base font-semibold text-[var(--ink)] outline-none disabled:opacity-45"
                     />
                   </label>
                   <label className="text-xs font-semibold text-[var(--ink-faint)]">
                     Adjustment
-                    <span className="mt-1.5 flex h-11 items-center rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3">
+                    <span className="mt-1.5 flex h-11 items-center rounded-lg bg-[var(--paper)] shadow-[var(--shadow-card)] px-3">
                       <span className="text-xs">$</span>
                       <input
                         aria-label={`${participant.displayName} mobile adjustment`}

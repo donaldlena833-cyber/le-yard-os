@@ -128,7 +128,7 @@ function ExportLink({ href, format }: { href: string; format: "CSV" | "PDF" }) {
     <a
       href={href}
       download
-      className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-4 text-xs font-semibold transition-[border-color,background,transform] hover:border-[var(--line-strong)] hover:bg-[var(--paper)] active:scale-[.98]"
+      className="focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4 text-xs font-semibold transition-[border-color,background,transform] hover:border-[var(--line-strong)] hover:bg-[var(--paper)] active:scale-[.98]"
     >
       <Icon className="size-3.5" />
       {format}
@@ -192,7 +192,7 @@ export function ReportsWorkspace() {
             <select
               value={filters.locationId}
               onChange={(event) => updateFilter("locationId", event.target.value)}
-              className="h-10 w-full appearance-none rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-7 pl-9 text-[13px] font-semibold outline-none"
+              className="h-10 w-full appearance-none rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] pr-7 pl-9 text-[13px] font-semibold outline-none"
             >
               <option value="all">Le Yard</option>
               {visibleLocations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
@@ -205,7 +205,7 @@ export function ReportsWorkspace() {
               type="date"
               value={filters.startsOn}
               onChange={(event) => updateFilter("startsOn", event.target.value)}
-              className="h-10 min-w-0 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-2 pl-9 text-[13px] font-semibold outline-none"
+              className="h-10 min-w-0 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] pr-2 pl-9 text-[13px] font-semibold outline-none"
             />
           </label>
           <label className="relative">
@@ -230,7 +230,7 @@ export function ReportsWorkspace() {
           <select
             value={kind}
             onChange={(event) => setKind(event.target.value as ReportKind)}
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs font-semibold outline-none"
+            className="h-11 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-xs font-semibold outline-none"
           >
             {authorizedCatalog.map((item) => <option key={item.kind} value={item.kind}>{item.group} · {item.label}</option>)}
           </select>
@@ -327,7 +327,7 @@ export function ReportsWorkspace() {
                   <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
                     {supportingColumns.map((column) => (
                       <div key={column.key} className={column.align === "right" ? "text-right" : undefined}>
-                        <dt className="text-[11px] font-semibold tracking-[0.08em] text-[var(--ink-faint)] uppercase">{column.label}</dt>
+                        <dt className="text-xs font-semibold tracking-[0.08em] text-[var(--ink-faint)] uppercase">{column.label}</dt>
                         <dd className={cn("mt-1 text-xs capitalize text-[var(--ink-soft)]", column.align === "right" && "numeric font-semibold text-[var(--ink)]")}>{row.cells[column.key] || "—"}</dd>
                       </div>
                     ))}

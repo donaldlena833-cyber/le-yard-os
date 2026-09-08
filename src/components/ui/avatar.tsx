@@ -1,10 +1,10 @@
 import { cn } from "@/lib/utils";
 
 const palette = [
-  "bg-[#d9aa68] text-[#39220e]",
-  "bg-[#b8cdc2] text-[#173427]",
-  "bg-[#c9c2da] text-[#302648]",
-  "bg-[#d9bdb6] text-[#45241e]",
+  "bg-[#bfc8ae] text-[#35402c]",
+  "bg-[#d9c3a0] text-[#63503a]",
+  "bg-[#bcb9af] text-[#47483f]",
+  "bg-[#858a73] text-[#f8f7ed]",
 ];
 
 export function Avatar({
@@ -30,7 +30,7 @@ export function Avatar({
       aria-label={name}
       title={name}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-semibold tracking-[-0.03em] ring-2 ring-[var(--paper)]",
+        "workspace-avatar inline-flex shrink-0 items-center justify-center rounded-full font-semibold tracking-[-0.03em]",
         palette[index % palette.length],
         size === "sm" && "size-7 text-xs",
         size === "md" && "size-9 text-xs",

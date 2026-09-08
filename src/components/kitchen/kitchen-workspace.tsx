@@ -109,21 +109,21 @@ export function KitchenWorkspace() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <p className="eyebrow">Recipe specification</p>
-              <input disabled={!canEdit} aria-label="Recipe name" value={selected.name} onChange={(event) => setRecipes((current) => current.map((recipe) => recipe.id === selected.id ? { ...recipe, name: event.target.value } : recipe))} className="mt-3 h-12 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xl font-semibold tracking-[-0.04em] outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-60 sm:text-2xl" />
+              <input disabled={!canEdit} aria-label="Recipe name" value={selected.name} onChange={(event) => setRecipes((current) => current.map((recipe) => recipe.id === selected.id ? { ...recipe, name: event.target.value } : recipe))} className="mt-3 h-12 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-xl font-semibold tracking-[-0.04em] outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-60 sm:text-2xl" />
               <p className="mt-2 text-sm leading-6 text-[var(--ink-faint)]">Measured components, portions, and current cost for one finished yield.</p>
             </div>
             <span className="flex size-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Scale className="size-5" /></span>
           </div>
 
-          <div className="mt-7 overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)]">
+          <div className="mt-7 overflow-hidden rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             <div className="hidden grid-cols-[minmax(0,1fr)_110px_60px_40px] gap-3 bg-[var(--canvas-strong)] px-4 py-3 text-xs font-semibold tracking-[0.1em] text-[var(--ink-faint)] uppercase sm:grid"><span>Component</span><span>Quantity</span><span>Unit</span><span /></div>
             {selected.ingredients.map((ingredient, index) => (
               <div key={`${ingredient.name}-${index}`} className="grid grid-cols-[minmax(0,1fr)_48px_44px] items-center gap-3 border-t border-[var(--line)] px-4 py-4 first:border-0 sm:grid-cols-[minmax(0,1fr)_110px_60px_40px] sm:py-3">
                 <div className="col-span-3 min-w-0 sm:col-span-1">
-                  <input disabled={!canEdit} aria-label={`${ingredient.name} ingredient name`} value={ingredient.name} onChange={(event) => updateIngredientName(index, event.target.value)} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-sm font-semibold outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-60" />
+                  <input disabled={!canEdit} aria-label={`${ingredient.name} ingredient name`} value={ingredient.name} onChange={(event) => updateIngredientName(index, event.target.value)} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-sm font-semibold outline-none transition-colors focus:border-[var(--accent)] disabled:opacity-60" />
                   <p className="mt-1.5 text-xs text-[var(--ink-faint)]">${(ingredient.quantity * ingredient.costPerUnit).toFixed(2)} current cost</p>
                 </div>
-                <input disabled={!canEdit} aria-label={`${ingredient.name} quantity`} type="number" min="0" step="1" value={ingredient.quantity} onChange={(event) => updateIngredient(index, event.target.value)} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-right text-sm font-semibold outline-none focus:border-[var(--accent)] disabled:opacity-60" />
+                <input disabled={!canEdit} aria-label={`${ingredient.name} quantity`} type="number" min="0" step="1" value={ingredient.quantity} onChange={(event) => updateIngredient(index, event.target.value)} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-right text-sm font-semibold outline-none focus:border-[var(--accent)] disabled:opacity-60" />
                 <span className="text-sm text-[var(--ink-faint)]">{ingredient.unit}</span>
                 <button disabled={!canEdit} type="button" aria-label={`Remove ${ingredient.name}`} onClick={() => removeIngredient(index)} className="focus-ring flex size-11 items-center justify-center rounded-xl text-[var(--ink-faint)] transition-colors hover:bg-[var(--danger-soft)] hover:text-[var(--danger)] disabled:opacity-40"><X className="size-4" /></button>
               </div>

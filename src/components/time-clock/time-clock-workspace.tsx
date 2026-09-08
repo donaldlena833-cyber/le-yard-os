@@ -57,7 +57,7 @@ export function TimeClockWorkspace() {
       <div className="mt-8 grid gap-10 xl:grid-cols-[1.25fr_.75fr]">
         <section>
           <SectionHeading eyebrow="Attendance" title="Today’s roster" detail="Sample state shaped like the Toast Labor import" />
-          <div className="overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)]">
+          <div className="overflow-hidden rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             {demoRoster.map((row, index) => (
               <div key={row.name} className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--line)] px-4 py-3.5 first:border-t-0 sm:grid-cols-[1fr_130px_130px]">
                 <div className="flex min-w-0 items-center gap-3"><Avatar name={row.name} index={index} /><div><p className="text-xs font-semibold">{row.name}</p><p className="mt-1 text-xs text-[var(--ink-faint)]">{row.role}</p></div></div>
@@ -70,7 +70,7 @@ export function TimeClockWorkspace() {
 
         <aside>
           <SectionHeading eyebrow="Source health" title="Toast Labor API" detail="Demo connection evidence" />
-          <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)] p-5">
+          <div className="rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5">
             <div className="flex items-center justify-between gap-3"><span className="flex items-center gap-2 text-xs font-semibold"><BadgeCheck className="size-4 text-[var(--accent-strong)]" />Connection</span><StatusPill tone="neutral">demo</StatusPill></div>
           </div>
           <div className="mt-5 space-y-3 text-xs leading-5 text-[var(--ink-faint)]">

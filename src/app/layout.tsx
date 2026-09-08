@@ -9,6 +9,7 @@ import {
   surfaceProductName,
 } from "@/lib/app-surface";
 import "./globals.css";
+import "./workspace-design.css";
 
 const interTight = Inter_Tight({
   variable: "--font-inter-tight",
@@ -82,7 +83,7 @@ export default async function RootLayout({
           href="/icons/icon-192.png"
         />
       </head>
-      <body>
+      <body className={isPhoneSurface ? undefined : "workspace-design"}>
         {children}
         <ServiceWorkerRegister />
       </body>

@@ -181,21 +181,21 @@ function InviteDialog({
               <input type="hidden" name="organizationId" value={organizationId} />
               <label className="sm:col-span-2">
                 <span className="mb-1.5 block text-xs font-semibold">Full name</span>
-                <input name="fullName" required autoComplete="name" placeholder="New teammate" className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs placeholder:text-[var(--ink-faint)]" />
+                <input name="fullName" required autoComplete="name" placeholder="New teammate" className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs placeholder:text-[var(--ink-faint)]" />
               </label>
               <label className="sm:col-span-2">
                 <span className="mb-1.5 block text-xs font-semibold">Work email</span>
-                <input name="email" required type="email" autoComplete="email" placeholder={demo ? "teammate@example.invalid" : "teammate@restaurant.com"} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs placeholder:text-[var(--ink-faint)]" />
+                <input name="email" required type="email" autoComplete="email" placeholder={demo ? "teammate@example.invalid" : "teammate@restaurant.com"} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs placeholder:text-[var(--ink-faint)]" />
               </label>
               <label>
                 <span className="mb-1.5 block text-xs font-semibold">Access role</span>
-                <select name="role" defaultValue={defaultRole} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs">
+                <select name="role" defaultValue={defaultRole} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs">
                   {roles.map((role) => <option key={role} value={role}>{roleLabel[role]}</option>)}
                 </select>
               </label>
               <label>
                 <span className="mb-1.5 block text-xs font-semibold">Primary location</span>
-                <select name="locationId" defaultValue={locations[0]?.id} className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs">
+                <select name="locationId" defaultValue={locations[0]?.id} className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs">
                   {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
                 </select>
               </label>
@@ -298,26 +298,26 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
         <Metric label="Needs review" value="3" detail="Time off, certificate, invitation" trend={{ label: "Action", tone: "negative" }} />
       </section>
 
-      <div className="mt-6 grid min-h-[720px] overflow-hidden rounded-[22px] border border-[var(--line)] bg-[var(--paper)] xl:grid-cols-[390px_minmax(0,1fr)]">
+      <div className="mt-6 grid min-h-[720px] overflow-hidden rounded-[22px] bg-[var(--paper)] shadow-[var(--shadow-card)] xl:grid-cols-[390px_minmax(0,1fr)]">
         <section className="border-b border-[var(--line)] xl:border-r xl:border-b-0" aria-label="Team directory">
           <div className="space-y-3 border-b border-[var(--line)] p-4">
             <label className="relative block">
               <span className="sr-only">Search team</span>
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--ink-faint)]" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search people or roles" className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-3 pl-10 text-xs placeholder:text-[var(--ink-faint)]" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} type="search" placeholder="Search people or roles" className="h-11 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] pr-3 pl-10 text-xs placeholder:text-[var(--ink-faint)]" />
             </label>
             <div className="grid grid-cols-2 gap-2">
               <label className="relative">
                 <span className="sr-only">Filter by role</span>
                 <Filter className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" />
-                <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as "all" | AppRole)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] pr-2 pl-9 text-xs">
+                <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value as "all" | AppRole)} className="h-10 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] pr-2 pl-9 text-xs">
                   <option value="all">All access roles</option>
                   {Object.entries(roleLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </label>
               <label>
                 <span className="sr-only">Filter by location</span>
-                <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs">
+                <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)} className="h-10 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-xs">
                   <option value="all">All locations</option>
                   {visibleLocations.map((location) => <option key={location.id} value={location.id}>{location.name.replace(" — Demo", "")}</option>)}
                 </select>
@@ -340,7 +340,7 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
               <div className="flex flex-wrap items-center gap-2">
                 <label>
                   <span className="sr-only">Access role</span>
-                  <select value={selectedRole} onChange={(event) => updateRole(event.target.value as AppRole)} disabled={!canManageRole} className="h-9 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-55">
+                  <select value={selectedRole} onChange={(event) => updateRole(event.target.value as AppRole)} disabled={!canManageRole} className="h-9 rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-55">
                     {Object.entries(roleLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 </label>
@@ -440,7 +440,7 @@ function ConnectedTeamWorkspace({ workspace }: { workspace: WorkspaceContextValu
         <Metric label="Session" value="Password" detail="Authenticated access" />
       </section>
 
-      <section className="mt-6 rounded-[22px] border border-[var(--line)] bg-[var(--paper-strong)] p-6 sm:p-8">
+      <section className="mt-6 rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-6 sm:p-8">
         <div className="flex max-w-2xl items-start gap-4">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
             {isAuthorizedRole ? <ShieldCheck className="size-4" /> : <LockKeyhole className="size-4" />}

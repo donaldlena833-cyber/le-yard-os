@@ -33,7 +33,7 @@ const dataClasses = [
 ] as const;
 
 const inputClass =
-  "focus-ring h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs";
+  "focus-ring h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs";
 
 function labelForDataClass(value: string) {
   return (
@@ -240,7 +240,7 @@ export function RetentionPolicyConfiguration({
         ref={dialogRef}
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="m-auto max-h-[calc(100svh-2rem)] w-[min(620px,calc(100vw-2rem))] overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--paper)] p-0 text-[var(--ink)] shadow-2xl backdrop:bg-black/35"
+        className="m-auto max-h-[calc(100svh-2rem)] w-[min(620px,calc(100vw-2rem))] overflow-hidden rounded-[24px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-0 text-[var(--ink)] shadow-2xl backdrop:bg-black/35"
         onCancel={(event) => {
           event.preventDefault();
           if (!busy) closeDialog();
@@ -374,7 +374,7 @@ export function RetentionPolicyConfiguration({
                   rows={4}
                   maxLength={2_000}
                   defaultValue={dialog.policy?.notes ?? ""}
-                  className="focus-ring w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs"
+                  className="focus-ring w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs"
                 />
               </label>
 

@@ -19,7 +19,7 @@ export function WorkspaceDataBoundary({
 
   return (
     <PageFrame width="wide">
-      <section className="mx-auto mt-[8svh] max-w-2xl rounded-[28px] border border-[var(--line)] bg-[var(--paper-strong)] p-7 shadow-[var(--shadow-card)] sm:p-10">
+      <section className="mx-auto mt-[8svh] max-w-2xl rounded-[28px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-7 shadow-[var(--shadow-card)] sm:p-10">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill tone="positive" dot>Tenant verified</StatusPill>
           <StatusPill tone="warning">Activation gate</StatusPill>

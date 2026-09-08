@@ -61,7 +61,7 @@ type DraftForm = {
 };
 
 const inputClass =
-  "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-sm outline-none focus:border-[var(--accent)]";
+  "h-11 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-sm outline-none focus:border-[var(--accent)]";
 
 const stateTone: Record<LivePrepTask["state"], "neutral" | "positive" | "warning" | "danger"> = {
   draft: "neutral",
@@ -325,7 +325,7 @@ export function LivePrepWorkspace({
             </label>
             <label className="text-xs font-semibold sm:col-span-2 xl:col-span-4">
               Note
-              <textarea className="mt-2 min-h-24 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 text-sm outline-none focus:border-[var(--accent)]" maxLength={2000} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} />
+              <textarea className="mt-2 min-h-24 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-3 text-sm outline-none focus:border-[var(--accent)]" maxLength={2000} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} />
             </label>
           </div>
           <div className="mt-5 flex justify-end">
@@ -423,7 +423,7 @@ export function LivePrepWorkspace({
         onClose={() => { setPendingCommand(null); setPendingTask(null); }}
         onConfirm={async () => { if (pendingTask) await finishAction(() => correctPrepCompletionAction({ requestId: requestId(), taskId: pendingTask.id, expectedVersion: pendingTask.version, correctionNote }), "Prep inventory posting reversed with linked evidence."); }}
       >
-        <label className="text-sm font-semibold">Correction reason<textarea className="mt-2 min-h-24 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 font-normal outline-none focus:border-[var(--accent)]" value={correctionNote} maxLength={2000} onChange={(event) => setCorrectionNote(event.target.value)} /></label>
+        <label className="text-sm font-semibold">Correction reason<textarea className="mt-2 min-h-24 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 font-normal outline-none focus:border-[var(--accent)]" value={correctionNote} maxLength={2000} onChange={(event) => setCorrectionNote(event.target.value)} /></label>
       </ConfirmActionDialog>
     </section>
   );

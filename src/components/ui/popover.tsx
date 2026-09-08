@@ -86,7 +86,7 @@ export function Popover({
             role="dialog"
             aria-label={label}
             className={cn(
-              "absolute top-[calc(100%+.5rem)] z-50 w-[min(92vw,360px)] rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-2 shadow-[var(--shadow-float)]",
+              "absolute top-[calc(100%+.5rem)] z-50 w-[min(92vw,360px)] rounded-[20px] bg-[var(--card)] p-2 shadow-[var(--shadow-float)]",
               align === "end" ? "right-0" : "left-0",
               contentClassName,
             )}

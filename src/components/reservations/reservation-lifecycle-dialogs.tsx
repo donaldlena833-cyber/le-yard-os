@@ -132,7 +132,7 @@ function CurrentCommitment({
   model: ReservationHostModel;
 }) {
   return (
-    <div className="grid gap-3 rounded-[16px] border border-[var(--line)] bg-[var(--canvas)] p-4 sm:grid-cols-2">
+    <div className="grid gap-3 rounded-[18px] bg-[var(--inner)] shadow-[var(--shadow-card)] p-4 sm:grid-cols-2">
       <div>
         <p className="text-xs text-[var(--ink-faint)]">Current commitment</p>
         <p className="mt-1 text-sm font-semibold">
@@ -434,7 +434,7 @@ export function ReservationEditDialog({
         position="responsive-sheet"
         className="max-h-[94svh] max-w-2xl overflow-y-auto rounded-b-none sm:rounded-[24px]"
       >
-        <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] px-5 py-5 sm:px-6">
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--track)] px-5 py-5 sm:px-6">
           <div>
             <p className="eyebrow">Reservation lifecycle</p>
             <h2 id={titleId} className="mt-2 text-xl font-semibold tracking-tight">
@@ -459,7 +459,7 @@ export function ReservationEditDialog({
         {reviewPayload ? (
           <div className="space-y-5 px-5 py-5 sm:px-6" aria-busy={busy}>
             <CurrentCommitment reservation={currentReservation} model={model} />
-            <div className="grid gap-3 rounded-[16px] border border-[var(--accent)]/30 bg-[var(--accent-soft)]/45 p-4 sm:grid-cols-2">
+            <div className="grid gap-3 rounded-[18px] bg-[var(--accent-soft)] shadow-[var(--shadow-card)] p-4 sm:grid-cols-2">
               <div>
                 <p className="text-xs text-[var(--ink-faint)]">Proposed time</p>
                 <p className="mt-1 text-sm font-semibold">
@@ -506,7 +506,7 @@ export function ReservationEditDialog({
                 {error.message}
               </InlineNotice>
             ) : null}
-            <div className="flex flex-col-reverse gap-2 border-t border-[var(--line)] pt-4 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-2 border-t border-[var(--track)] pt-4 sm:flex-row sm:justify-end">
               <Button
                 ref={reviewBackRef}
                 data-edit-review-back

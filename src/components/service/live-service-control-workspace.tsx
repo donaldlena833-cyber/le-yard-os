@@ -35,7 +35,7 @@ import {
 } from "@/lib/realtime/use-realtime-invalidation";
 
 const field =
-  "h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs outline-none focus:border-[var(--accent)]";
+  "h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs outline-none focus:border-[var(--accent)]";
 const area = `${field} min-h-24 py-3`;
 const optional = (value: FormDataEntryValue | null) =>
   String(value ?? "").trim() || null;
@@ -145,7 +145,7 @@ function PreshiftBrief({
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
         {fields.map(([label, value]) => (
           <div key={label} className="rounded-xl bg-[var(--canvas)] p-3">
-            <dt className="text-[10px] font-semibold uppercase tracking-[.12em] text-[var(--ink-faint)]">
+            <dt className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--ink-faint)]">
               {label}
             </dt>
             <dd className="mt-1 text-xs leading-5">{value}</dd>
@@ -153,7 +153,7 @@ function PreshiftBrief({
         ))}
         {canManage ? (
           <div className="rounded-xl bg-[var(--warning-soft)] p-3 sm:col-span-2">
-            <dt className="text-[10px] font-semibold uppercase tracking-[.12em] text-[var(--warning)]">
+            <dt className="text-xs font-semibold uppercase tracking-[.12em] text-[var(--warning)]">
               Private manager notes
             </dt>
             <dd className="mt-1 text-xs leading-5">
@@ -403,7 +403,7 @@ export function LiveServiceControlWorkspace({
         {model.canManageAvailability ? (
           <form
             onSubmit={availabilitySubmit}
-            className="grid gap-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 md:grid-cols-6"
+            className="grid gap-3 rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 md:grid-cols-6"
           >
             <select
               required
@@ -498,7 +498,7 @@ export function LiveServiceControlWorkspace({
         </div>
       </section>
       <div
-        className={`mt-9 grid gap-9 ${model.canManageLog ? "xl:grid-cols-2" : "max-w-3xl"}`}
+        className={`mt-9 grid gap-[22px] ${model.canManageLog ? "xl:grid-cols-2" : "max-w-3xl"}`}
       >
         {model.canManageLog ? (
           <section>

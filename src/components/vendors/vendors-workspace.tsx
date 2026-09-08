@@ -63,7 +63,7 @@ export function VendorsWorkspace() {
             <label className="relative block sm:w-56">
               <span className="sr-only">Search vendors</span>
               <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[var(--ink-faint)]" />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search vendors" className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-[13px] outline-none focus:border-[var(--accent)]" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search vendors" className="h-10 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] pr-3 pl-9 text-[13px] outline-none focus:border-[var(--accent)]" />
             </label>
           </div>
           <div className="mt-4 border-y border-[var(--line)]">

@@ -29,7 +29,7 @@ export function StickyActionBar({
       role="region"
       aria-label={label}
       className={cn(
-        "sticky bottom-[calc(72px+env(safe-area-inset-bottom)+0.75rem)] z-20 mt-7 rounded-[18px] border border-white/10 bg-[var(--graphite)] px-4 py-3 text-white shadow-[var(--shadow-float)] lg:bottom-3",
+        "sticky bottom-[calc(106px+env(safe-area-inset-bottom))] z-20 mt-7 rounded-[18px] bg-[var(--card)] px-4 py-3 text-[var(--text)] shadow-[var(--shadow-float)] lg:bottom-3",
         "sm:flex sm:items-center sm:justify-between sm:gap-5",
         className,
       )}
@@ -38,7 +38,7 @@ export function StickyActionBar({
         {icon ? (
           <span
             aria-hidden="true"
-            className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/10"
+            className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--button)] shadow-[var(--shadow-button)]"
           >
             {icon}
           </span>
@@ -46,7 +46,9 @@ export function StickyActionBar({
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold">{title}</p>
           {detail ? (
-            <p className="mt-1 text-xs leading-4 text-white/55">{detail}</p>
+            <p className="mt-1 text-xs leading-4 text-[var(--muted)]">
+              {detail}
+            </p>
           ) : null}
         </div>
       </div>

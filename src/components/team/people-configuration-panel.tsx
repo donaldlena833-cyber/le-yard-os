@@ -41,7 +41,7 @@ type AssignmentEditor =
   | { kind: "end"; assignment: LiveJobAssignment };
 
 const fieldClass =
-  "focus-ring h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs placeholder:text-[var(--ink-faint)]";
+  "focus-ring h-10 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-xs placeholder:text-[var(--ink-faint)]";
 
 function canConfigurePeople(workspace: WorkspaceContextValue) {
   return (
@@ -204,7 +204,7 @@ export function JobRoleConfigurationPanel({
 
   const editedRole = editor && editor.kind !== "create" ? editor.role : null;
   return (
-    <section className="mt-6 rounded-[22px] border border-[var(--line)] bg-[var(--paper)] p-5 sm:p-6">
+    <section className="mt-6 rounded-[22px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-5 sm:p-6">
       <SectionHeading
         eyebrow="Team setup"
         title="Job role catalog"
@@ -227,7 +227,7 @@ export function JobRoleConfigurationPanel({
           {roles.map((role) => (
             <article
               key={role.id}
-              className="rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4"
+              className="rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -412,7 +412,7 @@ export function JobRoleConfigurationPanel({
                     className={fieldClass}
                   />
                 </Field>
-                <label className="flex items-center gap-3 self-end rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-xs">
+                <label className="flex items-center gap-3 self-end rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 py-2.5 text-xs">
                   <input
                     name="isTipped"
                     type="checkbox"
@@ -749,7 +749,7 @@ export function EmployeeJobAssignmentPanel({
                   />
                 </Field>
                 {editedAssignment ? (
-                  <label className="flex items-center gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-xs sm:col-span-2">
+                  <label className="flex items-center gap-3 rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 py-2.5 text-xs sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={changePrivateRate}
@@ -781,7 +781,7 @@ export function EmployeeJobAssignmentPanel({
                     />
                   </Field>
                 ) : null}
-                <label className="flex items-center gap-3 self-end rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2.5 text-xs">
+                <label className="flex items-center gap-3 self-end rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 py-2.5 text-xs">
                   <input
                     name="isPrimary"
                     type="checkbox"

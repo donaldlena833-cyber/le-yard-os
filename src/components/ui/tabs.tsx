@@ -86,7 +86,7 @@ export function Tabs<const Value extends string>({
       aria-label={label}
       aria-orientation="horizontal"
       className={cn(
-        "flex items-center gap-1 overflow-x-auto border-b border-[var(--line)]",
+        "flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-[14px] bg-[var(--inner)] p-1",
         className,
       )}
     >
@@ -108,10 +108,10 @@ export function Tabs<const Value extends string>({
             onClick={() => onValueChange(item.value)}
             onKeyDown={(event) => handleKeyDown(event, index)}
             className={cn(
-              "focus-ring relative flex shrink-0 items-center justify-center gap-1.5 px-3 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
-              size === "large" ? "min-h-12" : "min-h-11",
+              "focus-ring relative flex shrink-0 items-center justify-center gap-1.5 rounded-[11px] px-4 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+              size === "large" ? "min-h-11" : "min-h-10",
               active
-                ? "text-[var(--ink)]"
+                ? "bg-[var(--button)] text-[var(--text)] shadow-[var(--shadow-button)]"
                 : "text-[var(--ink-faint)] hover:text-[var(--ink-soft)]",
             )}
           >
@@ -120,12 +120,6 @@ export function Tabs<const Value extends string>({
               <span className="numeric rounded-full bg-[var(--canvas-strong)] px-1.5 py-0.5 text-[10px] text-[var(--ink-faint)]">
                 {item.badge}
               </span>
-            ) : null}
-            {active ? (
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[var(--accent)]"
-              />
             ) : null}
           </button>
         );

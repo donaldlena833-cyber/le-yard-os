@@ -55,7 +55,7 @@ type DialogState = PolicyDialog | DraftDialog;
 type RequestAttempt = { fingerprint: string; requestId: string };
 
 const inputClass =
-  "focus-ring h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs";
+  "focus-ring h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs";
 
 function sentenceCase(value: string) {
   return value.replaceAll("_", " ");
@@ -322,7 +322,7 @@ export function TipPolicyConfiguration({
             <article
               key={policy.id}
               className={cn(
-                "rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-5",
+                "rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5",
                 !policy.isActive && "opacity-65",
               )}
             >
@@ -432,7 +432,7 @@ export function TipPolicyConfiguration({
         ref={dialogRef}
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
-        className="m-auto max-h-[calc(100svh-2rem)] w-[min(760px,calc(100vw-2rem))] overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--paper)] p-0 text-[var(--ink)] shadow-2xl backdrop:bg-black/35"
+        className="m-auto max-h-[calc(100svh-2rem)] w-[min(760px,calc(100vw-2rem))] overflow-hidden rounded-[24px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-0 text-[var(--ink)] shadow-2xl backdrop:bg-black/35"
         onCancel={(event) => {
           event.preventDefault();
           if (!busy) closeDialog();
@@ -526,7 +526,7 @@ export function TipPolicyConfiguration({
                       rows={4}
                       maxLength={2_000}
                       defaultValue={dialog.policy?.description ?? ""}
-                      className="focus-ring w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs"
+                      className="focus-ring w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs"
                     />
                   </label>
                 </div>
@@ -644,7 +644,7 @@ export function TipPolicyConfiguration({
                               step="0.0001"
                               disabled={draftMethod === "hours"}
                               defaultValue={existing?.points ?? ""}
-                              className="focus-ring h-9 w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] px-2 text-xs"
+                              className="focus-ring h-9 w-full rounded-lg bg-[var(--paper)] shadow-[var(--shadow-card)] px-2 text-xs"
                             />
                           </label>
                           <label>
@@ -657,7 +657,7 @@ export function TipPolicyConfiguration({
                               max="1440"
                               step="1"
                               defaultValue={existing?.minimumMinutes ?? ""}
-                              className="focus-ring h-9 w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] px-2 text-xs"
+                              className="focus-ring h-9 w-full rounded-lg bg-[var(--paper)] shadow-[var(--shadow-card)] px-2 text-xs"
                             />
                           </label>
                         </div>

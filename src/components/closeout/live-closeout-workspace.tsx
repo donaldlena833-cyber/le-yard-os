@@ -250,7 +250,7 @@ function TipRunDetail({ run }: { run: LiveTipRun }) {
           detail="Tracked separately"
         />
       </div>
-      <div className="mt-6 overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)]">
+      <div className="mt-6 overflow-hidden rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
         {run.allocations.map((allocation) => {
           const explanation = allocation.explanation;
           return (
@@ -357,7 +357,7 @@ export function LiveCloseoutWorkspace({
   if (!result.ok || !model) {
     return (
       <PageFrame>
-        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center">
+        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-8 text-center">
           <CircleAlert className="mx-auto size-6 text-[var(--warning)]" />
           <h2 className="mt-4 text-xl font-medium">Closeout unavailable</h2>
           <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">
@@ -761,7 +761,7 @@ export function LiveCloseoutWorkspace({
                     onChange={(event) =>
                       updateDraft("businessDate", event.target.value)
                     }
-                    className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs"
+                    className="h-11 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-xs"
                   />
                 </label>
                 <label className="py-3">
@@ -776,7 +776,7 @@ export function LiveCloseoutWorkspace({
                     onChange={(event) =>
                       updateDraft("shiftLabel", event.target.value)
                     }
-                    className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-xs"
+                    className="h-11 w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-xs"
                   />
                 </label>
               </div>
@@ -834,7 +834,7 @@ export function LiveCloseoutWorkspace({
                       onChange={(event) =>
                         updateDraft("covers", event.target.value)
                       }
-                      className="numeric h-10 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-3 text-right text-xs font-semibold"
+                      className="numeric h-10 rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-right text-xs font-semibold"
                     />
                   </label>
                 </section>
@@ -903,7 +903,7 @@ export function LiveCloseoutWorkspace({
                   value={draft.notes}
                   disabled={locked}
                   onChange={(event) => updateDraft("notes", event.target.value)}
-                  className="w-full rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 text-xs"
+                  className="w-full rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-3 text-xs"
                 />
               </label>
               {selected ? (
@@ -990,7 +990,7 @@ export function LiveCloseoutWorkspace({
               </div>
             ) : null}
             {selected && !tipRun ? (
-              <div className="rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)] p-5">
+              <div className="rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5">
                 <div className="flex items-start justify-between gap-3">
                   <span className="flex size-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
                     <Calculator className="size-4" />
@@ -1020,7 +1020,7 @@ export function LiveCloseoutWorkspace({
                   <select
                     value={policyVersionId}
                     onChange={(event) => setPolicyVersionId(event.target.value)}
-                    className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                    className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                   >
                     <option value="">Choose policy</option>
                     {model.policies.map((policy) => (
@@ -1069,7 +1069,7 @@ export function LiveCloseoutWorkspace({
             ) : null}
             {tipRun ? (
               <>
-                <div className="flex items-center justify-between gap-3 rounded-[18px] border border-[var(--line)] bg-[var(--paper-strong)] p-4">
+                <div className="flex items-center justify-between gap-3 rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
                   <div>
                     <div className="flex items-center gap-2">
                       <StatusPill

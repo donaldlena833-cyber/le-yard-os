@@ -64,7 +64,7 @@ function AnswerCard({ answer }: { answer: OperationsAnswer }) {
   const policy = guardedActionPolicy(answer.proposedAction);
   const band = confidenceBand(answer.confidence);
   return (
-    <article className="overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--paper)]">
+    <article className="overflow-hidden rounded-[24px] bg-[var(--paper)] shadow-[var(--shadow-card)]">
       <div className="p-5 sm:p-7">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill tone={band === "high" ? "positive" : band === "medium" ? "warning" : "danger"}>{Math.round(answer.confidence * 100)}% confidence</StatusPill>
@@ -106,7 +106,7 @@ function OwnerAnswerCard({
   const band = confidenceBand(answer.confidence);
   const proposal = answer.proposal;
   return (
-    <article className="overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--paper)]">
+    <article className="overflow-hidden rounded-[24px] bg-[var(--paper)] shadow-[var(--shadow-card)]">
       <div className="p-5 sm:p-7">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill tone={band === "high" ? "positive" : band === "medium" ? "warning" : "danger"}>{Math.round(answer.confidence * 100)}% confidence</StatusPill>
@@ -120,7 +120,7 @@ function OwnerAnswerCard({
           <section className="mt-6 rounded-[18px] border border-[var(--accent)]/35 bg-[var(--accent-soft)] p-4 sm:p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-[11px] font-semibold tracking-[.12em] text-[var(--accent-strong)] uppercase">Proposed task · not saved</p>
+                <p className="text-xs font-semibold tracking-[.12em] text-[var(--accent-strong)] uppercase">Proposed task · not saved</p>
                 <h4 className="mt-2 text-sm font-semibold">{proposal.change.title}</h4>
                 {proposal.change.description ? <p className="mt-1 text-xs leading-5 text-[var(--ink-soft)]">{proposal.change.description}</p> : null}
                 <p className="mt-3 text-xs text-[var(--ink-faint)]">Priority: {proposal.change.priority}{proposal.change.dueAt ? ` · Due ${new Date(proposal.change.dueAt).toLocaleString()}` : " · No due date"} · Unassigned</p>

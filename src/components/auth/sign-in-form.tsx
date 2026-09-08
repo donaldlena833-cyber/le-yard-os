@@ -31,7 +31,7 @@ export function SignInForm({
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <form action={action} className="mt-9 space-y-5">
+    <form action={action} className="mt-6 space-y-5">
       <input type="hidden" name="next" value={nextPath} />
       <label className="block">
         <span className="mb-2 block text-xs font-semibold text-[var(--ink-soft)]">
@@ -47,7 +47,7 @@ export function SignInForm({
               ? "Your preview username"
               : "donaldlena or you@leyard.com"
           }
-          className="h-12 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-4 text-sm outline-none transition-colors placeholder:text-[var(--ink-faint)] hover:border-[var(--line-strong)] focus:border-[var(--accent)]"
+          className="h-11 w-full rounded-[14px] border-0 bg-[var(--inner)] shadow-[var(--shadow-inset)] px-4 text-sm outline-none transition-colors placeholder:text-[var(--ink-faint)] hover:border-[var(--line-strong)] focus:border-[var(--accent)]"
         />
       </label>
       <label className="block">
@@ -64,13 +64,13 @@ export function SignInForm({
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
             placeholder="••••••••••••"
-            className="h-12 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-4 pr-12 text-sm outline-none transition-colors placeholder:text-[var(--ink-faint)] hover:border-[var(--line-strong)] focus:border-[var(--accent)]"
+            className="h-11 w-full rounded-[14px] border-0 bg-[var(--inner)] shadow-[var(--shadow-inset)] px-4 pr-12 text-sm outline-none transition-colors placeholder:text-[var(--ink-faint)] hover:border-[var(--line-strong)] focus:border-[var(--accent)]"
           />
           <button
             type="button"
             aria-label={showPassword ? "Hide password" : "Show password"}
             onClick={() => setShowPassword((value) => !value)}
-            className="focus-ring absolute inset-y-0 right-1 flex w-10 items-center justify-center rounded-lg text-[var(--ink-faint)]"
+            className="focus-ring absolute inset-y-0 right-1 flex w-10 items-center justify-center rounded-full text-[var(--strong)]"
           >
             {showPassword ? (
               <EyeOff className="size-4" />
@@ -82,7 +82,7 @@ export function SignInForm({
       </label>
 
       {playgroundMode || !demoMode ? (
-        <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3.5 py-3">
+        <label className="flex cursor-pointer items-start gap-3 rounded-[14px] bg-[var(--inner)] shadow-[var(--shadow-inset)] px-3.5 py-3">
           <input
             type="checkbox"
             name="remember"
@@ -93,7 +93,7 @@ export function SignInForm({
             <span className="block text-xs font-semibold text-[var(--ink-soft)]">
               Keep me logged in for 30 days
             </span>
-            <span className="mt-1 block text-[10px] leading-4 text-[var(--ink-faint)]">
+            <span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">
               Use this only on a private device. Otherwise, this device signs
               out after 8 hours.
             </span>

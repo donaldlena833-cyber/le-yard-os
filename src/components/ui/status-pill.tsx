@@ -17,7 +17,7 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border font-semibold whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-[10px] shadow-[var(--shadow-card)] font-medium whitespace-nowrap",
         size === "sm" && "min-h-6 px-2 text-xs leading-none",
         size === "md" && "min-h-7 px-2.5 text-[13px] leading-none",
         tone === "neutral" &&

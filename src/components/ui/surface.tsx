@@ -7,14 +7,10 @@ type SurfacePadding = "none" | "sm" | "md" | "lg";
 
 const variantClasses: Record<SurfaceVariant, string> = {
   plain: "",
-  outlined:
-    "border border-[var(--line)] bg-[var(--paper-strong)]",
-  raised:
-    "border border-[var(--line)] bg-[var(--paper-strong)] shadow-[var(--shadow-raised)]",
-  inset:
-    "border border-[var(--line)] bg-[var(--canvas-strong)] shadow-[0_1px_2px_rgba(25,28,24,.025)_inset]",
-  accent:
-    "border border-[color-mix(in_srgb,var(--accent-strong)_16%,transparent)] bg-[var(--accent-soft)]",
+  outlined: "bg-[var(--card)] shadow-[var(--shadow-card)]",
+  raised: "bg-[var(--card)] shadow-[var(--shadow-raised)]",
+  inset: "bg-[var(--inner)] shadow-[var(--shadow-inset)]",
+  accent: "bg-[var(--accent-soft)] shadow-[var(--shadow-card)]",
 };
 
 const paddingClasses: Record<SurfacePadding, string> = {
@@ -41,9 +37,12 @@ export function Surface({
 }: SurfaceProps) {
   return (
     <Component
+      data-slot="surface"
+      data-variant={variant}
       className={cn(
         "relative min-w-0",
-        variant !== "plain" && "overflow-hidden rounded-[18px] sm:rounded-[20px]",
+        variant !== "plain" &&
+          "overflow-hidden rounded-[18px] sm:rounded-[20px]",
         variantClasses[variant],
         paddingClasses[padding],
         className,

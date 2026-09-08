@@ -195,8 +195,8 @@ function MessageBubble({
           className={cn(
             "rounded-[18px] px-3.5 py-2.5 text-left text-[13px] leading-5",
             mine
-              ? "rounded-tr-md bg-[var(--ink)] text-[var(--paper)] dark:bg-[var(--accent)] dark:text-[#171a17]"
-              : "rounded-tl-md border border-[var(--line)] bg-[var(--paper-strong)] text-[var(--ink)]",
+              ? "rounded-tr-md bg-[var(--ink)] text-[var(--paper)] dark:bg-[var(--accent)] dark:text-[var(--on-primary)]"
+              : "rounded-tl-md bg-[var(--paper-strong)] shadow-[var(--shadow-card)] text-[var(--ink)]",
           )}
         >
           <p>{message.body}</p>
@@ -252,7 +252,7 @@ function MessageBubble({
               >
                 <SmilePlus className="size-3" />
               </summary>
-              <div className="absolute bottom-7 left-0 z-10 flex rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] p-1 shadow-lg">
+              <div className="absolute bottom-7 left-0 z-10 flex rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-1 shadow-lg">
                 {commonReactions.map((emoji) => (
                   <button
                     key={emoji}
@@ -522,7 +522,7 @@ export function MessagesWorkspace() {
         </Button>
       </div>
 
-      <div className="grid min-h-[calc(100svh-190px)] overflow-hidden rounded-[24px] border border-[var(--line)] bg-[var(--paper)] shadow-[0_12px_42px_rgba(25,28,24,.04)] lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)_290px]">
+      <div className="grid min-h-[calc(100svh-190px)] overflow-hidden rounded-[24px] bg-[var(--paper)] shadow-[var(--shadow-card)] shadow-[0_12px_42px_rgba(25,28,24,.04)] lg:grid-cols-[270px_minmax(0,1fr)] xl:grid-cols-[270px_minmax(0,1fr)_290px]">
         <nav
           aria-label="Message channels"
           className={cn(
@@ -551,7 +551,7 @@ export function MessagesWorkspace() {
               value={channelQuery}
               onChange={(event) => setChannelQuery(event.target.value)}
               placeholder="Find a channel"
-              className="h-10 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-9 text-xs placeholder:text-[var(--ink-faint)]"
+              className="h-10 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] pr-3 pl-9 text-xs placeholder:text-[var(--ink-faint)]"
             />
           </label>
           <div className="space-y-5">
@@ -594,7 +594,7 @@ export function MessagesWorkspace() {
               </div>
             </section>
           </div>
-          <div className="mt-8 rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3">
+          <div className="mt-8 rounded-2xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3">
             <div className="flex -space-x-1.5">
               {realPlaygroundPeople.map((person, index) => (
                 <Avatar
@@ -764,7 +764,7 @@ export function MessagesWorkspace() {
             ) : null}
             <form
               action={sendMessage}
-              className="flex items-end gap-2 rounded-[18px] border border-[var(--line)] bg-[var(--paper)] p-2 focus-within:border-[var(--line-strong)]"
+              className="flex items-end gap-2 rounded-[18px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-2 focus-within:border-[var(--line-strong)]"
             >
               <input
                 ref={fileInputRef}

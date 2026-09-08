@@ -534,7 +534,7 @@ function ImportDialog({
             value={importType}
             disabled={busy}
             onChange={(event) => onImportType(event.target.value as ManualCsvImportType)}
-            className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs outline-none focus:border-[var(--accent)]"
+            className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs outline-none focus:border-[var(--accent)]"
           >
             {manualCsvImportTypeValues.map((value) => (
               <option key={value} value={value}>
@@ -676,7 +676,7 @@ export function LiveIntegrationsWorkspace({
   if (!result.ok || !model) {
     return (
       <PageFrame>
-        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center">
+        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-8 text-center">
           <CircleAlert className="mx-auto size-6 text-[var(--warning)]" />
           <h2 className="mt-4 text-xl font-medium">Integration records unavailable</h2>
           <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">

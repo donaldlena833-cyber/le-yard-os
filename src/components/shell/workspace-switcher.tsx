@@ -6,6 +6,7 @@ import { useMemo, useState, useTransition } from "react";
 import { setWorkspaceSelectionAction } from "@/app/actions/workspace";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { cn } from "@/lib/utils";
+import styles from "./shell.module.css";
 
 function selectionKey(organizationId: string, locationId: string): string {
   return `${organizationId}|${locationId}`;
@@ -68,20 +69,16 @@ export function WorkspaceSwitcher({
   return (
     <div className={className}>
       <div
-        className={cn(
-          "group relative flex min-h-[50px] items-center gap-2.5 rounded-xl border border-white/[0.08] bg-white/[0.045] px-3 py-2.5 text-left transition-colors",
-          optionCount > 1 &&
-            "focus-within:border-[#dfa14a]/45 hover:border-white/[0.16] hover:bg-white/[0.065]",
-        )}
+        className={styles.switcher}
       >
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[#dfa14a]/15 text-[#dfa14a]">
+        <span className={styles.locationIcon}>
           <MapPin className="size-3.5" />
         </span>
         <span className="pointer-events-none min-w-0 flex-1">
-          <span className="block truncate text-xs font-semibold text-white">
+          <span className="block truncate text-[13px] font-semibold text-[var(--text)]">
             {workspace.activeLocation.name}
           </span>
-          <span className="mt-0.5 block truncate text-xs text-white/55">
+          <span className="mt-0.5 block truncate text-xs text-[var(--muted)]">
             {workspace.organization.name}
           </span>
         </span>
@@ -110,7 +107,7 @@ export function WorkspaceSwitcher({
                 </optgroup>
               ))}
             </select>
-            <span className="pointer-events-none relative z-20 text-white/45">
+            <span className="pointer-events-none relative z-20 text-[var(--muted)]">
               {pending ? (
                 <LoaderCircle className="size-3.5 animate-spin" />
               ) : (
@@ -123,7 +120,7 @@ export function WorkspaceSwitcher({
       <p
         aria-live="polite"
         className={cn(
-          "px-2 text-xs leading-4 text-[#f0b6ac]",
+          "px-2 text-xs leading-4 text-[var(--danger)]",
           message ? "mt-1" : "sr-only",
         )}
       >

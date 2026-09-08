@@ -367,7 +367,7 @@ function EmployeeTasksWorkspace({ timeZone }: { timeZone: string }) {
                     ? "Describe the equipment or room issue."
                     : "Describe what happened and where."
                 }
-                className="w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs"
+                className="w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs"
               />
             </label>
             <div className="mt-4 flex justify-end gap-2">
@@ -1053,7 +1053,7 @@ export function TasksWorkspace() {
                   <input
                     required
                     name="title"
-                    className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                    className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                   />
                 </label>
                 <label>
@@ -1063,7 +1063,7 @@ export function TasksWorkspace() {
                   <textarea
                     name="description"
                     rows={3}
-                    className="w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs"
+                    className="w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs"
                   />
                 </label>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -1073,7 +1073,7 @@ export function TasksWorkspace() {
                     </span>
                     <select
                       name="priority"
-                      className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                      className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                     >
                       <option>normal</option>
                       <option>high</option>
@@ -1089,7 +1089,7 @@ export function TasksWorkspace() {
                       name="dueAt"
                       type="datetime-local"
                       defaultValue="2026-08-01T18:00"
-                      className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                      className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                     />
                   </label>
                 </div>

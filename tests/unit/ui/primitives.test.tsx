@@ -40,9 +40,9 @@ describe("shared UI primitives", () => {
     const card = renderToStaticMarkup(<Card>Operational detail</Card>);
 
     expect(surface).toContain("<aside");
-    expect(surface).toContain("bg-[var(--canvas-strong)]");
+    expect(surface).toContain("bg-[var(--inner)]");
     expect(card).toContain("<article");
-    expect(card).toContain("bg-[var(--paper-strong)]");
+    expect(card).toContain("bg-[var(--card)]");
   });
 
   it("keeps status meaning visible beyond color alone", () => {

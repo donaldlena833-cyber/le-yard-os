@@ -47,6 +47,7 @@ import {
   type ServiceShiftManagementModel,
 } from "@/lib/reservations/service-shift-management";
 import { cn } from "@/lib/utils";
+import styles from "./reservations.module.css";
 
 function integerField(form: FormData, name: string): number | null {
   const raw = String(form.get(name) ?? "").trim();
@@ -286,7 +287,7 @@ export function ReservationSetupWorkspace({
       {message ? (
         <p
           role="status"
-          className="mt-4 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)] px-4 py-3 text-sm"
+          className="mt-4 rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4 py-3 text-sm"
         >
           {message}
         </p>
@@ -301,7 +302,7 @@ export function ReservationSetupWorkspace({
           exact reservations.configure capability for this location.
         </InlineNotice>
       ) : null}
-      <div className="mt-6 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
+      <div className={styles.metricGrid}>
         <Metric
           label="Tables"
           value={String(model.configuration.tableCount)}
@@ -374,7 +375,7 @@ export function ReservationSetupWorkspace({
             className="space-y-5"
             aria-describedby={canConfigure ? undefined : configurePermissionId}
           >
-            <label className="flex items-start gap-3 rounded-2xl border border-[var(--line)] p-4">
+            <label className={cn("flex items-start gap-3", styles.controlCard)}>
               <input
                 name="verifiedOnSite"
                 type="checkbox"
@@ -403,11 +404,11 @@ export function ReservationSetupWorkspace({
                 maxLength={1000}
                 disabled={!canConfigure}
                 placeholder="Verified with the FOH lead on site; note any adjusted table labels or clearances."
-                className="min-h-28 w-full rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-4 text-sm leading-6 outline-none focus:border-[var(--accent)]"
+                className="min-h-28 w-full rounded-2xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-4 text-sm leading-6 outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
               />
             </label>
             <div className="grid gap-3 sm:grid-cols-3">
-              <label className="rounded-2xl border border-[var(--line)] p-4">
+              <label className={styles.controlCard}>
                 <RadioTower className="size-4 text-[var(--accent-strong)]" />
                 <span className="mt-3 block text-xs font-semibold">
                   Public booking
@@ -420,7 +421,7 @@ export function ReservationSetupWorkspace({
                   disabled={!canConfigure}
                 />
               </label>
-              <label className="rounded-2xl border border-[var(--line)] p-4">
+              <label className={styles.controlCard}>
                 <MessageSquareText className="size-4 text-[var(--accent-strong)]" />
                 <span className="mt-3 block text-xs font-semibold">
                   Email + SMS
@@ -433,7 +434,7 @@ export function ReservationSetupWorkspace({
                   disabled={!canConfigure}
                 />
               </label>
-              <label className="rounded-2xl border border-[var(--line)] p-4">
+              <label className={styles.controlCard}>
                 <ShieldCheck className="size-4 text-[var(--accent-strong)]" />
                 <span className="mt-3 block text-xs font-semibold">
                   Staff push
@@ -476,7 +477,7 @@ export function ReservationSetupWorkspace({
           </form>
         </Surface>
       </div>
-      <section className="mt-12 border-t border-[var(--line)] pt-8">
+      <section className="mt-12 border-t border-[var(--track)] pt-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <SectionHeading
             eyebrow="Service-day controls"
@@ -586,12 +587,12 @@ export function ReservationSetupWorkspace({
                         </strong>
                       </div>
                     </div>
-                    <div className="mt-5 border-t border-[var(--line)] pt-4">
+                    <div className="mt-5 border-t border-[var(--track)] pt-4">
                       <p className="text-xs font-semibold tracking-wide text-[var(--ink-faint)] uppercase">
                         Active evidence
                       </p>
                       {shift.exceptions.length ? (
-                        <div className="mt-3 divide-y divide-[var(--line)] border-y border-[var(--line)]">
+                        <div className="mt-3 divide-y divide-[var(--track)] border-y border-[var(--track)]">
                           {shift.exceptions.map((exception) => (
                             <div
                               key={exception.id}

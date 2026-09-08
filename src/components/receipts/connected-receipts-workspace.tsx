@@ -313,7 +313,7 @@ function ReceiptInspector({
               name="vendorId"
               defaultValue={receipt.vendorId ?? ""}
               disabled={terminal}
-              className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+              className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
             >
               <option value="">Unmatched</option>
               {vendors.map((vendor) => (
@@ -331,7 +331,7 @@ function ReceiptInspector({
               name="categoryId"
               defaultValue={receipt.expenseCategoryId ?? ""}
               disabled={terminal}
-              className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+              className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
             >
               <option value="">Uncategorized</option>
               {categories.map((category) => (
@@ -349,7 +349,7 @@ function ReceiptInspector({
               name="documentNumber"
               defaultValue={receipt.documentNumber ?? ""}
               disabled={terminal}
-              className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+              className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
             />
           </label>
           <label>
@@ -361,7 +361,7 @@ function ReceiptInspector({
               type="date"
               defaultValue={receipt.documentDate ?? ""}
               disabled={terminal}
-              className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+              className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
             />
           </label>
           <label>
@@ -377,7 +377,7 @@ function ReceiptInspector({
                   : (receipt.totalCents / 100).toFixed(2)
               }
               disabled={terminal}
-              className="numeric h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+              className="numeric h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
             />
           </label>
           <label>
@@ -393,7 +393,7 @@ function ReceiptInspector({
                   : (receipt.taxCents / 100).toFixed(2)
               }
               disabled={terminal}
-              className="numeric h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+              className="numeric h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
             />
           </label>
           <label className="sm:col-span-2">
@@ -405,7 +405,7 @@ function ReceiptInspector({
               rows={3}
               defaultValue={receipt.notes ?? ""}
               disabled={terminal}
-              className="w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-xs"
+              className="w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-3 text-xs"
             />
           </label>
         </div>
@@ -548,7 +548,7 @@ function ReceiptInspector({
                     aria-label="Unlinked expense"
                     value={expenseTargetId}
                     onChange={(event) => setExpenseTargetId(event.target.value)}
-                    className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                    className="h-10 min-w-0 flex-1 rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                   >
                     <option value="">Choose a recent unlinked expense</option>
                     {availableExpenses.map((expense) => (
@@ -602,7 +602,7 @@ function ReceiptInspector({
                     onChange={(event) =>
                       setDeliveryTargetId(event.target.value)
                     }
-                    className="h-10 min-w-0 flex-1 rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-xs"
+                    className="h-10 min-w-0 flex-1 rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] px-3 text-xs"
                   >
                     <option value="">Choose a recent unlinked delivery</option>
                     {availableDeliveries.map((delivery) => (
@@ -840,7 +840,7 @@ export function ConnectedReceiptsWorkspace({
   if (model.status !== "ready") {
     return (
       <PageFrame>
-        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--paper-strong)] p-8 text-center">
+        <section className="mx-auto mt-[10svh] max-w-xl rounded-[24px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-8 text-center">
           <TriangleAlert className="mx-auto size-6 text-[var(--warning)]" />
           <h2 className="mt-4 text-xl font-medium">
             {model.status === "forbidden"
@@ -983,7 +983,7 @@ export function ConnectedReceiptsWorkspace({
               maxLength={120}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search documents and OCR"
-              className="h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] pr-3 pl-10 text-xs"
+              className="h-11 w-full rounded-xl bg-[var(--paper)] shadow-[var(--shadow-card)] pr-3 pl-10 text-xs"
             />
           </label>
           <Button type="submit" variant="secondary">
@@ -1028,7 +1028,7 @@ export function ConnectedReceiptsWorkspace({
         </div>
       ) : null}
 
-      <section className="mt-5 overflow-hidden rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)]">
+      <section className="mt-5 overflow-hidden rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
         <div className="hidden grid-cols-[1.2fr_.8fr_.7fr_.65fr_auto] gap-4 bg-[var(--canvas-strong)] px-4 py-2.5 text-xs font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase sm:grid">
           <span>Document</span>
           <span>Date</span>

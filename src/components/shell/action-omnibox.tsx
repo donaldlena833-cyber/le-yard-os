@@ -32,6 +32,7 @@ import {
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { getCommandAvailability } from "@/lib/connectivity/command-availability";
 import { cn } from "@/lib/utils";
+import styles from "./shell.module.css";
 
 type DisplayGroup = OmniboxGroup | "recent";
 
@@ -193,27 +194,27 @@ export function ActionOmnibox({
       initialFocusSelector="[data-omnibox-input]"
       position="top"
       returnFocusTarget={returnFocusTarget}
-      className="max-w-2xl"
+      className={styles.omnibox}
     >
-      <div className="flex items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3 sm:px-5">
+      <div className={styles.omniboxHeader}>
         <div className="min-w-0">
-          <h2 id="action-omnibox-title" className="text-sm font-semibold tracking-[-0.02em]">
+          <h2 id="action-omnibox-title" className={styles.omniboxTitle}>
             Actions
           </h2>
           <p className="mt-0.5 truncate text-xs text-[var(--ink-faint)]">
-            {workspace.activeLocation.name} · authorized workspace commands
+            {workspace.activeLocation.name} · workspace actions
           </p>
         </div>
-        <Button variant="quiet" size="icon" aria-label="Close action menu" onClick={closeOmnibox}>
+        <Button variant="quiet" size="icon" className={styles.iconButton} aria-label="Close action menu" onClick={closeOmnibox}>
           <X className="size-4" />
         </Button>
       </div>
 
-      <form onSubmit={submit} className="border-b border-[var(--line)] px-4 py-3 sm:px-5">
+      <form onSubmit={submit} className="px-[22px] pb-3">
         <label htmlFor="action-omnibox-input" className="sr-only">
           Search authorized actions
         </label>
-        <div className="flex min-h-12 items-center gap-3 rounded-xl bg-[var(--canvas)] px-3">
+        <div className={styles.omniboxSearch}>
           <Search aria-hidden="true" className="size-4 shrink-0 text-[var(--ink-faint)]" />
           <input
             id="action-omnibox-input"
@@ -259,7 +260,7 @@ export function ActionOmnibox({
               <h3
                 id={`omnibox-group-${group}`}
                 role="presentation"
-                className="flex items-center gap-2 px-3 py-2 text-xs font-semibold tracking-[0.13em] text-[var(--ink-faint)] uppercase"
+                className={styles.omniboxGroup}
               >
                 <Icon aria-hidden="true" className="size-3.5" />
                 {groupContent[group].label}
@@ -288,7 +289,8 @@ export function ActionOmnibox({
                       onMouseEnter={() => setActiveIndex(absoluteIndex)}
                       onClick={() => execute(row.action)}
                       className={cn(
-                        "focus-ring flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors",
+                        "focus-ring flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left transition-colors",
+                        styles.omniboxRow,
                         selected && commandAvailability.available
                           ? "bg-[var(--canvas-strong)] text-[var(--ink)]"
                           : commandAvailability.available
@@ -328,7 +330,7 @@ export function ActionOmnibox({
         ) : null}
       </div>
 
-      <p className="border-t border-[var(--line)] px-5 py-3 text-xs leading-4 text-[var(--ink-faint)]">
+      <p className={styles.omniboxFooter}>
         Recent history stores only action IDs and base workspace paths on this device—never search text or guest data.
       </p>
     </Modal>
