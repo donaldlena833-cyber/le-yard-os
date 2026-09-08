@@ -150,7 +150,7 @@ function ScenarioCrewTodayWorkspace({
           ["Next", lanes.next],
           ["Close", lanes.close],
         ] as const).map(([title, entries]) => (
-          <section key={title} className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 shadow-[var(--shadow-card)]">
+          <section key={title} className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
             <h3 className="text-xs font-semibold tracking-[0.12em] text-[var(--ink-faint)] uppercase">{title}</h3>
             <div className="mt-4 space-y-3">
               {entries.map((entry) => {
@@ -221,10 +221,10 @@ export function SaturdayServiceTodayWorkspace({
       </section>
 
       <section aria-label="Full-day service metrics" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Full day" value="96 covers" detail="36 lunch · 60 dinner" />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Dinner peak" value="60 seated" detail="17 of 17 tables occupied" />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Net sales" value="$5,460" detail="$4,200 dinner · $70 per cover" />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Roster" value={`${scenarioNow.metrics.onShift} on`} detail="Synthetic fixed-clock assignments" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Full day" value="96 covers" detail="36 lunch · 60 dinner" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Dinner peak" value="60 seated" detail="17 of 17 tables occupied" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Net sales" value="$5,460" detail="$4,200 dinner · $70 per cover" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Roster" value={`${scenarioNow.metrics.onShift} on`} detail="Synthetic fixed-clock assignments" />
       </section>
 
       <div className="mt-8 grid gap-8 xl:grid-cols-[1.45fr_.8fr] xl:gap-12">
@@ -243,7 +243,7 @@ export function SaturdayServiceTodayWorkspace({
                 { icon: ChefHat, label: "Kitchen", value: "Delay open", note: "Manager touch linked to the source incident" },
                 { icon: CircleDollarSign, label: "Dinner average", value: "$70", note: "Net sales per completed cover" },
               ].map((item) => (
-                <div key={item.label} className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 shadow-[var(--shadow-card)]">
+                <div key={item.label} className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
                   <item.icon className="size-4 text-[var(--accent-strong)]" />
                   <p className="mt-5 text-xs font-semibold tracking-[0.08em] text-[var(--ink-faint)] uppercase">{item.label}</p>
                   <p className="numeric mt-2 text-xl font-semibold tracking-[-0.04em]">{item.value}</p>
@@ -256,7 +256,7 @@ export function SaturdayServiceTodayWorkspace({
           <div className="grid gap-8 lg:grid-cols-[.85fr_1.15fr]">
             <section>
               <SectionHeading eyebrow="Next" title="Locked arrival waves" detail="60 dinner covers · 12 per wave · limit 14" />
-              <div className="space-y-3 rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5 shadow-[var(--shadow-card)]">
+              <div className="space-y-3 rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-5">
                 {pacing.map((period) => (
                   <div key={period.label} className="grid grid-cols-[44px_1fr_32px] items-center gap-3">
                     <span className={cn("text-xs font-semibold", period.current ? "text-[var(--accent-strong)]" : "text-[var(--ink-faint)]")}>{period.label}</span>
@@ -271,7 +271,7 @@ export function SaturdayServiceTodayWorkspace({
 
             <section>
               <SectionHeading eyebrow="Roster" title="Who’s operating" detail={`8 shown · ${scenarioNow.metrics.onShift} on at the fixed clock`} />
-              <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+              <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
                 {saturdayTeam.map((person, index) => (
                   <div key={person.name} className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--line)] px-4 py-3 first:border-0 sm:grid-cols-[1fr_100px_92px]">
                     <div className="flex min-w-0 items-center gap-3">
@@ -290,7 +290,7 @@ export function SaturdayServiceTodayWorkspace({
         <aside className="space-y-[22px]">
           <section>
             <SectionHeading eyebrow="Exceptions" title={`${saturdayServiceActions.length} source-linked actions`} detail="Open the source workflow to investigate. These cards do not resolve records." />
-            <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+            <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
               {saturdayServiceActions.map((action) => {
                 const Icon = action.icon;
                 return (
@@ -312,7 +312,7 @@ export function SaturdayServiceTodayWorkspace({
 
           <section>
             <SectionHeading eyebrow="Close" title="One full-day reconciliation" />
-            <div className="space-y-4 rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 shadow-[var(--shadow-card)]">
+            <div className="space-y-4 rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
               {[
                 ["Gross → net", "$5,460", "$5,560 gross − $60 comps − $40 voids"],
                 ["Tenders", "$5,460", "$1,092 cash + $4,368 card"],
@@ -371,7 +371,7 @@ function EmployeeTodayWorkspace() {
             <SectionHeading eyebrow="Priority" title="Open shifts & swaps" detail="Ask to pick up a shift; an owner or manager approves it." className="mb-0" />
             <Link href="/schedule" className="focus-ring hidden items-center gap-1 text-xs font-semibold text-[var(--accent-strong)] sm:flex">Open schedule <ArrowRight className="size-3" /></Link>
           </div>
-          <div className="mt-4 overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+          <div className="mt-4 overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             {employeeOpenShifts.map((shift) => {
               const requested = requestedShift === shift.id;
               return (
@@ -387,7 +387,7 @@ function EmployeeTodayWorkspace() {
 
         <section>
           <div className="flex items-end justify-between gap-3"><SectionHeading eyebrow="Pay" title="This week" detail="Tips and hourly pay update after approval." className="mb-0" /><WalletCards className="mb-1 size-5 text-[var(--accent)]" /></div>
-          <div className="mt-4 overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+          <div className="mt-4 overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             <div className="flex items-baseline justify-between gap-3 px-4 py-5"><span className="text-xs text-[var(--ink-faint)]">Estimated earned</span><span className="numeric text-2xl font-semibold tracking-[-0.04em]">$464.40</span></div>
             <div className="grid grid-cols-3 divide-x divide-[var(--line)] border-t border-[var(--line)] bg-[var(--paper)]"><div className="px-4 py-4"><p className="numeric text-base font-semibold">22.5h</p><p className="mt-1 text-xs text-[var(--ink-faint)]">Hours</p></div><div className="px-4 py-4"><p className="numeric text-base font-semibold">$104</p><p className="mt-1 text-xs text-[var(--ink-faint)]">Tips</p></div><div className="px-4 py-4"><p className="numeric text-base font-semibold">$360</p><p className="mt-1 text-xs text-[var(--ink-faint)]">Hourly</p></div></div>
           </div>
@@ -397,7 +397,7 @@ function EmployeeTodayWorkspace() {
 
       <section className="mt-8">
         <div className="flex items-end justify-between gap-3"><SectionHeading eyebrow="Your week" title="Upcoming shifts" detail="Release a shift from the schedule when you need coverage." className="mb-0" /><Link href="/schedule" className="focus-ring text-xs font-semibold text-[var(--accent-strong)]">Manage availability</Link></div>
-        <div className="mt-4 overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+        <div className="mt-4 overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
           {[{ day: "Tonight · Aug 8", time: "4:00–11:00 PM", covers: 86 }, { day: "Sat · Aug 9", time: "4:30–11:30 PM", covers: 74 }].map((shift, index) => (
             <div key={shift.day} className="flex flex-wrap items-center gap-4 border-t border-[var(--line)] px-4 py-4 first:border-0"><span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]"><CalendarDays className="size-4" /></span><div className="min-w-0 flex-1"><p className="text-sm font-semibold">{shift.day}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{shift.time} · {shift.covers} covers scheduled</p></div>{index === 0 ? <StatusPill tone="positive">Confirmed</StatusPill> : <StatusPill tone="neutral">Published</StatusPill>}</div>
           ))}
@@ -416,7 +416,7 @@ function ChefTodayWorkspace() {
         <div className="absolute inset-0 workspace-grid opacity-20" />
         <div className="relative flex flex-col justify-between gap-7 xl:flex-row xl:items-end"><div><p className="text-xs font-semibold tracking-[0.14em] text-[#dfa14a] uppercase">Kitchen today</p><h2 className="mt-4 text-[clamp(2rem,4.2vw,4rem)] leading-none font-medium tracking-[-0.065em]">Good afternoon, {firstName}.</h2><p className="mt-4 text-sm leading-6 text-white/55">Le Yard · Back of house · Friday service</p></div><div className="flex items-end gap-8 border-t border-white/10 pt-5 xl:border-0 xl:pt-0"><div><p className="text-xs tracking-[0.12em] text-white/55 uppercase">Covers tonight</p><p className="numeric mt-2 text-3xl font-medium tracking-[-0.05em]">86</p></div><div><p className="text-xs tracking-[0.12em] text-white/55 uppercase">Line status</p><p className="mt-2 text-2xl font-medium tracking-[-0.05em]">Ready</p></div></div></div>
       </section>
-      <div className="mt-8 grid gap-8 xl:grid-cols-[1.2fr_.8fr]"><section><div className="flex items-end justify-between gap-3"><SectionHeading eyebrow="Priority" title="Kitchen worklist" detail="Today’s kitchen priorities." className="mb-0" /><Link href="/kitchen" className="focus-ring hidden items-center gap-1 text-xs font-semibold text-[var(--accent-strong)] sm:flex">Open kitchen <ArrowRight className="size-3" /></Link></div><div className="mt-4 overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">{[{ title: "Publish BOH schedule", detail: "Saturday prep coverage has one open shift", tone: "warning" as const }, { title: "Review filet au poivre spec", detail: "Portion cost changes with the 180 g filet", tone: "neutral" as const }, { title: "Check produce count", detail: "Roma tomatoes and basil need a count before prep", tone: "positive" as const }].map((item) => <div key={item.title} className="flex items-center gap-3 border-t border-[var(--line)] px-4 py-4 first:border-0"><span className={cn("size-2 rounded-full", item.tone === "warning" ? "bg-[var(--warning)]" : item.tone === "positive" ? "bg-[var(--positive)]" : "bg-[var(--accent)]")} /><div className="min-w-0 flex-1"><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{item.detail}</p></div><ChevronRight className="size-4 text-[var(--ink-faint)]" /></div>)}</div></section><section><SectionHeading eyebrow="Menu costing" title="Recipes to review" detail="Portion specs and current prices." /><div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]"><div className="flex items-center justify-between border-t border-[var(--line)] px-4 py-4 first:border-0"><div><p className="text-sm font-semibold">Filet au poivre</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">180 g filet · sauce · fries</p></div><StatusPill tone="warning">Adjust</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-4 py-4"><div><p className="text-sm font-semibold">Tomato toast</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">Yield and ingredient costs current</p></div><StatusPill tone="positive">Costed</StatusPill></div></div></section></div>
+      <div className="mt-8 grid gap-8 xl:grid-cols-[1.2fr_.8fr]"><section><div className="flex items-end justify-between gap-3"><SectionHeading eyebrow="Priority" title="Kitchen worklist" detail="Today’s kitchen priorities." className="mb-0" /><Link href="/kitchen" className="focus-ring hidden items-center gap-1 text-xs font-semibold text-[var(--accent-strong)] sm:flex">Open kitchen <ArrowRight className="size-3" /></Link></div><div className="mt-4 overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">{[{ title: "Publish BOH schedule", detail: "Saturday prep coverage has one open shift", tone: "warning" as const }, { title: "Review filet au poivre spec", detail: "Portion cost changes with the 180 g filet", tone: "neutral" as const }, { title: "Check produce count", detail: "Roma tomatoes and basil need a count before prep", tone: "positive" as const }].map((item) => <div key={item.title} className="flex items-center gap-3 border-t border-[var(--line)] px-4 py-4 first:border-0"><span className={cn("size-2 rounded-full", item.tone === "warning" ? "bg-[var(--warning)]" : item.tone === "positive" ? "bg-[var(--positive)]" : "bg-[var(--accent)]")} /><div className="min-w-0 flex-1"><p className="text-sm font-semibold">{item.title}</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">{item.detail}</p></div><ChevronRight className="size-4 text-[var(--ink-faint)]" /></div>)}</div></section><section><SectionHeading eyebrow="Menu costing" title="Recipes to review" detail="Portion specs and current prices." /><div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]"><div className="flex items-center justify-between border-t border-[var(--line)] px-4 py-4 first:border-0"><div><p className="text-sm font-semibold">Filet au poivre</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">180 g filet · sauce · fries</p></div><StatusPill tone="warning">Adjust</StatusPill></div><div className="flex items-center justify-between border-t border-[var(--line)] px-4 py-4"><div><p className="text-sm font-semibold">Tomato toast</p><p className="mt-1 text-xs leading-5 text-[var(--ink-faint)]">Yield and ingredient costs current</p></div><StatusPill tone="positive">Costed</StatusPill></div></div></section></div>
     </PageFrame>
   );
 }
@@ -477,10 +477,10 @@ export function TodayWorkspace() {
       </section>
 
       <section aria-label="Today’s key metrics" className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Covers" value="—" detail="Connect Resy to import reservations" />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Scheduled labor" value="—" detail="Publish a live schedule" />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Projected sales" value="—" detail="Connect Toast to import sales" />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Prep complete" value="—" detail="No checklist data yet" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Covers" value="—" detail="Connect Resy to import reservations" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Scheduled labor" value="—" detail="Publish a live schedule" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Projected sales" value="—" detail="Connect Toast to import sales" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Prep complete" value="—" detail="No checklist data yet" />
       </section>
 
       <div className="mt-8 grid gap-8 xl:grid-cols-[1.45fr_.8fr] xl:gap-12">
@@ -491,7 +491,7 @@ export function TodayWorkspace() {
             detail={`${team.length} real users in this playground account set`}
             action={<Link href="/vendors" className="focus-ring inline-flex min-h-9 items-center gap-1 rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">Open vendors <ArrowRight className="size-3" /></Link>}
           />
-          <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+          <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             <div className="grid grid-cols-[1fr_auto] items-center bg-[var(--canvas-strong)] px-4 py-3 text-xs font-semibold tracking-[0.1em] text-[var(--ink-faint)] uppercase sm:grid-cols-[1fr_110px_110px]">
               <span>Team member</span>
               <span className="hidden sm:block">Shift</span>
@@ -519,7 +519,7 @@ export function TodayWorkspace() {
           <div className="mt-9 grid gap-8 md:grid-cols-2">
             <section>
               <SectionHeading eyebrow="Run of show" title="Before doors" detail={`Local time · ${workspace.activeLocation.name}`} />
-              <ol className="relative rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-5 py-5 shadow-[var(--shadow-card)] before:absolute before:top-6 before:bottom-6 before:left-[23px] before:w-px before:bg-[var(--line-strong)]">
+              <ol className="relative rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-5 py-5 before:absolute before:top-6 before:bottom-6 before:left-[23px] before:w-px before:bg-[var(--line-strong)]">
                 {[
                   ["Before service", "Lineup & allergy review", "Managers"],
                   ["Before service", "Family meal", "Mateo"],
@@ -540,7 +540,7 @@ export function TodayWorkspace() {
 
             <section>
               <SectionHeading eyebrow="Reservations" title="Pacing" detail="No Resy feed connected" />
-              <div className="rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-5 py-8 text-center text-sm text-[var(--ink-faint)] shadow-[var(--shadow-card)]">Connect Resy to see covers by service window.</div>
+              <div className="rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-5 py-8 text-center text-sm text-[var(--ink-faint)]">Connect Resy to see covers by service window.</div>
               <div className="mt-4 flex items-start gap-3 rounded-2xl bg-[var(--positive-soft)] px-4 py-3.5 text-xs leading-5 text-[var(--positive)]">
                 <Sparkles className="mt-0.5 size-3.5 shrink-0" />
                 This dashboard stays empty until live service data is connected.
@@ -555,7 +555,7 @@ export function TodayWorkspace() {
             title={initialActions.length ? `${initialActions.length} source-linked exceptions` : "All clear"}
             detail="Open a source workflow to act; this summary never finalizes a record."
           />
-          <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+          <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             {initialActions.map((action) => {
               const Icon = action.icon;
               return (
@@ -579,7 +579,7 @@ export function TodayWorkspace() {
 
           <section className="mt-9">
             <SectionHeading eyebrow="Service pulse" title="Tonight at a glance" />
-            <div className="space-y-5 rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 shadow-[var(--shadow-card)]">
+            <div className="space-y-5 rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
               {[
                 { icon: UsersRound, label: "Team confirmations", value: "—", note: "Publish a schedule to collect acknowledgements" },
                 { icon: Utensils, label: "Menu readiness", value: "—", note: "Add kitchen checklists when ready" },

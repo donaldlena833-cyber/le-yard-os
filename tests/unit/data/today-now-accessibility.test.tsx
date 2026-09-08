@@ -60,7 +60,7 @@ const exceptions: ServiceDayException[] = slice.exceptions.map(
 afterEach(() => cleanup());
 
 describe("Host/service Today Now accessibility", () => {
-  it("exposes a named region, dated links, freshness, and 48px dominant action", () => {
+  it("exposes a named region, dated links, freshness, and 44px shared primary action", () => {
     const { container } = render(
       <HostServiceNow slice={slice} action={action} exceptions={exceptions} />,
     );
@@ -68,7 +68,8 @@ describe("Host/service Today Now accessibility", () => {
     expect(screen.getByRole("region", { name: /host service now/i })).toBeTruthy();
     const primaryAction = screen.getByRole("link", { name: "Open reservation book" });
     expect(primaryAction.getAttribute("href")).toBe("/reservations?date=2026-08-09");
-    expect(primaryAction.className).toContain("min-h-12");
+    expect(primaryAction.className).toContain("min-h-11");
+    expect(primaryAction.className).toContain("shadow-[var(--shadow-primary)]");
     expect(primaryAction.tabIndex).toBe(0);
 
     const exception = screen.getByRole("link", { name: /Guests waiting to be seated/i });

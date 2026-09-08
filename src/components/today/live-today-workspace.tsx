@@ -15,6 +15,7 @@ import {
 import Link from "next/link";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Avatar } from "@/components/ui/avatar";
+import { buttonVariants } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
@@ -121,7 +122,7 @@ export function HostServiceNow({
           href={action.destination}
           data-analytics-name={action.analyticsName}
           data-offline-policy={action.offlinePolicy}
-          className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 text-sm font-semibold text-[var(--on-primary)] transition-[background-color,transform] hover:-translate-y-px hover:bg-[var(--primary-hover)] hover:text-white motion-reduce:transform-none"
+          className={buttonVariants({ variant: "primary" })}
         >
           <LayoutDashboard className="size-4" />
           {action.label}
@@ -238,7 +239,7 @@ function ServiceStatusSummary({ result }: { result: LiveReadResult<LiveServiceCo
   const unavailable = result.data.availability.filter((item) => item.status === "eighty_sixed" || item.status === "running_low");
   const published = result.data.preshifts.find((preshift) => preshift.status === "published");
   if (!unavailable.length && !published) return null;
-  return <section className="mt-5 flex flex-wrap items-center gap-3 rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4 py-3.5 shadow-[var(--shadow-card)]"><span className="flex size-10 items-center justify-center rounded-xl bg-[var(--warning-soft)] text-[var(--warning)]"><AlertCircle className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Service status</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">{unavailable.length ? unavailable.map((item) => `${item.subjectLabel}: ${item.status === "eighty_sixed" ? "86" : "running low"}`).join(" · ") : "No current 86 items"}{published ? ` · ${published.servicePeriod.replaceAll("_", " ")} pre-shift published` : ""}</span></span><Link href="/service" className="focus-ring inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">Open service</Link></section>;
+  return <section className="mt-5 flex flex-wrap items-center gap-3 rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4 py-3.5"><span className="flex size-10 items-center justify-center rounded-xl bg-[var(--warning-soft)] text-[var(--warning)]"><AlertCircle className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Service status</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">{unavailable.length ? unavailable.map((item) => `${item.subjectLabel}: ${item.status === "eighty_sixed" ? "86" : "running low"}`).join(" · ") : "No current 86 items"}{published ? ` · ${published.servicePeriod.replaceAll("_", " ")} pre-shift published` : ""}</span></span><Link href="/service" className="focus-ring inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">Open service</Link></section>;
 }
 
 function dollars(cents: number, currencyCode: string): string {
@@ -252,7 +253,7 @@ function dollars(cents: number, currencyCode: string): string {
 function ErrorState({ message }: { message: string }) {
   return (
     <PageFrame>
-      <section className="mx-auto mt-[8svh] max-w-xl rounded-[28px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-7 text-center shadow-[var(--shadow-card)]">
+      <section className="mx-auto mt-[8svh] max-w-xl rounded-[28px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-7 text-center">
         <AlertCircle className="mx-auto size-6 text-[var(--danger)]" />
         <h2 className="mt-4 text-xl font-medium tracking-[-0.04em]">Today is temporarily unavailable</h2>
         <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">{message}</p>
@@ -329,7 +330,7 @@ function EmployeeTodayWorkspace({
               </Link>
             }
           />
-          <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+          <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             {openShifts.map((shift, index) => (
               <div key={shift.id} className="flex flex-wrap items-center gap-4 border-b border-[var(--line)] px-3 py-4 last:border-0">
                 <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
@@ -382,7 +383,7 @@ function EmployeeTodayWorkspace({
 
       <section className="mt-9">
         <SectionHeading eyebrow="Team messages" title="Announcements" detail="Messages shared with the team." />
-        <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+        <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
           {data.announcements.map((announcement) => (
             <div key={announcement.id} className="flex items-start gap-3 px-3 py-4"><Megaphone className="mt-0.5 size-4 text-[var(--accent-strong)]" /><div><p className="text-xs leading-5">{announcement.body}</p><p className="mt-1 text-xs text-[var(--ink-faint)]">{announcement.authorName}</p></div></div>
           ))}
@@ -434,7 +435,7 @@ function ChefTodayWorkspace({
       <div className="mt-8 grid gap-[22px] xl:grid-cols-[1.2fr_.8fr]">
         <section>
           <SectionHeading eyebrow="Back of house" title="Kitchen schedule" detail="Published BOH coverage for today." action={<Link href="/schedule" className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--canvas-strong)]">Edit schedule <ArrowRight className="size-3" /></Link>} />
-          <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+          <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             {kitchenShifts.map((shift, index) => <div key={shift.id} className="flex items-center gap-3 px-3 py-4"><Avatar name={shift.employeeName} index={index} /><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{shift.employeeName}</p><p className="mt-1 text-xs text-[var(--ink-faint)]">{shift.jobName} · {shift.startLabel}–{shift.endLabel}</p></div><StatusPill tone={shift.isOpen ? "warning" : "neutral"}>{shift.isOpen ? "Open" : "Published"}</StatusPill></div>)}
             {!kitchenShifts.length ? <div className="px-5 py-10 text-center"><UsersRound className="mx-auto size-5 text-[var(--ink-faint)]" /><p className="mt-3 text-xs font-semibold">No kitchen shifts published today</p><p className="mt-1 text-xs text-[var(--ink-faint)]">Create or publish the BOH schedule when you are ready.</p></div> : null}
           </div>
@@ -443,8 +444,8 @@ function ChefTodayWorkspace({
         <aside>
           <SectionHeading eyebrow="Kitchen tools" title="Recipes & vendors" detail="Keep portion specs and current purchase prices close to service." />
           <div className="space-y-3">
-            <Link href="/kitchen" className="focus-ring flex items-center gap-3 rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 shadow-[var(--shadow-card)] transition-[background,transform,border-color,box-shadow] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)] hover:shadow-[var(--shadow-raised)]"><ClipboardCheck className="size-4 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Recipes & portion cost</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">Edit ingredients, weights, and measured costs.</span></span><ArrowRight className="size-3.5 text-[var(--ink-faint)]" /></Link>
-            <Link href="/vendors" className="focus-ring flex items-center gap-3 rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 shadow-[var(--shadow-card)] transition-[background,transform,border-color,box-shadow] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)] hover:shadow-[var(--shadow-raised)]"><PackageSearch className="size-4 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Vendors & prices</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">Review current food purchasing costs.</span></span><ArrowRight className="size-3.5 text-[var(--ink-faint)]" /></Link>
+            <Link href="/kitchen" className="focus-ring flex items-center gap-3 rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 transition-[background,transform,border-color,box-shadow] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)] hover:shadow-[var(--shadow-raised)]"><ClipboardCheck className="size-4 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Recipes & portion cost</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">Edit ingredients, weights, and measured costs.</span></span><ArrowRight className="size-3.5 text-[var(--ink-faint)]" /></Link>
+            <Link href="/vendors" className="focus-ring flex items-center gap-3 rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4 transition-[background,transform,border-color,box-shadow] duration-200 hover:-translate-y-px hover:border-[var(--line-strong)] hover:bg-[var(--paper)] hover:shadow-[var(--shadow-raised)]"><PackageSearch className="size-4 text-[var(--accent-strong)]" /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Vendors & prices</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">Review current food purchasing costs.</span></span><ArrowRight className="size-3.5 text-[var(--ink-faint)]" /></Link>
           </div>
         </aside>
       </div>
@@ -527,11 +528,11 @@ export function LiveTodayWorkspace({
       <ReservationNowResult snapshot={snapshot.data} />
 
       <section aria-label="Today’s live metrics" className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Scheduled" value={String(data.scheduledCount)} detail={`${data.openShiftCount} open for coverage`} />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Coverage" value={String(Math.max(0, data.scheduledCount - data.openShiftCount))} detail={`${data.openShiftCount} open for coverage`} />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]" label="Open tasks" value={String(data.openTaskCount)} detail="Visible in your access scope" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Scheduled" value={String(data.scheduledCount)} detail={`${data.openShiftCount} open for coverage`} />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Coverage" value={String(Math.max(0, data.scheduledCount - data.openShiftCount))} detail={`${data.openShiftCount} open for coverage`} />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Open tasks" value={String(data.openTaskCount)} detail="Visible in your access scope" />
         <Metric
-          className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4 shadow-[var(--shadow-card)]"
+          className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4"
           label="Closeout"
           value={data.closeout ? dollars(data.closeout.netSalesCents, data.currencyCode) : "Not filed"}
           detail={data.closeout ? `${data.closeout.covers} covers · ${data.closeout.status}` : "No live sales summary yet"}
@@ -546,7 +547,7 @@ export function LiveTodayWorkspace({
             detail="Latest published schedule for this business week"
             action={<Link href="/schedule" className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open schedule <ArrowRight className="size-3" /></Link>}
           />
-          <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+          <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
             {data.shifts.map((shift, index) => (
               <div key={shift.id} className="grid grid-cols-[1fr_auto] items-center gap-4 border-b border-[var(--line)] px-3 py-3.5 last:border-0 sm:grid-cols-[1fr_120px_120px]">
                 <span className="flex min-w-0 items-center gap-3">
@@ -575,7 +576,7 @@ export function LiveTodayWorkspace({
 
           <section className="mt-9">
             <SectionHeading eyebrow="Accountability" title="Open tasks" detail="No completion is inferred from missing data" />
-            <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] shadow-[var(--shadow-card)]">
+            <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
               {data.tasks.map((task) => (
                 <div key={task.id} className="flex items-start gap-3 px-2 py-4">
                   <ClipboardCheck className="mt-0.5 size-4 text-[var(--ink-faint)]" />
@@ -596,7 +597,7 @@ export function LiveTodayWorkspace({
         <aside className="space-y-[22px]">
           <section>
             <SectionHeading eyebrow="Team messages" title="Announcements" detail="Latest messages you are allowed to read" />
-            <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4 shadow-[var(--shadow-card)]">
+            <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4">
               {data.announcements.map((announcement) => (
                 <div key={announcement.id} className="py-4">
                   <div className="flex items-start gap-3">
