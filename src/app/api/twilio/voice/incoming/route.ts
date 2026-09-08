@@ -2,6 +2,7 @@ import twilio from "twilio";
 import { logCommunicationEvent, findGuestByPhone } from "@/lib/communications.server";
 import { elevenLabsConfigured, registerElevenLabsTwilioCall } from "@/lib/elevenlabs.server";
 import { readTwilioForm, twilioAbsoluteUrl, twilioForwardNumbers, twilioPhoneNumber, validateTwilioRequest, xmlResponse } from "@/lib/twilio.server";
+import { addReceptionGreeting } from "@/lib/voice-reception.server";
 
 export async function POST(request: Request) {
   const { params } = await readTwilioForm(request);
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
     }
   }
   const response = new twilio.twiml.VoiceResponse();
+  addReceptionGreeting(response);
   const dial = response.dial({ answerOnBridge: true, timeout: 24, timeLimit: 1800,
     callerId: twilioPhoneNumber(), action: twilioAbsoluteUrl("/api/twilio/voice/result"), method: "POST" });
   for (const [label, phone] of Object.entries(twilioForwardNumbers())) {

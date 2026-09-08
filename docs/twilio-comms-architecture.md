@@ -6,7 +6,7 @@ Use one permanent Twilio phone number as the single public identity for Le Yard 
 
 ## Day-one routing
 
-- Inbound voice: Twilio number dials Donald and Maris simultaneously. First human to accept wins.
+- Inbound voice: callers hear a short Le Yard welcome, then Twilio dials Donald and Maris simultaneously. First human to accept wins.
 - Answer confirmation: forwarded legs require a keypress before bridge to avoid carrier voicemail stealing the call.
 - No-answer path: record voicemail metadata and trigger an SMS recovery flow.
 - Inbound SMS: all messages are persisted in Le Yard OS and become one conversation tied to the guest phone identity.
@@ -16,6 +16,17 @@ Use one permanent Twilio phone number as the single public identity for Le Yard 
 ## AI-ready routing
 
 Later, ElevenLabs (or another swappable voice provider) can become the first voice hop. The AI must call Le Yard OS tools for availability and booking changes. The AI never owns inventory.
+
+### Fish Audio welcome
+
+The day-one welcome is a generated recording rather than a live synthesis request. This keeps inbound calls working if Fish Audio is unavailable and avoids paying to generate identical speech on every call.
+
+1. Create a scoped Fish Audio key and expose it locally as `FISH_API_KEY`.
+2. Optionally set `FISH_REFERENCE_ID` to the approved Le Yard voice.
+3. Run `npm run voice:generate-reception`.
+4. Deploy `public/audio/le-yard-reception.mp3` and set `TWILIO_RECEPTION_AUDIO_URL` to its public HTTPS URL.
+
+Until that URL is configured, Twilio speaks the same welcome text. A future interactive receptionist would add streaming speech recognition, an LLM dialogue layer, Fish Audio streaming TTS, and the existing human-transfer tools; it is a separate call path from this reliable greeting and ring group.
 
 ### Required agent tools
 

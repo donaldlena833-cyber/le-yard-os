@@ -63,6 +63,7 @@
     "simulation:report": "SERVICE_SIMULATION_SCOPE=isolated-nonproduction node --experimental-strip-types --experimental-transform-types scripts/full-service-simulation.mts report",
     "simulation:replay": "SERVICE_SIMULATION_SCOPE=isolated-nonproduction node --experimental-strip-types --experimental-transform-types scripts/full-service-simulation.mts replay",
     "import:opening-menu": "node scripts/import-le-yard-opening-menu.mjs",
+    "voice:generate-reception": "node scripts/generate-fish-reception-audio.mjs",
     "booking:create-client": "node scripts/create-booking-api-client.mjs",
     "verify": "npm run test:plugins && npm run lint && npm run types:database:check && npm run typecheck && npm run test && npm run test:integration && npm run build",
     "verify:full": "npm run verify && npm run test:e2e && npm audit --audit-level=high",
