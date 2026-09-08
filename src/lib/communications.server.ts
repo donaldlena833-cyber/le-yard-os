@@ -76,7 +76,18 @@ export async function hasServiceSmsConsent(phone: string) {
     .contains("metadata", { phone: normalizeE164(phone), purpose: "guest_care" })
     .order("occurred_at", { ascending: false }).order("id", { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error("SMS consent could not be checked.");
-  return data?.event_type === "sms.consent.granted";
+  if (data?.event_type === "sms.consent.granted") return true;
+  if (data?.event_type === "sms.consent.revoked") return false;
+  // A recent user-initiated exchange permits a reply about that exchange; it
+  // does not create recurring or marketing consent. The 48-hour limit is an
+  // application safeguard, not a carrier-defined consent window.
+  const inbound = await createAdminClient().from("communication_messages")
+    .select("body").eq("organization_id", tenant.organizationId)
+    .eq("location_id", tenant.locationId).eq("from_number", normalizeE164(phone))
+    .eq("direction", "inbound").gte("sent_at", new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
+    .order("sent_at", {ascending:false}).order("sid", {ascending:false}).limit(1).maybeSingle();
+  if (inbound.error) throw new Error("Reply permission could not be checked.");
+  return Boolean(inbound.data && !/^(stop|stopall|unsubscribe|cancel|end|revoke|optout|quit|help)$/i.test(inbound.data.body.trim()));
 }
 
 const privateEventTerms = ["buyout", "private event", "private dinner", "corporate event", "corporate dinner", "birthday party", "engagement party", "rehearsal dinner", "wedding", "company dinner", "holiday party"];
@@ -89,16 +100,16 @@ export function detectPrivateEventLead(text: string, partySize?: number | null) 
 export function detectReservationIntent(text: string) {
   return /\b(reservation|reserve|book|booking|table|party of|dinner|brunch|lunch)\b/i.test(text);
 }
-export async function notifyOwnersOfCommunication(input: { title: string; body: string; eventType: string }) {
+export async function notifyOwnersOfCommunication(input: { title: string; body: string; eventType: string; actionUrl?: string; required?: boolean }) {
   const tenant = await resolveLeYardTenant();
   const admin = createAdminClient();
   const { data: memberships, error } = await admin.from("organization_memberships").select("user_id")
     .eq("organization_id", tenant.organizationId).eq("status", "active").in("role", ["owner", "admin"]);
-  if (error) { console.error("communications_owner_lookup_failed"); return; }
-  if (!memberships.length) return;
+  if (error) { if(input.required) throw new Error("Owner notification unavailable."); console.error("communications_owner_lookup_failed"); return; }
+  if (!memberships.length) { if(input.required) throw new Error("No owners could be notified."); return; }
   const { error: insertError } = await admin.from("notifications").insert(memberships.map((membership) => ({
     organization_id: tenant.organizationId, user_id: membership.user_id, notification_type: input.eventType,
-    title: input.title, body: input.body, action_url: "/phone", entity_type: null, entity_id: null,
+    title: input.title, body: input.body, action_url: input.actionUrl ?? "/phone", entity_type: null, entity_id: null,
   })));
-  if (insertError) console.error("communications_owner_notification_failed");
+  if (insertError) { if(input.required) throw new Error("Owner notification could not be saved."); console.error("communications_owner_notification_failed"); }
 }

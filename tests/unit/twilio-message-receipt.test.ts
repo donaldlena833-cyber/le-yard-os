@@ -1,3 +1,4 @@
+vi.mock("@/lib/communication-groups.server",()=>({saveCommunicationMessage:vi.fn().mockResolvedValue({internal:false}),communicationThreadMode:vi.fn().mockResolvedValue("automation")}));
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createHmac } from "node:crypto";
 import { POST } from "@/app/api/twilio/sms/incoming/route";
@@ -36,4 +37,30 @@ it("honors STOP even while automation is disabled", async () => {
 it("does not acknowledge receipt when durable storage fails", async () => {
   vi.mocked(logCommunicationEvent).mockRejectedValueOnce(new Error("database unavailable"));
   expect((await POST(request("SM"))).status).toBe(503);
+});
+
+it('preserves inbound whitespace exactly for later review', async()=>{
+  const {saveCommunicationMessage}=await import('@/lib/communication-groups.server');
+  await POST(request('SM',{Body:'  Text\nwith spacing.  '}));
+  expect(saveCommunicationMessage).toHaveBeenCalledWith(expect.objectContaining({body:'  Text\nwith spacing.  '}));
+});
+it('archives before acknowledging a receipt and asks Twilio to retry if the archive fails',async()=>{
+  const {saveCommunicationMessage}=await import('@/lib/communication-groups.server');
+  vi.mocked(saveCommunicationMessage).mockRejectedValueOnce(Error('archive offline'));
+  expect((await POST(request('SM'))).status).toBe(503);
+});
+it('keeps an escalated client out of automated reservation replies',async()=>{
+  const {communicationThreadMode}=await import('@/lib/communication-groups.server');
+  vi.mocked(communicationThreadMode).mockResolvedValueOnce('human');vi.stubEnv('TWILIO_SMS_ENABLED','true');
+  const {detectReservationIntent,notifyOwnersOfCommunication}=await import('@/lib/communications.server');
+  vi.mocked(detectReservationIntent).mockReturnValue(true);
+  const r=await POST(request('SM',{Body:'I need to change my reservation'}));
+  expect(await r.text()).not.toContain('<Message');expect(notifyOwnersOfCommunication).toHaveBeenCalledWith(expect.objectContaining({eventType:'sms_human_reply'}));
+});
+it('routes employee texts and MMS to team requests even when guest automation is disabled',async()=>{
+  const {saveCommunicationMessage}=await import('@/lib/communication-groups.server');
+  vi.mocked(saveCommunicationMessage).mockResolvedValueOnce({internal:true});
+  const {notifyOwnersOfCommunication}=await import('@/lib/communications.server');
+  const r=await POST(request('MM',{Body:'Can I change my shift?',NumMedia:'1'}));
+  expect(await r.text()).not.toContain('<Message');expect(notifyOwnersOfCommunication).toHaveBeenCalledWith(expect.objectContaining({actionUrl:'/messages?group=team'}));
 });

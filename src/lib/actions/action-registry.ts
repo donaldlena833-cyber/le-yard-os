@@ -542,8 +542,8 @@ export const ACTION_REGISTRY = [
   },
   {
     id: "navigate.messages",
-    label: "Messages",
-    shortLabel: "Messages",
+    label: "Groups",
+    shortLabel: "Groups",
     description: "Open authorized location and team channels.",
     workModes: allWorkModes,
     capabilities: openCapabilityRequirement,

@@ -22,6 +22,7 @@ const providerAuthenticatedPaths = new Set([
   "/api/internal/communications/agent/availability",
   "/api/internal/communications/agent/reservations",
   "/api/internal/communications/agent/transfer-human",
+  "/api/internal/communications/agent/sms-handoff",
 ]);
 
 const publicPaths = new Set([

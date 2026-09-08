@@ -92,14 +92,22 @@ export function requireValidTwilioRequest(request: Request, params: URLSearchPar
   if (!validateTwilioRequest(request, params)) throw new Response("Forbidden", { status: 403 });
 }
 export function twilioSmsEnabled() { return process.env.TWILIO_SMS_ENABLED?.trim() === "true"; }
-export async function sendTwilioMessage(to: string, body: string) {
+export async function sendTwilioMessage(to: string, body: string, options: { mediaUrls?: string[]; actorId?: string; handoffNotice?: boolean } = {}) {
   if (!twilioSmsEnabled()) throw new Error("SMS remains disabled until campaign and carrier tests are verified.");
   const target = normalizeE164(to);
   const messagingServiceSid = required("TWILIO_MESSAGING_SERVICE_SID");
   if (!/^MG[0-9a-f]{32}$/i.test(messagingServiceSid)) throw new Error("Invalid Messaging Service SID.");
   const { hasServiceSmsConsent } = await import("@/lib/communications.server");
   if (!await hasServiceSmsConsent(target)) throw new Error("Service SMS consent is not established.");
-  return twilioRestClient().messages.create({ to: target, body, messagingServiceSid, from: twilioPhoneNumber(), statusCallback: twilioAbsoluteUrl("/api/twilio/sms/status") });
+  const { communicationThreadMode, saveCommunicationMessage } = await import("@/lib/communication-groups.server");
+  if (!options.actorId && !options.handoffNotice && await communicationThreadMode(target) === "human") throw new Error("Conversation is assigned to a human.");
+  const result = await twilioRestClient().messages.create({ to: target, ...(body ? {body} : {}), ...(options.mediaUrls?.length ? {mediaUrl:options.mediaUrls} : {}), messagingServiceSid, from: twilioPhoneNumber(), statusCallback: twilioAbsoluteUrl("/api/twilio/sms/status") });
+  try {
+    await saveCommunicationMessage({sid:result.sid,from:result.from || twilioPhoneNumber(),to:target,body,
+      status:result.status,at:(result.dateSent??result.dateCreated??new Date()).toISOString(),mediaCount:options.mediaUrls?.length??0,
+      senderKind:options.actorId?'staff':'automation',actorId:options.actorId});
+  } catch { console.error("communication_outbound_archive_pending_callback"); }
+  return result;
 }
 export async function createTwilioCall(input: { to: string; url: string; statusCallback?: string }) {
   return twilioRestClient().calls.create({

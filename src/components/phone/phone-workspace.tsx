@@ -524,6 +524,7 @@ export function PhoneWorkspace({
             </div>
           </div>
           <div className={s.headerActions}>
+            <a className={s.iconButton} href="https://operations.leyardny.com/messages?group=clients" aria-label="Open Groups"><MessageSquare size={18}/></a>
             <button
               className={s.iconButton}
               aria-label={

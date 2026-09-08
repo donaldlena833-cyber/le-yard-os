@@ -1219,6 +1219,235 @@ export type Database = {
           },
         ]
       };
+      "communication_case_notes": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "case_id": string
+          "author_id": string
+          "author_name": string
+          "body": string
+          "status": string | null
+          "created_at": string
+        }
+        Insert: {
+          "id": string
+          "organization_id": string
+          "case_id": string
+          "author_id": string
+          "author_name": string
+          "body": string
+          "status"?: string | null
+          "created_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "case_id"?: string
+          "author_id"?: string
+          "author_name"?: string
+          "body"?: string
+          "status"?: string | null
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_case_notes_organization_id_case_id_fkey"
+            columns: ["organization_id","case_id"]
+            referencedRelation: "communication_cases"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
+      "communication_cases": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "kind": string
+          "title": string
+          "body": string
+          "phone": string | null
+          "source_sid": string | null
+          "created_by": string | null
+          "created_at": string
+        }
+        Insert: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "kind": string
+          "title": string
+          "body"?: string
+          "phone"?: string | null
+          "source_sid"?: string | null
+          "created_by"?: string | null
+          "created_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "kind"?: string
+          "title"?: string
+          "body"?: string
+          "phone"?: string | null
+          "source_sid"?: string | null
+          "created_by"?: string | null
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_cases_location_id_fkey"
+            columns: ["location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_cases_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_cases_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "communication_cases_organization_id_source_sid_fkey"
+            columns: ["organization_id","source_sid"]
+            referencedRelation: "communication_messages"
+            referencedColumns: ["organization_id","sid"]
+          },
+        ]
+      };
+      "communication_messages": {
+        Row: {
+          "organization_id": string
+          "location_id": string
+          "sid": string
+          "from_number": string
+          "to_number": string
+          "body": string
+          "direction": string
+          "sender_kind": string
+          "actor_id": string | null
+          "media_count": number
+          "status": string
+          "error_code": string | null
+          "sent_at": string
+          "synced_at": string
+          "audience": string
+          "contact_name": string | null
+          "phone": string | null
+        }
+        Insert: {
+          "organization_id": string
+          "location_id": string
+          "sid": string
+          "from_number": string
+          "to_number": string
+          "body"?: string
+          "direction": string
+          "sender_kind": string
+          "actor_id"?: string | null
+          "media_count"?: number
+          "status": string
+          "error_code"?: string | null
+          "sent_at": string
+          "synced_at"?: string
+          "audience"?: string
+          "contact_name"?: string | null
+          "phone"?: string | null
+        }
+        Update: {
+          "organization_id"?: string
+          "location_id"?: string
+          "sid"?: string
+          "from_number"?: string
+          "to_number"?: string
+          "body"?: string
+          "direction"?: string
+          "sender_kind"?: string
+          "actor_id"?: string | null
+          "media_count"?: number
+          "status"?: string
+          "error_code"?: string | null
+          "sent_at"?: string
+          "synced_at"?: string
+          "audience"?: string
+          "contact_name"?: string | null
+          "phone"?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_messages_location_id_fkey"
+            columns: ["location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messages_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_messages_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
+      "communication_threads": {
+        Row: {
+          "organization_id": string
+          "location_id": string
+          "phone": string
+          "mode": string
+          "reason": string | null
+          "updated_at": string
+        }
+        Insert: {
+          "organization_id": string
+          "location_id": string
+          "phone": string
+          "mode"?: string
+          "reason"?: string | null
+          "updated_at"?: string
+        }
+        Update: {
+          "organization_id"?: string
+          "location_id"?: string
+          "phone"?: string
+          "mode"?: string
+          "reason"?: string | null
+          "updated_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "communication_threads_location_id_fkey"
+            columns: ["location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_threads_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "communication_threads_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
       "data_export_requests": {
         Row: {
           "id": string
@@ -8878,6 +9107,22 @@ export type Database = {
         }
         Relationships: []
       };
+      "communication_case_summaries": {
+        Row: {
+          "id": string | null
+          "organization_id": string | null
+          "location_id": string | null
+          "kind": string | null
+          "title": string | null
+          "body": string | null
+          "phone": string | null
+          "source_sid": string | null
+          "created_by": string | null
+          "created_at": string | null
+          "status": string | null
+        }
+        Relationships: []
+      };
       "inventory_on_hand": {
         Row: {
           "organization_id": string | null
@@ -9282,6 +9527,13 @@ export type Database = {
           "p_shift_id": string | null
         }
         Returns: Database["public"]["Tables"]["shifts"]["Row"]
+      };
+      "communication_employee_for_phone": {
+        Args: {
+          "p_organization_id": string | null
+          "p_phone": string | null
+        }
+        Returns: { "id": string | null; "display_name": string | null }[]
       };
       "complete_checklist_run": {
         Args: {
@@ -11701,6 +11953,10 @@ export const DatabaseObjectNames = {
       "checklist_templates",
       "closeout_attachments",
       "cogs_periods",
+      "communication_case_notes",
+      "communication_cases",
+      "communication_messages",
+      "communication_threads",
       "data_export_requests",
       "deliveries",
       "delivery_lines",
@@ -11829,6 +12085,7 @@ export const DatabaseObjectNames = {
     ],
     Views: [
       "approved_labor_daily",
+      "communication_case_summaries",
       "inventory_on_hand",
       "tip_run_totals",
     ],
@@ -11881,6 +12138,7 @@ export const DatabaseObjectNames = {
       "cancel_time_off_request",
       "capture_audit_event",
       "claim_open_shift",
+      "communication_employee_for_phone",
       "complete_checklist_run",
       "complete_owner_intelligence_run",
       "complete_prep_task",

@@ -1,3 +1,4 @@
+import { setCommunicationThreadMode } from "@/lib/communication-groups.server";
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { requirePhoneAccess } from "@/lib/phone-access.server";
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
   } catch(error) { return failure(error); }
 }
 const schema = z.object({ action:z.enum(["sms","call"]), requestId:z.string().uuid(), to:z.string().max(32),
-  body:z.string().trim().max(1200).optional(), staff:z.enum(["donald","maris"]).optional(), consent:z.boolean().optional() }).strict();
+  body:z.string().trim().max(1200).optional(), staff:z.enum(["donald","maris"]).optional(), consent:z.boolean().optional(), attachments:z.array(z.string().max(200)).max(3).optional() }).strict();
 
 export async function POST(request: Request) {
   let claimed = false;
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
     let to: string;
     try { to=normalizeE164(input.to); } catch { return json({error:"Enter a number with its country code."},400); }
     if (!/^\+1[2-9]\d{9}$/.test(to) || to===twilioPhoneNumber()) return json({error:"Use a +1 destination other than the Le Yard number."},400);
-    if (input.action==="sms" && (!twilioSmsEnabled() || !input.body)) return json({error:"Texting is not enabled or the message is empty."},400);
+    if (input.action==="sms" && (!twilioSmsEnabled() || (!input.body && !input.attachments?.length))) return json({error:"Texting is not enabled or the message is empty."},400);
     if (input.action==="call" && (process.env.TWILIO_OUTBOUND_ENABLED!=="true" || !input.staff)) return json({error:"Calling is not enabled or no cellphone was selected."},400);
     if (input.action==="call" && input.staff && twilioForwardNumbers()[input.staff]===to) return json({error:"Choose a destination different from the cellphone receiving your callback."},400);
     const admin = createAdminClient();
@@ -77,6 +78,19 @@ export async function POST(request: Request) {
       if(!input.consent) return json({error:"Record the recipient's permission before sending guest-care texts."},400);
       await recordServiceSmsConsent({phone:to,evidence:`Explicit guest-care permission confirmed by operator ${w.identity.userId}; request ${requestId}.`});
     }
+    const mediaUrls: string[] = [];
+    let mediaBytes = 0;
+    for (const path of input.attachments ?? []) {
+      const prefix = `${organizationId}/${w.identity.userId}/`;
+      if (!path.startsWith(prefix) || !/^[0-9a-f-]{36}\.(png|jpg)$/.test(path.slice(prefix.length))) return json({error:"Attachment does not belong to this operator."},403);
+      const attachment = await admin.storage.from("phone-attachments").info(path);
+      if (attachment.error || !attachment.data || !attachment.data.size || !['image/png','image/jpeg'].includes(attachment.data.contentType ?? '')) return json({error:"Attachment unavailable or unsupported."},400);
+      mediaBytes += attachment.data.size;
+      if(mediaBytes>4_000_000)return json({error:"Combined MMS images must be smaller than 4 MB."},400);
+      const result = await admin.storage.from("phone-attachments").createSignedUrl(path, 3600);
+      if (result.error || !result.data) throw new Error("Attachment unavailable");
+      mediaUrls.push(result.data.signedUrl);
+    }
     const meta={fingerprint,userId:w.identity.userId,to,action:input.action,status:"pending"};
     const {error:claimError}=await bucket.upload(path,JSON.stringify(meta),{contentType:"application/json",upsert:false});
     if(claimError) return json({error:"Request already submitted or history unavailable. Refresh before retrying."},409);
@@ -84,7 +98,10 @@ export async function POST(request: Request) {
     const {error:logError}=await admin.from("integration_events").insert({organization_id:organizationId,event_type:"phone.outbound.request",severity:"info",message:"Staff phone request",metadata:{...meta,requestId}});
     if(logError) throw new Error("Request log unavailable");
     let result:{sid:string,status:string};
-    if(input.action==="sms") result=await sendTwilioMessage(to,input.body!);
+    if(input.action==="sms") {
+      await setCommunicationThreadMode(to,"human","An operator replied from Le Yard OS.");
+      result=await sendTwilioMessage(to,input.body??"",{actorId:w.identity.userId,...(mediaUrls.length?{mediaUrls}:{})});
+    }
     else {
       const url=new URL(twilioAbsoluteUrl("/api/twilio/voice/outbound-bridge"));
       url.searchParams.set("to",to);url.searchParams.set("staff",input.staff!);
