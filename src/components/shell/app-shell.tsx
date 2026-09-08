@@ -324,9 +324,10 @@ function Sidebar({
   return (
     <aside className={styles.sidebar}>
       <div className={styles.brand}>
+        <BrandMark className={styles.monogram} />
         <div className="min-w-0">
           <p className={styles.brandTitle}>
-            {surfaceProductName}
+            {surfaceProductName.replace(/^Le Yard\s*/, "").replace(/^OS$/, "Operations")}
           </p>
           <p className={styles.brandDetail}>
             {surfaceProductDetail}
