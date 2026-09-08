@@ -11,9 +11,12 @@ import {
   LogOut,
   Menu,
   Moon,
+  Phone,
   Plus,
   Search,
+  ShieldAlert,
   ShieldCheck,
+  Siren,
   Sun,
   X,
 } from "lucide-react";
@@ -50,6 +53,10 @@ import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { safeInternalRedirect } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import {
+  LE_YARD_PUBLIC_PHONE,
+  LE_YARD_PUBLIC_PHONE_DISPLAY,
+} from "@/lib/public-contact";
 import type { Database } from "@/types/database.generated";
 import styles from "./shell.module.css";
 import {
@@ -270,6 +277,44 @@ function NotificationsControl({ workspace }: { workspace: WorkspaceContextValue 
   );
 }
 
+function EmergencyContactControl() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      label="Emergency and support contacts"
+      triggerLabel="Open emergency and support contacts"
+      triggerClassName={cn(buttonVariants({ variant: "quiet", size: "icon" }), styles.iconButton)}
+      trigger={<ShieldAlert className="size-4" />}
+    >
+      <div className="px-2 py-2">
+        <p className="text-sm font-semibold">Emergency &amp; support</p>
+        <p className="mt-1 text-xs leading-4 text-[var(--muted)]">
+          Reach the founders through the shared restaurant line. For immediate danger, contact emergency services.
+        </p>
+        <div className="mt-4 grid gap-2">
+          <a
+            href={`tel:${LE_YARD_PUBLIC_PHONE}`}
+            className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "w-full justify-between")}
+          >
+            <span>Call Le Yard</span>
+            <span className="numeric text-xs text-[var(--muted)]">{LE_YARD_PUBLIC_PHONE_DISPLAY}</span>
+          </a>
+          <a
+            href="tel:911"
+            className={cn(buttonVariants({ variant: "danger", size: "lg" }), "w-full")}
+          >
+            <Siren className="size-4" />
+            Call 911
+          </a>
+        </div>
+      </div>
+    </Popover>
+  );
+}
+
 function NavigationLink({
   item,
   pathname,
@@ -364,6 +409,14 @@ function Sidebar({
       </nav>
 
       <div className={styles.sidebarFooter}>
+        <a
+          href={`tel:${LE_YARD_PUBLIC_PHONE}`}
+          className="focus-ring mb-2 flex min-h-10 items-center gap-3 rounded-xl px-3 text-[13px] font-medium text-[var(--muted)] transition-colors hover:bg-[var(--inner)] hover:text-[var(--text)]"
+        >
+          <Phone className="size-[17px]" />
+          <span className="min-w-0 flex-1">Call Le Yard</span>
+          <span className="numeric text-xs">{LE_YARD_PUBLIC_PHONE_DISPLAY}</span>
+        </a>
         {isNavItemVisible(settingsItem, workspace) ? (
           <NavigationLink item={settingsItem} pathname={pathname} />
         ) : null}
@@ -628,6 +681,7 @@ function ShellContent({ children }: { children: ReactNode }) {
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
             <NotificationsControl workspace={workspace} />
+            <EmergencyContactControl />
             {workspace.mode === "demo" && !isHostSurface ? (
               <Button
                 variant="primary"
