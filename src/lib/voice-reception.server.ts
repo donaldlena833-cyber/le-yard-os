@@ -21,6 +21,9 @@ export function addReceptionGreeting(response: twilio.twiml.VoiceResponse) {
     response.play(audioUrl);
     return "recorded" as const;
   }
-  response.say(LE_YARD_RECEPTION_GREETING);
+  response.say(
+    { voice: "Polly.Joanna", language: "en-US" },
+    LE_YARD_RECEPTION_GREETING,
+  );
   return "twilio" as const;
 }

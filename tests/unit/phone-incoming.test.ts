@@ -32,6 +32,7 @@ describe("inbound founder ring group", () => {
   it("welcomes the caller before ringing both founders in parallel", async () => {
     const xml = await (await POST(request())).text();
     expect(xml).toContain("Thank you for calling Le Yard");
+    expect(xml).toContain('voice="Polly.Joanna"');
     expect(xml.indexOf("<Say")).toBeLessThan(xml.indexOf("<Dial"));
     expect(xml).toContain("+12025550101</Number>");
     expect(xml).toContain("+12025550102</Number>");
