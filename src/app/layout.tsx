@@ -29,6 +29,10 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(publicEnv.NEXT_PUBLIC_APP_URL),
+  icons: {
+    icon: [{ url: "/favicon.png", sizes: "192x192", type: "image/png" }],
+    shortcut: "/favicon.ico",
+  },
   title: {
     default: surfaceProductName,
     template: `%s · ${surfaceProductName}`,
