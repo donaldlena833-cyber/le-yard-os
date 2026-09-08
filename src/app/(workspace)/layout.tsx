@@ -14,7 +14,10 @@ import {
 function WorkspaceAccessState({
   resolution,
 }: {
-  resolution: Exclude<WorkspaceSessionResolution, { status: "ready" | "unauthenticated" }>;
+  resolution: Exclude<
+    WorkspaceSessionResolution,
+    { status: "ready" | "unauthenticated" }
+  >;
 }) {
   const content = {
     no_access: {
@@ -54,21 +57,33 @@ function WorkspaceAccessState({
         <div className="flex items-center gap-3">
           <BrandMark />
           <div>
-            <p className="text-sm font-semibold tracking-[-0.02em]">Le Yard OS</p>
-            <p className="mt-0.5 text-[10px] text-[var(--ink-faint)]">Secure operator workspace</p>
+            <p className="text-sm font-semibold tracking-[-0.02em]">
+              Le Yard OS
+            </p>
+            <p className="mt-0.5 text-[10px] text-[var(--ink-faint)]">
+              Secure operator workspace
+            </p>
           </div>
         </div>
         <span className="mt-10 flex size-11 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
           <Icon className="size-5" />
         </span>
         <p className="eyebrow mt-5">{content.eyebrow}</p>
-        <h1 className="mt-2 text-2xl font-medium tracking-[-0.045em]">{content.title}</h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--ink-faint)]">{content.detail}</p>
+        <h1 className="mt-2 text-2xl font-medium tracking-[-0.045em]">
+          {content.title}
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-[var(--ink-faint)]">
+          {content.detail}
+        </p>
         {resolution.identity ? (
           <div className="mt-6 rounded-2xl bg-[var(--canvas)] px-4 py-3">
-            <p className="text-xs font-semibold">{resolution.identity.displayName}</p>
+            <p className="text-xs font-semibold">
+              {resolution.identity.displayName}
+            </p>
             {resolution.identity.email ? (
-              <p className="mt-1 text-[10px] text-[var(--ink-faint)]">{resolution.identity.email}</p>
+              <p className="mt-1 text-[10px] text-[var(--ink-faint)]">
+                {resolution.identity.email}
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -98,7 +113,7 @@ export default async function WorkspaceLayout({
 
   return (
     <WorkspaceProvider value={resolution.context}>
-      {isPhoneSurface ? <div className="min-h-svh bg-[var(--canvas)]"><header className="flex items-center justify-between border-b border-[var(--line)] px-5 py-3"><span className="text-sm font-semibold">Le Yard Phone</span><form action={signOutAction}><Button type="submit" variant="quiet">Sign out</Button></form></header>{children}</div> : <AppShell>{children}</AppShell>}
+      {isPhoneSurface ? children : <AppShell>{children}</AppShell>}
     </WorkspaceProvider>
   );
 }

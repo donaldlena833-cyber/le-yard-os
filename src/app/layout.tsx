@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Inter_Tight } from "next/font/google";
 import { connection } from "next/server";
 import { ServiceWorkerRegister } from "@/components/pwa/service-worker-register";
 import { publicEnv } from "@/lib/env";
@@ -9,6 +9,12 @@ import {
   surfaceProductName,
 } from "@/lib/app-surface";
 import "./globals.css";
+
+const interTight = Inter_Tight({
+  variable: "--font-inter-tight",
+  subsets: ["latin"],
+  display: "swap",
+});
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -26,9 +32,11 @@ export const metadata: Metadata = {
     default: surfaceProductName,
     template: `%s · ${surfaceProductName}`,
   },
-  description: isPhoneSurface ? "The shared Le Yard phone for calls, texts, and voicemail." : isHostSurface
-    ? "The private reservation book and guest CRM for the Le Yard team."
-    : "The private operating system for the Le Yard restaurant team.",
+  description: isPhoneSurface
+    ? "The shared Le Yard phone for calls, texts, and voicemail."
+    : isHostSurface
+      ? "The private reservation book and guest CRM for the Le Yard team."
+      : "The private operating system for the Le Yard restaurant team.",
   applicationName: surfaceProductName,
   appleWebApp: {
     capable: true,
@@ -56,7 +64,7 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} ${interTight.variable}`}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
     >

@@ -1,5 +1,13 @@
 "use client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type ComponentType,
+} from "react";
 import {
   ArrowLeft,
   Delete,
@@ -9,10 +17,25 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Send,
+  ArrowRight,
+  ArrowUp,
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  LoaderCircle,
+  Moon,
+  Paperclip,
+  PhoneIncoming,
+  PhoneMissed,
+  PhoneOutgoing,
+  Settings2,
+  Smartphone,
+  SquarePen,
+  Sun,
+  X,
   Voicemail,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import s from "./phone-workspace.module.css";
 
 type Message = {
   sid: string;
@@ -48,8 +71,6 @@ type Model = {
   calls: Call[];
   voicemails: Voice[];
 };
-const field =
-  "min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[var(--accent)]";
 function number(value: string) {
   const digits = value.replace(/\D/g, "");
   return digits.length === 10
@@ -75,13 +96,111 @@ function date(at: string) {
     timeZone: "America/New_York",
   });
 }
+
+function time(at: string) {
+  return new Date(at).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/New_York",
+  });
+}
+function day(at: string) {
+  return new Date(at).toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "America/New_York",
+  });
+}
+function shortDate(at: string) {
+  return day(at) === day(new Date().toISOString())
+    ? time(at)
+    : new Date(at).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        timeZone: "America/New_York",
+      });
+}
+function duration(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+function isMissed(status: string) {
+  return ["no-answer", "busy", "failed", "canceled"].includes(status);
+}
+function callStatus(status: string) {
+  return (
+    (
+      {
+        "no-answer": "Missed",
+        busy: "Busy",
+        failed: "Failed",
+        canceled: "Canceled",
+      } as Record<string, string>
+    )[status] ?? status
+  );
+}
+function Avatar({ value }: { value: string }) {
+  const tone = ["sage", "sand", "stone", "olive"][
+    Number(value.replace(/\D/g, "").slice(-1)) % 4
+  ];
+  return (
+    <span className={s.avatar} data-tone={tone} aria-hidden="true">
+      {value.replace(/\D/g, "").slice(-2) || "?"}
+    </span>
+  );
+}
+function Empty({
+  icon: Icon,
+  title,
+  text,
+  action,
+}: {
+  icon: ComponentType<{ size?: number; strokeWidth?: number }>;
+  title: string;
+  text: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className={s.empty}>
+      <span>
+        <Icon size={27} strokeWidth={1.3} />
+      </span>
+      <h3>{title}</h3>
+      <p>{text}</p>
+      {action}
+    </div>
+  );
+}
+
 export function PhoneWorkspace({
   live,
   defaultStaff,
+  accountAction,
 }: {
   live: boolean;
   defaultStaff: "donald" | "maris";
+  accountAction?: ReactNode;
 }) {
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [preferences, setPreferences] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      let saved: string | null = null;
+      try {
+        saved = localStorage.getItem("le-yard-phone-appearance");
+      } catch {
+        /* Storage may be unavailable in private browsing. */
+      }
+      setTheme(
+        saved === "dark" ||
+          (saved !== "light" &&
+            window.matchMedia?.("(prefers-color-scheme: dark)").matches)
+          ? "dark"
+          : "light",
+      );
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   const [model, setModel] = useState<Model | null>(null);
   const [selected, setSelected] = useState("");
   const [tab, setTab] = useState<"keypad" | "texts" | "calls" | "voicemail">(
@@ -271,605 +390,867 @@ export function PhoneWorkspace({
       : !model
         ? "Connecting to your shared phone…"
         : null;
-  const filteredConversations = conversations.filter(([phone, m]) =>
-    `${phone} ${m.body}`.toLowerCase().includes(search.toLowerCase()),
+  const searchDigits = search.replace(/\D/g, "");
+  const filteredConversations = conversations.filter(
+    ([phone, m]) =>
+      `${phone} ${m.body}`.toLowerCase().includes(search.toLowerCase()) ||
+      (/^[+\d\s().-]+$/.test(search) &&
+        Boolean(searchDigits) &&
+        phone.includes(searchDigits)),
   );
-  return (
-    <div className="mx-auto w-full max-w-6xl px-4 pt-5 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-7 sm:pt-7">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--line)] pb-6">
-        <div>
-          <p className="eyebrow">Le Yard · Shared phone</p>
-          <h1 className="mt-2 text-3xl font-medium tracking-tight sm:text-4xl">
-            (332) 877-9035
-          </h1>
-          <p className="mt-2 max-w-xl text-sm text-[var(--ink-faint)]">
-            Your business number. Calls, messages, and voicemail in one place.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="quiet"
-            aria-label="Refresh phone history"
-            disabled={loading}
-            onClick={async () => {
-              setLoading(true);
-              await refresh();
-              setLoading(false);
-            }}
-          >
-            <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} />
-          </Button>
-          <Button
-            variant="accent"
-            onClick={() => {
-              setCreating(true);
-              setSelected("");
-              setTab("texts");
-            }}
-          >
-            <Plus className="size-4" />
-            New conversation
-          </Button>
-        </div>
-      </header>
-      {!live ? (
-        <p className="my-5 text-sm">
-          The phone is available in the live owner workspace. Demo mode cannot
-          send calls or texts.
-        </p>
-      ) : null}
-      <div
-        className="flex items-center gap-2 py-3 text-xs text-[var(--ink-faint)]"
-        role="status"
-      >
-        <span
-          className={`size-2 rounded-full ${loadError ? "bg-amber-600" : model ? "bg-emerald-600" : "bg-stone-400"}`}
-        />
-        {loadError
-          ? "Connection needs attention"
-          : loading
-            ? "Syncing phone…"
-            : updatedAt
-              ? `Updated ${updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
-              : "Connecting…"}
-      </div>
-      <nav
-        aria-label="Phone views"
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-[var(--line)] bg-[var(--paper)] px-2 pt-2 pb-[calc(.5rem+env(safe-area-inset-bottom))] shadow-sm sm:static sm:mb-4 sm:flex sm:gap-2 sm:border-y sm:bg-transparent sm:p-2 sm:shadow-none"
-      >
-        {(
-          [
-            ["keypad", "Keypad", Grid3X3],
-            ["calls", "Recents", Phone],
-            ["texts", "Messages", MessageSquare],
-            ["voicemail", "Voicemail", Voicemail],
-          ] as const
-        ).map(([key, label, Icon]) => (
-          <button
-            key={key}
-            className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-3 text-[11px] font-medium transition-colors sm:min-h-11 sm:flex-row sm:gap-2 sm:text-sm ${tab === key ? "bg-[var(--accent-soft)] text-[var(--accent-strong)]" : "text-[var(--ink-faint)] hover:bg-[var(--canvas-strong)]"}`}
-            onClick={() => {
-              setTab(key);
-              setCreating(false);
-              setSearch("");
-            }}
-            aria-current={tab === key ? "page" : undefined}
-          >
-            <Icon className="size-5" />
-            {label}
-          </button>
-        ))}
-      </nav>
-      {loadError ? (
-        <div
-          role="alert"
-          className="my-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"
+  const startConversation = () => {
+    setCreating(true);
+    setSelected("");
+    setTab("texts");
+    setNewNumber("");
+    setNotice("");
+  };
+  const goTo = (next: typeof tab) => {
+    setTab(next);
+    setCreating(false);
+    setSearch("");
+    setPreferences(false);
+  };
+  const prepareCall = (phone: string) => {
+    setDial(phone);
+    goTo("keypad");
+  };
+  const recentCalls = (model?.calls ?? []).filter(
+    (c) =>
+      (!missedOnly || isMissed(c.status)) &&
+      (!search ||
+        `${c.from} ${c.to}`
+          .replace(/\D/g, "")
+          .includes(search.replace(/\D/g, "") || search)),
+  );
+  const founder = staff === "donald" ? "Donald" : "Maris";
+  const title = {
+    keypad: "Keypad",
+    texts: "Messages",
+    calls: "Recents",
+    voicemail: "Voicemail",
+  }[tab];
+  const founderSelector = (
+    <div
+      className={s.founderSelector}
+      role="group"
+      aria-label="Ring this cellphone"
+    >
+      {(["donald", "maris"] as const).map((person) => (
+        <button
+          key={person}
+          aria-pressed={staff === person}
+          onClick={() => setStaff(person)}
         >
-          <p>
-            {loadError}
-            {model ? " Previously synced history is still shown." : ""}
-          </p>
-          {authExpired ? (
-            <a
-              className="font-semibold underline"
-              href="/sign-in?next=%2Fphone"
+          <span
+            className={s.founderInitial}
+            aria-hidden="true"
+            data-tone={person === "donald" ? "sage" : "sand"}
+          >
+            {person[0].toUpperCase()}
+          </span>
+          {person === "donald" ? "Donald" : "Maris"}
+          {staff === person ? <Check size={14} /> : null}
+        </button>
+      ))}
+    </div>
+  );
+  const callRows = (calls: Call[], compact = false) =>
+    calls.map((c, index) => {
+      const phone = c.to === model?.business ? c.from : c.to;
+      const incoming = c.to === model?.business;
+      const missed = isMissed(c.status);
+      const Direction = missed
+        ? PhoneMissed
+        : incoming
+          ? PhoneIncoming
+          : PhoneOutgoing;
+      return (
+        <div key={c.sid}>
+          {!compact &&
+          (index === 0 || day(c.at) !== day(calls[index - 1].at)) ? (
+            <h3 className={s.groupLabel}>{day(c.at)}</h3>
+          ) : null}
+          <div className={s.callRow}>
+            <Avatar value={phone} />
+            <button
+              className={s.rowBody}
+              onClick={() => prepareCall(phone)}
+              aria-label={`Prepare call to ${displayNumber(phone)}`}
             >
-              Sign in again
-            </a>
-          ) : (
-            <Button
-              variant="secondary"
-              disabled={loading}
-              onClick={() => void refresh()}
-            >
-              Retry
-            </Button>
-          )}
-        </div>
-      ) : null}
-      {authExpired && !loadError ? (
-        <a
-          className="my-3 block rounded-xl bg-amber-50 p-4 text-sm font-semibold text-amber-950 underline"
-          href="/sign-in?next=%2Fphone"
-        >
-          Session ended. Sign in again
-        </a>
-      ) : null}
-      {notice ? (
-        <p
-          role="status"
-          className="my-3 rounded-xl bg-[var(--canvas-strong)] px-4 py-3 text-sm"
-        >
-          {notice}
-        </p>
-      ) : null}
-      {creating ? (
-        <form
-          className="flex flex-wrap items-end gap-3 border-b border-[var(--line)] py-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const normalized = number(newNumber);
-            if (!/^\+1[2-9]\d{9}$/.test(normalized)) {
-              setNotice("Enter a valid US or Canadian phone number.");
-              return;
-            }
-            if (normalized === model?.business) {
-              setNotice("Enter the other person's number.");
-              return;
-            }
-            openConversation(normalized);
-          }}
-        >
-          <label className="min-w-56 flex-1 text-sm">
-            Phone number
-            <input
-              className={`${field} mt-2`}
-              type="tel"
-              autoFocus
-              value={newNumber}
-              onChange={(e) => setNewNumber(e.target.value)}
-              placeholder="(212) 555-0123"
-              required
-            />
-          </label>
-          <Button type="submit">Open conversation</Button>
-          <Button variant="quiet" onClick={() => setCreating(false)}>
-            Cancel
-          </Button>
-        </form>
-      ) : null}
-      {tab === "keypad" ? (
-        <section
-          aria-label="Phone keypad"
-          className="mx-auto grid max-w-3xl gap-8 py-4 md:grid-cols-[minmax(0,360px)_1fr] md:items-center md:gap-12"
-        >
-          <div>
-            <label className="sr-only" htmlFor="dial-number">
-              Number to call
-            </label>
-            <input
-              id="dial-number"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={dial}
-              onChange={(e) =>
-                setDial(
-                  e.target.value.replace(/[^0-9+*# ()-]/g, "").slice(0, 24),
-                )
-              }
-              placeholder="Enter a number"
-              className="h-16 w-full border-0 bg-transparent text-center text-3xl tracking-wide outline-none focus:ring-2 focus:ring-[var(--accent)] rounded-xl"
-            />
-            <div
-              className="grid grid-cols-3 gap-x-6 gap-y-3 px-5 py-4"
-              aria-label="Dial pad"
-            >
-              {[
-                ["1", ""],
-                ["2", "ABC"],
-                ["3", "DEF"],
-                ["4", "GHI"],
-                ["5", "JKL"],
-                ["6", "MNO"],
-                ["7", "PQRS"],
-                ["8", "TUV"],
-                ["9", "WXYZ"],
-                ["*", ""],
-                ["0", "+"],
-                ["#", ""],
-              ].map(([digit, letters]) => (
-                <button
-                  type="button"
-                  key={digit}
-                  aria-label={digit}
-                  onClick={() =>
-                    setDial((value) => (value + digit).slice(0, 24))
-                  }
-                  className="flex min-h-16 flex-col items-center justify-center rounded-full bg-[var(--canvas-strong)] text-[var(--ink)] transition duration-150 hover:bg-[var(--line)] active:scale-95 motion-reduce:transform-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
-                >
-                  <span className="text-3xl leading-8">{digit}</span>
-                  <span className="min-h-3 text-[9px] font-semibold tracking-[.2em]">
-                    {letters}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-3 items-center gap-6 px-5 pt-2">
+              <strong>{displayNumber(phone)}</strong>
+              <span className={missed ? s.missed : ""}>
+                <Direction size={13} />
+                {missed
+                  ? callStatus(c.status)
+                  : incoming
+                    ? "Incoming"
+                    : "Outgoing"}
+                {c.status === "completed"
+                  ? ` · ${duration(Number(c.duration))}`
+                  : !missed
+                    ? ` · ${c.status}`
+                    : ""}
+              </span>
+            </button>
+            <time className={s.rowTime} dateTime={c.at} title={date(c.at)}>
+              {compact ? shortDate(c.at) : time(c.at)}
+            </time>
+            {!compact ? (
               <button
-                aria-label="Message this number"
-                disabled={!validDial}
-                onClick={() => openConversation(dialNumber)}
-                className="flex min-h-14 items-center justify-center rounded-full disabled:opacity-30"
-              >
-                <MessageSquare className="size-6" />
-              </button>
-              <button
-                aria-label="Call from Le Yard"
-                disabled={
-                  busy || !validDial || !model?.callsEnabled || authExpired
-                }
-                onClick={() => void submit("call", dialNumber)}
-                className="flex min-h-16 items-center justify-center rounded-full bg-emerald-700 text-white transition hover:bg-emerald-800 active:scale-95 disabled:opacity-35 motion-reduce:transform-none"
-              >
-                <Phone className="size-7" />
-              </button>
-              <button
-                aria-label="Delete last digit"
-                disabled={!dial}
-                onClick={() => setDial((value) => value.slice(0, -1))}
-                className="flex min-h-14 items-center justify-center rounded-full disabled:opacity-30"
-              >
-                <Delete className="size-6" />
-              </button>
-            </div>
-            <div className="mt-3 flex min-h-8 justify-center">
-              <button
-                className="px-4 text-xs text-[var(--ink-faint)] underline disabled:invisible"
-                disabled={!dial}
-                onClick={() => setDial("")}
-              >
-                Clear number
-              </button>
-            </div>
-            {dial && !validDial ? (
-              <p className="text-center text-xs text-[var(--ink-faint)]">
-                Enter a US or Canadian number, including area code.
-              </p>
-            ) : null}
-          </div>
-          <div className="border-t border-[var(--line)] pt-5 md:border-t-0 md:pt-0">
-            <h2 className="text-lg font-semibold">Call as Le Yard</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--ink-faint)]">
-              Your cellphone rings first. Answer and press 1 to connect. The
-              guest sees (332) 877-9035.
-            </p>
-            <label className="mt-5 block text-sm font-medium">
-              Ring this cellphone
-              <select
-                className={`${field} mt-2`}
-                value={staff}
-                onChange={(e) => setStaff(e.target.value as "donald" | "maris")}
-              >
-                <option value="donald">Donald</option>
-                <option value="maris">Maris</option>
-              </select>
-            </label>
-            <p className="mt-3 text-xs leading-5 text-[var(--ink-faint)]">
-              Call audio stays on your cellphone. Use its mute, speaker, and
-              end-call controls after answering.
-            </p>
-            {busy ? (
-              <p role="status" className="mt-3 text-sm">
-                Starting your request…
-              </p>
-            ) : null}
-            {model && !model.callsEnabled ? (
-              <p className="mt-3 text-sm">Outbound calling is not enabled.</p>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-      {tab === "texts" ? (
-        <div className="grid min-h-[480px] md:grid-cols-[280px_minmax(0,1fr)]">
-          <aside
-            aria-label="Conversations"
-            className={`${selected ? "hidden md:block" : ""} border-[var(--line)] md:border-r`}
-          >
-            <label className="mx-2 my-3 flex items-center gap-2">
-              <Search className="size-4 shrink-0" />
-              <input
-                aria-label="Search conversations"
-                type="search"
-                className={field}
-                placeholder="Search messages or number"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </label>
-            {filteredConversations.map(([phone, m]) => (
-              <button
-                key={phone}
-                className={`block w-full border-b border-[var(--line)] px-3 py-4 text-left transition-colors hover:bg-[var(--canvas-strong)] ${selected === phone ? "bg-[var(--canvas-strong)]" : ""}`}
+                className={s.rowAction}
+                aria-label={`Message ${displayNumber(phone)}`}
                 onClick={() => openConversation(phone)}
               >
-                <span className="block text-sm font-semibold">
-                  {displayNumber(phone)}
-                </span>
-                <span className="mt-1 block truncate text-sm text-[var(--ink-faint)]">
-                  {m.direction === "outbound" ? "You: " : ""}
-                  {m.body || "Attachment"}
-                </span>
-                <span className="mt-2 block text-xs text-[var(--ink-faint)]">
-                  {date(m.at)}
-                </span>
+                <MessageSquare size={18} />
               </button>
-            ))}
-            {!filteredConversations.length ? (
-              <p className="px-3 py-7 text-sm text-[var(--ink-faint)]">
-                {emptyHistory ??
-                  (search
-                    ? "No matching conversations."
-                    : "No messages yet. Start a conversation above.")}
-              </p>
             ) : null}
-          </aside>
-          <section
-            aria-label="Selected conversation"
-            className={`${!selected ? "hidden md:flex md:items-center md:justify-center" : "flex"} min-w-0 flex-col md:pl-6`}
-          >
-            {!selected ? (
-              <p className="text-sm text-[var(--ink-faint)]">
-                Choose a conversation or start a new one.
-              </p>
-            ) : (
-              <>
-                <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] py-4">
-                  <Button
-                    variant="quiet"
-                    size="icon"
-                    className="md:hidden"
-                    aria-label="Back to conversations"
-                    onClick={() => setSelected("")}
-                  >
-                    <ArrowLeft className="size-4" />
-                  </Button>
-                  <h2 className="flex-1 text-lg font-semibold">
-                    {displayNumber(selected)}
-                  </h2>
-                  <label className="text-xs">
-                    Ring
-                    <select
-                      className="ml-2 min-h-11 rounded-lg border border-[var(--line)] bg-[var(--paper)] px-2 text-sm"
-                      value={staff}
-                      onChange={(e) =>
-                        setStaff(e.target.value as "donald" | "maris")
-                      }
-                    >
-                      <option value="donald">Donald</option>
-                      <option value="maris">Maris</option>
-                    </select>
-                  </label>
-                  <Button
-                    disabled={busy || !model?.callsEnabled}
-                    variant="secondary"
-                    onClick={() => void submit("call")}
-                  >
-                    <Phone className="size-4" />
-                    Call from Le Yard
-                  </Button>
-                </div>
-                <div
-                  ref={history}
-                  className="flex max-h-[52svh] min-h-52 flex-1 flex-col gap-4 overflow-y-auto py-5"
-                  aria-label="Text history"
-                >
-                  {messages.map((m) => (
-                    <article
-                      key={m.sid}
-                      className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm ${m.direction === "outbound" ? "ml-auto bg-[var(--accent-soft)]" : "mr-auto bg-[var(--canvas-strong)]"}`}
-                    >
-                      <p className="whitespace-pre-wrap break-words">
-                        {m.body}
-                      </p>
-                      {Array.from(
-                        { length: Math.min(m.mediaCount, 10) },
-                        (_, i) => (
-                          <a
-                            key={i}
-                            className="mt-2 block underline"
-                            href={`/api/phone/media?message=${m.sid}&index=${i}`}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            Open attachment {i + 1}
-                          </a>
-                        ),
-                      )}
-                      <p className="mt-2 text-xs text-[var(--ink-faint)]">
-                        {date(m.at)} · {m.status}
-                        {m.errorCode ? ` · error ${m.errorCode}` : ""}
-                      </p>
-                    </article>
-                  ))}
-                  {!messages.length ? (
-                    <p className="text-sm text-[var(--ink-faint)]">
-                      No texts with this number yet.
-                    </p>
-                  ) : null}
-                </div>
-                <form
-                  className="border-t border-[var(--line)] py-4"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    void submit("sms");
-                  }}
-                >
-                  <label className="sr-only" htmlFor="phone-message">
-                    Message
-                  </label>
-                  <textarea
-                    id="phone-message"
-                    className={`${field} min-h-24 resize-y`}
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    maxLength={1200}
-                    placeholder="Message from Le Yard…"
-                    required
-                  />
-                  <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-[var(--ink-faint)]">
-                    <input
-                      type="checkbox"
-                      className="mt-1 size-4"
-                      checked={consent}
-                      onChange={(e) => setConsent(e.target.checked)}
-                    />
-                    The recipient agreed to guest-care texts about this request.
-                    Required for a new conversation; never use this number for
-                    unsolicited marketing.
-                  </label>
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <p className="text-xs text-[var(--ink-faint)]">
-                      From Le Yard · {draft.length}/1200
-                    </p>
-                    <Button
-                      type="submit"
-                      variant="accent"
-                      disabled={busy || !draft.trim() || !model?.smsEnabled}
-                    >
-                      <Send className="size-4" />
-                      {busy ? "Submitting…" : "Send text"}
-                    </Button>
-                  </div>
-                  {model && !model.smsEnabled ? (
-                    <p className="mt-2 text-xs text-[var(--ink-faint)]">
-                      Text sending is awaiting activation.
-                    </p>
-                  ) : null}
-                </form>
-              </>
-            )}
-          </section>
+          </div>
         </div>
-      ) : tab === "calls" ? (
-        <section
-          aria-label="Call history"
-          className="divide-y divide-[var(--line)]"
-        >
-          <div className="flex items-center justify-between gap-3 py-4">
-            <h2 className="text-lg font-semibold">Recent calls</h2>
+      );
+    });
+
+  return (
+    <main className={s.phone} data-theme={theme}>
+      <div className={s.workspace}>
+        <header className={s.brandHeader}>
+          <div className={s.brand}>
+            <span className={s.monogram} aria-hidden="true">
+              L<span>Y</span>
+            </span>
+            <div>
+              <span className={s.wordmark}>LE YARD</span>
+              <span className={s.brandDetail}>SHARED PHONE</span>
+            </div>
+          </div>
+          <div className={s.headerActions}>
             <button
-              className="min-h-11 rounded-xl border border-[var(--line)] px-4 text-sm"
-              aria-pressed={missedOnly}
-              onClick={() => setMissedOnly((value) => !value)}
+              className={s.iconButton}
+              aria-label={
+                theme === "dark"
+                  ? "Switch to light appearance"
+                  : "Switch to dark appearance"
+              }
+              onClick={() => {
+                const next = theme === "dark" ? "light" : "dark";
+                setTheme(next);
+                try {
+                  localStorage.setItem("le-yard-phone-appearance", next);
+                } catch {
+                  /* The current choice still works without storage. */
+                }
+              }}
             >
-              {missedOnly ? "Show all calls" : "Missed calls"}
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+            <button
+              className={s.iconButton}
+              aria-label="Phone preferences"
+              aria-expanded={preferences}
+              onClick={() => setPreferences((value) => !value)}
+            >
+              <Settings2 size={18} />
             </button>
           </div>
-          {model?.calls
-            .filter(
-              (c) =>
-                !missedOnly ||
-                ["no-answer", "busy", "failed", "canceled"].includes(c.status),
-            )
-            .map((c) => (
-              <div
-                key={c.sid}
-                className="flex flex-wrap items-center justify-between gap-3 py-4"
+        </header>
+
+        {preferences ? (
+          <section className={s.preferences} aria-label="Phone preferences">
+            <div className={s.sectionHeading}>
+              <h2>Your phone</h2>
+              <button
+                className={s.iconButton}
+                aria-label="Close preferences"
+                onClick={() => setPreferences(false)}
               >
-                <div>
-                  <p className="text-sm font-semibold">
-                    {c.to === model.business ? "Incoming from" : "Outgoing to"}{" "}
-                    {displayNumber(c.to === model.business ? c.from : c.to)}
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--ink-faint)]">
-                    {date(c.at)} · {c.status} · {c.duration}s
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="quiet"
-                    onClick={() =>
-                      openConversation(c.to === model.business ? c.from : c.to)
-                    }
-                  >
-                    <MessageSquare className="size-4" />
-                    Message
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setDial(c.to === model.business ? c.from : c.to);
-                      setTab("keypad");
-                    }}
-                  >
-                    <Phone className="size-4" />
-                    Keypad
-                  </Button>
-                </div>
+                <X size={18} />
+              </button>
+            </div>
+            <div className={s.profileRow}>
+              <span className={s.profileMark}>LY</span>
+              <div>
+                <strong>Le Yard</strong>
+                <p>{displayNumber(model?.business ?? "+13328779035")}</p>
               </div>
-            ))}
-          {!model?.calls.filter(
-            (c) =>
-              !missedOnly ||
-              ["no-answer", "busy", "failed", "canceled"].includes(c.status),
-          ).length ? (
-            <p className="py-8 text-sm text-[var(--ink-faint)]">
-              {emptyHistory ??
-                (missedOnly
-                  ? "No missed calls in recent history."
-                  : "No calls in the recent history.")}
+              <span className={s.smallTag}>Shared line</span>
+            </div>
+            <div className={s.preferenceRow}>
+              <span>
+                <Smartphone size={17} /> Ring first
+              </span>
+              <strong>{founder}’s cellphone</strong>
+            </div>
+            {founderSelector}
+            <div className={s.preferenceRow}>
+              <span>
+                <Sun size={17} /> Appearance
+              </span>
+              <strong>{theme === "dark" ? "Dark" : "Light"}</strong>
+            </div>
+            <p className={s.helpText}>
+              Save this page to your Home Screen for quick access. Call audio
+              stays on your cellphone; outgoing calls and texts start here.
             </p>
+            {accountAction ? (
+              <div className={s.accountAction}>{accountAction}</div>
+            ) : null}
+          </section>
+        ) : null}
+
+        <div className={s.pageHeading}>
+          <div>
+            <p className={s.numberLabel}>
+              {displayNumber(model?.business ?? "+13328779035")}
+            </p>
+            <h1>{creating ? "New message" : title}</h1>
+          </div>
+          <button
+            className={s.iconButton}
+            aria-label={
+              tab === "texts" ? "New conversation" : "Refresh phone history"
+            }
+            disabled={tab !== "texts" && loading}
+            onClick={
+              tab === "texts"
+                ? startConversation
+                : async () => {
+                    setLoading(true);
+                    await refresh();
+                    setLoading(false);
+                  }
+            }
+          >
+            {tab === "texts" ? (
+              <SquarePen size={19} />
+            ) : (
+              <RefreshCw size={18} className={loading ? s.spinning : ""} />
+            )}
+          </button>
+        </div>
+        <div className={s.syncStatus} role="status">
+          <span
+            data-state={loadError ? "warning" : model ? "ready" : "loading"}
+          />
+          {loadError
+            ? "Connection needs attention"
+            : loading
+              ? "Syncing phone…"
+              : updatedAt
+                ? `Updated ${updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`
+                : live
+                  ? "Connecting…"
+                  : "Preview · calling and texting unavailable"}
+        </div>
+        {loadError ? (
+          <div className={s.alert} role="alert">
+            <p>
+              {loadError}
+              {model ? " Previously synced history is still shown." : ""}
+            </p>
+            {authExpired ? (
+              <a href="/sign-in?next=%2Fphone">Sign in again</a>
+            ) : (
+              <button
+                className={s.textButton}
+                disabled={loading}
+                onClick={() => void refresh()}
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        ) : null}
+        {authExpired && !loadError ? (
+          <a className={s.alert} href="/sign-in?next=%2Fphone">
+            Session ended. Sign in again
+          </a>
+        ) : null}
+        {notice ? (
+          <p role="status" className={s.notice}>
+            {notice}
+          </p>
+        ) : null}
+
+        <div className={s.view} key={tab}>
+          {creating ? (
+            <form
+              className={s.newConversation}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const normalized = number(newNumber);
+                if (!/^\+1[2-9]\d{9}$/.test(normalized)) {
+                  setNotice("Enter a valid US or Canadian phone number.");
+                  return;
+                }
+                if (normalized === model?.business) {
+                  setNotice("Enter the other person's number.");
+                  return;
+                }
+                openConversation(normalized);
+              }}
+            >
+              <label htmlFor="new-phone-number">To</label>
+              <input
+                id="new-phone-number"
+                className={s.input}
+                aria-label="Phone number"
+                type="tel"
+                autoFocus
+                value={newNumber}
+                onChange={(e) => setNewNumber(e.target.value)}
+                placeholder="(212) 555-0123"
+                required
+              />
+              <div className={s.formActions}>
+                <button
+                  type="button"
+                  className={s.textButton}
+                  onClick={() => setCreating(false)}
+                >
+                  Cancel
+                </button>
+                <button className={s.primaryButton} type="submit">
+                  Continue <ArrowRight size={16} />
+                </button>
+              </div>
+            </form>
           ) : null}
-        </section>
-      ) : tab === "voicemail" ? (
-        <section
-          aria-label="Voicemail"
-          className="divide-y divide-[var(--line)]"
-        >
-          {model?.voicemails.map((v) => (
-            <div key={v.id} className="py-5">
-              <p className="text-sm font-semibold">
-                {v.from ? displayNumber(v.from) : "Unknown caller"}
-              </p>
-              <p className="my-2 text-xs text-[var(--ink-faint)]">
-                {date(v.at)} · {v.durationSeconds ?? 0}s
-              </p>
-              {v.recordingSid ? (
-                <audio
-                  controls
-                  preload="none"
-                  src={`/api/phone/media?recording=${v.recordingSid}`}
-                  className="w-full max-w-md"
+
+          {tab === "keypad" ? (
+            <section aria-label="Phone keypad" className={s.keypadLayout}>
+              <div className={s.dialCard}>
+                <div className={s.dialDisplay}>
+                  <label className="sr-only" htmlFor="dial-number">
+                    Number to call
+                  </label>
+                  <input
+                    id="dial-number"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={dial}
+                    onChange={(e) =>
+                      setDial(
+                        e.target.value
+                          .replace(/[^0-9+*# ()-]/g, "")
+                          .slice(0, 24),
+                      )
+                    }
+                    placeholder="Enter a number"
+                  />
+                  <p>
+                    {dial && !validDial
+                      ? "Include a US or Canadian area code"
+                      : "Calling from Le Yard"}
+                  </p>
+                </div>
+                <div className={s.dialPad} aria-label="Dial pad">
+                  {[
+                    ["1", ""],
+                    ["2", "ABC"],
+                    ["3", "DEF"],
+                    ["4", "GHI"],
+                    ["5", "JKL"],
+                    ["6", "MNO"],
+                    ["7", "PQRS"],
+                    ["8", "TUV"],
+                    ["9", "WXYZ"],
+                    ["*", ""],
+                    ["0", "+"],
+                    ["#", ""],
+                  ].map(([digit, letters]) => (
+                    <button
+                      type="button"
+                      key={digit}
+                      aria-label={digit}
+                      onClick={() =>
+                        setDial((value) => (value + digit).slice(0, 24))
+                      }
+                    >
+                      <span>{digit}</span>
+                      <small>{letters || "\u00a0"}</small>
+                    </button>
+                  ))}
+                </div>
+                <div className={s.dialActions}>
+                  <button
+                    aria-label="Message this number"
+                    disabled={!validDial}
+                    onClick={() => openConversation(dialNumber)}
+                  >
+                    <MessageSquare size={22} />
+                  </button>
+                  <button
+                    className={s.callButton}
+                    aria-label="Call from Le Yard"
+                    disabled={
+                      busy || !validDial || !model?.callsEnabled || authExpired
+                    }
+                    onClick={() => void submit("call", dialNumber)}
+                  >
+                    {busy ? (
+                      <LoaderCircle className={s.spinning} size={26} />
+                    ) : (
+                      <Phone size={26} fill="currentColor" strokeWidth={1.5} />
+                    )}
+                  </button>
+                  <button
+                    aria-label="Delete last digit"
+                    disabled={!dial}
+                    onClick={() => setDial((value) => value.slice(0, -1))}
+                  >
+                    <Delete size={23} />
+                  </button>
+                </div>
+                <button
+                  className={s.clearNumber}
+                  disabled={!dial}
+                  onClick={() => setDial("")}
+                >
+                  Clear number
+                </button>
+                <div className={s.ringFirst}>
+                  <span>RING FIRST</span>
+                  {founderSelector}
+                  <p>
+                    Answer your cellphone and press <strong>1</strong> to
+                    connect.
+                  </p>
+                </div>
+                {model && !model.callsEnabled ? (
+                  <p className={s.helpText}>Outbound calling is not enabled.</p>
+                ) : null}
+              </div>
+              <aside className={s.keypadAside}>
+                <div className={s.lineCard}>
+                  <div className={s.lineCardTop}>
+                    <span className={s.lineMark}>LY</span>
+                    <span>YOUR BUSINESS LINE</span>
+                  </div>
+                  <h2>Le Yard</h2>
+                  <p>{displayNumber(model?.business ?? "+13328779035")}</p>
+                  <div className={s.lineCardFooter}>
+                    <span>
+                      <Phone size={14} /> Calls
+                    </span>
+                    <span>
+                      <MessageSquare size={14} /> Messages
+                    </span>
+                    <span>
+                      <Voicemail size={14} /> Voicemail
+                    </span>
+                  </div>
+                </div>
+                <div className={s.sectionHeading}>
+                  <h2>Recent calls</h2>
+                  <button
+                    className={s.textButton}
+                    onClick={() => goTo("calls")}
+                  >
+                    View all <ArrowUpRight size={14} />
+                  </button>
+                </div>
+                <div className={s.compactCalls}>
+                  {callRows((model?.calls ?? []).slice(0, 3), true)}
+                  {!model?.calls.length ? (
+                    <p className={s.helpText}>
+                      {emptyHistory ?? "Your recent calls will appear here."}
+                    </p>
+                  ) : null}
+                </div>
+                <details className={s.howItWorks}>
+                  <summary>
+                    How calling works <ChevronDown size={16} />
+                  </summary>
+                  <p>
+                    We ring {founder} first, then connect the guest. They see
+                    your Le Yard number. Use your cellphone’s speaker, mute, and
+                    end-call controls.
+                  </p>
+                </details>
+              </aside>
+            </section>
+          ) : null}
+
+          {tab === "texts" && !creating ? (
+            <div className={s.inbox} data-selected={Boolean(selected)}>
+              <aside className={s.conversations} aria-label="Conversations">
+                <label className={s.search}>
+                  <Search size={17} />
+                  <input
+                    aria-label="Search conversations"
+                    type="search"
+                    placeholder="Search people, messages…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </label>
+                <div
+                  className={s.quickContacts}
+                  aria-label="Recent conversations"
+                >
+                  <button className={s.newContact} onClick={startConversation}>
+                    <span>
+                      <Plus size={21} />
+                    </span>
+                    <small>New</small>
+                  </button>
+                  {conversations.slice(0, 4).map(([phone]) => (
+                    <button
+                      key={phone}
+                      onClick={() => openConversation(phone)}
+                      aria-label={`Open ${displayNumber(phone)}`}
+                    >
+                      <Avatar value={phone} />
+                      <small>••• {phone.slice(-4)}</small>
+                    </button>
+                  ))}
+                </div>
+                <div className={s.sectionHeading}>
+                  <h2>Conversations</h2>
+                  <span className={s.count}>
+                    {model ? conversations.length : "—"}
+                  </span>
+                </div>
+                <div className={s.conversationList}>
+                  {filteredConversations.map(([phone, m]) => (
+                    <button
+                      key={phone}
+                      className={s.conversationRow}
+                      data-active={selected === phone}
+                      onClick={() => openConversation(phone)}
+                    >
+                      <Avatar value={phone} />
+                      <span className={s.rowBody}>
+                        <strong>{displayNumber(phone)}</strong>
+                        <span>
+                          {m.direction === "outbound" ? "You: " : ""}
+                          {m.body || "Attachment"}
+                        </span>
+                      </span>
+                      <time
+                        className={s.rowTime}
+                        dateTime={m.at}
+                        title={date(m.at)}
+                      >
+                        {shortDate(m.at)}
+                      </time>
+                    </button>
+                  ))}
+                </div>
+                {!filteredConversations.length ? (
+                  <Empty
+                    icon={MessageSquare}
+                    title={search ? "No matches" : "Your conversations"}
+                    text={
+                      emptyHistory ??
+                      (search
+                        ? "No matching conversations."
+                        : "No messages yet. Start a conversation above.")
+                    }
+                  />
+                ) : null}
+              </aside>
+              <section className={s.thread} aria-label="Selected conversation">
+                {!selected ? (
+                  <Empty
+                    icon={MessageSquare}
+                    title="Your shared inbox"
+                    text="Choose a conversation or start a new one."
+                    action={
+                      <button
+                        className={s.primaryButton}
+                        onClick={startConversation}
+                      >
+                        <SquarePen size={16} /> New message
+                      </button>
+                    }
+                  />
+                ) : (
+                  <>
+                    <div className={s.threadHeader}>
+                      <button
+                        className={`${s.iconButton} ${s.backButton}`}
+                        aria-label="Back to conversations"
+                        onClick={() => setSelected("")}
+                      >
+                        <ArrowLeft size={19} />
+                      </button>
+                      <Avatar value={selected} />
+                      <div className={s.threadIdentity}>
+                        <h2>{displayNumber(selected)}</h2>
+                        <p>Texting as Le Yard</p>
+                      </div>
+                      <button
+                        className={s.iconButton}
+                        aria-label="Call this contact"
+                        onClick={() => prepareCall(selected)}
+                      >
+                        <Phone size={18} />
+                      </button>
+                    </div>
+                    <div
+                      ref={history}
+                      className={s.history}
+                      aria-label="Text history"
+                    >
+                      {messages.map((m, index) => (
+                        <div key={m.sid}>
+                          {index === 0 ||
+                          day(m.at) !== day(messages[index - 1].at) ? (
+                            <p className={s.messageDay}>{day(m.at)}</p>
+                          ) : null}
+                          <article
+                            className={s.message}
+                            data-outbound={m.direction === "outbound"}
+                          >
+                            <div className={s.bubble}>
+                              <p>{m.body}</p>
+                              {Array.from(
+                                { length: Math.min(m.mediaCount, 10) },
+                                (_, i) => (
+                                  <a
+                                    key={i}
+                                    href={`/api/phone/media?message=${m.sid}&index=${i}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    <Paperclip size={14} /> Open attachment{" "}
+                                    {i + 1}
+                                    <ArrowUpRight size={13} />
+                                  </a>
+                                ),
+                              )}
+                            </div>
+                            <p className={s.messageMeta}>
+                              {time(m.at)} · {m.status}
+                              {m.errorCode ? ` · error ${m.errorCode}` : ""}
+                            </p>
+                          </article>
+                        </div>
+                      ))}
+                      {!messages.length ? (
+                        <Empty
+                          icon={MessageSquare}
+                          title="Start the conversation"
+                          text="No texts with this number yet."
+                        />
+                      ) : null}
+                    </div>
+                    <form
+                      className={s.composer}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void submit("sms");
+                      }}
+                    >
+                      <div className={s.composeInput}>
+                        <label className="sr-only" htmlFor="phone-message">
+                          Message
+                        </label>
+                        <textarea
+                          id="phone-message"
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          maxLength={1200}
+                          placeholder="Message from Le Yard…"
+                          required
+                          rows={2}
+                        />
+                        <button
+                          type="submit"
+                          aria-label={busy ? "Submitting text" : "Send text"}
+                          disabled={
+                            busy ||
+                            !draft.trim() ||
+                            !model?.smsEnabled ||
+                            authExpired
+                          }
+                        >
+                          {busy ? (
+                            <LoaderCircle size={19} className={s.spinning} />
+                          ) : (
+                            <ArrowUp size={21} />
+                          )}
+                        </button>
+                      </div>
+                      <label className={s.consent}>
+                        <input
+                          type="checkbox"
+                          checked={consent}
+                          onChange={(e) => setConsent(e.target.checked)}
+                        />
+                        <span>
+                          The recipient agreed to guest-care texts about this
+                          request.
+                        </span>
+                      </label>
+                      <div className={s.composeMeta}>
+                        <span>Consent required for new conversations.</span>
+                        <span>{draft.length}/1200</span>
+                      </div>
+                      {model && !model.smsEnabled ? (
+                        <p className={s.helpText}>
+                          Text sending is awaiting activation.
+                        </p>
+                      ) : null}
+                    </form>
+                  </>
+                )}
+              </section>
+            </div>
+          ) : null}
+
+          {tab === "calls" ? (
+            <section aria-label="Call history" className={s.historyPage}>
+              <label className={s.search}>
+                <Search size={17} />
+                <input
+                  aria-label="Search calls"
+                  type="search"
+                  placeholder="Search by number…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              <div
+                className={s.segmented}
+                role="group"
+                aria-label="Filter calls"
+              >
+                <button
+                  aria-pressed={!missedOnly}
+                  onClick={() => setMissedOnly(false)}
+                >
+                  All calls
+                </button>
+                <button
+                  aria-pressed={missedOnly}
+                  onClick={() => setMissedOnly(true)}
+                >
+                  Missed calls
+                </button>
+              </div>
+              {callRows(recentCalls)}
+              {!recentCalls.length ? (
+                <Empty
+                  icon={Phone}
+                  title={
+                    model && !loadError && missedOnly
+                      ? "No missed calls"
+                      : "Call history"
+                  }
+                  text={
+                    emptyHistory ??
+                    (search
+                      ? "No calls match this number."
+                      : missedOnly
+                        ? "No missed calls in recent history."
+                        : "No calls in the recent history.")
+                  }
                 />
               ) : null}
-              {v.from && /^\+1[2-9]\d{9}$/.test(v.from) ? (
-                <Button
-                  className="mt-3"
-                  variant="quiet"
-                  onClick={() => {
-                    setDial(v.from!);
-                    setTab("keypad");
-                  }}
-                >
-                  <Phone className="size-4" />
-                  Return call
-                </Button>
-              ) : null}
-            </div>
-          ))}
-          {!model?.voicemails.length ? (
-            <p className="py-8 text-sm text-[var(--ink-faint)]">
-              {emptyHistory ?? "No voicemail yet."}
-            </p>
+            </section>
           ) : null}
-        </section>
-      ) : null}
-      <footer className="mt-6 border-t border-[var(--line)] pt-4 text-xs leading-5 text-[var(--ink-faint)]">
-        Save this page to your phone’s Home Screen. Use this workspace for
-        outgoing calls and texts; your regular Phone and Messages apps use your
-        personal number. History refreshes every 15 seconds while open.
-      </footer>
-    </div>
+
+          {tab === "voicemail" ? (
+            <section aria-label="Voicemail" className={s.historyPage}>
+              <div className={s.sectionHeading}>
+                <h2>Voice messages</h2>
+                <span className={s.count}>
+                  {model?.voicemails.length ?? "—"}
+                </span>
+              </div>
+              <div className={s.voicemailList}>
+                {model?.voicemails.map((v) => (
+                  <article className={s.voicemailCard} key={v.id}>
+                    <div className={s.voicemailHeading}>
+                      <Avatar value={v.from ?? "?"} />
+                      <div className={s.rowBody}>
+                        <strong>
+                          {v.from ? displayNumber(v.from) : "Unknown caller"}
+                        </strong>
+                        <span>{date(v.at)}</span>
+                      </div>
+                      <span className={s.duration}>
+                        {v.durationSeconds === undefined
+                          ? "—"
+                          : duration(v.durationSeconds)}
+                      </span>
+                    </div>
+                    {v.recordingSid ? (
+                      <audio
+                        controls
+                        preload="none"
+                        aria-label={`Voicemail from ${v.from ? displayNumber(v.from) : "unknown caller"}`}
+                        src={`/api/phone/media?recording=${v.recordingSid}`}
+                      />
+                    ) : (
+                      <p className={s.helpText}>Recording unavailable.</p>
+                    )}
+                    {v.from && /^\+1[2-9]\d{9}$/.test(v.from) ? (
+                      <div className={s.voicemailActions}>
+                        <button
+                          className={s.textButton}
+                          onClick={() => openConversation(v.from!)}
+                        >
+                          <MessageSquare size={15} /> Message
+                        </button>
+                        <button
+                          className={s.textButton}
+                          onClick={() => prepareCall(v.from!)}
+                        >
+                          <Phone size={15} /> Return call
+                        </button>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+              {!model?.voicemails.length ? (
+                <Empty
+                  icon={Voicemail}
+                  title="Voice messages"
+                  text={emptyHistory ?? "No voicemail yet."}
+                />
+              ) : null}
+            </section>
+          ) : null}
+        </div>
+        <footer className={s.footer}>
+          <span>LE YARD</span>New York · One shared line
+        </footer>
+      </div>
+      <div className={s.dockWrap}>
+        <nav aria-label="Phone views" className={s.dock}>
+          {(
+            [
+              ["keypad", "Keypad", Grid3X3],
+              ["calls", "Recents", Phone],
+              ["texts", "Messages", MessageSquare],
+              ["voicemail", "Voicemail", Voicemail],
+            ] as const
+          ).map(([key, label, Icon]) => (
+            <button
+              key={key}
+              aria-current={tab === key ? "page" : undefined}
+              onClick={() => goTo(key)}
+            >
+              <span>
+                <Icon size={19} strokeWidth={1.8} />
+              </span>
+              <small>{label}</small>
+            </button>
+          ))}
+        </nav>
+        <button
+          className={s.dockCompose}
+          aria-label="Compose a new message"
+          onClick={startConversation}
+        >
+          <Plus size={25} strokeWidth={1.7} />
+        </button>
+      </div>
+    </main>
   );
 }
