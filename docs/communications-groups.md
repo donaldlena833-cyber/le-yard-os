@@ -40,10 +40,10 @@ Messages and tickets have keyset pagination. Search applies to loaded messages. 
 4. Wire the external SMS agent's human-escalation tool to the endpoint and its automated sends through the guarded path.
 5. With an authorized test handset, verify client inbound SMS/MMS, agent handoff notice delivery and owner notification, blocked automated follow-up, a human SMS/MMS reply, STOP/START behavior, and an employee-number conversation in Team requests. Verify no personal owner number appears in replies.
 
-No Twilio number, Messaging Service, campaign, or forwarding destination needs to be replaced. This revision has not itself been deployed or tested through a live carrier.
+No Twilio number, Messaging Service, campaign, or forwarding destination needs to be replaced. On September 8, 2026, the Groups release was deployed to Operations, Phone, and Host, both migrations were applied, and 17 available historical messages were reconciled. Donald completed live SMS/MMS round trips, an agent-handoff notice, and human replies through the authenticated Groups UI. Ticket notes, resolve/reopen, conversation links, and automation handback/takeover were also verified. All test sends and notifications were restricted to Donald. Client routing and employee access boundaries were tested with isolated fixtures; no client or other employee was contacted. No AI model was activated.
 
 Live acceptance testing may temporarily set `COMMUNICATIONS_TEST_OWNER_ID` and
-`COMMUNICATIONS_TEST_UNTIL` on Operations. Until the specified UTC instant, only
+`COMMUNICATIONS_TEST_UNTIL` on Operations and Phone. Until the specified UTC instant, only
 notifications associated with the existing `TWILIO_FORWARD_DONALD` contact are
 restricted to that active owner. Other contacts and voice routing are unaffected.
 Remove these two settings after testing; expiry also restores normal recipients.
