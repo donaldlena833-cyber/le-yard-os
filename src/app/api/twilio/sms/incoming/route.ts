@@ -39,11 +39,11 @@ export async function POST(request: Request) {
   if (optOutType === "HELP") return xmlResponse(new twilio.twiml.MessagingResponse().toString());
   const response = new twilio.twiml.MessagingResponse();
   if (internal) {
-    await notifyOwnersOfCommunication({title:'New team request',body:`${senderLabel}: ${body.slice(0,220)}`,eventType:'team_sms_inbound',actionUrl:'/messages?group=team'});
+    await notifyOwnersOfCommunication({ phone: from,title:'New team request',body:`${senderLabel}: ${body.slice(0,220)}`,eventType:'team_sms_inbound',actionUrl:'/messages?group=team'});
     return xmlResponse(response.toString());
   }
   if (!twilioSmsEnabled()) {
-    await notifyOwnersOfCommunication({title:'New Le Yard text',body:`${senderLabel}: ${body.slice(0,220)}`,eventType:'sms_inbound',actionUrl:'/messages?group=clients'});
+    await notifyOwnersOfCommunication({ phone: from,title:'New Le Yard text',body:`${senderLabel}: ${body.slice(0,220)}`,eventType:'sms_inbound',actionUrl:'/messages?group=clients'});
     return xmlResponse(response.toString());
   }
   if (/^help$/i.test(body)) {
@@ -52,19 +52,19 @@ export async function POST(request: Request) {
   }
   // Team requests are always handled in the shared Team group; they never enter
   // guest booking automation or authorize privileged employee/account changes.
-  try { if (await communicationThreadMode(from) === 'human') { await notifyOwnersOfCommunication({title:'Client reply · human handling',body:`${senderLabel}: ${body.slice(0,220)}`,eventType:'sms_human_reply',actionUrl:'/messages?group=clients'}); return xmlResponse(response.toString()); } }
+  try { if (await communicationThreadMode(from) === 'human') { await notifyOwnersOfCommunication({ phone: from,title:'Client reply · human handling',body:`${senderLabel}: ${body.slice(0,220)}`,eventType:'sms_human_reply',actionUrl:'/messages?group=clients'}); return xmlResponse(response.toString()); } }
   catch { return new Response('Handoff state unavailable', {status:503}); }
   const eventLead = detectPrivateEventLead(body);
   if (eventLead.isLead) {
     await logCommunicationEvent({ eventType: "lead.private_event", message: "Potential private-event lead detected by SMS.", metadata: { messageSid, from, body, signal: eventLead.matchedTerm ?? undefined } });
-    await notifyOwnersOfCommunication({ title: "Private-event lead", body: `${senderLabel}: ${body.slice(0, 220)}`, eventType: "private_event_lead" });
+    await notifyOwnersOfCommunication({ phone: from, title: "Private-event lead", body: `${senderLabel}: ${body.slice(0, 220)}`, eventType: "private_event_lead" });
     response.message({ statusCallback: twilioAbsoluteUrl("/api/twilio/sms/status") }, "Le Yard: Your event inquiry has been received. Please send the date, approximate guest count, and occasion. This is not a confirmed booking. Reply STOP to opt out.");
   } else if (detectReservationIntent(body)) {
     await logCommunicationEvent({ eventType: "reservation.intent.sms", message: "Reservation intent detected by SMS.", metadata: { messageSid, from, body, guestId: guest?.id } });
-    await notifyOwnersOfCommunication({ title: "Reservation inquiry", body: `${senderLabel}: ${body.slice(0, 220)}`, eventType: "sms_inbound" });
+    await notifyOwnersOfCommunication({ phone: from, title: "Reservation inquiry", body: `${senderLabel}: ${body.slice(0, 220)}`, eventType: "sms_inbound" });
     response.message({ statusCallback: twilioAbsoluteUrl("/api/twilio/sms/status") }, "Le Yard: We received your reservation question. Please send your preferred date, time, and party size. A table is not booked until explicitly confirmed. Reply STOP to opt out.");
   } else {
-    await notifyOwnersOfCommunication({ title: "New Le Yard text", body: `${senderLabel}: ${body.slice(0, 220)}`, eventType: "sms_inbound" });
+    await notifyOwnersOfCommunication({ phone: from, title: "New Le Yard text", body: `${senderLabel}: ${body.slice(0, 220)}`, eventType: "sms_inbound" });
   }
   return xmlResponse(response.toString());
 }

@@ -41,3 +41,9 @@ Messages and tickets have keyset pagination. Search applies to loaded messages. 
 5. With an authorized test handset, verify client inbound SMS/MMS, agent handoff notice delivery and owner notification, blocked automated follow-up, a human SMS/MMS reply, STOP/START behavior, and an employee-number conversation in Team requests. Verify no personal owner number appears in replies.
 
 No Twilio number, Messaging Service, campaign, or forwarding destination needs to be replaced. This revision has not itself been deployed or tested through a live carrier.
+
+Live acceptance testing may temporarily set `COMMUNICATIONS_TEST_OWNER_ID` and
+`COMMUNICATIONS_TEST_UNTIL` on Operations. Until the specified UTC instant, only
+notifications associated with the existing `TWILIO_FORWARD_DONALD` contact are
+restricted to that active owner. Other contacts and voice routing are unaffected.
+Remove these two settings after testing; expiry also restores normal recipients.

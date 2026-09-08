@@ -3,6 +3,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeE164 } from "@/lib/twilio.server";
 import type { Json } from "@/types/database.generated";
+import { communicationTestOwner } from "@/lib/communication-test-routing";
 
 export type LeYardTenant = { organizationId: string; locationId: string; timezone: string };
 let tenantPromise: Promise<LeYardTenant> | null = null;
@@ -100,14 +101,17 @@ export function detectPrivateEventLead(text: string, partySize?: number | null) 
 export function detectReservationIntent(text: string) {
   return /\b(reservation|reserve|book|booking|table|party of|dinner|brunch|lunch)\b/i.test(text);
 }
-export async function notifyOwnersOfCommunication(input: { title: string; body: string; eventType: string; actionUrl?: string; required?: boolean }) {
+export async function notifyOwnersOfCommunication(input: { title: string; body: string; eventType: string; actionUrl?: string; required?: boolean; phone?: string }) {
   const tenant = await resolveLeYardTenant();
   const admin = createAdminClient();
   const { data: memberships, error } = await admin.from("organization_memberships").select("user_id")
     .eq("organization_id", tenant.organizationId).eq("status", "active").in("role", ["owner", "admin"]);
   if (error) { if(input.required) throw new Error("Owner notification unavailable."); console.error("communications_owner_lookup_failed"); return; }
   if (!memberships.length) { if(input.required) throw new Error("No owners could be notified."); return; }
-  const { error: insertError } = await admin.from("notifications").insert(memberships.map((membership) => ({
+  const testOwner = communicationTestOwner(input.phone, process.env);
+  const recipients = testOwner ? memberships.filter(member => member.user_id === testOwner) : memberships;
+  if (!recipients.length) throw new Error("Test recipient is not an active owner.");
+  const { error: insertError } = await admin.from("notifications").insert(recipients.map((membership) => ({
     organization_id: tenant.organizationId, user_id: membership.user_id, notification_type: input.eventType,
     title: input.title, body: input.body, action_url: input.actionUrl ?? "/phone", entity_type: null, entity_id: null,
   })));

@@ -73,6 +73,7 @@ export async function POST(request: Request) {
     });
     if (item.error) throw item.error;
     await notifyOwnersOfCommunication({
+      phone: input.phone,
       title: "Client needs a human",
       body: input.reason,
       eventType: "sms_human_handoff",
