@@ -26,18 +26,7 @@
   gap: 11px;
   padding: 18px;
 }
-.monogram {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: var(--button);
-  color: var(--strong);
-  box-shadow: var(--shadow-button);
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -1.8px;
-}
-.monogram > span { color: var(--brand-brass, #9a7846); }
+.monogram { width: 34px; height: 45px; color: var(--ly-brand-ink); }
 .brandTitle {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -176,7 +165,8 @@
 @media (max-width: 639px) {
   .header { gap: 12px; }
   .actions { gap: 6px; }
-  .headerBrand, .mobileMenu { display: none; }
+  .headerBrand { display: block; width: 25px; height: 33px; }
+  .mobileMenu { display: none; }
 }
 @media (max-width: 359px) {
   .header { padding-left: 20px; padding-right: 20px; }

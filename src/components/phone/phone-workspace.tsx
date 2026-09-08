@@ -1,4 +1,7 @@
 "use client";
+
+import { LyMonogram } from "@/components/ly-monogram";
+
 import {
   useCallback,
   useEffect,
@@ -515,9 +518,6 @@ export function PhoneWorkspace({
       <div className={s.workspace}>
         <header className={s.brandHeader}>
           <div className={s.brand}>
-            <span className={s.monogram} aria-hidden="true">
-              L<span>Y</span>
-            </span>
             <div>
               <span className={s.wordmark}>LE YARD</span>
               <span className={s.brandDetail}>SHARED PHONE</span>
@@ -567,7 +567,6 @@ export function PhoneWorkspace({
               </button>
             </div>
             <div className={s.profileRow}>
-              <span className={s.profileMark}>LY</span>
               <div>
                 <strong>Le Yard</strong>
                 <p>{displayNumber(model?.business ?? "+13328779035")}</p>
@@ -824,7 +823,6 @@ export function PhoneWorkspace({
               <aside className={s.keypadAside}>
                 <div className={s.lineCard}>
                   <div className={s.lineCardTop}>
-                    <span className={s.lineMark}>LY</span>
                     <span>YOUR BUSINESS LINE</span>
                   </div>
                   <h2>Le Yard</h2>
@@ -1218,7 +1216,7 @@ export function PhoneWorkspace({
           ) : null}
         </div>
         <footer className={s.footer}>
-          <span>LE YARD</span>New York · One shared line
+          <LyMonogram className={s.signature} /><span>New York · One shared line</span>
         </footer>
       </div>
       <div className={s.dockWrap}>

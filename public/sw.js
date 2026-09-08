@@ -1,4 +1,4 @@
-const CACHE_NAME = "le-yard-os-public-shell-v3";
+const CACHE_NAME = "le-yard-os-public-shell-v4";
 const PUBLIC_SHELL = [
   "/offline.html",
   "/offline.css",

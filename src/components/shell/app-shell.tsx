@@ -324,7 +324,6 @@ function Sidebar({
   return (
     <aside className={styles.sidebar}>
       <div className={styles.brand}>
-        <BrandMark className={styles.monogram} />
         <div className="min-w-0">
           <p className={styles.brandTitle}>
             {surfaceProductName}
@@ -415,7 +414,6 @@ function MobileDrawer({
       className={styles.drawer}
     >
             <div className={styles.drawerHeader}>
-              <BrandMark className={styles.monogram} />
               <span id="mobile-navigation-title" className={styles.drawerTitle}>{surfaceProductName}</span>
               <button
                 type="button"
@@ -567,7 +565,7 @@ function ShellContent({ children }: { children: ReactNode }) {
       <div className={styles.frame}>
         <header className={styles.header}>
           <div className={styles.heading}>
-            <BrandMark className={cn(styles.monogram, styles.headerBrand, "lg:hidden")} />
+            {pathname !== "/phone" ? <BrandMark className={cn(styles.monogram, styles.headerBrand, "lg:hidden")} /> : null}
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className={styles.title}>

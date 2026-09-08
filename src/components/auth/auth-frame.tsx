@@ -19,7 +19,6 @@ function Frame({
       <div className="auth-container">
         <header className="auth-brand">
           <div className="flex items-center gap-3">
-            <BrandMark className="size-10" />
             <div>
               <p className="text-sm font-semibold tracking-[.12em]">LE YARD</p>
               <p className="mt-1 text-xs text-[var(--muted)]">
@@ -46,7 +45,7 @@ function Frame({
         </header>
         <section className="auth-card">{children}</section>
         <p className="auth-footer">
-          LE YARD <span>New York · Your shared workspace</span>
+          <BrandMark className="ly-footer-signature" /><span>New York · Your shared workspace</span>
         </p>
       </div>
     </main>

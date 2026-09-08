@@ -361,3 +361,13 @@
     padding: 24px;
   }
 }
+
+/* Original LY brushwork: olive ink by day, champagne by night. */
+.workspace-design { --ly-brand-ink: #414c34; }
+.workspace-design[data-theme="dark"], [data-theme="dark"] .workspace-design, .dark .workspace-design { --ly-brand-ink: #dac6a3; }
+.ly-workspace-mark { display: block; width: 34px; height: 45px; flex-shrink: 0; overflow: visible; color: var(--ly-brand-ink, #414c34); transition: color 240ms; }
+
+@media (prefers-reduced-motion: reduce) { .ly-workspace-mark { transition: none; } }
+
+.auth-footer { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.ly-footer-signature { width: 20px; height: 27px; opacity: .72; }
