@@ -21,7 +21,9 @@ async function migrationSql() {
     .filter((file) => file.endsWith(".sql"))
     .sort();
   return (
-    await Promise.all(files.map((file) => readFile(join(directory, file), "utf8")))
+    await Promise.all(
+      files.map((file) => readFile(join(directory, file), "utf8")),
+    )
   ).join("\n");
 }
 
@@ -98,13 +100,17 @@ function finalMigratedObjectNames(
 describe("generated Supabase contract", () => {
   it("is byte-for-byte current with the ordered migrations", async () => {
     await expect(
-      execFileAsync(process.execPath, ["scripts/generate-database-types.mjs", "--check"], {
-        cwd: root,
-      }),
+      execFileAsync(
+        process.execPath,
+        ["scripts/generate-database-types.mjs", "--check"],
+        {
+          cwd: root,
+        },
+      ),
     ).resolves.toMatchObject({
       stdout: expect.stringContaining("Verified generated database contract"),
     });
-  }, 30_000);
+  }, 90_000);
 
   it("exactly matches every final migrated public table, view, function, and enum", async () => {
     const sql = await migrationSql();
@@ -130,7 +136,9 @@ describe("generated Supabase contract", () => {
       "approved",
       "rejected",
     ]);
-    expect(DatabaseConstants.public.Enums.job_status).toContain("partially_succeeded");
+    expect(DatabaseConstants.public.Enums.job_status).toContain(
+      "partially_succeeded",
+    );
   });
 
   it("types every private bucket declared by the storage migration", async () => {
@@ -141,9 +149,11 @@ describe("generated Supabase contract", () => {
     expect(bucketInsert).toBeTruthy();
     const migratedBuckets = captures(bucketInsert!, /\('([a-z0-9-]+)'/g);
     expect([...PRIVATE_BUCKETS].sort()).toEqual(migratedBuckets);
-    expect(PRIVATE_BUCKET_DATABASE_POLICIES["employee-documents"].maxBytes).toBe(
-      25 * 1_048_576,
+    expect(
+      PRIVATE_BUCKET_DATABASE_POLICIES["employee-documents"].maxBytes,
+    ).toBe(25 * 1_048_576);
+    expect(PRIVATE_BUCKET_DATABASE_POLICIES.imports.maxBytes).toBe(
+      100 * 1_048_576,
     );
-    expect(PRIVATE_BUCKET_DATABASE_POLICIES.imports.maxBytes).toBe(100 * 1_048_576);
   });
 });

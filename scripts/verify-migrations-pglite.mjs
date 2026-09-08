@@ -1,3 +1,4 @@
+import { verifyOpeningRoomV3 } from "./verify-opening-room-v3.mjs";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
@@ -5150,6 +5151,7 @@ try {
   process.stdout.write(
     "PASS secure invitation functions and owner-role guard\n",
   );
+  await verifyOpeningRoomV3(db);
 } finally {
   await db.close();
 }

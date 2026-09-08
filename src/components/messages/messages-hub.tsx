@@ -5,6 +5,7 @@ import {
   type CommunicationGroup,
 } from "@/lib/communication-groups";
 import { CommunicationGroups } from "./communication-groups";
+import { SmsPilotStatus } from "./sms-pilot-status";
 import s from "./communication-groups.module.css";
 export function MessagesHub({
   children,
@@ -33,6 +34,7 @@ export function MessagesHub({
           Open Phone
         </a>
       </div>
+      <SmsPilotStatus />
       <nav className={s.tabs} aria-label="Groups">
         {communicationGroups.map((g) => (
           <button

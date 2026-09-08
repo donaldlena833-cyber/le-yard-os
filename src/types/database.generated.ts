@@ -7366,6 +7366,76 @@ export type Database = {
           },
         ]
       };
+      "sms_ai_runs": {
+        Row: {
+          "organization_id": string
+          "location_id": string
+          "source_sid": string
+          "status": string
+          "model": string
+          "created_at": string
+          "started_at": string | null
+          "completed_at": string | null
+          "week_start": string | null
+          "reserved_micro_usd": number
+          "input_tokens": number | null
+          "output_tokens": number | null
+          "latency_ms": number | null
+          "decision": Json | null
+          "reply_sid": string | null
+          "error_code": string | null
+        }
+        Insert: {
+          "organization_id": string
+          "location_id": string
+          "source_sid": string
+          "status"?: string
+          "model"?: string
+          "created_at"?: string
+          "started_at"?: string | null
+          "completed_at"?: string | null
+          "week_start"?: string | null
+          "reserved_micro_usd"?: number
+          "input_tokens"?: number | null
+          "output_tokens"?: number | null
+          "latency_ms"?: number | null
+          "decision"?: Json | null
+          "reply_sid"?: string | null
+          "error_code"?: string | null
+        }
+        Update: {
+          "organization_id"?: string
+          "location_id"?: string
+          "source_sid"?: string
+          "status"?: string
+          "model"?: string
+          "created_at"?: string
+          "started_at"?: string | null
+          "completed_at"?: string | null
+          "week_start"?: string | null
+          "reserved_micro_usd"?: number
+          "input_tokens"?: number | null
+          "output_tokens"?: number | null
+          "latency_ms"?: number | null
+          "decision"?: Json | null
+          "reply_sid"?: string | null
+          "error_code"?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_ai_runs_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "sms_ai_runs_organization_id_source_sid_fkey"
+            columns: ["organization_id","source_sid"]
+            referencedRelation: "communication_messages"
+            referencedColumns: ["organization_id","sid"]
+          },
+        ]
+      };
       "sop_acknowledgements": {
         Row: {
           "id": string
@@ -10975,6 +11045,15 @@ export type Database = {
         }
         Returns: { "outcome": string | null; "revision": number | null; "data": Json | null; "updated_at": string | null }[]
       };
+      "save_startup_workspace_v3": {
+        Args: {
+          "p_workspace_id": string | null
+          "p_expected_revision": number | null
+          "p_data": Json | null
+          "p_operation_id": string | null
+        }
+        Returns: { "outcome": string | null; "revision": number | null; "data": Json | null; "updated_at": string | null }[]
+      };
       "save_time_off_request": {
         Args: {
           "p_request_id": string | null
@@ -11207,6 +11286,13 @@ export type Database = {
         }
         Returns: { "id": string | null; "claimToken": string | null; "organizationId": string | null; "notificationId": string | null; "subscriptionId": string | null; "attempts": number | null; "deliveryTopic": string | null }[]
       };
+      "service_claim_sms_ai_run": {
+        Args: {
+          "p_organization_id": string | null
+          "p_source_sid": string | null
+        }
+        Returns: Json
+      };
       "service_complete_identity_delivery": {
         Args: {
           "p_id": string | null
@@ -11337,6 +11423,14 @@ export type Database = {
           "p_now": string | null
         }
         Returns: number
+      };
+      "service_enqueue_sms_ai_run": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
+          "p_source_sid": string | null
+        }
+        Returns: undefined
       };
       "service_exchange_reservation_management": {
         Args: {
@@ -12054,6 +12148,7 @@ export const DatabaseObjectNames = {
       "shift_swap_offers",
       "shift_swap_requests",
       "shifts",
+      "sms_ai_runs",
       "sop_acknowledgements",
       "sop_documents",
       "sop_versions",
@@ -12309,6 +12404,7 @@ export const DatabaseObjectNames = {
       "save_reservation_with_guest",
       "save_schedule_template",
       "save_startup_workspace",
+      "save_startup_workspace_v3",
       "save_time_off_request",
       "save_tip_pool_policy_draft",
       "save_waitlist_entry",
@@ -12330,6 +12426,7 @@ export const DatabaseObjectNames = {
       "service_claim_integration_sync_job",
       "service_claim_reservation_message_outbox",
       "service_claim_reservation_push_deliveries",
+      "service_claim_sms_ai_run",
       "service_complete_identity_delivery",
       "service_complete_integration_sync_job",
       "service_complete_reservation_delivery_run",
@@ -12342,6 +12439,7 @@ export const DatabaseObjectNames = {
       "service_day_provider_health",
       "service_enqueue_identity_delivery",
       "service_enqueue_reservation_reminders",
+      "service_enqueue_sms_ai_run",
       "service_exchange_reservation_management",
       "service_expire_reservation_deadlines",
       "service_fence_integration_sync_job",

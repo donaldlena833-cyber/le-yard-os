@@ -157,6 +157,7 @@ const approvedAuthenticatedFunctions = new Set([
   "save_push_subscription",
   "save_reservation",
   "save_startup_workspace",
+  "save_startup_workspace_v3",
   "save_reservation_floor_positions",
   "save_reservation_with_guest",
   "save_schedule_template",

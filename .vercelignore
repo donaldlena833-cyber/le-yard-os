@@ -35,6 +35,6 @@
 /scripts/
 /supabase/
 /playwright*.config.*
-/vitest.config.*
+/vitest*.config.*
 /eslint.config.*
 /README.md

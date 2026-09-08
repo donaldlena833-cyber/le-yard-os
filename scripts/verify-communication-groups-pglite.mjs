@@ -28,18 +28,23 @@ async function actor(id) {
 let failed = false;
 try {
   await db.exec(bootstrap);
-  await db.exec("create schema supabase_migrations; create table supabase_migrations.schema_migrations(version text primary key);");
+  await db.exec(
+    "create schema supabase_migrations; create table supabase_migrations.schema_migrations(version text primary key);",
+  );
   for (const file of (await readdir("supabase/migrations"))
     .filter((f) => f.endsWith(".sql"))
     .sort()) {
     await db.exec(await readFile(`supabase/migrations/${file}`, "utf8"));
-    await db.query("insert into supabase_migrations.schema_migrations(version) values ($1)", [file.split("_")[0]]);
+    await db.query(
+      "insert into supabase_migrations.schema_migrations(version) values ($1)",
+      [file.split("_")[0]],
+    );
   }
   await db.exec(`set request.jwt.claims='{"role":"service_role"}';`);
   const contract = (
     await db.query("select public.service_runtime_schema_contract() as value")
   ).rows[0].value;
-  assert.equal(contract.migrationHead, "20260908120001");
+  assert.equal(contract.migrationHead, "20260908120003");
   assert.equal(
     contract.matchesExpected,
     true,
@@ -143,6 +148,131 @@ try {
       )
     ).rows[0].public,
     false,
+  );
+  await db.exec(`reset role;set request.jwt.claims='{"role":"service_role"}';`);
+  await db.query(
+    `select public.service_enqueue_sms_ai_run('${org}','${loc}','${sid}')`,
+  );
+  await db.query(
+    `select public.service_enqueue_sms_ai_run('${org}','${loc}','${sid}')`,
+  );
+  assert.equal(
+    (await db.query("select count(*)::int as n from public.sms_ai_runs"))
+      .rows[0].n,
+    1,
+    "Duplicate inbound must create one job",
+  );
+  await denied(
+    `select public.service_enqueue_sms_ai_run('${other}','${otherLoc}','${sid}')`,
+    "22023",
+  );
+  await db.exec(
+    `delete from public.communication_threads where organization_id='${org}';`,
+  );
+  assert.equal(
+    (
+      await db.query(
+        `select public.service_claim_sms_ai_run('${org}','${sid}') as value`,
+      )
+    ).rows[0].value.status,
+    "claimed",
+  );
+  assert.equal(
+    (
+      await db.query(
+        `select public.service_claim_sms_ai_run('${org}','${sid}') as value`,
+      )
+    ).rows[0].value.status,
+    "processing",
+    "A claimed request must not be replayed",
+  );
+  assert.equal(
+    (await db.query("select reserved_micro_usd from public.sms_ai_runs"))
+      .rows[0].reserved_micro_usd,
+    10000,
+  );
+  const sid2 = "SM" + "b".repeat(32);
+  await db.exec(
+    `insert into public.communication_messages(organization_id,location_id,sid,from_number,to_number,body,direction,sender_kind,status,sent_at) values('${org}','${loc}','${sid2}','+12125550123','+13328779035','Second message','inbound','client','received',now()); select public.service_enqueue_sms_ai_run('${org}','${loc}','${sid2}');`,
+  );
+  assert.equal(
+    (
+      await db.query(
+        `select public.service_claim_sms_ai_run('${org}','${sid2}') as value`,
+      )
+    ).rows[0].value.status,
+    "busy",
+    "Concurrent jobs for the same conversation must serialize",
+  );
+  await db.exec(
+    `update public.sms_ai_runs set started_at=clock_timestamp()-interval '2 minutes' where source_sid='${sid}';`,
+  );
+  assert.equal(
+    (
+      await db.query(
+        `select public.service_claim_sms_ai_run('${org}','${sid}') as value`,
+      )
+    ).rows[0].value.status,
+    "held",
+    "Stale processing must hold, never replay a possibly sent response",
+  );
+  assert.equal(
+    (
+      await db.query(
+        `select mode from public.communication_threads where organization_id='${org}'`,
+      )
+    ).rows[0].mode,
+    "human",
+  );
+  assert.equal(
+    (
+      await db.query(
+        `select public.service_claim_sms_ai_run('${org}','${sid2}') as value`,
+      )
+    ).rows[0].value.status,
+    "held",
+  );
+  await db.exec(
+    `update public.communication_threads set mode='automation' where organization_id='${org}'; update public.sms_ai_runs set status='queued' where source_sid='${sid2}';`,
+  );
+  // Fill the reviewed weekly budget with synthetic completed jobs; do not call any provider.
+  await db.exec(`insert into public.communication_messages(organization_id,location_id,sid,from_number,to_number,body,direction,sender_kind,status,sent_at) select '${org}','${loc}','SM'||md5('budget-'||i),'+12125550124','+13328779035','Fixture','inbound','client','received',now() from generate_series(1,499) i;
+    insert into public.sms_ai_runs(organization_id,location_id,source_sid,status,week_start,reserved_micro_usd) select '${org}','${loc}','SM'||md5('budget-'||i),'completed',date_trunc('week',clock_timestamp() at time zone 'UTC')::date,10000 from generate_series(1,499) i;`);
+  assert.equal(
+    (
+      await db.query(
+        `select public.service_claim_sms_ai_run('${org}','${sid2}') as value`,
+      )
+    ).rows[0].value.status,
+    "budget",
+  );
+  assert.equal(
+    (
+      await db.query(
+        `select sum(reserved_micro_usd)::int as n from public.sms_ai_runs`,
+      )
+    ).rows[0].n,
+    5000000,
+    "Claims cannot overrun the $5 budget",
+  );
+  await actor(owner);
+  assert.ok(
+    (await db.query("select * from public.sms_ai_runs")).rows.length > 0,
+  );
+  await denied(
+    `select public.service_claim_sms_ai_run('${org}','${sid2}')`,
+    "42501",
+  );
+  await denied(`update public.sms_ai_runs set reserved_micro_usd=0`, "42501");
+  for (const user of [employee, outsider]) {
+    await actor(user);
+    assert.equal(
+      (await db.query("select * from public.sms_ai_runs")).rows.length,
+      0,
+    );
+  }
+  console.log(
+    "PASS: AI pilot durable deduplication, serialized conversation claims, stale-worker human hold, service-only writes, tenant isolation, and atomic $5 weekly reservation limit.",
   );
   console.log(
     "PASS: complete migration chain; owner reads; employee and cross-tenant isolation; append-only transcript access; employee phone routing; stable ticket status; private MMS bucket; composite tenant constraints.",
