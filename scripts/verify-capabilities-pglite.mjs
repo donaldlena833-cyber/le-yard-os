@@ -377,8 +377,9 @@ try {
     "select public.can_manage_org($1::uuid) as can_manage, public.is_owner_pending_mfa($1::uuid) as pending_mfa",
     [ids.organization],
   )).rows[0];
-  if (ownerAal1Access.can_manage || !ownerAal1Access.pending_mfa) {
-    throw new Error(`AAL1 Owner policy failed: ${JSON.stringify(ownerAal1Access)}`);
+  // This harness applies the full chain, including permanent_password_auth.
+  if (!ownerAal1Access.can_manage || ownerAal1Access.pending_mfa) {
+    throw new Error(`Password-authenticated Owner policy failed: ${JSON.stringify(ownerAal1Access)}`);
   }
   await assumeUser(ids.manager);
   await configure(ids.vendor, "vendor.save", {

@@ -320,14 +320,14 @@ try {
 
     insert into public.shift_closeouts (
       id, organization_id, location_id, business_date, shift_label,
-      gross_sales_cents, net_sales_cents, submitted_by
+      gross_sales_cents, net_sales_cents, comps_cents, card_sales_cents, submitted_by
     ) values
       ('${ids.mainCloseout}', '${ids.organization}', '${ids.location}', current_date,
-       'main', 10000, 9000, '${ids.owner}'),
+       'main', 10000, 9000, 1000, 9000, '${ids.owner}'),
       ('${ids.otherCloseout}', '${ids.organization}', '${ids.otherLocation}', current_date,
-       'other-location', 20000, 18000, '${ids.owner}'),
+       'other-location', 20000, 18000, 2000, 18000, '${ids.owner}'),
       ('${ids.tenantCloseout}', '${ids.otherOrganization}', '${ids.tenantLocation}', current_date,
-       'other-tenant', 30000, 27000, '${ids.otherOwner}');
+       'other-tenant', 30000, 27000, 3000, 27000, '${ids.otherOwner}');
     insert into public.inventory_counts (
       id, organization_id, location_id, status, count_type, counted_by
     ) values

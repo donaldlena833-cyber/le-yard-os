@@ -77,19 +77,14 @@ test("exposes an accessible log out control and leaves no signed-in shell state"
   expect(authCookies).toEqual([]);
 });
 
-test("completes the demo-safe authenticator enrollment control", async ({ page }) => {
+test("shows the current password sign-in policy without authenticator enrollment", async ({ page }) => {
   await openWorkspace(page, "/settings", "Settings");
 
   await page.getByRole("button", { name: "Security", exact: true }).click();
-  await expect(page.getByText("Authenticator app", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Enroll", exact: true }).click();
-
-  await expect(page.getByText("No scannable secret", { exact: false })).toBeVisible();
-  await page.getByLabel("Six-digit verification code").fill("123456");
-  await page.getByRole("button", { name: "Verify and enable", exact: true }).click();
-
-  await expect(page.getByText("Authenticator already enrolled", { exact: true })).toBeVisible();
-  await expect(page.getByText("Demo MFA enrollment verified locally.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Password sign-in", { exact: true })).toBeVisible();
+  await expect(page.getByText("All accounts use password sign-in without a second factor or geographic login restriction.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Enroll", exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Six-digit verification code")).toHaveCount(0);
   await expectNoViewportOverflow(page);
 });
 
