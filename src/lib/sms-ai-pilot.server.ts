@@ -16,6 +16,7 @@ import { communicationsAvailability } from "@/lib/communications-reservations.se
 import { classifySms } from "@/lib/gemini-sms.server";
 import {
   planSmsAiReply,
+  smsAiEnabled,
   smsAiWeek,
   smsPilotContact,
   SMS_AI_MODEL,
@@ -361,22 +362,9 @@ export async function smsPilotStatus() {
     .limit(20000);
   if (error || !data || data.length >= 20000)
     throw new Error("pilot_status_unavailable");
-  const contacts = await Promise.all(
-    (["Donald", "Maris"] as const).map(async (name) => {
-      const phone =
-        process.env[`TWILIO_FORWARD_${name.toUpperCase()}`]?.trim() ?? "";
-      return {
-        name,
-        enabled: smsPilotContact(phone),
-        mode: phone ? await communicationThreadMode(phone) : null,
-      };
-    }),
-  );
   return {
-    enabled: contacts.some((contact) => contact.enabled),
+    enabled: smsAiEnabled(),
     model: SMS_AI_MODEL,
-    until: process.env.SMS_AI_PILOT_UNTIL ?? null,
-    contacts,
     budgetUsd: SMS_AI_WEEKLY_MICRO_USD / 1_000_000,
     reservedUsd:
       data

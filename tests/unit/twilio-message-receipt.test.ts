@@ -153,22 +153,28 @@ it("routes employee texts and MMS to team requests even when guest automation is
   );
 });
 
-it("durably queues only Donald's pilot before acknowledging and schedules post-response work", async () => {
+it("keeps employee texts in Team when guest AI chat is enabled", async () => {
+  const { saveCommunicationMessage } = await import(
+    "@/lib/communication-groups.server"
+  );
+  const { enqueueSmsPilot } = await import("@/lib/sms-ai-pilot.server");
+  vi.mocked(saveCommunicationMessage).mockResolvedValueOnce({ internal: true });
+  vi.stubEnv("SMS_AI_PILOT_ENABLED", "true");
+  vi.stubEnv("GEMINI_API_KEY", "fixture");
+  vi.stubEnv("TWILIO_SMS_ENABLED", "true");
+  const response = await POST(request("SM", { Body: "Can I change my shift?" }));
+  expect(response.status).toBe(200);
+  expect(enqueueSmsPilot).not.toHaveBeenCalled();
+});
+
+it("durably queues every external guest before acknowledging and schedules post-response work", async () => {
   const { after } = await import("next/server");
   const { enqueueSmsPilot, processSmsPilotQueue } = await import(
     "@/lib/sms-ai-pilot.server"
   );
   vi.stubEnv("SMS_AI_PILOT_ENABLED", "true");
   vi.stubEnv("GEMINI_API_KEY", "fixture");
-  vi.stubEnv("TWILIO_FORWARD_DONALD", "+12125550103");
   vi.stubEnv("TWILIO_SMS_ENABLED", "true");
-  vi.stubEnv("SMS_AI_PILOT_STARTED_AT", "2026-01-01T00:00Z");
-  vi.stubEnv("SMS_AI_PILOT_UNTIL", "2099-01-01T00:00Z");
-  vi.stubEnv("COMMUNICATIONS_TEST_UNTIL", "2099-01-01T00:00Z");
-  vi.stubEnv(
-    "COMMUNICATIONS_TEST_OWNER_ID",
-    "11111111-1111-4111-8111-111111111111",
-  );
   const r = await POST(request("SM"));
   expect(r.status).toBe(200);
   expect(await r.text()).not.toContain("<Message");
@@ -178,7 +184,7 @@ it("durably queues only Donald's pilot before acknowledging and schedules post-r
   await POST(request("SM", { Body: "STOP" }));
   expect(enqueueSmsPilot).not.toHaveBeenCalled();
   await POST(request("SM", { From: "+12125550104" }));
-  expect(enqueueSmsPilot).not.toHaveBeenCalled();
+  expect(enqueueSmsPilot).toHaveBeenCalledOnce();
   vi.mocked(enqueueSmsPilot).mockRejectedValueOnce(Error("queue offline"));
   expect((await POST(request("SM"))).status).toBe(503);
 });

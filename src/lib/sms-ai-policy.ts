@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { communicationTestOwner } from "@/lib/communication-test-routing";
 
 export const SMS_AI_MODEL = "gemini-3.1-flash-lite";
 export const SMS_AI_WEEKLY_MICRO_USD = 5_000_000;
@@ -32,40 +31,24 @@ export const smsAiDecisionSchema = z
   .strict();
 export type SmsAiDecision = z.infer<typeof smsAiDecisionSchema>;
 
+export function smsAiEnabled(
+  env: Record<string, string | undefined> = process.env,
+) {
+  return (
+    env.SMS_AI_PILOT_ENABLED === "true" && Boolean(env.GEMINI_API_KEY?.trim())
+  );
+}
+
 export function smsPilotContact(
   phone: string,
   env: Record<string, string | undefined> = process.env,
-  now = Date.now(),
 ) {
-  if (
-    env.SMS_AI_PILOT_ENABLED !== "true" ||
-    !env.GEMINI_API_KEY?.trim() ||
-    !env.TWILIO_FORWARD_DONALD?.trim()
-  )
-    return false;
-  const isDonald = phone === env.TWILIO_FORWARD_DONALD.trim();
-  const isMaris =
-    Boolean(env.TWILIO_FORWARD_MARIS?.trim()) &&
-    phone === env.TWILIO_FORWARD_MARIS?.trim();
-  if (!isDonald && !isMaris) return false;
-  const start = Date.parse(env.SMS_AI_PILOT_STARTED_AT ?? "");
-  const until = Date.parse(env.SMS_AI_PILOT_UNTIL ?? "");
-  if (
-    !Number.isFinite(start) ||
-    !Number.isFinite(until) ||
-    now < start ||
-    now >= until
-  )
-    return false;
-  if (isMaris && !isDonald) return true;
-  try {
-    return (
-      communicationTestOwner(phone, env, now) ===
-      "11111111-1111-4111-8111-111111111111"
-    );
-  } catch {
-    return false;
-  }
+  if (!smsAiEnabled(env)) return false;
+  const normalized = phone.trim();
+  const business = (
+    env.TWILIO_FROM_NUMBER || env.TWILIO_PHONE_NUMBER || ""
+  ).trim();
+  return /^\+[1-9]\d{7,14}$/.test(normalized) && normalized !== business;
 }
 
 export function smsAiCost(inputTokens: number, outputTokens: number) {

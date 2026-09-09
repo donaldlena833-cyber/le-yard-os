@@ -9,14 +9,10 @@ import {
 const env = {
   SMS_AI_PILOT_ENABLED: "true",
   GEMINI_API_KEY: "fixture",
+  TWILIO_PHONE_NUMBER: "+13328779035",
   TWILIO_FORWARD_DONALD: "+12125550123",
   TWILIO_FORWARD_MARIS: "+12125550125",
-  SMS_AI_PILOT_STARTED_AT: "2026-09-08T12:00Z",
-  SMS_AI_PILOT_UNTIL: "2026-09-08T20:00Z",
-  COMMUNICATIONS_TEST_UNTIL: "2026-09-08T20:00Z",
-  COMMUNICATIONS_TEST_OWNER_ID: "11111111-1111-4111-8111-111111111111",
 };
-const now = Date.parse("2026-09-08T13:00Z");
 const decision = smsAiDecisionSchema.parse({
   intent: "reservation",
   date: null,
@@ -25,35 +21,16 @@ const decision = smsAiDecisionSchema.parse({
   summary: "Booking inquiry",
   photoDescription: null,
 });
-it("requires the exact Donald or Maris contact and a valid, isolated test window", () => {
-  expect(smsPilotContact(env.TWILIO_FORWARD_DONALD, env, now)).toBe(true);
-  expect(smsPilotContact(env.TWILIO_FORWARD_MARIS, env, now)).toBe(true);
-  expect(smsPilotContact("+12125550124", env, now)).toBe(false);
-  expect(
-    smsPilotContact(
-      env.TWILIO_FORWARD_MARIS,
-      env,
-      Date.parse(env.SMS_AI_PILOT_UNTIL),
-    ),
-  ).toBe(false);
-  for (const key of [
-    "GEMINI_API_KEY",
-    "SMS_AI_PILOT_ENABLED",
-    "SMS_AI_PILOT_STARTED_AT",
-    "SMS_AI_PILOT_UNTIL",
-    "COMMUNICATIONS_TEST_UNTIL",
-    "COMMUNICATIONS_TEST_OWNER_ID",
-  ])
-    expect(
-      smsPilotContact(env.TWILIO_FORWARD_DONALD, { ...env, [key]: "" }, now),
-    ).toBe(false);
-  expect(
-    smsPilotContact(
-      env.TWILIO_FORWARD_DONALD,
-      env,
-      Date.parse(env.SMS_AI_PILOT_UNTIL),
-    ),
-  ).toBe(false);
+it("accepts every valid external SMS contact while guest chat is enabled", () => {
+  expect(smsPilotContact(env.TWILIO_FORWARD_DONALD, env)).toBe(true);
+  expect(smsPilotContact(env.TWILIO_FORWARD_MARIS, env)).toBe(true);
+  expect(smsPilotContact("+12125550124", env)).toBe(true);
+  expect(smsPilotContact(env.TWILIO_PHONE_NUMBER, env)).toBe(false);
+  expect(smsPilotContact("not-a-phone", env)).toBe(false);
+  for (const key of ["GEMINI_API_KEY", "SMS_AI_PILOT_ENABLED"])
+    expect(smsPilotContact("+12125550124", { ...env, [key]: "" })).toBe(
+      false,
+    );
 });
 it("asks for missing booking fields and checks only valid future availability", () => {
   expect(planSmsAiReply(decision, "2026-09-08")).toMatchObject({

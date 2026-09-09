@@ -107,15 +107,6 @@ export async function POST(request: Request) {
   if (optOutType === "HELP")
     return xmlResponse(new twilio.twiml.MessagingResponse().toString());
   const response = new twilio.twiml.MessagingResponse();
-  if (smsPilotContact(from) && twilioSmsEnabled() && !/^help$/i.test(body)) {
-    try {
-      await enqueueSmsPilot(messageSid);
-      after(processSmsPilotQueue);
-    } catch {
-      return new Response("Pilot receipt unavailable", { status: 503 });
-    }
-    return xmlResponse(response.toString());
-  }
   if (internal) {
     await notifyOwnersOfCommunication({
       phone: from,
@@ -158,6 +149,15 @@ export async function POST(request: Request) {
     }
   } catch {
     return new Response("Handoff state unavailable", { status: 503 });
+  }
+  if (smsPilotContact(from)) {
+    try {
+      await enqueueSmsPilot(messageSid);
+      after(processSmsPilotQueue);
+    } catch {
+      return new Response("AI receipt unavailable", { status: 503 });
+    }
+    return xmlResponse(response.toString());
   }
   const eventLead = detectPrivateEventLead(body);
   if (eventLead.isLead) {

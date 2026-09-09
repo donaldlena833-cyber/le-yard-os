@@ -4,8 +4,6 @@ import s from "./communication-groups.module.css";
 type Status = {
   enabled: boolean;
   model: string;
-  until: string | null;
-  contacts: { name: string; enabled: boolean; mode: string | null }[];
   reservedUsd: number;
   budgetUsd: number;
   queued: number;
@@ -54,7 +52,7 @@ export function SmsPilotStatus() {
       if (!r.ok) throw Error();
     } catch {
       setError(
-        "Queued requests could not be resumed. Only Donald and Maris can run this pilot.",
+        "Queued guest requests could not be resumed.",
       );
     } finally {
       setWorking(false);
@@ -68,31 +66,14 @@ export function SmsPilotStatus() {
     );
   if (!status) return null;
   return (
-    <aside className={s.notice} aria-label="AI pilot status">
-      <strong>AI pilot · {status.enabled ? "Donald and Maris" : "off"}</strong>
-      <p>{status.model} · Other numbers are excluded from this pilot.</p>
-      <p>
-        {status.contacts
-          .map(
-            (contact) =>
-              `${contact.name}: ${!contact.enabled ? "off" : contact.mode === "human" ? "human handling" : "automation"}`,
-          )
-          .join(" · ")}
-      </p>
+    <aside className={s.notice} aria-label="AI guest chat status">
+      <strong>AI guest chat · {status.enabled ? "on" : "off"}</strong>
+      <p>{status.model} · New guest texts enter chat automatically.</p>
       <p>
         ${status.reservedUsd.toFixed(4)} of ${status.budgetUsd.toFixed(2)}{" "}
         weekly model budget used or reserved. {status.queued} queued ·{" "}
         {status.review} held or needing review.
       </p>
-      {status.until ? (
-        <p>
-          Test window ends{" "}
-          {new Date(status.until).toLocaleString("en-US", {
-            timeZone: "America/New_York",
-          })}{" "}
-          New York time.
-        </p>
-      ) : null}
       {status.recent[0] ? (
         <p>
           Latest request: {status.recent[0].status}
@@ -108,7 +89,7 @@ export function SmsPilotStatus() {
           disabled={working || !status.enabled}
           onClick={() => void resumeQueue()}
         >
-          Process queued pilot requests
+          Process queued guest requests
         </button>
       ) : null}
     </aside>
