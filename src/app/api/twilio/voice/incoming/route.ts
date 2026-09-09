@@ -3,6 +3,9 @@ import { logCommunicationEvent, findGuestByPhone } from "@/lib/communications.se
 import { elevenLabsConfigured, registerElevenLabsTwilioCall } from "@/lib/elevenlabs.server";
 import { readTwilioForm, twilioAbsoluteUrl, twilioForwardNumbers, twilioPhoneNumber, validateTwilioRequest, xmlResponse } from "@/lib/twilio.server";
 import { addReceptionGreeting } from "@/lib/voice-reception.server";
+import { buildVoiceGather, createVoiceState, voiceAiConfigured, VOICE_AI_GREETING } from "@/lib/voice-ai.server";
+
+export const maxDuration = 15;
 
 export async function POST(request: Request) {
   const { params } = await readTwilioForm(request);
@@ -11,6 +14,16 @@ export async function POST(request: Request) {
   const to = params.get("To") ?? "";
   const callSid = params.get("CallSid") ?? "";
   if (to !== twilioPhoneNumber() || !/^CA[0-9a-f]{32}$/i.test(callSid)) return new Response("Forbidden", { status: 403 });
+  const internalTest = params.get("InternalTest") === "true";
+  if (internalTest && (!Number.isSafeInteger(Number(params.get("Timestamp"))) || Math.abs(Date.now() / 1000 - Number(params.get("Timestamp"))) > 300))
+    return new Response("Invalid test", { status: 400 });
+  if ((process.env.TWILIO_INBOUND_MODE?.trim().toLowerCase() === "fish-gemini" || internalTest) && voiceAiConfigured()) {
+    const state = { ...createVoiceState(callSid), internalTest };
+    if (!internalTest) await logCommunicationEvent({ eventType: "voice.inbound", message: "Inbound call answered by Le Yard's AI receptionist.", metadata: { callSid, from, direction: "inbound", provider: "fish-gemini" } }).catch(() => false);
+    return xmlResponse(buildVoiceGather(state, VOICE_AI_GREETING, twilioAbsoluteUrl("/audio/le-yard-ai-welcome.wav")));
+  }
+  // A failed diagnostic must never fall through to a live founder ring group.
+  if (internalTest) return new Response("AI unavailable", { status: 503 });
   const guest = from.startsWith("+") ? await findGuestByPhone(from).catch(() => null) : null;
   await logCommunicationEvent({ eventType: "voice.inbound", message: "Inbound Le Yard call received.",
     metadata: { callSid, from, guestId: guest?.id, guestName: guest?.display_name, direction: "inbound" } });

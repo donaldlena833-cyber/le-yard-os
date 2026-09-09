@@ -21,6 +21,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|sw.js|audio/le-yard-reception\\.mp3$|audio/le-yard-reception-v2\\.wav$|.*\\.(?:css|svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw.js|audio/le-yard-reception\\.mp3$|audio/le-yard-reception-v2\\.wav$|audio/le-yard-ai-welcome\\.wav$|.*\\.(?:css|svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

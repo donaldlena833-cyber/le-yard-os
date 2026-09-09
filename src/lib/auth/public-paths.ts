@@ -8,6 +8,7 @@ export const CONNECTED_ACCEPTANCE_ATTESTATION_PATH =
 const providerAuthenticatedPaths = new Set([
   "/api/twilio/readiness",
   "/api/twilio/voice/incoming",
+  "/api/twilio/voice/ai/turn",
   "/api/twilio/voice/screen",
   "/api/twilio/voice/screen-result",
   "/api/twilio/voice/result",
