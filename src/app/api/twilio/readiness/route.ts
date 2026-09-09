@@ -1,6 +1,7 @@
 import { resolveLeYardTenant } from "@/lib/communications.server";
 import { readTwilioForm, twilioForwardNumbers, twilioPhoneNumber, twilioSmsEnabled, validateTwilioRequest } from "@/lib/twilio.server";
 import { voiceAiConfigured } from "@/lib/voice-ai.server";
+import { liveStreamUrl } from "@/lib/voice-live.server";
 
 // Signed read-only deployment probe. Never discloses keys, staff phones, or guest data.
 export async function POST(request: Request) {
@@ -13,10 +14,13 @@ export async function POST(request: Request) {
     if (!Number.isSafeInteger(timestamp) || Math.abs(Date.now() / 1000 - timestamp) > 300 ||
         params.get("To") !== twilioPhoneNumber() || !["voice", "messaging"].includes(channel ?? ""))
       return new Response("Invalid probe", { status: 400, headers });
-    const aiEnabled = process.env.TWILIO_INBOUND_MODE?.trim().toLowerCase() === "fish-gemini";
+    const voiceMode = process.env.TWILIO_INBOUND_MODE?.trim().toLowerCase();
+    const aiEnabled = ["fish-gemini", "gemini-live"].includes(voiceMode ?? "");
     if (channel === "voice") {
       twilioForwardNumbers();
-      if (aiEnabled && (!voiceAiConfigured() || !process.env.FISH_API_KEY?.trim())) throw new Error("AI configuration incomplete");
+      if (aiEnabled && !voiceAiConfigured()) throw new Error("AI configuration incomplete");
+      if (voiceMode === "fish-gemini" && !process.env.FISH_API_KEY?.trim()) throw new Error("Fish configuration incomplete");
+      if (voiceMode === "gemini-live") liveStreamUrl();
     }
     else {
       if (!/^MG[0-9a-f]{32}$/i.test(process.env.TWILIO_MESSAGING_SERVICE_SID?.trim() ?? ""))

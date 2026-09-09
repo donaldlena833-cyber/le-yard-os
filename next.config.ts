@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: projectRoot,
   outputFileTracingIncludes: {
-    "/api/twilio/*": ["./docs/le-yard-receptionist.md", "./public/audio/le-yard-room-tone.wav"],
+    "/api/twilio/*": ["./docs/le-yard-receptionist.md", "./docs/le-yard-receptionist-live.md", "./public/audio/le-yard-room-tone.wav"],
   },
   experimental: {
     taint: true,

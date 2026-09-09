@@ -34,6 +34,8 @@
 /docs/*
 # Runtime receptionist knowledge is required inside the voice function.
 !/docs/le-yard-receptionist.md
+!/docs/le-yard-receptionist-live.md
+/workers/
 /scripts/
 /supabase/
 /playwright*.config.*

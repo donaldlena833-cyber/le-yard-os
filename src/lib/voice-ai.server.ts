@@ -6,7 +6,7 @@ import twilio from "twilio";
 import { z } from "zod";
 import { twilioAbsoluteUrl, twilioForwardNumbers, twilioPhoneNumber } from "@/lib/twilio.server";
 
-export const VOICE_AI_GREETING = "Hi, thanks for calling Le Yard. I'm the AI receptionist. How can I help?";
+export const VOICE_AI_GREETING = "Thanks for calling Le Yard. How can I help?";
 export const VOICE_AI_MODEL = "gemini-3.1-flash-lite";
 const stateSchema = z.object({
   callSid: z.string().regex(/^CA[0-9a-f]{32}$/i),
@@ -62,6 +62,7 @@ export function openVoiceState(token: string, callSid: string): VoiceState {
 }
 
 function speak(parent: twilio.twiml.VoiceResponse | ReturnType<twilio.twiml.VoiceResponse["gather"]>, text: string, audioUrl?: string) {
+  if (!text && !audioUrl) return;
   if (audioUrl && new URL(audioUrl).protocol === "https:") parent.play(audioUrl);
   else parent.say({ voice: "Polly.Joanna", language: "en-US" }, text);
 }
