@@ -24,7 +24,7 @@ async function signed(url, callSid, fields = {}) {
   assert.equal(response.status, 200, `Voice callback HTTP ${response.status}`);
   const xml = await response.text();
   assert(!/<(?:Dial|Number|Client|Record|Redirect)\b/.test(xml), "Synthetic session attempted an external action");
-  return { xml, latencyMs: Date.now() - started };
+  return { xml, latencyMs: Date.now() - started, model: response.headers.get("x-le-yard-voice-model"), modelError: response.headers.get("x-le-yard-model-error") };
 }
 async function start() {
   const callSid = `CA${randomBytes(16).toString("hex")}`;
@@ -45,6 +45,7 @@ for (const [label, speech] of [
   ["new-reservation", "Can I book a table for two tomorrow at seven?"],
 ]) {
   const result = await signed(conversation.url, conversation.callSid, { SpeechResult: speech });
+  assert.equal(result.model, "gemini", `Expected model reply: ${result.modelError || result.model}`);
   const audioUrl = result.xml.match(/<Play>([^<]+)<\/Play>/)?.[1];
   assert(audioUrl, "Fish voice fell back; provider path is not fully passing");
   const audio = await fetch(decode(audioUrl));

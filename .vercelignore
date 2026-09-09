@@ -31,7 +31,9 @@
 # not needed by `next build`. Runtime source, public assets, and package/Next/
 # TypeScript/PostCSS configuration remain included by omission.
 /tests/
-/docs/
+/docs/*
+# Runtime receptionist knowledge is required inside the voice function.
+!/docs/le-yard-receptionist.md
 /scripts/
 /supabase/
 /playwright*.config.*
