@@ -1,7 +1,7 @@
 import { readTwilioForm, twilioPhoneNumber, validateTwilioRequest, xmlResponse } from "@/lib/twilio.server";
 import { buildVoiceExit, buildVoiceGather, generateVoiceReply, openVoiceState, type VoiceReply, type VoiceState } from "@/lib/voice-ai.server";
 import { publishReceptionSpeech } from "@/lib/fish-voice.server";
-import { logCommunicationEvent } from "@/lib/communications.server";
+import { recordVoiceEvent } from "@/lib/voice-telemetry.server";
 
 export const maxDuration = 15;
 
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   while (Buffer.byteLength(JSON.stringify(state), "utf8") > 2500 && state.history.length > 1) state.history.shift();
   let audioUrl: string | undefined;
   try { audioUrl = await publishReceptionSpeech(reply.text); } catch { /* intelligible Twilio speech remains available */ }
-  if (!state.internalTest) await logCommunicationEvent({ eventType: "voice.ai.turn", message: `AI receptionist ${reply.action === "continue" ? "answered the caller" : `requested ${reply.action}`}.`,
-    metadata: { callSid: state.callSid, turn: state.turn, action: reply.action, modelFallback: fallback, voice: audioUrl ? "fish" : "polly", latencyMs: Date.now() - started } }).catch(() => false);
+  if (!state.internalTest) await recordVoiceEvent({ eventType: "voice.ai.turn", message: `AI receptionist ${reply.action === "continue" ? "answered the caller" : `requested ${reply.action}`}.`,
+    metadata: { callSid: state.callSid, turn: state.turn, action: reply.action, modelFallback: fallback, voice: audioUrl ? "fish" : "polly", latencyMs: Date.now() - started } });
   return xmlResponse(reply.action === "continue" ? buildVoiceGather(state, reply.text, audioUrl) : buildVoiceExit(state, reply.action, reply.text, audioUrl));
 }

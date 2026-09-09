@@ -4,6 +4,7 @@ import { elevenLabsConfigured, registerElevenLabsTwilioCall } from "@/lib/eleven
 import { readTwilioForm, twilioAbsoluteUrl, twilioForwardNumbers, twilioPhoneNumber, validateTwilioRequest, xmlResponse } from "@/lib/twilio.server";
 import { addReceptionGreeting } from "@/lib/voice-reception.server";
 import { buildVoiceGather, createVoiceState, voiceAiConfigured, VOICE_AI_GREETING } from "@/lib/voice-ai.server";
+import { recordVoiceEvent } from "@/lib/voice-telemetry.server";
 
 export const maxDuration = 15;
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
     return new Response("Invalid test", { status: 400 });
   if ((process.env.TWILIO_INBOUND_MODE?.trim().toLowerCase() === "fish-gemini" || internalTest) && voiceAiConfigured()) {
     const state = { ...createVoiceState(callSid), internalTest };
-    if (!internalTest) await logCommunicationEvent({ eventType: "voice.inbound", message: "Inbound call answered by Le Yard's AI receptionist.", metadata: { callSid, from, direction: "inbound", provider: "fish-gemini" } }).catch(() => false);
+    if (!internalTest) await recordVoiceEvent({ eventType: "voice.inbound", message: "Inbound call answered by Le Yard's AI receptionist.", metadata: { callSid, from, direction: "inbound", provider: "fish-gemini" } });
     return xmlResponse(buildVoiceGather(state, VOICE_AI_GREETING, twilioAbsoluteUrl("/audio/le-yard-ai-welcome.wav")));
   }
   // A failed diagnostic must never fall through to a live founder ring group.
