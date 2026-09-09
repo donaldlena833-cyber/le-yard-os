@@ -1,4 +1,5 @@
 import { createLiveVoiceSession, liveSessionInputSchema, validateLiveSession } from "@/lib/voice-live.server";
+import { recordVoiceEvent } from "@/lib/voice-telemetry.server";
 export const maxDuration = 10;
 export async function POST(request: Request) {
   const headers = { "cache-control": "no-store" };
@@ -14,5 +15,8 @@ export async function POST(request: Request) {
   try {
     const gemini = await createLiveVoiceSession();
     return Response.json({ callSid: state.callSid, internalTest: state.internalTest === true, gemini }, { headers });
-  } catch { return Response.json({ error: "Voice connection is unavailable" }, { status: 503, headers }); }
+  } catch {
+    if (!state.internalTest) await recordVoiceEvent({ eventType: "voice.live.unavailable", message: "Native voice session could not start.", metadata: { callSid: state.callSid } });
+    return Response.json({ error: "Voice connection is unavailable" }, { status: 503, headers });
+  }
 }

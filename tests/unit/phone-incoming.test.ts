@@ -18,6 +18,7 @@ vi.mock("@/lib/twilio.server", () => ({
 }));
 
 import { POST } from "@/app/api/twilio/voice/incoming/route";
+import { findGuestByPhone, logCommunicationEvent } from "@/lib/communications.server";
 
 const request = () =>
   new Request("https://operations.leyardny.com/api/twilio/voice/incoming", {
@@ -26,9 +27,19 @@ const request = () =>
     body: "From=%2B12025550100&To=%2B13328779035&CallSid=CA0123456789abcdef0123456789abcdef",
   });
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); vi.clearAllMocks(); });
 
 describe("inbound founder ring group", () => {
+  it("still rings both founders when the guest database and event logger stall", async () => {
+    vi.useFakeTimers();
+    vi.mocked(findGuestByPhone).mockImplementationOnce(() => new Promise(() => {}));
+    vi.mocked(logCommunicationEvent).mockImplementationOnce(() => new Promise(() => {}));
+    const response = POST(request());
+    await vi.advanceTimersByTimeAsync(650);
+    const xml = await (await response).text();
+    expect(xml.match(/<Number/g)).toHaveLength(2);
+    expect(xml).toContain('answerOnBridge="true"');
+  });
   it("welcomes the caller before ringing both founders in parallel", async () => {
     const xml = await (await POST(request())).text();
     expect(xml).toContain("Thank you for calling Le Yard");

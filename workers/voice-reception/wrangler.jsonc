@@ -1,0 +1,11 @@
+{
+  "name": "le-yard-reception",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-09-09",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "VOICE_SESSIONS", "class_name": "VoiceReceptionSessionDO" }]
+  },
+  "migrations": [{ "tag": "voice-session-v1", "new_sqlite_classes": ["VoiceReceptionSessionDO"] }],
+  "vars": { "VOICE_APP_ORIGIN": "https://phone.leyardny.com" }
+}
