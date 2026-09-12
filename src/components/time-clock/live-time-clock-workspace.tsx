@@ -147,7 +147,7 @@ export function LiveTimeClockWorkspace({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill tone={syncTone} dot={syncTone === "positive"}>{syncLabel}</StatusPill>
-            <span className="text-xs text-[var(--ink-faint)]">Read-only POS mirror</span>
+            <span className="text-xs text-[var(--ink-faint)]">Toast attendance</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Time clock</h2>
           <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
@@ -205,7 +205,7 @@ export function LiveTimeClockWorkspace({
               <div>
                 <p className="text-sm font-semibold">Punch on the Toast POS</p>
                 <p className="mt-1.5 text-xs leading-5 text-white/60">
-                  Clock in, clock out, and start or end breaks on Toast. Le Yard OS imports those facts through the Labor API; it does not create or edit punches here.
+                  Clock in, clock out, and record breaks on Toast.
                 </p>
               </div>
             </div>
@@ -304,7 +304,7 @@ export function LiveTimeClockWorkspace({
             </div>
             <div className="flex gap-3 rounded-[16px] bg-[var(--canvas)] p-4 text-xs leading-5 text-[var(--ink-faint)]">
               <UsersRound className="mt-0.5 size-4 shrink-0 text-[var(--accent-strong)]" />
-              <p>Employee and job mappings must be unique. Ambiguous records are rejected and surfaced as a degraded sync instead of being guessed.</p>
+              <p></p>
             </div>
           </div>
         </aside>

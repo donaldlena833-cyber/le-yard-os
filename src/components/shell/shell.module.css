@@ -175,3 +175,17 @@
 @media (prefers-reduced-motion: reduce) {
   .navLink, .iconButton, .dockIcon { transition: none; }
 }
+
+/* Desktop navigation remains scrollable independently of its fixed footer. */
+.sidebar { border: 1px solid var(--line); box-shadow: none; }
+.nav { min-height: 0; overscroll-behavior: contain; }
+.brand, .sidebarFooter { flex-shrink: 0; }
+.navLink { gap: 8px; min-height: 36px; padding: 5px 10px; }
+.navGroup + .navGroup { margin-top: 14px; }
+.sidebarFooter { padding: 8px 0; }
+.identity { padding-block: 8px; }
+.frame, .content { min-width: 0; }
+@media (min-width: 1024px) {
+  .header { min-height: 76px; padding-block: 14px; border-bottom: 1px solid var(--line); }
+  .content { min-height: calc(100svh - 76px); }
+}

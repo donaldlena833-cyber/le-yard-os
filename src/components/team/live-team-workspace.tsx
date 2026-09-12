@@ -227,8 +227,8 @@ function LiveTeamContent({
             <StatusPill tone="positive" dot>{activeCount} active</StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">Live · {workspace.organization.name}</span>
           </div>
-          <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Your whole team, in one place</h2>
-          <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Directory, operational profiles, private records, and account access from the connected tenant.</p>
+          <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">People</h2>
+          <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Team directory, roles, and employee records.</p>
         </div>
         {canAdminister ? (
           <Button variant="accent" onClick={() => setInviteOpen(true)} disabled={!canInvite}>
@@ -240,7 +240,7 @@ function LiveTeamContent({
       <section aria-label="Live team metrics" className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Active team" value={String(activeCount)} detail={`${data.members.length - activeCount} invited or suspended`} />
         <Metric label="Leadership" value={String(leadershipCount)} detail="Owners, admins, managers" />
-        <Metric label="Locations" value={String(workspace.locations.length)} detail="Your visible scope" />
+        <Metric label="Locations" value={String(workspace.locations.length)} detail="Your locations" />
         <Metric label="Job roles" value={String(data.jobRoles.filter((role) => role.active).length)} detail="Active role definitions" />
       </section>
 
@@ -331,7 +331,7 @@ function LiveTeamContent({
                 )}
 
                 <section className={cn((selected.detailAccess === "private" || selected.detailAccess === "not_configured") && "lg:col-span-2")}>
-                  <SectionHeading eyebrow="Security" title="Account access" detail="Every change is checked by the database" />
+                  <SectionHeading eyebrow="Security" title="Account access" detail="Manage account access" />
                   {canTarget ? (
                     <form
                       key={`${selected.membershipId}:${selected.role}:${selected.locationIds.join(",")}:${selected.primaryLocationId ?? "none"}`}

@@ -114,7 +114,7 @@ function OrganizationPanel({ data }: { data: LiveSettingsModel }) {
       <section>
         <SectionHeading
           title="Organization profile"
-          detail="Authenticated tenant values. Changes remain locked until the owners confirm production identity and branding."
+          detail="Restaurant identity and operating preferences."
         />
         <dl className="grid gap-px overflow-hidden rounded-[18px] border border-[var(--line)] bg-[var(--line)] sm:grid-cols-2">
           {[
@@ -134,7 +134,7 @@ function OrganizationPanel({ data }: { data: LiveSettingsModel }) {
                 "Saturday",
               ][data.organization.weekStartsOn],
             ],
-            ["Tenant state", data.organization.status],
+            ["Account status", data.organization.status],
           ].map(([label, value]) => (
             <div key={label} className="bg-[var(--paper)] px-4 py-4">
               <dt className="text-xs font-semibold tracking-[.1em] text-[var(--ink-faint)] uppercase">
@@ -155,15 +155,15 @@ function OrganizationPanel({ data }: { data: LiveSettingsModel }) {
           <CircleAlert className="mt-0.5 size-4 shrink-0" />
           <span>
             {data.organization.configuredAt
-              ? `Tenant setup was marked configured ${dateTime(data.organization.configuredAt)}. Owner approval is still required before production deployment.`
-              : "Owner emails, exact restaurant and location details, brand assets, and operating rules are still required before production bootstrap."}
+              ? `Restaurant settings updated ${dateTime(data.organization.configuredAt)}.`
+              : "Complete the restaurant profile and operating settings."}
           </span>
         </div>
       </section>
       <section>
         <SectionHeading
           title="Owner accounts"
-          detail="Owners have full tenant access. Auth email and password custody stay with Supabase Auth."
+          detail="Restaurant owner accounts."
         />
         <div className="border-y border-[var(--line)]">
           {data.owners.map((owner, index) => (
@@ -175,7 +175,7 @@ function OrganizationPanel({ data }: { data: LiveSettingsModel }) {
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold">{owner.displayName}</p>
                 <p className="mt-1 text-xs text-[var(--ink-faint)]">
-                  Owner operator · password not retrievable
+                  Owner operator
                 </p>
               </div>
               <StatusPill tone={tone(owner.status)}>
@@ -185,7 +185,7 @@ function OrganizationPanel({ data }: { data: LiveSettingsModel }) {
           ))}
           {!data.owners.length ? (
             <p className="py-5 text-center text-xs text-[var(--ink-faint)]">
-              No owner account is visible in this tenant scope.
+              No owner account is available.
             </p>
           ) : null}
         </div>
@@ -193,7 +193,7 @@ function OrganizationPanel({ data }: { data: LiveSettingsModel }) {
       <section>
         <SectionHeading
           title="Role boundaries"
-          detail="Counts come from current tenant memberships; permissions remain constrained by RLS and assigned locations."
+          detail="Access by role and assigned location."
         />
         <div className="overflow-x-auto border-y border-[var(--line)]">
           <div className="grid min-w-[620px] grid-cols-[110px_1fr_70px] gap-4 bg-[var(--canvas-strong)] px-4 py-2.5 text-xs font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase">
@@ -224,7 +224,7 @@ function LocationsPanel({ data }: { data: LiveSettingsModel }) {
     <div>
       <SectionHeading
         title="Restaurant locations"
-        detail="Only locations available through the current user’s tenant scope are shown."
+        detail="Locations available to your account."
         action={
           <Button variant="secondary" size="sm" disabled>
             Add location
@@ -336,12 +336,12 @@ function SecurityPanel({ workspace }: { workspace: WorkspaceContextValue }) {
             [
               KeyRound,
               "Service credentials",
-              "Server only · private encrypted schema",
+              "Encrypted and protected",
             ],
             [
               FileClock,
               "Session history",
-              "Authentication events remain in provider logs",
+              "Sign-in activity is recorded",
             ],
           ].map(([Icon, title, detail]) => {
             const RowIcon = Icon as typeof UsersRound;
@@ -834,7 +834,7 @@ function ExpenseCategoriesPanel({
         </h3>
         <p className="mx-auto mt-2 max-w-sm text-xs leading-4 text-[var(--ink-faint)]">
           Expense categories control receipt coding and accounting exports
-          across the tenant.
+          across the restaurant.
         </p>
       </section>
     );
@@ -991,7 +991,7 @@ function DataPanel({
           Owner or Admin access required
         </h3>
         <p className="mx-auto mt-2 max-w-sm text-xs leading-4 text-[var(--ink-faint)]">
-          Retention, backup evidence, tenant exports, error status, and
+          Retention, backups, data exports, connection status, and
           immutable audit records are not exposed to this role.
         </p>
       </section>
@@ -1056,8 +1056,8 @@ function DataPanel({
       />
       <section>
         <SectionHeading
-          title="Tenant exports"
-          detail="Requests are permission-checked and recorded. A full tenant export remains locked until an approved storage destination and retention rule exist."
+          title="Data exports"
+          detail="Manage exports and their storage destination."
         />
         <div className="border-y border-[var(--line)]">
           {data.exportRequests.map((request) => (
@@ -1083,15 +1083,15 @@ function DataPanel({
           ))}
           {!data.exportRequests.length ? (
             <p className="py-5 text-center text-xs text-[var(--ink-faint)]">
-              No tenant export request is recorded.
+              No data export has been requested.
             </p>
           ) : null}
         </div>
       </section>
       <section>
         <SectionHeading
-          title="Immutable audit trail"
-          detail="Latest security-sensitive tenant events visible to this session."
+          title="Activity history"
+          detail="Recent account and configuration changes."
         />
         <div className="overflow-x-auto border-y border-[var(--line)]">
           <div className="grid min-w-[700px] grid-cols-[1fr_1fr_.8fr_.8fr] gap-4 bg-[var(--canvas-strong)] px-4 py-2.5 text-xs font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase">
@@ -1144,7 +1144,7 @@ export function LiveSettingsWorkspace({
     <PageFrame width="standard">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <p className="eyebrow">Tenant administration</p>
+          <p className="eyebrow">Administration</p>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">
             Settings
           </h2>
@@ -1158,8 +1158,8 @@ export function LiveSettingsWorkspace({
         >
           <CircleAlert className="size-3" />{" "}
           {data.organization.configuredAt
-            ? "Tenant configured"
-            : "Production setup incomplete"}
+            ? "Configured"
+            : "Setup incomplete"}
         </StatusPill>
       </div>
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">

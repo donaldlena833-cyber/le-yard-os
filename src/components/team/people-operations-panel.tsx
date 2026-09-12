@@ -621,7 +621,7 @@ export function PeopleOperationsPanel({
         <SectionHeading
           eyebrow="Readiness"
           title="Certifications & documents"
-          detail={member.detailAccess === "self" && member.role === "employee" ? "Only records released to you are listed" : "Private files use short-lived signed downloads"}
+          detail={member.detailAccess === "self" && member.role === "employee" ? "Only records released to you are listed" : "Employee certifications and documents"}
         />
         <div className="grid gap-6 lg:grid-cols-2">
           <div>

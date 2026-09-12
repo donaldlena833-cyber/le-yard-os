@@ -907,7 +907,7 @@ function LiveScheduleContent({
             </span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">
-            Schedule the week clearly
+            Weekly schedule
           </h2>
           <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
             Restaurant-local time · {data.timeZone}

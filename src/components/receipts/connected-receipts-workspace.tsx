@@ -874,7 +874,7 @@ export function ConnectedReceiptsWorkspace({
               Connected
             </StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">
-              Private storage · human review
+              Document review
             </span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">

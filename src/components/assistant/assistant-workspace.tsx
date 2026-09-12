@@ -8,7 +8,6 @@ import {
   CornerDownLeft,
   FileSearch,
   LoaderCircle,
-  LockKeyhole,
   RotateCcw,
   Search,
   ShieldCheck,
@@ -25,7 +24,7 @@ import {
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
-import { PageFrame, SectionHeading } from "@/components/ui/page-frame";
+import { PageFrame } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import { confidenceBand, guardedActionPolicy, validateCitations, type OperationsAnswer } from "@/lib/ai/guardrails";
 import type { OwnerIntelligenceAnswer } from "@/lib/ai/intelligence-contract";
@@ -245,7 +244,7 @@ export function AssistantWorkspace() {
         <div className="relative max-w-3xl">
           <div className="flex flex-wrap items-center gap-2"><StatusPill className="bg-white/[.08] text-[#e4aa55]"><Sparkles className="size-3" /> Ask Le Yard</StatusPill><span className="text-xs text-white/55">{workspace.mode === "live" ? `${workspace.activeLocation.name} · ${workspace.role}` : "Synthetic demo · owner preview"}</span></div>
           <h2 className="mt-5 text-[clamp(2rem,5vw,3.5rem)] leading-[1.02] font-medium tracking-[-0.06em]">Answers that show their work.</h2>
-          <p className="mt-4 max-w-2xl text-xs leading-5 text-white/55">Search the operational record with citations and confidence. Your owner beta can draft a task, but it cannot save anything until you review and confirm the exact change.</p>
+          <p className="mt-4 max-w-2xl text-xs leading-5 text-white/55">Ask about service, your team, and daily operations. Review suggested tasks before saving.</p>
           <form onSubmit={submit} className="mt-7 flex items-center gap-2 rounded-[17px] bg-white/[.08] p-2 ring-1 ring-white/10 focus-within:ring-[#e1a34d]/70">
             <Search className="ml-2 size-4 shrink-0 text-white/55" />
             <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Ask a question about restaurant operations" placeholder="Ask about labor, receipts, guests, inventory…" className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/55" />
@@ -259,24 +258,13 @@ export function AssistantWorkspace() {
       </div>
 
       {notice ? <p role="alert" className="mt-5 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />{notice}</p> : null}
-      <div className="mt-5">{ownerAnswer ? <OwnerAnswerCard answer={ownerAnswer} onReview={() => setConfirmationOpen(true)} onUndo={undoProposal} busy={isPending} /> : answer ? <AnswerCard answer={answer} /> : <section className="rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[var(--paper)] px-6 py-12 text-center"><FileSearch className="mx-auto size-5 text-[var(--ink-faint)]" /><h3 className="mt-4 text-base font-semibold">Ask from the active location’s record</h3><p className="mx-auto mt-2 max-w-md text-xs leading-4 text-[var(--ink-faint)]">Connected search reads the last 30 days through your authenticated tenant and location scope. Every operational statement must cite a supplied source record.</p></section>}</div>
-
-      <section className="mt-9">
-        <SectionHeading title="Hard safety boundaries" detail="These controls apply even after a live model is connected." />
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[18px] border border-[var(--line)] p-4"><LockKeyhole className="size-4 text-[var(--accent-strong)]" /><p className="mt-4 text-xs font-semibold">Permission aware</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Sources inherit the current user’s organization, location, role, and field-level access.</p></div>
-          <div className="rounded-[18px] border border-[var(--line)] p-4"><BookOpenCheck className="size-4 text-[var(--positive)]" /><p className="mt-4 text-xs font-semibold">Citations required</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">An answer without identifiable source records is invalid and cannot support an action.</p></div>
-          <div className="rounded-[18px] border border-[var(--line)] p-4"><ShieldCheck className="size-4 text-[var(--positive)]" /><p className="mt-4 text-xs font-semibold">No silent mutations</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">Payroll, tips, punches, inventory, and guest changes always require authorized human approval.</p></div>
-        </div>
-      </section>
-
-      <p className="mt-6 flex items-start gap-2 rounded-[16px] bg-[var(--warning-soft)] p-4 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />Owner beta: operational evidence included in a question is processed through your local Codex subscription session. Access is limited to your explicitly authorized owner account.</p>
+      <div className="mt-5">{ownerAnswer ? <OwnerAnswerCard answer={ownerAnswer} onReview={() => setConfirmationOpen(true)} onUndo={undoProposal} busy={isPending} /> : answer ? <AnswerCard answer={answer} /> : <section className="rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[var(--paper)] px-6 py-12 text-center"><FileSearch className="mx-auto size-5 text-[var(--ink-faint)]" /><h3 className="mt-4 text-base font-semibold">Ask from the active location’s record</h3><p className="mx-auto mt-2 max-w-md text-xs leading-4 text-[var(--ink-faint)]">Search the last 30 days of restaurant activity. Answers include links to their sources.</p></section>}</div>
 
       <ConfirmActionDialog
         open={confirmationOpen && Boolean(ownerAnswer?.proposal)}
         labelledBy="confirm-intelligence-task"
         title="Create this task?"
-        description="This is the first point where Ask Le Yard will write to the operating record. Confirm the exact task below."
+        description="Review the task details before saving."
         confirmLabel="Confirm & create task"
         confirmVariant="accent"
         busy={isPending}

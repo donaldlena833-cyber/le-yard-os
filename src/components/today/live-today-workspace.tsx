@@ -217,19 +217,19 @@ function SnapshotStatus({
       className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-[var(--line)] px-2 py-3 text-xs text-[var(--ink-faint)]"
     >
       <StatusPill tone={unavailable ? "warning" : "neutral"}>
-        {unavailable ? `${unavailable} snapshot read unavailable` : `${available} snapshot reads fresh`}
+        {unavailable ? `${unavailable} updates unavailable` : `${available} sources up to date`}
       </StatusPill>
       <span>
-        Snapshot at{" "}
+        Updated{" "}
         <time dateTime={snapshot.observedAt}>
           {snapshotLabel(snapshot.observedAt, snapshot.today.timeZone)}
         </time>
       </span>
       <span>
-        Realtime: {realtimeSupported ? "scoped invalidation" : "snapshot only"}
+        {realtimeSupported ? "Live updates" : "Refresh for updates"}
       </span>
-      <span>Provider sync evidence: {providerLabel}</span>
-      <span className="sr-only">{snapshot.realtime.detail}</span>
+      <span>Integrations: {providerLabel}</span>
+
     </section>
   );
 }
@@ -501,7 +501,7 @@ export function LiveTodayWorkspace({
               <StatusPill tone="positive" dot className="bg-white/[0.08] text-[#93d0ad]">
                 Connected · {workspace.activeLocation.name}
               </StatusPill>
-              <span className="text-xs text-white/55">Tenant-scoped operations</span>
+              <span className="text-xs text-white/55"></span>
             </div>
             <h2 className="mt-5 text-[clamp(2rem,4vw,3.75rem)] leading-none font-medium tracking-[-0.06em]">
               Welcome back, {firstName}.
@@ -530,7 +530,7 @@ export function LiveTodayWorkspace({
       <section aria-label="Today’s live metrics" className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Scheduled" value={String(data.scheduledCount)} detail={`${data.openShiftCount} open for coverage`} />
         <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Coverage" value={String(Math.max(0, data.scheduledCount - data.openShiftCount))} detail={`${data.openShiftCount} open for coverage`} />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Open tasks" value={String(data.openTaskCount)} detail="Visible in your access scope" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Open tasks" value={String(data.openTaskCount)} detail="Assigned to your location" />
         <Metric
           className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4"
           label="Closeout"
@@ -568,14 +568,14 @@ export function LiveTodayWorkspace({
             {!data.shifts.length ? (
               <div className="px-5 py-12 text-center">
                 <UsersRound className="mx-auto size-5 text-[var(--ink-faint)]" />
-                <p className="mt-3 text-xs font-semibold">No visible shifts today</p>
+                <p className="mt-3 text-xs font-semibold">No shifts today</p>
                 <p className="mt-1 text-xs text-[var(--ink-faint)]">Publish a schedule or check another business date.</p>
               </div>
             ) : null}
           </div>
 
           <section className="mt-9">
-            <SectionHeading eyebrow="Accountability" title="Open tasks" detail="No completion is inferred from missing data" />
+            <SectionHeading eyebrow="Accountability" title="Open tasks" detail="" />
             <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
               {data.tasks.map((task) => (
                 <div key={task.id} className="flex items-start gap-3 px-2 py-4">
@@ -589,14 +589,14 @@ export function LiveTodayWorkspace({
                   <StatusPill tone={task.priority === "urgent" ? "danger" : task.status === "blocked" ? "warning" : "neutral"}>{task.status.replaceAll("_", " ")}</StatusPill>
                 </div>
               ))}
-              {!data.tasks.length ? <div className="px-5 py-9 text-center text-xs text-[var(--ink-faint)]">No open tasks are visible in this location scope.</div> : null}
+              {!data.tasks.length ? <div className="px-5 py-9 text-center text-xs text-[var(--ink-faint)]">No open tasks.</div> : null}
             </div>
           </section>
         </section>
 
         <aside className="space-y-[22px]">
           <section>
-            <SectionHeading eyebrow="Team messages" title="Announcements" detail="Latest messages you are allowed to read" />
+            <SectionHeading eyebrow="Team messages" title="Announcements" detail="Team updates" />
             <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4">
               {data.announcements.map((announcement) => (
                 <div key={announcement.id} className="py-4">

@@ -366,7 +366,7 @@ export function LiveServiceControlWorkspace({
       <section className="rounded-[26px] bg-[var(--graphite)] p-6 text-white sm:p-8">
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill tone="neutral" className="bg-white/[0.08] text-white">
-            Server snapshot
+            Service overview
           </StatusPill>
           <span className="text-xs text-white/50">
             {workspace.activeLocation.name}

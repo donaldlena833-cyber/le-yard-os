@@ -25,8 +25,8 @@ export function RealtimeSyncStatus({
       : state === "reconnecting"
         ? "Displayed records may be stale until the connection is restored."
         : isRefreshing
-          ? "Checking the server-authoritative record for changes."
-          : "The current server snapshot remains available while the live channel connects.";
+          ? "Checking for updates."
+          : "Your latest data is available.";
 
   return (
     <InlineNotice

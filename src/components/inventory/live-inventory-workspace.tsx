@@ -1267,7 +1267,7 @@ function InventoryMutationDialog({
       <ModalFrame
         returnFocus={returnFocus}
         title="Create purchase order"
-        description="Create an internal, tenant-scoped order. This records the order but does not transmit it to the vendor."
+        description="Record a purchase order. Send it to the vendor separately."
         labelledBy="purchase-order-dialog"
         notice={notice}
         onClose={onClose}
@@ -2590,8 +2590,8 @@ export function LiveInventoryWorkspace({
         }
         status={
           <>
-            <StatusPill tone="neutral">Server-backed</StatusPill>
-            <span>Ledger-backed · tenant scoped</span>
+            <StatusPill tone="neutral">Live</StatusPill>
+            <span></span>
           </>
         }
         actions={
@@ -2717,7 +2717,7 @@ export function LiveInventoryWorkspace({
                 <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <SectionHeading
                     title="On hand"
-                    detail="Approved ledger quantities compared with current location par."
+                    detail="Stock on hand compared with par levels."
                     className="mb-0"
                   />
                   <label className="relative block sm:w-72">
@@ -2815,7 +2815,7 @@ export function LiveInventoryWorkspace({
                                   item.lastMovementAt,
                                   model.timeZone,
                                 )
-                              : "No ledger movement"}
+                              : "No stock activity"}
                           </span>
                           <span className="numeric text-right text-xs">
                             {item.lastUnitCostCents === null
@@ -3203,7 +3203,7 @@ export function LiveInventoryWorkspace({
                     detail={
                       model.locations.length > 1
                         ? "Submit a source-location transfer for destination review."
-                        : "No other RLS-visible active location is available as a destination."
+                        : "No other location is available."
                     }
                   />
                 )}

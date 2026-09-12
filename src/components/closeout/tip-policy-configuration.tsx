@@ -273,7 +273,7 @@ export function TipPolicyConfiguration({
         <SectionHeading
           eyebrow="Policy control"
           title="Tip policy setup"
-          detail="Owner-authored rules · different-person approval · immutable versions"
+          detail="Tip distribution policies"
         />
         {model.canAuthor ? (
           <Button

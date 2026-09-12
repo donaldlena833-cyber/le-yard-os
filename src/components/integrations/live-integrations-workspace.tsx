@@ -325,7 +325,7 @@ function AuditLedger({ events }: { events: LiveIntegrationAuditEvent[] }) {
   if (!events.length) {
     return (
       <EmptyLedger
-        title="No immutable audit events"
+        title="No activity yet"
         detail="Database mutation evidence will appear after an authorized import, sync, or connection change."
       />
     );
@@ -859,12 +859,12 @@ export function LiveIntegrationsWorkspace({
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill tone="neutral">Tenant scoped</StatusPill>
+            <StatusPill tone="neutral">Le Yard</StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">{model.locationName}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Integrations</h2>
           <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
-            Connection state, manual imports, retries, and audit evidence—without exposing credentials.
+            Connections, imports, and sync history.
           </p>
         </div>
         {model.canManageSettings ? (
@@ -909,7 +909,7 @@ export function LiveIntegrationsWorkspace({
 
       <section className="mt-8">
         <SectionHeading
-          title="Adapter status"
+          title="Connections"
           detail={`Showing organization-wide and ${model.locationName} connection records only.`}
         />
         <div className="grid gap-x-8 md:grid-cols-2">
@@ -965,8 +965,8 @@ export function LiveIntegrationsWorkspace({
 
       <section className="mt-9">
         <SectionHeading
-          title="Activity ledger"
-          detail="Status is read from persisted jobs; terminal evidence is never simulated in the browser."
+          title="Activity history"
+          detail="Recent syncs, imports, and changes."
         />
         <div className="flex gap-1 overflow-x-auto border-b border-[var(--line)] pb-2">
           {([
@@ -1016,7 +1016,7 @@ export function LiveIntegrationsWorkspace({
       <div className="mt-7 grid gap-3 sm:grid-cols-2">
         <div className="flex items-start gap-3 rounded-[16px] bg-[var(--positive-soft)] px-4 py-3 text-xs leading-4 text-[var(--positive)]">
           <ShieldCheck className="mt-0.5 size-4 shrink-0" />
-          Credential ciphertext remains in a private schema that browser roles cannot read. This screen does not request it.
+
         </div>
         <div className="flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-xs leading-4 text-[var(--warning)]">
           <CircleAlert className="mt-0.5 size-4 shrink-0" />

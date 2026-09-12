@@ -285,7 +285,7 @@ function DemoTeamWorkspace({ workspace }: { workspace: WorkspaceContextValue }) 
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex items-center gap-2"><StatusPill tone="positive" dot>{activeCount} active</StatusPill><span className="text-xs text-[var(--ink-faint)]">Le Yard users</span></div>
-          <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Your whole team, in one place</h2>
+          <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">People</h2>
           <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Profiles, access, availability, and documents within your visible Le Yard scope.</p>
         </div>
         <Button variant="accent" onClick={() => setInviteOpen(true)} disabled={!canCreateUsers(viewer)}><UserRoundPlus className="size-4" /> Invite teammate</Button>

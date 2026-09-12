@@ -481,10 +481,17 @@ export function RecipeEditorDialog({
 
 function SetupStep({ number, icon, title, detail, action, children }: { number: string; icon: ReactNode; title: string; detail: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="grid gap-4 border-t border-[var(--line)] py-6 md:grid-cols-[7.5rem_1fr]">
-      <div><span className="numeric text-xs tracking-[.16em] text-[var(--ink-faint)]">{number}</span><div className="mt-3 flex size-9 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]">{icon}</div></div>
-      <div><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><h3 className="text-sm font-semibold">{title}</h3><p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--ink-faint)]">{detail}</p></div>{action}</div><div className="mt-4">{children}</div></div>
-    </section>
+    <details className="group rounded-2xl border border-[var(--line)] bg-[var(--paper)] mb-3" open={number === "01"}>
+      <summary className="flex cursor-pointer list-none items-center gap-4 p-5 focus-visible:outline-2 focus-visible:outline-[var(--accent)]">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[var(--canvas-strong)] text-[var(--ink-faint)]">{icon}</span>
+        <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{title}</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">{detail}</span></span>
+        <span aria-hidden="true" className="text-lg text-[var(--ink-faint)] group-open:rotate-45">+</span>
+      </summary>
+      <div className="border-t border-[var(--line)] px-5 pb-5">
+        {action ? <div className="flex flex-wrap justify-end gap-2 py-4">{action}</div> : null}
+        <div className="max-h-[32rem] overflow-auto overscroll-contain">{children}</div>
+      </div>
+    </details>
   );
 }
 
@@ -559,11 +566,11 @@ export function InventoryCatalogWorkspace({ model, workspace }: { model: LiveInv
 
   return (
     <section className="mt-5">
-      <div className="flex flex-col justify-between gap-4 pb-5 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><Settings2 className="size-4 text-[var(--accent-strong)]" /><span className="text-xs font-semibold tracking-[.14em] text-[var(--accent-strong)] uppercase">Guided setup</span></div><h3 className="mt-3 text-xl font-medium tracking-[-0.04em]">Inventory foundation</h3><p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">Start with units, then add products, costs, opening stock, and recipe specs.</p></div><StatusPill tone={canConfigureOperations ? "positive" : "neutral"}>{canConfigureOperations ? "Ready to configure" : "Read only"}</StatusPill></div>
+      <div className="flex flex-col justify-between gap-4 pb-5 sm:flex-row sm:items-end"><div><div className="flex items-center gap-2"><Settings2 className="size-4 text-[var(--accent-strong)]" /><span className="text-xs font-semibold tracking-[.14em] text-[var(--accent-strong)] uppercase">Catalog settings</span></div><h3 className="mt-3 text-xl font-medium tracking-[-0.04em]">Inventory catalog</h3><p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">Start with units, then add products, costs, opening stock, and recipe specs.</p></div><StatusPill tone={canConfigureOperations ? "positive" : "neutral"}>{canConfigureOperations ? "Ready to configure" : "Read only"}</StatusPill></div>
       {!canConfigureOperations ? <div className="mb-5 flex items-start gap-3 rounded-xl bg-[var(--warning-soft)] px-4 py-3 text-xs leading-5 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" />Inventory setup is read only for this account.</div> : null}
 
-      <SetupStep number="01" icon={<ArrowRightLeft className="size-4" />} title="Units & conversions" detail="Define the canonical language for count, mass, volume, and length before creating items." action={<div className="flex gap-2">{action("Unit", "unit", false, canConfigureUnits)}{action("Conversion", "conversion", catalog.units.filter((unit) => unit.isActive).length < 2)}</div>}>
-        {catalog.units.length ? <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{catalog.units.map((unit) => <div key={unit.id} className="flex items-center gap-3 py-3"><span className="numeric w-14 text-xs font-semibold">{unit.symbol}</span><span className="min-w-0 flex-1 text-xs">{unit.name}<span className="ml-2 text-xs text-[var(--ink-faint)]">{unit.dimension}{unit.isBase ? " · base" : ""}</span></span><StatusPill tone={unit.isActive ? "positive" : "neutral"}>{unit.isActive ? "Active" : "Inactive"}</StatusPill><EditButton disabled={!canConfigureUnits} onClick={() => open("unit", unit)} /></div>)}</div> : <EmptyLine>Add the first canonical unit—typically each, ounce, pound, or milliliter.</EmptyLine>}
+      <SetupStep number="01" icon={<ArrowRightLeft className="size-4" />} title="Units & conversions" detail="Measurement units and conversion rates." action={<div className="flex gap-2">{action("Unit", "unit", false, canConfigureUnits)}{action("Conversion", "conversion", catalog.units.filter((unit) => unit.isActive).length < 2)}</div>}>
+        {catalog.units.length ? <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{catalog.units.map((unit) => <div key={unit.id} className="flex items-center gap-3 py-3"><span className="numeric w-14 text-xs font-semibold">{unit.symbol}</span><span className="min-w-0 flex-1 text-xs">{unit.name}<span className="ml-2 text-xs text-[var(--ink-faint)]">{unit.dimension}{unit.isBase ? " · base" : ""}</span></span><StatusPill tone={unit.isActive ? "positive" : "neutral"}>{unit.isActive ? "Active" : "Inactive"}</StatusPill><EditButton disabled={!canConfigureUnits} onClick={() => open("unit", unit)} /></div>)}</div> : <EmptyLine>Add a measurement unit—typically each, ounce, pound, or milliliter.</EmptyLine>}
         {catalog.conversions.length ? <div className="mt-3 divide-y divide-[var(--line)]">{catalog.conversions.map((conversion) => <div key={conversion.id} className="flex items-center gap-3 py-2 text-xs"><span className="numeric flex-1">1 {unitById.get(conversion.fromUnitId)?.symbol ?? "?"} = {conversion.multiplier} {unitById.get(conversion.toUnitId)?.symbol ?? "?"}{conversion.inventoryItemId ? ` · ${itemById.get(conversion.inventoryItemId)?.name ?? "Item specific"}` : ""}</span><StatusPill tone={conversion.isActive ? "positive" : "neutral"}>{conversion.isActive ? "Active" : "Inactive"}</StatusPill><EditButton disabled={!canConfigureFoundation} onClick={() => open("conversion", conversion)} /></div>)}</div> : null}
       </SetupStep>
 

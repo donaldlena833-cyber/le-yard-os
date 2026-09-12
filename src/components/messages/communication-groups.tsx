@@ -612,7 +612,7 @@ export function CommunicationGroups({
                       ? mode === "human"
                         ? "Human handling · automated replies paused"
                         : "Automation may reply until a human takes over"
-                      : "Client and staff replies appear exactly as recorded."}
+                      : "Conversation history."}
                   </p>
                 </div>
                 {phone ? (
@@ -862,8 +862,7 @@ export function CommunicationGroups({
         </form>
       ) : null}
       <p className={s.muted} style={{ marginTop: 18 }}>
-        Shared by owners and admins. Updates every 15 seconds while this page is
-        visible. Search applies to loaded history.
+        Shared team inbox.
       </p>
     </section>
   );

@@ -33,7 +33,7 @@ export function SmsPilotStatus() {
           setError("");
         }
       } catch {
-        if (active) setError("AI pilot status is unavailable.");
+        if (active) setError("Guest assistance status is unavailable.");
       }
     }
     void refresh();
@@ -68,20 +68,7 @@ export function SmsPilotStatus() {
   return (
     <aside className={s.notice} aria-label="AI guest chat status">
       <strong>AI guest chat · {status.enabled ? "on" : "off"}</strong>
-      <p>{status.model} · New guest texts enter chat automatically.</p>
-      <p>
-        ${status.reservedUsd.toFixed(4)} of ${status.budgetUsd.toFixed(2)}{" "}
-        weekly model budget used or reserved. {status.queued} queued ·{" "}
-        {status.review} held or needing review.
-      </p>
-      {status.recent[0] ? (
-        <p>
-          Latest request: {status.recent[0].status}
-          {status.recent[0].latency_ms != null
-            ? ` · model response ${(status.recent[0].latency_ms / 1000).toFixed(1)}s`
-            : ""}
-        </p>
-      ) : null}
+      <p>{status.queued} waiting · {status.review} needing team review</p>
       {status.queued > 0 ? (
         <button
           type="button"

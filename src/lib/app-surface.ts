@@ -26,4 +26,4 @@ export function isRequestPathAllowedForAppSurface(pathname: string): boolean {
   return isDestinationAllowedForAppSurface(pathname);
 }
 export const surfaceProductName = isPhoneSurface ? "Le Yard Phone" : isHostSurface ? "Le Yard Host" : "Le Yard OS";
-export const surfaceProductDetail = isPhoneSurface ? "Shared calls & messages" : isHostSurface ? "Reservations & guest CRM" : "Operator workspace";
+export const surfaceProductDetail = isPhoneSurface ? "Shared calls & messages" : isHostSurface ? "Reservations & guests" : "Restaurant operations";

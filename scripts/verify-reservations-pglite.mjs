@@ -8140,6 +8140,25 @@ try {
     "public pilot exhausted inventory",
   );
 
+  // A replacement must preserve history while installing the exact DD08 inventory.
+  await assumeUser(ids.owner);
+  const floorLocation = "30000000-0000-4000-8000-000000000008";
+  await db.query(`insert into public.locations (id, organization_id, name, code, timezone)
+    values ($1, $2, 'Floor verification', 'DD08', 'America/New_York')`, [floorLocation, ids.organization]);
+  const floorRequest = "d8000000-0000-4000-8000-000000000008";
+  const installed = (await db.query(`select public.install_le_yard_reservation_draft($1, $2) as result`, [floorRequest, floorLocation])).rows[0].result;
+  const floor = (await db.query(`select count(*)::int as tables, sum(max_capacity)::int as seats,
+    bool_and(not is_bookable) as paused from public.reservation_tables where location_id=$1 and is_active`, [floorLocation])).rows[0];
+  if (floor.tables !== 20 || floor.seats !== 40 || !floor.paused || !installed.installed) throw new Error(`DD08 inventory mismatch: ${JSON.stringify({floor,installed})}`);
+  const window = (await db.query(`select count(*)::int as members from public.reservation_table_combination_members m
+    join public.reservation_table_combinations c on c.id=m.combination_id
+    where c.location_id=$1 and c.max_capacity=8 and c.is_active`, [floorLocation])).rows[0];
+  if (window.members !== 4) throw new Error("Window eight must use four two-tops");
+  const replay = (await db.query(`select public.install_le_yard_reservation_draft($1, $2) as result`, [floorRequest, floorLocation])).rows[0].result;
+  if (!replay.replayed) throw new Error("Floor reset replay is not idempotent");
+  const snapshot = (await db.query(`select count(*)::int as count from private.reservation_configuration_snapshots where id=$1`, [floorRequest])).rows[0];
+  if (snapshot.count !== 1) throw new Error("Floor reset must retain one snapshot");
+
   process.stdout.write(
     "PASS reservation configuration, atomic staff lifecycle revisions, table states, rate limits, reminders, public verification/modification/cancellation, exact cross-boundary expiry, waitlist seating, recipient/version evidence, and linearized begin-delivery authorization fences\n",
   );

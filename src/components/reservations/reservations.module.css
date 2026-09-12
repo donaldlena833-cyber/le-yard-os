@@ -176,3 +176,17 @@
 @media (prefers-reduced-motion: reduce) {
   .floorTable, .filter, .reservationRow { transition: none; }
 }
+
+.hostLayout { display: grid; gap: 24px; margin-top: 24px; }
+.floorPanel, .servicePanel { min-width: 0; }
+.floorScroll { overflow-x: auto; padding: 5px; border: 1px solid var(--line); border-radius: 18px; background: var(--inner); }
+.floor { aspect-ratio: 420 / 299.69385; min-width: 600px; border-radius: 12px; box-shadow: none; }
+.architecture { position: absolute; inset: 0; background: url('/floor-plan/dd08-dining.svg') center / 100% 100% no-repeat; pointer-events: none; }
+.floor[data-layout="legacy"] .architecture { display: none; }
+.floorTable { min-width: 24px; min-height: 24px; border: 1px solid var(--line-strong); font-size: 11px; line-height: 1; border-radius: 5px; }
+.floorCaption { bottom: 8px; left: auto; right: 8px; transform: none; font-size: 10px; padding: 5px 8px; }
+@media (min-width: 1024px) {
+ .hostLayout { grid-template-columns: minmax(280px, .8fr) minmax(0, 1.65fr); align-items: start; }
+ .floorPanel { grid-column: 2; grid-row: 1 / span 2; }
+ .servicePanel { grid-column: 1; }
+}

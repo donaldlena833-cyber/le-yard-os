@@ -525,9 +525,9 @@ export function LiveGuestsWorkspace({
       <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
           <div className="flex items-center gap-2">
-            <StatusPill tone="neutral">Server-backed</StatusPill>
+            <StatusPill tone="neutral">Live</StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">
-              Tenant-wide CRM · human-controlled changes
+              Guest history
             </span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">
@@ -571,7 +571,7 @@ export function LiveGuestsWorkspace({
         <Metric
           label="VIP guests"
           value={model.metrics.vipProfiles.toLocaleString()}
-          detail="Human flagged"
+          detail="Marked as VIP"
         />
         <Metric
           label="Allergy notes"
@@ -582,7 +582,7 @@ export function LiveGuestsWorkspace({
           }
           detail={
             canReadSensitiveGuestContext
-              ? "Profiles with recorded text"
+              ? "Guests with allergy notes"
               : "Sensitive guest permission required"
           }
         />

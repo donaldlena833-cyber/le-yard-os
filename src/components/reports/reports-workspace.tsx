@@ -178,7 +178,7 @@ export function ReportsWorkspace() {
       <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
           <div className="flex items-center gap-2">
-            <StatusPill tone={isFullServiceDayPreview ? "warning" : "positive"} dot>{isFullServiceDayPreview ? "Local replay passed · release blocked" : "Source-backed"}</StatusPill>
+            <StatusPill tone={isFullServiceDayPreview ? "warning" : "positive"} dot>{isFullServiceDayPreview ? "Local replay passed · release blocked" : "Live"}</StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">Synthetic workspace · {demoWorkspace.asOf.slice(0, 10)}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Reports</h2>

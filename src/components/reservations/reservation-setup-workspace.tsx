@@ -265,13 +265,13 @@ export function ReservationSetupWorkspace({
       <PageHeader
         eyebrow={`${workspace.activeLocation.name} · Owner-controlled`}
         title="Reservation setup"
-        detail="Install the measured-plan draft, verify the physical room, then explicitly approve staff and public booking controls."
+        detail="Floor plan, service hours, and booking settings."
         status={
           <StatusPill
             tone={model.configuration.ready ? "positive" : "warning"}
             dot
           >
-            {model.configuration.ready ? "Approved" : "Fail-closed"}
+            {model.configuration.ready ? "Approved" : "Booking off"}
           </StatusPill>
         }
         actions={
@@ -299,19 +299,19 @@ export function ReservationSetupWorkspace({
           title="Read-only reservation configuration"
         >
           Installing, resetting, or approving reservation rules requires the
-          exact reservations.configure capability for this location.
+          reservation configuration access for this location.
         </InlineNotice>
       ) : null}
       <div className={styles.metricGrid}>
         <Metric
           label="Tables"
           value={String(model.configuration.tableCount)}
-          detail="Expected 17"
+          detail="20 dining tables"
         />
         <Metric
           label="Seats"
           value={String(model.configuration.seatCount)}
-          detail="Expected 68"
+          detail="40 dining seats · 6 bar / perch seats"
         />
         <Metric
           label="Public booking"
@@ -321,7 +321,7 @@ export function ReservationSetupWorkspace({
         <Metric
           label="Messaging"
           value={model.configuration.messagingEnabled ? "On" : "Off"}
-          detail="Resend + Twilio"
+          detail="Email and SMS"
         />
       </div>
       <div className="mt-8 grid gap-6 lg:grid-cols-[.85fr_1.15fr]">
@@ -329,14 +329,12 @@ export function ReservationSetupWorkspace({
           <Surface variant="outlined" padding="lg">
             <SectionHeading
               eyebrow="Step 1"
-              title="Install the draft"
-              detail="Seeds a disabled 17-table, 68-seat room from the measured floor-plan project plus a conservative dinner service. It does not enable online booking."
+              title="Restaurant floor plan"
+              detail="20 interchangeable two-tops with eight seats by the window, matching the latest design."
             />
             <div className="rounded-2xl bg-[var(--canvas)] p-4 text-xs leading-5 text-[var(--ink-faint)]">
               <LayoutTemplate className="mb-3 size-5 text-[var(--accent-strong)]" />
-              The source drawing is authoritative for the shell dimensions.
-              Exact table positions and operating aisles remain assumptions
-              until physically checked.
+              Based on the latest restaurant design: window eight, two-tops, banquettes, bar, and entry.
             </div>
             <Button
               className="mt-5 w-full"
@@ -347,18 +345,16 @@ export function ReservationSetupWorkspace({
                 canConfigure ? undefined : configurePermissionId
               }
             >
-              {busy ? "Installing…" : "Install or reset draft"}
+              {busy ? "Installing…" : "Load latest floor plan"}
             </Button>
           </Surface>
           <Surface variant="inset" padding="lg">
             <div className="flex gap-3">
               <LockKeyhole className="mt-0.5 size-5 shrink-0 text-[var(--warning)]" />
               <div>
-                <p className="text-sm font-semibold">Safe by default</p>
+                <p className="text-sm font-semibold">Booking status</p>
                 <p className="mt-2 text-xs leading-5 text-[var(--ink-faint)]">
-                  Draft tables are not bookable, service periods are offline,
-                  and public availability returns unavailable until the approval
-                  command succeeds.
+                  Booking stays paused until the floor plan and service settings are approved.
                 </p>
               </div>
             </div>
@@ -388,7 +384,7 @@ export function ReservationSetupWorkspace({
                   I verified the floor on site
                 </strong>
                 <small className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">
-                  17 tables, 68 seats, labels, safe aisle clearances, exits, and
+                  20 dining tables, 40 dining seats, labels, safe aisle clearances, exits, and
                   non-bookable service areas match the operating room.
                 </small>
               </span>
@@ -448,17 +444,16 @@ export function ReservationSetupWorkspace({
                 />
               </label>
             </div>
-            {model.configuration.tableCount !== 17 ||
-            model.configuration.seatCount !== 68 ? (
+            {model.configuration.tableCount !== 20 ||
+            model.configuration.seatCount !== 40 ? (
               <div className="flex gap-3 rounded-2xl bg-[var(--warning-soft)] p-4 text-xs leading-5">
                 <AlertTriangle className="size-4 shrink-0 text-[var(--warning)]" />
-                Install the complete draft before approval. The database also
-                enforces the expected table and seat totals.
+                Load the complete floor plan before approval.
               </div>
             ) : (
               <div className="flex gap-3 rounded-2xl bg-[var(--positive-soft)] p-4 text-xs leading-5">
                 <CheckCircle2 className="size-4 shrink-0 text-[var(--positive)]" />
-                The draft totals match. Physical verification is still required.
+                The floor totals match. Confirm the room before opening booking.
               </div>
             )}
             <Button
@@ -468,8 +463,8 @@ export function ReservationSetupWorkspace({
               disabled={
                 busy ||
                 !canConfigure ||
-                model.configuration.tableCount !== 17 ||
-                model.configuration.seatCount !== 68
+                model.configuration.tableCount !== 20 ||
+                model.configuration.seatCount !== 40
               }
             >
               {busy ? "Saving approval…" : "Approve reservation system"}
@@ -482,7 +477,7 @@ export function ReservationSetupWorkspace({
           <SectionHeading
             eyebrow="Service-day controls"
             title="Closures, pacing, and buffers"
-            detail="Record dated exceptions against the materialized service. Availability and database writes enforce the same evidence."
+            detail="Adjust service dates, booking pace, and buffers."
           />
           <FormField
             id="service-control-date"
@@ -664,7 +659,7 @@ export function ReservationSetupWorkspace({
               <SectionHeading
                 eyebrow="Audited override"
                 title="Record an exception"
-                detail="Choose exact boundaries from the materialized service. Existing reservations are not cancelled automatically."
+                detail="Select the affected service times. Existing bookings stay in place."
               />
               <form
                 key={`${selectedShift?.id ?? "none"}-${exceptionKind}`}
@@ -832,7 +827,7 @@ export function ReservationSetupWorkspace({
                 <FormField
                   id="service-exception-reason"
                   label="Operational reason"
-                  description="Stored with the actor and request evidence in the audit trail."
+                  description="Add a brief reason for the change."
                   required
                 >
                   <textarea
@@ -871,16 +866,13 @@ export function ReservationSetupWorkspace({
       <ConfirmActionDialog
         open={installConfirmOpen}
         labelledBy={installDialogTitleId}
-        title="Reset the reservation draft?"
+        title="Replace the floor plan?"
         description={
           <>
-            This replaces the current floor, tables, combinations, and service
-            draft. Public booking, guest messaging, and staff push will all be
-            turned off. The server records a restorable snapshot and refuses the
-            reset while future guest commitments exist.
+            This replaces the current floor plan and service settings. Booking and notifications will be paused. The previous configuration is saved, and existing guest commitments prevent replacement.
           </>
         }
-        confirmLabel="Reset draft"
+        confirmLabel="Replace floor plan"
         onClose={() => {
           setInstallConfirmOpen(false);
           setInstallConfirmation("");

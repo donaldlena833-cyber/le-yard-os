@@ -338,8 +338,8 @@ function DraggableFloorTable({
       style={{
         left: `${table.x * 100}%`,
         top: `${table.y * 100}%`,
-        width: `${Math.max(table.width * 100, 8)}%`,
-        height: `${Math.max(table.height * 100, 7)}%`,
+        width: `${table.width * 100}%`,
+        height: `${table.height * 100}%`,
         transform: `translate(-50%, -50%) rotate(${table.rotation}deg)${dragTransform}`,
       }}
     >
@@ -396,8 +396,8 @@ function FloorPlan({
     );
     const bounds = floorRef.current?.getBoundingClientRect();
     if (!table || !bounds) return null;
-    const halfWidth = Math.max(table.width, 0.08) / 2;
-    const halfHeight = Math.max(table.height, 0.07) / 2;
+    const halfWidth = table.width / 2;
+    const halfHeight = table.height / 2;
     return {
       x: Math.max(
         halfWidth,
@@ -443,19 +443,10 @@ function FloorPlan({
       <div
         ref={floorRef}
         className={styles.floor}
+        data-layout={model.floorNow.tables.some((table) => table.label === "F1") ? "dd08" : "legacy"}
         data-editing={editing}
       >
-        <div className={cn(styles.zone, "inset-x-[4%] top-[5%] h-[16%]")}>
-          <span className={cn(styles.zoneLabel, "left-3 top-2")}>
-            Entry · host stand
-          </span>
-        </div>
-        <div className={cn(styles.zone, "bottom-[6%] left-[4%] top-[26%] w-[19%]")}>
-          <span className={cn(styles.zoneLabel, "bottom-3 left-3 [writing-mode:vertical-rl]")}>
-            Service lane
-          </span>
-        </div>
-        <div className={cn(styles.zone, "bottom-[6%] left-[27%] right-[4%] top-[26%]")} />
+        <div className={styles.architecture} aria-hidden="true" />
         {guidePosition ? (
           <>
             <div
@@ -497,8 +488,8 @@ function FloorPlan({
         })}
         <div className={styles.floorCaption}>
           {editing
-            ? "Draft mode · review before saving"
-            : "Floor now · verify on site"}
+            ? "Unsaved changes"
+            : "Dining room"}
         </div>
       </div>
     </DndContext>
@@ -1876,8 +1867,7 @@ export function ReservationsWorkspace({
               Finish and approve reservation setup
             </p>
             <p className="mt-1 text-xs text-[var(--ink-faint)]">
-              Online booking remains fail-closed until service rules and the
-              draft floor are approved.
+              Online booking is off. Review your floor plan and service settings.
             </p>
           </div>
           <Button
@@ -1950,12 +1940,12 @@ export function ReservationsWorkspace({
         />
       </div>
 
-      <div className="mt-4 grid gap-5 lg:mt-6 lg:grid-cols-[300px_minmax(0,1fr)]">
+      <div className={styles.hostLayout}>
         <section
           id="reservation-book-region"
           aria-label="Reservation day book"
           className={cn(
-            "min-w-0 lg:row-span-2",
+            "min-w-0",
             mobileView !== "book" && "hidden lg:block",
           )}
         >
@@ -2049,7 +2039,7 @@ export function ReservationsWorkspace({
         <section
           id="reservation-floor-region"
           aria-label="Reservation floor"
-          className={cn("min-w-0", mobileView !== "floor" && "hidden lg:block")}
+          className={cn(styles.floorPanel, mobileView !== "floor" && "hidden lg:block")}
         >
           <SectionHeading
             eyebrow="Dining room"
@@ -2061,7 +2051,7 @@ export function ReservationsWorkspace({
                   ? `Assignment mode · choose a table for ${selected.guest.displayName}, or cancel below.`
                   : selected
                     ? `The outline shows ${selected.guest.displayName}’s selected interval; table color still means physical state now.`
-                    : "Table colors show observed physical state, never future availability."
+                    : "Current table status"
             }
             action={
               layoutEditing ? (
@@ -2104,7 +2094,7 @@ export function ReservationsWorkspace({
               )
             }
           />
-          <FloorPlan
+          <div className={styles.floorScroll}><FloorPlan
             model={model}
             selected={selected}
             selectedTableId={selectedTableId}
@@ -2128,7 +2118,7 @@ export function ReservationsWorkspace({
             )}
             editing={layoutEditing}
             onMoveTable={stageTableMove}
-          />
+          /></div>
           {assignmentMode && selected ? (
             <InlineNotice
               tone="info"
@@ -2169,12 +2159,7 @@ export function ReservationsWorkspace({
             {model.floorNow.businessDateAtObservation !== model.businessDate
               ? `This remains the current physical floor while you review ${dateTitle(model.businessDate)}. `
               : ""}
-            {model.intervalInventory.allocations.length} inventory interval
-            {model.intervalInventory.allocations.length === 1 ? "" : "s"}{" "}
-            (assignments, holds, and timed blocks){" "}
-            {model.intervalInventory.allocations.length === 1 ? "is" : "are"}{" "}
-            evaluated by exact overlap for this service date and do not recolor
-            the floor.
+
           </div>
           {selectedTable ? (
             <Surface variant="outlined" padding="sm" className="mt-3">
@@ -2255,7 +2240,7 @@ export function ReservationsWorkspace({
           id="reservation-service-region"
           aria-label="Reservation service context"
           className={cn(
-            "min-w-0 lg:col-start-2",
+            styles.servicePanel,
             mobileView !== "service" && "hidden lg:block",
           )}
         >

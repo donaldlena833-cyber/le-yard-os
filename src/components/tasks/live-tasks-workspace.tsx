@@ -657,13 +657,13 @@ function TaskPanel({
           title={
             model.tasks.length
               ? "No matching tasks"
-              : "No tasks in this location scope"
+              : "No tasks yet"
           }
           detail={
             model.tasks.length
               ? "Try a different title, assignee, or priority."
               : canManage
-                ? "Create the first tenant-scoped task for this location."
+                ? "Create a task to get started."
                 : "Management has not assigned work in this location scope."
           }
         />
@@ -1359,7 +1359,7 @@ function SopPanel({
             detail={
               canManage
                 ? "Author the first location procedure, then publish it for staff."
-                : "Published tenant-scoped versions will appear here."
+                : "Published procedures will appear here."
             }
           />
         )}
@@ -2934,7 +2934,7 @@ export function LiveTasksWorkspace({
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <StatusPill tone="neutral">Server-backed</StatusPill>
+            <StatusPill tone="neutral">Live</StatusPill>
             <StatusPill tone={canManage ? "positive" : "neutral"}>
               {canManage ? "Management controls" : "Staff controls"}
             </StatusPill>
@@ -2990,7 +2990,7 @@ export function LiveTasksWorkspace({
         <Metric
           label="Today’s checklists"
           value={`${todayRuns.length - incompleteTodayRuns.length}/${todayRuns.length}`}
-          detail="Terminal runs / runs created"
+          detail="Completed / started"
         />
         <Metric
           label="SOP acknowledgements"
@@ -3096,10 +3096,7 @@ export function LiveTasksWorkspace({
       <div className="mt-8 flex items-start gap-3 border-t border-[var(--line)] pt-5 text-xs leading-4 text-[var(--ink-faint)]">
         <ShieldCheck className="mt-0.5 size-4 shrink-0 text-[var(--positive)]" />
         <span>
-          Every count and control is derived from live rows visible through the
-          current organization, location, and role policies. Actor identity,
-          completion times, and terminal evidence are written by server-owned
-          commands.
+
         </span>
       </div>
       <AnimatePresence>

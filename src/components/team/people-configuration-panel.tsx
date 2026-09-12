@@ -208,7 +208,7 @@ export function JobRoleConfigurationPanel({
       <SectionHeading
         eyebrow="Team setup"
         title="Job role catalog"
-        detail="Define the roles your restaurant actually uses—nothing is assumed or prefilled."
+        detail="Manage job roles and tip eligibility."
         action={
           <Button
             type="button"

@@ -413,9 +413,8 @@ function Sidebar({
           href={`tel:${LE_YARD_PUBLIC_PHONE}`}
           className="focus-ring mb-2 flex min-h-10 items-center gap-3 rounded-xl px-3 text-[13px] font-medium text-[var(--muted)] transition-colors hover:bg-[var(--inner)] hover:text-[var(--text)]"
         >
-          <Phone className="size-[17px]" />
-          <span className="min-w-0 flex-1">Call Le Yard</span>
-          <span className="numeric text-xs">{LE_YARD_PUBLIC_PHONE_DISPLAY}</span>
+          <Phone className="size-[17px] shrink-0" />
+          <span className="min-w-0"><span className="block">Call Le Yard</span><span className="numeric mt-0.5 block text-xs">{LE_YARD_PUBLIC_PHONE_DISPLAY}</span></span>
         </a>
         {isNavItemVisible(settingsItem, workspace) ? (
           <NavigationLink item={settingsItem} pathname={pathname} />
@@ -427,7 +426,7 @@ function Sidebar({
               {workspace.identity.displayName}
             </p>
             <p className={cn("truncate", styles.identityDetail)}>
-              {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : "Password secured"}
+              {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : "Signed in"}
             </p>
           </div>
           <ShieldCheck
@@ -519,7 +518,7 @@ function MobileDrawer({
                 <div className="min-w-0 flex-1">
                   <p className={cn("truncate", styles.identityName)}>{workspace.identity.displayName}</p>
                   <p className={cn("truncate", styles.identityDetail)}>
-                    {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : "Password secured"}
+                    {shellRoleLabel[workspace.role]} · {workspace.mode === "demo" ? "Playground" : "Signed in"}
                   </p>
                 </div>
               </div>
