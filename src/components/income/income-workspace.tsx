@@ -78,7 +78,7 @@ function dateTimeLabel(value: string, timeZone: string): string {
 }
 
 function freshnessLabel(value: string | null, timeZone: string): string {
-  return value ? dateTimeLabel(value, timeZone) : "No source records";
+  return value ? dateTimeLabel(value, timeZone) : "No records";
 }
 
 type HourlyMetric = "revenue" | "demand" | "labor";
@@ -816,7 +816,7 @@ export function IncomeWorkspace({
           </section>
 
           <section>
-            <SectionHeading eyebrow="Evidence" title="Source freshness" />
+            <SectionHeading eyebrow="Data" title="Last updated" />
             <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
               {model.sources.map((source) => (
                 <div

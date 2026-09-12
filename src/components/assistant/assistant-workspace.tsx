@@ -68,7 +68,7 @@ function AnswerCard({ answer }: { answer: OperationsAnswer }) {
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill tone={band === "high" ? "positive" : band === "medium" ? "warning" : "danger"}>{Math.round(answer.confidence * 100)}% confidence</StatusPill>
           <StatusPill><BookOpenCheck className="size-3" /> {answer.citations.length} cited record{answer.citations.length === 1 ? "" : "s"}</StatusPill>
-          <StatusPill tone="accent">{answer.sourceMode === "tenant_records" ? "Tenant records" : "Evidence preview"}</StatusPill>
+          <StatusPill tone="accent">{answer.sourceMode === "tenant_records" ? "Restaurant records" : "Preview"}</StatusPill>
         </div>
         <h3 className="mt-5 text-xl font-medium tracking-[-0.04em]">{answer.title}</h3>
         <p className="mt-3 max-w-3xl text-[13px] leading-6 text-[var(--ink-soft)]">{answer.summary}</p>
@@ -137,7 +137,7 @@ function OwnerAnswerCard({
         ) : null}
       </div>
       <div className="border-t border-[var(--line)] bg-[var(--canvas)] px-5 py-4 sm:px-7">
-        <p className="text-xs font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase">Evidence used</p>
+        <p className="text-xs font-semibold tracking-[.12em] text-[var(--ink-faint)] uppercase">References</p>
         <div className="mt-2 grid gap-1 sm:grid-cols-2">
           {answer.citations.map((source) => (
             <Link key={`${source.sourceTable}:${source.sourceRecordId}`} href={recordRoutes[source.sourceTable] || "/reports"} className="focus-ring group flex items-start gap-3 rounded-xl p-3 transition-colors hover:bg-[var(--paper)]">

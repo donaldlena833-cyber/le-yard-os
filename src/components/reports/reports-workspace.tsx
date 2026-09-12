@@ -288,7 +288,7 @@ export function ReportsWorkspace() {
             </section>
 
             <aside>
-              <SectionHeading eyebrow="Evidence" title="Source coverage" />
+              <SectionHeading eyebrow="Data" title="Data coverage" />
               <div className="divide-y divide-[var(--line)] border-y border-[var(--line)]">
                 <div className="flex gap-3 py-4">
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[var(--positive)]" />
@@ -296,7 +296,7 @@ export function ReportsWorkspace() {
                 </div>
                 <div className="flex gap-3 py-4">
                   <Clock3 className="mt-0.5 size-4 shrink-0 text-[var(--accent)]" />
-                  <div><p className="text-[13px] font-semibold">{report.freshnessAt ? `Source updated ${formatFreshness(report.freshnessAt)}` : "No matching source observations"}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">{report.freshnessAt ? "Newest included source update" : "Generated time is not used as source freshness"}</p></div>
+                  <div><p className="text-[13px] font-semibold">{report.freshnessAt ? `Updated ${formatFreshness(report.freshnessAt)}` : "No records in this period"}</p><p className="mt-1 text-xs leading-4 text-[var(--ink-faint)]">{report.freshnessAt ? "Latest recorded activity" : "Awaiting activity"}</p></div>
                 </div>
                 <div className="flex gap-3 py-4">
                   <Info className="mt-0.5 size-4 shrink-0 text-[var(--warning)]" />
@@ -308,17 +308,17 @@ export function ReportsWorkspace() {
 
           <section className="mt-9">
             <SectionHeading
-              eyebrow="Source rows"
+              eyebrow="Details"
               title={`${report.rows.length} matching record${report.rows.length === 1 ? "" : "s"}`}
               detail={`${filters.startsOn} through ${filters.endsOn}`}
-              action={<span className="flex items-center gap-1.5 text-xs text-[var(--ink-faint)]"><BarChart3 className="size-3" /> Values preserve source precision</span>}
+              action={<span className="flex items-center gap-1.5 text-xs text-[var(--ink-faint)]"><BarChart3 className="size-3" /> Recorded values</span>}
             />
             <ResponsiveDataView
               items={report.rows}
               columns={responsiveColumns}
               getItemKey={(row) => row.id}
-              label={`${report.title} source records`}
-              empty={<ReadState compact state="empty" title="No matching source records" description="Adjust the report, location, or date filters to broaden the evidence window." />}
+              label={`${report.title} records`}
+              empty={<ReadState compact state="empty" title="No matching records" description="Adjust the report, location, or date filters to see more activity." />}
               renderCard={(row) => (
                 <div>
                   <p className="text-sm font-semibold text-[var(--ink)]">
