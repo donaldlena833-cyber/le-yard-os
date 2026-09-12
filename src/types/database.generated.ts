@@ -4635,6 +4635,76 @@ export type Database = {
         }
         Relationships: []
       };
+      "owner_sms_alerts": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "source_sid": string | null
+          "source_key": string
+          "recipient": string
+          "part": number
+          "body": string
+          "status": string
+          "provider_sid": string | null
+          "provider_status": string | null
+          "error_code": string | null
+          "created_at": string
+          "started_at": string | null
+          "updated_at": string
+          "completed_at": string | null
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "source_sid"?: string | null
+          "source_key": string
+          "recipient": string
+          "part": number
+          "body": string
+          "status"?: string
+          "provider_sid"?: string | null
+          "provider_status"?: string | null
+          "error_code"?: string | null
+          "created_at"?: string
+          "started_at"?: string | null
+          "updated_at"?: string
+          "completed_at"?: string | null
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "source_sid"?: string | null
+          "source_key"?: string
+          "recipient"?: string
+          "part"?: number
+          "body"?: string
+          "status"?: string
+          "provider_sid"?: string | null
+          "provider_status"?: string | null
+          "error_code"?: string | null
+          "created_at"?: string
+          "started_at"?: string | null
+          "updated_at"?: string
+          "completed_at"?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owner_sms_alerts_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+          {
+            foreignKeyName: "owner_sms_alerts_organization_id_source_sid_fkey"
+            columns: ["organization_id","source_sid"]
+            referencedRelation: "communication_messages"
+            referencedColumns: ["organization_id","sid"]
+          },
+        ]
+      };
       "payroll_exports": {
         Row: {
           "id": string
@@ -11268,6 +11338,13 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["integration_sync_jobs"]["Row"]
       };
+      "service_claim_owner_sms_alert": {
+        Args: {
+          "p_organization_id": string | null
+          "p_id": string | null
+        }
+        Returns: Json
+      };
       "service_claim_reservation_message_outbox": {
         Args: {
           "p_worker_id": string | null
@@ -12107,6 +12184,7 @@ export const DatabaseObjectNames = {
       "organization_memberships",
       "organization_settings",
       "organizations",
+      "owner_sms_alerts",
       "payroll_exports",
       "prep_tasks",
       "preshift_acknowledgements",
@@ -12424,6 +12502,7 @@ export const DatabaseObjectNames = {
       "service_claim_booking_rate_limit",
       "service_claim_identity_delivery",
       "service_claim_integration_sync_job",
+      "service_claim_owner_sms_alert",
       "service_claim_reservation_message_outbox",
       "service_claim_reservation_push_deliveries",
       "service_claim_sms_ai_run",

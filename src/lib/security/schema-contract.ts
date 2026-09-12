@@ -1,6 +1,6 @@
 export const EXPECTED_SCHEMA_CONTRACT = {
   contractVersion: "runtime-schema-v2",
-  migrationHead: "20260908120003",
+  migrationHead: "20260912172755",
 } as const;
 
 export type RuntimeSchemaContract = {

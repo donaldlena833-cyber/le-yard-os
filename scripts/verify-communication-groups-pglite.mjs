@@ -44,7 +44,7 @@ try {
   const contract = (
     await db.query("select public.service_runtime_schema_contract() as value")
   ).rows[0].value;
-  assert.equal(contract.migrationHead, "20260908120003");
+  assert.equal(contract.migrationHead, "20260912172755");
   assert.equal(
     contract.matchesExpected,
     true,

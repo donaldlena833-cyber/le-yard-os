@@ -23,6 +23,8 @@ const providerAuthenticatedPaths = new Set([
   "/api/twilio/voice/outbound-result",
   "/api/twilio/sms/incoming",
   "/api/twilio/sms/status",
+  "/api/twilio/sms/owner-alert-status",
+  "/api/internal/communications/owner-alerts",
   "/api/internal/communications/agent/availability",
   "/api/internal/communications/agent/reservations",
   "/api/internal/communications/agent/transfer-human",
@@ -40,6 +42,7 @@ const publicPaths = new Set([
   "/api/internal/integrations/toast-labor",
   CONNECTED_ACCEPTANCE_ATTESTATION_PATH,
   "/manifest.webmanifest",
+  "/le-yard-messages.vcf",
   "/offline.html",
   "/sw.js",
 ]);

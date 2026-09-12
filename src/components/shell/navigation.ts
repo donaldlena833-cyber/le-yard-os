@@ -62,7 +62,7 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/schedule", label: "Schedule", icon: CalendarDays, mobile: true },
       { href: "/service", label: "Service Control", icon: RadioTower },
       { href: "/time-clock", label: "Time Clock", icon: Timer, mobile: true },
-      { href: "/messages", label: "Groups", icon: MessageCircleMore, mobile: true },
+      { href: "/messages", label: "Groups", icon: MessageCircleMore, mobile: true, surfaces: ["operations", "phone"] },
       { href: "/phone", label: "Phone", icon: Phone, roles: ["owner", "admin"], surfaces: ["operations", "phone"] },
     ],
   },

@@ -7,18 +7,31 @@ import {
 import { CommunicationGroups } from "./communication-groups";
 import { SmsPilotStatus } from "./sms-pilot-status";
 import s from "./communication-groups.module.css";
-export function MessagesHub({
-  children,
-  initialGroup,
-  initialPhone,
-}: {
+type MessagesHubProps = {
   children: ReactNode;
   initialGroup: CommunicationGroup | "channels";
   initialPhone?: string;
-}) {
-  const [group, setGroup] = useState(initialGroup);
+  messageLinkError?: string;
+};
+
+export function MessagesHub(props: MessagesHubProps) {
+  return <MessagesHubSelection key={JSON.stringify([props.initialGroup, props.initialPhone, props.messageLinkError])} {...props} />;
+}
+
+function MessagesHubSelection({
+  children,
+  initialGroup,
+  initialPhone,
+  messageLinkError,
+}: MessagesHubProps) {
+  const [selection, setSelection] = useState({
+    group: initialGroup,
+    phone: initialPhone,
+    error: messageLinkError,
+  });
+  const { group, phone, error } = selection;
   function select(value: typeof group) {
-    setGroup(value);
+    setSelection({ group: value, phone: undefined, error: undefined });
     window.history.replaceState(null, "", `/messages?group=${value}`);
   }
   return (
@@ -34,31 +47,49 @@ export function MessagesHub({
           Open Phone
         </a>
       </div>
+      <aside className={s.notice} aria-label="Le Yard Messages phone alerts">
+        <strong>Le Yard Messages on your phone</strong>
+        <p>
+          Save the Le Yard business number as “Le Yard Messages” to keep its texts
+          together. When phone alerts are enabled, open the link in each alert to
+          view that guest or team conversation. Reply here from the Le Yard
+          number; a manual reply pauses AI for that conversation.
+        </p>
+        <p>Replying to the alert text on your phone sends a message to Le Yard, not to the guest.</p>
+        <div className={s.row}>
+          <a className={s.button} href="/le-yard-messages.vcf" download="Le Yard Messages.vcf">
+            Save Le Yard Messages contact
+          </a>
+          <span className={s.muted}>(332) 877-9035</span>
+        </div>
+      </aside>
       <SmsPilotStatus />
       <nav className={s.tabs} aria-label="Groups">
         {communicationGroups.map((g) => (
           <button
             key={g.id}
-            aria-pressed={group === g.id}
+            aria-pressed={!error && group === g.id}
             onClick={() => select(g.id)}
           >
             {g.title}
           </button>
         ))}
         <button
-          aria-pressed={group === "channels"}
+          aria-pressed={!error && group === "channels"}
           onClick={() => select("channels")}
         >
           Team channels
         </button>
       </nav>
-      {group === "channels" ? (
+      {error ? (
+        <p role="alert" className={s.alert}>{error}</p>
+      ) : group === "channels" ? (
         children
       ) : (
         <CommunicationGroups
-          key={group}
+          key={`${group}:${phone ?? ""}`}
           group={group}
-          initialPhone={initialPhone}
+          initialPhone={phone}
         />
       )}
     </div>
