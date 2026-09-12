@@ -190,3 +190,8 @@
  .floorPanel { grid-column: 2; grid-row: 1 / span 2; }
  .servicePanel { grid-column: 1; }
 }
+
+.reservationDialog { display: flex; flex-direction: column; overflow: hidden; }
+.reservationDialog > div:first-child { flex-shrink: 0; }
+.reservationDialog > form { min-height: 0; overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; }
+.dialogActions { position: sticky; bottom: 0; z-index: 2; padding-block: 12px; background: var(--card); border-top: 1px solid var(--line); }

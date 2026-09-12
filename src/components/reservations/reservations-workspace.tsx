@@ -260,7 +260,7 @@ function Dialog({
       initialFocusSelector="[autofocus]"
       position="responsive-sheet"
       returnFocusTarget={returnFocusTarget}
-      className="max-h-[94svh] max-w-xl overflow-y-auto rounded-t-[24px] border-0 p-5 sm:rounded-[24px] sm:p-7"
+      className={cn(styles.reservationDialog, "max-h-[94svh] max-w-xl rounded-t-[24px] border-0 p-5 sm:rounded-[24px] sm:p-7")}
     >
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -2665,7 +2665,7 @@ export function ReservationsWorkspace({
                 name="notes"
               />
             </label>
-            <div className="col-span-2 mt-2 flex justify-end gap-2">
+            <div className={cn(styles.dialogActions, "col-span-2 mt-2 flex justify-end gap-2")}>
               <Button
                 variant="quiet"
                 onClick={() => setBookMode(null)}
