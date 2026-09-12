@@ -195,3 +195,5 @@
 .reservationDialog > div:first-child { flex-shrink: 0; }
 .reservationDialog > form { min-height: 0; overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; }
 .dialogActions { position: sticky; bottom: 0; z-index: 2; padding-block: 12px; background: var(--card); border-top: 1px solid var(--line); }
+
+:global([data-theme="dark"]) .architecture { background-image: url("/floor-plan/dd08-dining-dark.svg"); }
