@@ -1,3 +1,10 @@
+vi.mock("@/lib/owner-sms-alerts.server", () => ({
+  ownerSmsAlertsEnabled: vi.fn().mockReturnValue(false),
+  isOwnerSmsAlertRecipient: vi.fn().mockReturnValue(false),
+  enqueueOwnerSmsAlerts: vi.fn().mockResolvedValue([]),
+  enqueueOwnerSmsReplyGuidance: vi.fn().mockResolvedValue([]),
+  processOwnerSmsAlertQueue: vi.fn(),
+}));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("@/lib/sms-ai-pilot.server", () => ({
   enqueueSmsPilot: vi.fn().mockResolvedValue(undefined),
@@ -55,6 +62,8 @@ function request(prefix: string, extra: Record<string, string> = {}) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(ownerSmsAlertsEnabled).mockReturnValue(false);
+  vi.mocked(isOwnerSmsAlertRecipient).mockReturnValue(false);
   vi.mocked(logCommunicationEvent).mockResolvedValue(true);
   vi.stubEnv("TWILIO_ACCOUNT_SID", account);
   vi.stubEnv("TWILIO_AUTH_TOKEN", "test-token");
@@ -149,7 +158,7 @@ it("routes employee texts and MMS to team requests even when guest automation is
   );
   expect(await r.text()).not.toContain("<Message");
   expect(notifyOwnersOfCommunication).toHaveBeenCalledWith(
-    expect.objectContaining({ actionUrl: "/messages?group=team" }),
+    expect.objectContaining({ actionUrl: "/messages?message=MM" + "b".repeat(32) }),
   );
 });
 
@@ -181,10 +190,48 @@ it("durably queues every external guest before acknowledging and schedules post-
   expect(enqueueSmsPilot).toHaveBeenCalledOnce();
   expect(after).toHaveBeenCalledWith(processSmsPilotQueue);
   vi.clearAllMocks();
+  vi.mocked(ownerSmsAlertsEnabled).mockReturnValue(false);
+  vi.mocked(isOwnerSmsAlertRecipient).mockReturnValue(false);
   await POST(request("SM", { Body: "STOP" }));
   expect(enqueueSmsPilot).not.toHaveBeenCalled();
   await POST(request("SM", { From: "+12125550104" }));
   expect(enqueueSmsPilot).toHaveBeenCalledOnce();
   vi.mocked(enqueueSmsPilot).mockRejectedValueOnce(Error("queue offline"));
   expect((await POST(request("SM"))).status).toBe(503);
+});
+
+import { ownerSmsAlertsEnabled, isOwnerSmsAlertRecipient, enqueueOwnerSmsAlerts, enqueueOwnerSmsReplyGuidance } from "@/lib/owner-sms-alerts.server";
+it("durably forwards complete incoming text independently of guest automation", async () => {
+  vi.mocked(ownerSmsAlertsEnabled).mockReturnValue(true);
+  const body = "  reservation\n" + "x".repeat(1500) + "  ";
+  expect((await POST(request("SM", { Body: body, NumMedia: "2" }))).status).toBe(200);
+  expect(enqueueOwnerSmsAlerts).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({sourceSid:"SM"+"b".repeat(32),from:"+12125550103",body,mediaCount:2}));
+});
+it("also forwards opt-out receipts while preserving provider opt-out handling", async () => {
+  vi.mocked(ownerSmsAlertsEnabled).mockReturnValue(true);
+  const response = await POST(request("SM", {Body:"STOP", OptOutType:"STOP"}));
+  expect(enqueueOwnerSmsAlerts).toHaveBeenCalledOnce();
+  expect(revokeServiceSmsConsent).toHaveBeenCalledOnce();
+  expect(await response.text()).not.toContain("<Message>");
+});
+it("requests a provider retry when durable alert enqueue fails", async () => {
+  vi.mocked(ownerSmsAlertsEnabled).mockReturnValue(true);
+  vi.mocked(enqueueOwnerSmsAlerts).mockRejectedValueOnce(Error("offline"));
+  expect((await POST(request("SM"))).status).toBe(503);
+});
+it("native founder replies get inbox guidance and never forward to the other founder or AI", async () => {
+  vi.mocked(ownerSmsAlertsEnabled).mockReturnValue(true);
+  vi.mocked(isOwnerSmsAlertRecipient).mockReturnValue(true);
+  const { enqueueSmsPilot } = await import("@/lib/sms-ai-pilot.server");
+  expect((await POST(request("SM", {Body:"Yes book it"}))).status).toBe(200);
+  expect(enqueueOwnerSmsReplyGuidance).toHaveBeenCalledOnce();
+  expect(enqueueOwnerSmsAlerts).not.toHaveBeenCalled();
+  expect(enqueueSmsPilot).not.toHaveBeenCalled();
+});
+it("does not send founder guidance in response to STOP", async () => {
+  vi.mocked(ownerSmsAlertsEnabled).mockReturnValue(true);
+  vi.mocked(isOwnerSmsAlertRecipient).mockReturnValue(true);
+  expect((await POST(request("SM", {Body:"STOP", OptOutType:"STOP"}))).status).toBe(200);
+  expect(enqueueOwnerSmsReplyGuidance).not.toHaveBeenCalled();
+  expect(enqueueOwnerSmsAlerts).not.toHaveBeenCalled();
 });

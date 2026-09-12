@@ -1,4 +1,11 @@
 import { after } from "next/server";
+import {
+  enqueueOwnerSmsAlerts,
+  enqueueOwnerSmsReplyGuidance,
+  isOwnerSmsAlertRecipient,
+  ownerSmsAlertsEnabled,
+  processOwnerSmsAlertQueue,
+} from "@/lib/owner-sms-alerts.server";
 import { smsPilotContact } from "@/lib/sms-ai-policy";
 import {
   enqueueSmsPilot,
@@ -84,6 +91,18 @@ export async function POST(request: Request) {
       },
       { required: true },
     );
+    // Forward independently of guest automation and human takeover. A failed
+    // durable enqueue asks Twilio to retry; source SIDs deduplicate the alerts.
+    if (ownerSmsAlertsEnabled() && !isOwnerSmsAlertRecipient(from)) {
+      await enqueueOwnerSmsAlerts({
+        sourceSid: messageSid,
+        from,
+        body: exactBody,
+        mediaCount,
+        guestName: guest?.display_name ?? undefined,
+      });
+      after(processOwnerSmsAlertQueue);
+    }
     if (optOutType === "STOP" || stopWords.test(body)) {
       if (from.startsWith("+"))
         await revokeServiceSmsConsent({
@@ -100,6 +119,14 @@ export async function POST(request: Request) {
         });
       return xmlResponse(new twilio.twiml.MessagingResponse().toString());
     }
+    if (ownerSmsAlertsEnabled() && isOwnerSmsAlertRecipient(from)) {
+      // A native SMS reply has no guest identifier. Never guess a destination.
+      if (optOutType !== "HELP") {
+        await enqueueOwnerSmsReplyGuidance({ sourceSid: messageSid, from });
+        after(processOwnerSmsAlertQueue);
+      }
+      return xmlResponse(new twilio.twiml.MessagingResponse().toString());
+    }
   } catch {
     return new Response("Temporary receipt failure", { status: 503 });
   }
@@ -113,7 +140,7 @@ export async function POST(request: Request) {
       title: "New team request",
       body: `${senderLabel}: ${body.slice(0, 220)}`,
       eventType: "team_sms_inbound",
-      actionUrl: "/messages?group=team",
+      actionUrl: `/messages?message=${messageSid}`,
     });
     return xmlResponse(response.toString());
   }
@@ -123,7 +150,7 @@ export async function POST(request: Request) {
       title: "New Le Yard text",
       body: `${senderLabel}: ${body.slice(0, 220)}`,
       eventType: "sms_inbound",
-      actionUrl: "/messages?group=clients",
+      actionUrl: `/messages?message=${messageSid}`,
     });
     return xmlResponse(response.toString());
   }
@@ -143,7 +170,7 @@ export async function POST(request: Request) {
         title: "Client reply · human handling",
         body: `${senderLabel}: ${body.slice(0, 220)}`,
         eventType: "sms_human_reply",
-        actionUrl: "/messages?group=clients",
+        actionUrl: `/messages?message=${messageSid}`,
       });
       return xmlResponse(response.toString());
     }

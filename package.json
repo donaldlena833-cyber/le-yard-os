@@ -39,7 +39,7 @@
     "test:service-day-reads:pglite": "node scripts/verify-service-day-read-policies-pglite.mjs",
     "test:operations-config:pglite": "node scripts/verify-operations-security-configuration-pglite.mjs",
     "test:financial-config:pglite": "node scripts/verify-financial-retention-configuration-pglite.mjs",
-    "test:integration": "npm run test:db:pglite && npm run test:bootstrap:pglite && npm run test:people-config:pglite && npm run test:inventory-catalog:pglite && npm run test:capabilities:pglite && npm run test:inventory-capabilities:pglite && npm run test:function-grants:pglite && npm run test:connected-attestation:pglite && npm run test:reservations:pglite && npm run test:reservation-push:pglite && npm run test:schedule-atomic:pglite && npm run test:service-control:pglite && npm run test:service-day-snapshot:pglite && npm run test:service-shifts:pglite && npm run test:income:pglite && npm run test:service-day-reads:pglite && npm run test:operations-config:pglite && npm run test:financial-config:pglite && npm run test:communications:pglite",
+    "test:integration": "npm run test:db:pglite && npm run test:bootstrap:pglite && npm run test:people-config:pglite && npm run test:inventory-catalog:pglite && npm run test:capabilities:pglite && npm run test:inventory-capabilities:pglite && npm run test:function-grants:pglite && npm run test:connected-attestation:pglite && npm run test:reservations:pglite && npm run test:reservation-push:pglite && npm run test:schedule-atomic:pglite && npm run test:service-control:pglite && npm run test:service-day-snapshot:pglite && npm run test:service-shifts:pglite && npm run test:income:pglite && npm run test:service-day-reads:pglite && npm run test:operations-config:pglite && npm run test:financial-config:pglite && npm run test:communications:pglite && npm run test:owner-sms-alerts:pglite",
     "types:database": "node scripts/generate-database-types.mjs",
     "types:database:check": "node scripts/generate-database-types.mjs --check",
     "test:rls": "supabase test db",
@@ -68,7 +68,8 @@
     "verify": "npm run test:plugins && npm run lint && npm run types:database:check && npm run typecheck && npm run test && npm run test:integration && npm run build",
     "verify:full": "npm run verify && npm run test:e2e && npm audit --audit-level=high",
     "verify:connected": "npm run verify:full && npm run test:rls && npm run test:db:lint && npm run test:e2e:connected",
-    "test:communications:pglite": "node scripts/verify-communication-groups-pglite.mjs"
+    "test:communications:pglite": "node scripts/verify-communication-groups-pglite.mjs",
+    "test:owner-sms-alerts:pglite": "node scripts/verify-owner-sms-alerts-pglite.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

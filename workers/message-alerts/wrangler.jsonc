@@ -1,0 +1,8 @@
+{
+  "name": "le-yard-message-alerts",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-09-12",
+  "workers_dev": false,
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true }
+}

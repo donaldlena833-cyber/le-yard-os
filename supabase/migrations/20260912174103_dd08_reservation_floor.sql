@@ -261,7 +261,7 @@ $$;
 revoke all on function public.install_le_yard_reservation_draft_legacy_unsafe(uuid, uuid) from public, anon, authenticated, service_role;
 
 update private.runtime_schema_contract_expected expected
-set migration_head = '20260912173500',
+set migration_head = '20260912174103',
  table_fingerprint = snapshot.value ->> 'tableFingerprint',
  function_fingerprint = snapshot.value ->> 'functionFingerprint',
  access_fingerprint = snapshot.value ->> 'accessFingerprint',
