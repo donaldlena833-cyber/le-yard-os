@@ -77,7 +77,7 @@ describe("live report timestamp hydration", () => {
       />,
     );
     expect(markup).toContain("Generated Aug 24, 4:00 PM");
-    expect(markup).toContain("Source updated Aug 24, 3:45 PM");
+    expect(markup).toContain("Updated Aug 24, 3:45 PM");
     expect(markup).not.toContain("8:00 PM");
   });
 });

@@ -145,7 +145,7 @@ describe("reservation service controls", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: "Install or reset draft" }),
+      screen.getByRole("button", { name: "Load latest floor plan" }),
     ).toHaveProperty("disabled", true);
     const reason = screen.getByRole("textbox", {
       name: /Operational reason/,
