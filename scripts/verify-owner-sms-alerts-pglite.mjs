@@ -117,7 +117,12 @@ try {
   const contract = (
     await db.query("select public.service_runtime_schema_contract() as value")
   ).rows[0].value;
-  assert.equal(contract.migrationHead, "20260912174103");
+  const currentMigrationHead = (await readdir("supabase/migrations"))
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .at(-1)
+    .split("_")[0];
+  assert.equal(contract.migrationHead, currentMigrationHead);
   assert.equal(contract.matchesExpected, true);
   const rls = (
     await db.query(

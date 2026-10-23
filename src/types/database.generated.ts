@@ -631,6 +631,52 @@ export type Database = {
           },
         ]
       };
+      "catering_inquiries": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "client_id": string
+          "request_id": string
+          "payload_hash": string
+          "payload": Json
+          "status": string
+          "notification_status": string
+          "created_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "client_id": string
+          "request_id": string
+          "payload_hash": string
+          "payload": Json
+          "status"?: string
+          "notification_status"?: string
+          "created_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "client_id"?: string
+          "request_id"?: string
+          "payload_hash"?: string
+          "payload"?: Json
+          "status"?: string
+          "notification_status"?: string
+          "created_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catering_inquiries_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
       "chat_attachments": {
         Row: {
           "id": string
@@ -11211,6 +11257,12 @@ export type Database = {
         }
         Returns: { "id": string | null; "created_at": string | null }[]
       };
+      "service_authenticate_catering_client": {
+        Args: {
+          "p_key_hash": string | null
+        }
+        Returns: Json
+      };
       "service_availability_subjects": {
         Args: {
           "p_organization_id": string | null
@@ -11284,6 +11336,14 @@ export type Database = {
           "p_location_id": string | null
           "p_manage_token_hash": string | null
           "p_reason": string | null
+        }
+        Returns: Json
+      };
+      "service_capture_catering_inquiry": {
+        Args: {
+          "p_client_id": string | null
+          "p_request_id": string | null
+          "p_payload": Json | null
         }
         Returns: Json
       };
@@ -12112,6 +12172,7 @@ export const DatabaseObjectNames = {
       "booking_api_clients",
       "capability_definitions",
       "cash_movements",
+      "catering_inquiries",
       "chat_attachments",
       "chat_channel_members",
       "chat_channels",
@@ -12491,6 +12552,7 @@ export const DatabaseObjectNames = {
       "seat_waitlist_entry",
       "serialize_tip_labor_evidence",
       "service_add_guest_note",
+      "service_authenticate_catering_client",
       "service_availability_subjects",
       "service_begin_reservation_delivery_run",
       "service_begin_reservation_message_delivery",
@@ -12498,6 +12560,7 @@ export const DatabaseObjectNames = {
       "service_book_public_reservation",
       "service_book_public_reservation_release_legacy",
       "service_cancel_public_reservation",
+      "service_capture_catering_inquiry",
       "service_capture_guest_interest",
       "service_claim_booking_rate_limit",
       "service_claim_identity_delivery",
