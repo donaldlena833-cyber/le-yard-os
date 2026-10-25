@@ -6,6 +6,8 @@ import { requireLocalPostgresControlUrl } from "./lib/require-local-postgres-con
 
 const controlUrl = requireLocalPostgresControlUrl(process.env.RLS_TEST_DATABASE_URL, "RLS_TEST_DATABASE_URL");
 const root = process.cwd();
+const legacyPublishBaseline = process.env.RLS_TEST_LEGACY_PUBLISH === "true";
+let legacyPublishInjected = false;
 const requiredFiles = ["00_rls_coverage.sql", "01_tenant_and_roles.sql", "02_workflow_guards.sql", "03_tip_engine.sql", "04_current_scope_signals.sql", "05_service_shift_read_stability.sql", "06_current_preshift_projection.sql", "07_reservation_signal_sources.sql", "08_square_source_evidence.sql", "09_sql_warning_triage.sql", "10_checklist_authoring_boundaries.sql", "11_staffing_replay_and_overlap.sql", "12_staffing_capabilities_and_publication.sql", "13_receiving_proposed_quantities.sql", "14_prep_formula_and_replay.sql"];
 const testFiles = (await readdir(join(root, "tests/rls"))).filter(f => f.endsWith(".sql")).sort();
 if (!requiredFiles.every(file => testFiles.includes(file))) throw new Error("Required RLS coverage file is missing.");
@@ -49,12 +51,21 @@ try {
   const migrationHash = createHash("sha256");
   for (const file of migrations) {
     await db.query("begin");
+    if (legacyPublishBaseline && file.startsWith("20261025062929_")) {
+      const legacySql = await readFile(join(root, "tests/fixtures/legacy-publish-schedule-v0008.sql"), "utf8");
+      await db.query(legacySql);
+      const legacyMd5 = (await db.query("select md5(prosrc)body from pg_proc where oid='public.publish_schedule(uuid,text)'::regprocedure")).rows[0].body;
+      if (legacyMd5 !== "db3c23cd12c8623ec753da7b945ef7b9") throw new Error("Historical publication fixture drifted");
+      report.legacyPublishBaseline = { bodyMd5: legacyMd5, fixtureSha256: createHash("sha256").update(legacySql).digest("hex"), injectedBefore: file };
+      legacyPublishInjected = true;
+    }
     const sql = await readFile(join(root, "supabase/migrations", file), "utf8");
     migrationHash.update(file).update("\0").update(sql);
     await db.query(sql);
     await db.query("insert into supabase_migrations.schema_migrations(version) values($1)", [file.split("_")[0]]);
     await db.query("commit");
   }
+  if (legacyPublishBaseline && !legacyPublishInjected) throw new Error("Historical baseline was not exercised");
   const seedSql = await readFile(join(root, "supabase/seed.sql"), "utf8");
   report.seedSha256 = createHash("sha256").update(seedSql).digest("hex");
   await db.query(seedSql);

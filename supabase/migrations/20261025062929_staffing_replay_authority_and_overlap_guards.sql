@@ -4,7 +4,10 @@ BEGIN
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid='public.claim_open_shift(uuid,uuid)'::regprocedure) IS DISTINCT FROM '5d1ca8b0c4a6a8cbe7c76c39339733a8' THEN RAISE EXCEPTION 'Reviewed staffing function body drifted: public.claim_open_shift'; END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid='public.decide_shift_swap(uuid,uuid,uuid,boolean)'::regprocedure) IS DISTINCT FROM '4117700c653ee3ab31f5a0ba10dc1c1d' THEN RAISE EXCEPTION 'Reviewed staffing function body drifted: public.decide_shift_swap'; END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid='public.offer_shift_swap(uuid,uuid,text)'::regprocedure) IS DISTINCT FROM '65ad1d35adc38ab96aae948bf5d365ae' THEN RAISE EXCEPTION 'Reviewed staffing function body drifted: public.offer_shift_swap'; END IF;
-  IF (SELECT md5(prosrc) FROM pg_proc WHERE oid='public.publish_schedule(uuid,text)'::regprocedure) IS DISTINCT FROM 'cd0fea5db4a3786eb099ba5a9c94f225' THEN RAISE EXCEPTION 'Reviewed staffing function body drifted: public.publish_schedule'; END IF;
+  -- The hosted catalog retained the exact migration0008 implementation.
+  -- Both reviewed predecessors are upgraded to the same guarded publication
+  -- below; unknown bodies still stop this migration before any changes.
+  IF coalesce((SELECT md5(prosrc) FROM pg_proc WHERE oid='public.publish_schedule(uuid,text)'::regprocedure),'') NOT IN ('cd0fea5db4a3786eb099ba5a9c94f225','db3c23cd12c8623ec753da7b945ef7b9') THEN RAISE EXCEPTION 'Reviewed staffing function body drifted: public.publish_schedule'; END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid='public.reopen_shift(uuid,uuid)'::regprocedure) IS DISTINCT FROM '80fa76c04ee44abc173c3369bc524ad3' THEN RAISE EXCEPTION 'Reviewed staffing function body drifted: public.reopen_shift'; END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid='public.request_shift_swap(uuid,uuid,uuid,text)'::regprocedure) IS DISTINCT FROM '9a5f7a937cffe1fde8e2c620ccc4a523' THEN RAISE EXCEPTION 'Reviewed staffing function body drifted: public.request_shift_swap'; END IF;
 END

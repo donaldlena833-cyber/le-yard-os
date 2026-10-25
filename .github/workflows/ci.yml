@@ -88,6 +88,11 @@ jobs:
         env:
           RLS_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54322/postgres
           RLS_TEST_REPORT_PATH: rls-native-results.json
+      - name: Verify the reviewed hosted legacy publication upgrade
+        run: npm run test:rls:legacy-publish
+        env:
+          RLS_TEST_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:54322/postgres
+          RLS_TEST_REPORT_PATH: rls-native-legacy-publish-results.json
       - name: Verify business conflicts and genuine engine serialization
         run: npm run test:business-conflicts:native
         env:
@@ -99,6 +104,7 @@ jobs:
           name: native-rls-results
           path: |
             rls-native-results.json
+            rls-native-legacy-publish-results.json
             business-conflict-native-results.json
       - name: Stop the isolated control database
         if: always()
