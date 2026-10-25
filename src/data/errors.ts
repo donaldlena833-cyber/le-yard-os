@@ -42,7 +42,7 @@ export function throwDatabaseError(
       throw new WorkflowError("conflict", "This request conflicts with an existing record.");
     }
 
-    if (error.code === "40001") {
+    if (error.code === "40001" || error.code === "PT409") {
       throw new WorkflowError(
         "stale",
         "This record changed while you were working. Review the latest details before trying again.",

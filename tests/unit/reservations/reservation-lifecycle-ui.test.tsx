@@ -7,8 +7,9 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  quoteStaffReservationTurnAction,
   cancelReservationAction,
   loadReservationLifecycleHeadAction,
   modifyReservationAction,
@@ -27,10 +28,18 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/app/actions/workflows/reservations", () => ({
+  quoteStaffReservationTurnAction: vi.fn(),
   cancelReservationAction: vi.fn(),
   loadReservationLifecycleHeadAction: vi.fn(),
   modifyReservationAction: vi.fn(),
 }));
+
+beforeEach(() => {
+  vi.mocked(quoteStaffReservationTurnAction).mockImplementation(async (raw) => {
+    const input = raw as { startsAt: string; partySize: number };
+    return { ok: true, persisted: false, mode: "live", data: { startsAt: input.startsAt, partySize: input.partySize, durationMinutes: 90, serviceShiftId: "90000000-0000-4000-8000-000000000001", policyHash: "a".repeat(64) } };
+  });
+});
 
 afterEach(() => {
   cleanup();
@@ -101,18 +110,21 @@ function lifecycleSuccess(
   };
 }
 
-function fillAndReviewEdit() {
+async function fillAndReviewEdit() {
   fireEvent.change(screen.getByLabelText(/Time/), {
     target: { value: "19:30" },
   });
   fireEvent.change(screen.getByLabelText(/Reason for change/), {
     target: { value: "Guest requested a later arrival." },
   });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Review changes" })).toHaveProperty("disabled", false));
   fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
+  await screen.findByRole("dialog", { name: "Review reservation changes" });
 }
 
 describe("staff reservation lifecycle dialogs", () => {
-  it("keeps a valid nonstandard turn visible and accepts every whole-minute database duration", () => {
+  it("shows the configured nonstandard turn and prevents a manual override", async () => {
+    vi.mocked(quoteStaffReservationTurnAction).mockImplementation(async (raw) => { const i = raw as { startsAt: string; partySize: number }; return { ok: true, persisted: false, mode: "live", data: { ...i, durationMinutes: 73, serviceShiftId: "90000000-0000-4000-8000-000000000001", policyHash: "b".repeat(64) } }; });
     const { model, reservation } = fixture();
 
     render(
@@ -126,7 +138,8 @@ describe("staff reservation lifecycle dialogs", () => {
     );
 
     const duration = screen.getByLabelText(/Turn time/);
-    expect(duration).toHaveProperty("value", "73");
+    await waitFor(() => expect(duration).toHaveProperty("value", "73"));
+    expect(duration).toHaveProperty("readOnly", true);
     expect(duration.getAttribute("type")).toBe("number");
     expect(duration.getAttribute("min")).toBe("15");
     expect(duration.getAttribute("max")).toBe("720");
@@ -134,7 +147,7 @@ describe("staff reservation lifecycle dialogs", () => {
     fireEvent.change(duration, {
       target: { value: "719" },
     });
-    expect(duration).toHaveProperty("value", "719");
+    expect(duration).toHaveProperty("value", "73");
   });
 
   it("restores focus to the primary edit field when returning from review", async () => {
@@ -149,7 +162,7 @@ describe("staff reservation lifecycle dialogs", () => {
       />,
     );
 
-    fillAndReviewEdit();
+    await fillAndReviewEdit();
     const back = screen.getByRole("button", { name: "Back to edit" });
     await waitFor(() => expect(document.activeElement).toBe(back));
     fireEvent.click(back);
@@ -165,6 +178,7 @@ describe("staff reservation lifecycle dialogs", () => {
     const { model, reservation } = fixture();
     const onClose = vi.fn();
     const onCompleted = vi.fn();
+    const onCommitted = vi.fn();
 
     render(
       <ReservationEditDialog
@@ -173,6 +187,7 @@ describe("staff reservation lifecycle dialogs", () => {
         reservation={reservation}
         onClose={onClose}
         onCompleted={onCompleted}
+        onCommitted={onCommitted}
       />,
     );
 
@@ -180,7 +195,7 @@ describe("staff reservation lifecycle dialogs", () => {
       screen.getByRole("dialog", { name: "Edit / reschedule" }),
     ).toBeTruthy();
     expect(screen.getByText("Current record · version 7")).toBeTruthy();
-    fillAndReviewEdit();
+    await fillAndReviewEdit();
 
     expect(modifyReservationAction).not.toHaveBeenCalled();
     expect(
@@ -194,6 +209,8 @@ describe("staff reservation lifecycle dialogs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
 
     await waitFor(() => expect(modifyReservationAction).toHaveBeenCalledOnce());
+    expect(onCommitted).toHaveBeenCalledWith(expect.objectContaining({ id: reservation.id, version: 8, startsAt: "2026-08-11T23:30:00.000Z", durationMinutes: 90, partySize: 2 }));
+    expect(onCommitted.mock.invocationCallOrder[0]).toBeLessThan(onCompleted.mock.invocationCallOrder[0]!);
     const input = vi.mocked(modifyReservationAction).mock.calls[0]![0] as Record<
       string,
       unknown
@@ -236,7 +253,7 @@ describe("staff reservation lifecycle dialogs", () => {
       />,
     );
 
-    fillAndReviewEdit();
+    await fillAndReviewEdit();
     fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
     expect(
       await screen.findByText(/connection ended before a result was confirmed/i),
@@ -285,7 +302,7 @@ describe("staff reservation lifecycle dialogs", () => {
       />,
     );
 
-    fillAndReviewEdit();
+    await fillAndReviewEdit();
     fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
     await screen.findByText(
       /connection ended before a result was confirmed/i,
@@ -302,7 +319,9 @@ describe("staff reservation lifecycle dialogs", () => {
     await waitFor(() =>
       expect(document.activeElement).toBe(screen.getByLabelText(/Date/)),
     );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Review changes" })).toHaveProperty("disabled", false));
     fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
+    await screen.findByRole("dialog", { name: "Review reservation changes" });
     fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
 
     await waitFor(() => expect(modifyReservationAction).toHaveBeenCalledTimes(2));
@@ -350,7 +369,7 @@ describe("staff reservation lifecycle dialogs", () => {
       />,
     );
 
-    fillAndReviewEdit();
+    await fillAndReviewEdit();
     fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
     expect(
       await screen.findByText(/review it now against version 8/i),

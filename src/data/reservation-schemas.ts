@@ -15,6 +15,22 @@ const reservationStatus = z.enum([
   "no_show",
 ]);
 
+export const staffReservationTurnInputSchema = z.object({
+  locationId: uuid,
+  startsAt: z.iso.datetime({ offset: true }),
+  partySize: z.number().int().min(1).max(100),
+  reservationId: nullableUuid,
+});
+export const staffReservationTurnSchema = z.object({
+  startsAt: z.iso.datetime({ offset: true }),
+  partySize: z.number().int().min(1).max(100),
+  durationMinutes: z.number().int().min(15).max(720),
+  serviceShiftId: uuid,
+  policyHash: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export type StaffReservationTurnInput = z.infer<typeof staffReservationTurnInputSchema>;
+export type StaffReservationTurn = z.infer<typeof staffReservationTurnSchema>;
+
 export const saveReservationInputSchema = z.object({
   requestId: uuid,
   locationId: uuid,

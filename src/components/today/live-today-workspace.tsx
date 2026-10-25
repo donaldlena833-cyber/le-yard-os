@@ -42,13 +42,13 @@ const todayRealtimeBindings = [
   { table: "time_breaks", scope: "organization" },
   { table: "service_availability_events", scope: "location" },
   { table: "manager_log_entries", scope: "location" },
-  { table: "preshifts", scope: "location" },
-  { table: "preshift_acknowledgements", scope: "location" },
+  { table: "service_control_invalidation_signals", scope: "location" },
   { table: "employee_job_roles", scope: "location" },
 ] satisfies readonly RealtimeInvalidationBinding[];
 
-const noTodayReservationPostgresBindings = [] as const;
-const todayReservationBroadcastEvents = ["INSERT", "UPDATE", "DELETE"] as const;
+const todayReservationRealtimeBindings = [
+  { table: "reservation_invalidation_signals", scope: "location" },
+] satisfies readonly RealtimeInvalidationBinding[];
 
 function combineRealtimeState(
   ...sources: readonly RealtimeInvalidationResult[]
@@ -372,7 +372,7 @@ function EmployeeTodayWorkspace({
           </section>
 
           <section>
-            <SectionHeading eyebrow="Pay" title="Earnings" detail="Approved Toast hours and tip runs appear by Friday payday." />
+            <SectionHeading eyebrow="Pay" title="Earnings" detail="Approved recorded hours and tip runs appear by Friday payday." />
             <div className="rounded-[22px] border border-dashed border-[var(--line-strong)] bg-[var(--paper-strong)] p-5 shadow-[var(--shadow-card)]">
               <div className="flex items-start gap-3"><WalletCards className="mt-0.5 size-4 text-[var(--accent-strong)]" /><p className="text-[13px] leading-5 text-[var(--ink-faint)]">No live paystub is available yet. Nothing is estimated before hours and tips are approved.</p></div>
               <Link href="/earnings" className="focus-ring mt-4 inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open earnings <ArrowRight className="size-3" /></Link>
@@ -474,10 +474,8 @@ export function LiveTodayWorkspace({
       workspace.mode === "live" &&
       snapshot.ok &&
       snapshot.data.reservationSlice?.ok === true,
-    channelName: `reservations:${workspace.organization.id}:${workspace.activeLocation.id}`,
-    bindings: noTodayReservationPostgresBindings,
-    broadcastEvents: todayReservationBroadcastEvents,
-    privateChannel: true,
+    channelName: `today-reservation-signals:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: todayReservationRealtimeBindings,
     organizationId: workspace.organization.id,
     locationId: workspace.activeLocation.id,
   });

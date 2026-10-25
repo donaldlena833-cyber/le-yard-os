@@ -54,7 +54,7 @@ test("canonical full-day projections reconcile across the operating surfaces", a
 
   await openWorkspace(page, "/reports", "Reports");
   await expect(
-    page.getByText("Local replay passed · release blocked", { exact: true }),
+    page.getByText("Local replay failed · release failed", { exact: true }),
   ).toBeVisible();
 });
 

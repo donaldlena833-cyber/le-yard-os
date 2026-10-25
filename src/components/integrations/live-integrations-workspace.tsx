@@ -71,7 +71,7 @@ const integrationRealtimeBindings = [
 ] satisfies readonly RealtimeInvalidationBinding[];
 
 const catalogProviders: readonly IntegrationProvider[] = [
-  "toast",
+  "square",
   "resy",
   "csv",
   "payroll",
@@ -79,7 +79,7 @@ const catalogProviders: readonly IntegrationProvider[] = [
 ];
 
 const providerMarks: Record<IntegrationProvider, string> = {
-  toast: "T",
+  square: "S",
   resy: "R",
   csv: "CSV",
   payroll: "P",
@@ -169,7 +169,7 @@ function SyncLedger({
     return (
       <EmptyLedger
         title="No sync jobs yet"
-        detail="Live Toast and Resy jobs appear only after approved access is supplied. Manual imports have their own ledger."
+        detail="Provider jobs require approved access and a verified scope. Manual imports have their own ledger."
       />
     );
   }
@@ -626,7 +626,7 @@ export function LiveIntegrationsWorkspace({
   const [selectedProvider, setSelectedProvider] = useState<IntegrationProvider | null>(null);
   const [activityTab, setActivityTab] = useState<ActivityTab>("syncs");
   const [importOpen, setImportOpen] = useState(false);
-  const [importType, setImportType] = useState<ManualCsvImportType>("toast_sales");
+  const [importType, setImportType] = useState<ManualCsvImportType>("inventory_items");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importValidation, setImportValidation] = useState<ManualCsvValidationSuccess | null>(null);
   const [importError, setImportError] = useState("");
@@ -749,7 +749,6 @@ export function LiveIntegrationsWorkspace({
       return;
     }
     if (provider === "resy") setImportType("resy_reservations");
-    else if (provider === "toast") setImportType("toast_sales");
     setSelectedProvider(null);
     setImportFile(null);
     setImportValidation(null);
@@ -1020,7 +1019,7 @@ export function LiveIntegrationsWorkspace({
         </div>
         <div className="flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-xs leading-4 text-[var(--warning)]">
           <CircleAlert className="mt-0.5 size-4 shrink-0" />
-          Toast and Resy API status is “not configured” until approved credentials and restaurant authorization are supplied.
+          Square is limited to Sandbox source evidence. Operating use requires approved access, verified mappings and financial reconciliation.
         </div>
       </div>
 

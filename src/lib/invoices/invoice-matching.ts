@@ -44,20 +44,26 @@ function tokenScore(left: string, right: string) {
 
 function bestCatalogMatch(description: string, catalog: InvoiceCatalogItem[]) {
   const normalizedDescription = normalize(description);
+  if (!normalizedDescription) return null;
   let best: { item: InvoiceCatalogItem; score: number; reason: string } | null = null;
+  let ambiguous = false;
   for (const item of catalog) {
     const candidates = [item.name, item.sku ?? "", ...(item.aliases ?? [])].filter(Boolean);
     for (const candidate of candidates) {
       const normalizedCandidate = normalize(candidate);
+      if (!normalizedCandidate) continue;
       const exact = normalizedDescription === normalizedCandidate;
       const contained = normalizedDescription.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedDescription);
       const score = exact ? 1 : contained ? 0.92 : tokenScore(normalizedDescription, normalizedCandidate);
       if (!best || score > best.score) {
         best = { item, score, reason: exact ? "Exact catalog name" : contained ? "Name contains catalog term" : "Shared normalized terms" };
+        ambiguous = false;
+      } else if (score === best.score && item.id !== best.item.id) {
+        ambiguous = true;
       }
     }
   }
-  return best && best.score >= 0.42 ? best : null;
+  return best && !ambiguous && best.score >= 0.42 ? best : null;
 }
 
 /** Match extracted invoice lines to current inventory catalog identities. */

@@ -26,7 +26,8 @@ additional_redirect_urls = ["http://localhost:3000/**"]
 enable_signup = false
 
 [auth.email]
-enable_signup = false
+# Keep the email/password provider available; [auth].enable_signup blocks registration.
+enable_signup = true
 double_confirm_changes = true
 enable_confirmations = true
 

@@ -46,7 +46,7 @@ Perform drills in a disposable, isolated nonproduction project.
 5. apply any forward migrations newer than the restored point only after review
 6. run database lint and the full RLS test suite
 7. verify Auth/membership, signed file access, schedule, time clock, closeout/tips, inventory, CRM, reports, and audit immutability
-8. confirm no email, push, Toast, Resy, payroll, accounting, or model integration can reach real recipients from the drill environment
+8. confirm no email, push, Square, Resy, payroll, accounting, or model integration can reach real recipients from the drill environment
 9. measure recovery point and recovery time, then record `restore_tested_at` and evidence
 10. destroy or archive the isolated target according to the approved policy
 
@@ -54,7 +54,7 @@ Perform drills in a disposable, isolated nonproduction project.
 
 The repository includes a narrower database gate for proving that a supplied
 logical archive is restorable without contacting Supabase, messaging, push,
-Toast, Resy, payroll, accounting, or any other operational provider. It is a
+Square, Resy, payroll, accounting, or any other operational provider. It is a
 database drill, not evidence that the platform backup or private Storage
 payloads currently exist.
 

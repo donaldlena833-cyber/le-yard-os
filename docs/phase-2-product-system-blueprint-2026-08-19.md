@@ -1,3 +1,5 @@
+> Historical dated status/design snapshot. Current implementation and acceptance boundaries are in the [current register](le-yard-os-expansion-status.md); this snapshot is not current release proof.
+
 # Le Yard OS — Phase 2 product-system blueprint
 
 Date: August 19, 2026

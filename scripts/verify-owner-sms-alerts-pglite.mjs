@@ -78,9 +78,8 @@ try {
   await db.exec(
     "create schema supabase_migrations; create table supabase_migrations.schema_migrations(version text primary key)",
   );
-  for (const file of (await readdir("supabase/migrations"))
-    .filter((file) => file.endsWith(".sql"))
-    .sort()) {
+  const migrationFiles = (await readdir("supabase/migrations")).filter((file) => file.endsWith(".sql")).sort();
+  for (const file of migrationFiles) {
     await db.exec(await readFile(`supabase/migrations/${file}`, "utf8"));
     await db.query(
       "insert into supabase_migrations.schema_migrations(version) values ($1)",
@@ -117,7 +116,7 @@ try {
   const contract = (
     await db.query("select public.service_runtime_schema_contract() as value")
   ).rows[0].value;
-  assert.equal(contract.migrationHead, "20260912174103");
+  assert.equal(contract.migrationHead, migrationFiles.at(-1).split('_')[0]);
   assert.equal(contract.matchesExpected, true);
   const rls = (
     await db.query(

@@ -52,7 +52,7 @@
   --positive-soft: #e0e8d8;
   --warning: #805521;
   --warning-soft: #f1e4d0;
-  --danger: #a24c3c;
+  --danger: #974332;
   --danger-soft: #f1dfd9;
   --graphite: #1c1d19;
   --graphite-soft: #252620;
@@ -221,6 +221,9 @@
 }
 .workspace-design .workspace-greeting .workspace-grid {
   display: none;
+}
+.workspace-design .workspace-greeting .bg-white\/\[0\.08\] {
+  color: var(--brand-text);
 }
 .workspace-design .workspace-greeting h2 {
   font-size: 26px;

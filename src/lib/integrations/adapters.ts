@@ -17,17 +17,13 @@ export type IntegrationAdapterDefinition = {
 };
 
 export const integrationAdapters: Record<IntegrationProvider, IntegrationAdapterDefinition> = {
-  toast: {
-    provider: "toast",
-    label: "Toast",
-    description: "Sales, checks, labor, menus, and restaurant configuration.",
-    accessNote: "Standard API access is read-only. Write operations require approved custom or partner access.",
-    capabilities: [
-      { id: "sales", label: "Read sales & checks", direction: "read", requiresApproval: false },
-      { id: "labor", label: "Read labor records", direction: "read", requiresApproval: false },
-      { id: "write-labor", label: "Write schedules or punches", direction: "write", requiresApproval: true },
-    ],
-    supportsManualImport: true,
+  square: {
+    provider: "square",
+    label: "Square",
+    description: "Orders, payments and refunds retained as read-only source evidence.",
+    accessNote: "Sandbox rehearsal only. Account access, mapping verification and financial reconciliation are required before operating use.",
+    capabilities: [{ id: "read_source_evidence", label: "Read source evidence", direction: "read", requiresApproval: true }],
+    supportsManualImport: false,
   },
   resy: {
     provider: "resy",

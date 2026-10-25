@@ -14,6 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:service-day:local": "vitest run --config vitest.local-readiness.config.mts tests/local-readiness/service-day-v2.test.mjs",
+    "test:spot-count:local": "vitest run --config vitest.local-readiness.config.mts tests/local-readiness/partial-count.test.mjs",
     "test:coverage": "vitest run --coverage",
     "test:plugins": "node scripts/validate-plugin-marketplace.mjs && node --test plugins/le-yard-menu-costing/skills/le-yard-menu-costing/scripts/calculate-menu-cost.test.mjs",
     "test:db:pglite": "node scripts/verify-migrations-pglite.mjs",
@@ -42,7 +44,7 @@
     "test:integration": "npm run test:db:pglite && npm run test:bootstrap:pglite && npm run test:people-config:pglite && npm run test:inventory-catalog:pglite && npm run test:capabilities:pglite && npm run test:inventory-capabilities:pglite && npm run test:function-grants:pglite && npm run test:connected-attestation:pglite && npm run test:reservations:pglite && npm run test:reservation-push:pglite && npm run test:schedule-atomic:pglite && npm run test:service-control:pglite && npm run test:service-day-snapshot:pglite && npm run test:service-shifts:pglite && npm run test:income:pglite && npm run test:service-day-reads:pglite && npm run test:operations-config:pglite && npm run test:financial-config:pglite && npm run test:communications:pglite && npm run test:owner-sms-alerts:pglite",
     "types:database": "node scripts/generate-database-types.mjs",
     "types:database:check": "node scripts/generate-database-types.mjs --check",
-    "test:rls": "supabase test db",
+    "test:rls": "node scripts/verify-rls-postgres.mjs",
     "test:e2e": "playwright test",
     "test:e2e:connected": "E2E_CONNECTED_MODE=release-acceptance playwright test --config playwright.connected.config.ts",
     "test:e2e:connected:smoke": "E2E_CONNECTED_MODE=developer-smoke playwright test --config playwright.connected.config.ts",
@@ -67,9 +69,11 @@
     "booking:create-client": "node scripts/create-booking-api-client.mjs",
     "verify": "npm run test:plugins && npm run lint && npm run types:database:check && npm run typecheck && npm run test && npm run test:integration && npm run build",
     "verify:full": "npm run verify && npm run test:e2e && npm audit --audit-level=high",
-    "verify:connected": "npm run verify:full && npm run test:rls && npm run test:db:lint && npm run test:e2e:connected",
+    "verify:connected": "npm run verify:full && npm run test:rls && npm run test:business-conflicts:native && npm run test:db:lint && npm run test:e2e:connected",
     "test:communications:pglite": "node scripts/verify-communication-groups-pglite.mjs",
-    "test:owner-sms-alerts:pglite": "node scripts/verify-owner-sms-alerts-pglite.mjs"
+    "test:owner-sms-alerts:pglite": "node scripts/verify-owner-sms-alerts-pglite.mjs",
+    "test:business-conflicts:native": "node scripts/verify-business-conflicts-postgres.mjs",
+    "test:business-conflicts:local": "vitest run --config vitest.local-readiness.config.mts tests/local-readiness/business-conflicts.test.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

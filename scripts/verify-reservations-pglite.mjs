@@ -31,6 +31,7 @@ const ids = {
   publicRequest: "d5000000-0000-4000-8000-000000000001",
   expiringPublicRequest: "d5000000-0000-4000-8000-000000000002",
   pacingReservation: "d4000000-0000-4000-8000-000000000003",
+  pacingReservationSecond: "d4000000-0000-4000-8000-000000000006",
   smsInjectionRequest: "d5000000-0000-4000-8000-000000000003",
   emailInjectionRequest: "d5000000-0000-4000-8000-000000000004",
   smsFormatReplayRequest: "d5000000-0000-4000-8000-000000000005",
@@ -212,12 +213,12 @@ function expectExactKeys(row, expectedKeys, label) {
   }
 }
 
-async function configure(requestId, command, payload) {
+async function configure(requestId, command, payload, locationId = ids.location) {
   const result = await db.query(
     `select public.configure_reservation_location(
       $1::uuid, $2::uuid, $3::text, $4::jsonb
     ) as result`,
-    [requestId, ids.location, command, JSON.stringify(payload)],
+    [requestId, locationId, command, JSON.stringify(payload)],
   );
   return result.rows[0].result;
 }
@@ -519,7 +520,7 @@ try {
         ]),
       ],
     ),
-    "40001",
+    "PT409",
     "stale atomic floor draft",
   );
   const positionsAfterRejectedDraft = (
@@ -588,6 +589,14 @@ try {
       }))),
     ],
   );
+  // Future dinner fixtures and immediate waitlist seating need separate,
+  // nonoverlapping service policies. Derive both in the location timezone.
+  const fixtureCalendar = (await db.query(`select
+    ((clock_timestamp() at time zone 'America/New_York')::date+1)::text tomorrow,
+    to_char(clock_timestamp() at time zone 'America/New_York'-interval '1 hour','YYYY-MM-DD') current_service_date,
+    to_char(clock_timestamp() at time zone 'America/New_York'-interval '1 hour','HH24:MI') current_starts,
+    to_char(clock_timestamp() at time zone 'America/New_York'+interval '3 hours','HH24:MI') current_ends
+  `)).rows[0];
   await configure(ids.period, "service_period.save", {
     name: "Dinner",
     daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
@@ -598,17 +607,33 @@ try {
     pacingCoverLimit: 12,
     minPartySize: 2,
     maxPartySize: 6,
-    effectiveFrom: "2026-01-01",
+    effectiveFrom: fixtureCalendar.tomorrow,
     effectiveTo: null,
     onlineEnabled: true,
     isActive: true,
     approved: true,
   });
 
+  await configure("d3000000-0000-4000-8000-000000000002", "service_period.save", {
+    name: "Synthetic current waitlist service", daysOfWeek: [0,1,2,3,4,5,6],
+    startsLocal: fixtureCalendar.current_starts, endsLocal: fixtureCalendar.current_ends,
+    defaultDurationMinutes: 90, pacingIntervalMinutes: 15, pacingCoverLimit: 12,
+    minPartySize: 1, maxPartySize: 8, effectiveFrom: fixtureCalendar.current_service_date,
+    effectiveTo: fixtureCalendar.current_service_date, onlineEnabled: false, isActive: true, approved: true,
+  });
+
+  await configure("d3000000-0000-4000-8000-000000000004", "service_period.save", {
+    name: "Synthetic secondary-location scope service", daysOfWeek: [0,1,2,3,4,5,6],
+    startsLocal: "17:00", endsLocal: "23:00", defaultDurationMinutes: 120,
+    pacingIntervalMinutes: 15, pacingCoverLimit: 12, minPartySize: 1, maxPartySize: 8,
+    effectiveFrom: fixtureCalendar.tomorrow, effectiveTo: null,
+    onlineEnabled: false, isActive: true, approved: true,
+  }, ids.otherLocation);
+
   const serviceTime = (
     await db.query(
-      `select date_trunc('day', clock_timestamp() + interval '2 days')
-        + interval '22 hours' as value`,
+      `select (date_trunc('day', clock_timestamp() at time zone 'America/New_York')
+        + interval '2 days 18 hours') at time zone 'America/New_York' as value`,
     )
   ).rows[0].value;
 
@@ -1097,7 +1122,7 @@ try {
           ids.otherTable,
         ],
       ),
-    "40001",
+    "PT409",
     "stale expected reservation version",
   );
   const lifecycleHeadAfterStale = (
@@ -1469,14 +1494,14 @@ try {
     ["d6100000-0000-4000-8000-000000000001", ids.table],
   );
   const atomicTime = (
-    await db.query("select clock_timestamp() + interval '30 hours' as value")
+    await db.query("select (date_trunc('day', clock_timestamp() at time zone 'America/New_York') + interval '1 day 19 hours') at time zone 'America/New_York' as value")
   ).rows[0].value;
   await expectDatabaseError(
     () =>
       db.query(
         `select public.save_reservation_with_guest(
           $1::uuid, $2::uuid, 'Atomic Guest', 'atomic@example.invalid',
-          '+12125550122', $3::timestamptz, 90, 2, null, 'manual',
+          '+12125550122', $3::timestamptz, 120, 2, null, 'manual',
           array[$4::uuid]
         )`,
         [ids.atomicRequest, ids.location, atomicTime, ids.table],
@@ -1502,7 +1527,7 @@ try {
     await db.query(
       `select public.save_reservation_with_guest(
         $1::uuid, $2::uuid, 'Atomic Guest', 'atomic@example.invalid',
-        '+12125550122', $3::timestamptz, 90, 2, null, 'manual',
+        '+12125550122', $3::timestamptz, 120, 2, null, 'manual',
         array[$4::uuid]
       ) as result`,
       [ids.atomicRequest, ids.location, atomicTime, ids.table],
@@ -1516,7 +1541,7 @@ try {
     await db.query(
       `select public.save_reservation_with_guest(
         $1::uuid, $2::uuid, 'Atomic Guest', 'atomic@example.invalid',
-        '+12125550122', $3::timestamptz, 90, 2, null, 'manual',
+        '+12125550122', $3::timestamptz, 120, 2, null, 'manual',
         array[$4::uuid]
       ) as result`,
       [ids.atomicRequest, ids.location, atomicTime, ids.table],
@@ -1601,7 +1626,7 @@ try {
       `select public.save_reservation_with_guest(
         $1::uuid, $2::uuid, 'Merge Replay Source',
         'merge.replay.source@example.invalid', '+12125550981',
-        $3::timestamptz, 90, 2, 'Immutable replay payload', 'manual',
+        $3::timestamptz, 120, 2, 'Immutable replay payload', 'manual',
         array[]::uuid[]
       ) result`,
       [ids.mergeReplayRequest, ids.location, mergeReplayTime],
@@ -1622,7 +1647,7 @@ try {
         `select public.save_reservation_with_guest(
           $1::uuid, $2::uuid, 'Merge Replay Source',
           'changed-contact@example.invalid', '+12125550981',
-          $3::timestamptz, 90, 2, 'Immutable replay payload', 'manual',
+          $3::timestamptz, 120, 2, 'Immutable replay payload', 'manual',
           array[]::uuid[]
         )`,
         [ids.mergeReplayRequest, ids.location, mergeReplayTime],
@@ -1649,7 +1674,7 @@ try {
         `select public.save_reservation_with_guest(
           $1::uuid, $2::uuid, 'Waitlist collision',
           'waitlist.collision@example.invalid', '+12125550983',
-          $3::timestamptz, 90, 2, null, 'manual', array[]::uuid[]
+          $3::timestamptz, 120, 2, null, 'manual', array[]::uuid[]
         )`,
         [ids.matchedIdentityWaitlist, ids.location, mergeReplayTime],
       ),
@@ -1700,7 +1725,7 @@ try {
       `select public.save_reservation_with_guest(
         $1::uuid, $2::uuid, 'Merge Replay Source',
         'merge.replay.source@example.invalid', '+12125550981',
-        $3::timestamptz, 90, 2, 'Immutable replay payload', 'manual',
+        $3::timestamptz, 120, 2, 'Immutable replay payload', 'manual',
         array[]::uuid[]
       ) result`,
       [ids.mergeReplayRequest, ids.location, mergeReplayTime],
@@ -1754,7 +1779,7 @@ try {
   await db.query(
     `select public.save_reservation(
       $1::uuid, $2::uuid, $3::uuid, null::uuid, $4::timestamptz,
-      90, 2, null, 'manual', array[]::uuid[]
+      120, 2, null, 'manual', array[]::uuid[]
     )`,
     [
       ids.existingReservationCreationRequest,
@@ -1769,7 +1794,7 @@ try {
         `select public.save_reservation_with_guest(
           $1::uuid, $2::uuid, 'Existing reservation collision',
           'existing.reservation.collision@example.invalid', '+12125550985',
-          $3::timestamptz, 90, 2, null, 'manual', array[]::uuid[]
+          $3::timestamptz, 120, 2, null, 'manual', array[]::uuid[]
         )`,
         [
           ids.existingReservationCollision,
@@ -1807,12 +1832,12 @@ try {
   await db.exec("set role authenticated");
   await assumeUser(ids.owner);
   const reminderTime = (
-    await db.query("select clock_timestamp() + interval '90 minutes' as value")
+    await db.query("select (date_trunc('day', clock_timestamp() at time zone 'America/New_York') + interval '4 days 18 hours') at time zone 'America/New_York' as value")
   ).rows[0].value;
   await db.query(
     `select public.save_reservation_with_guest(
       $1::uuid, $2::uuid, 'Reminder Guest', 'reminder@example.invalid',
-      '+12125550123', $3::timestamptz, 90, 2, null, 'phone', array[]::uuid[]
+      '+12125550123', $3::timestamptz, 120, 2, null, 'phone', array[]::uuid[]
     )`,
     [ids.reminderRequest, ids.location, reminderTime],
   );
@@ -1855,7 +1880,7 @@ try {
         `select public.save_reservation_with_guest(
           $1::uuid, $2::uuid, 'Collision Attacker',
           'hold.collision.attacker@example.invalid', '+12125550987',
-          $3::timestamptz, 90, 2, null, 'manual', array[]::uuid[]
+          $3::timestamptz, 120, 2, null, 'manual', array[]::uuid[]
         )`,
         [
           publicIdentityCollisionHold.holdId,
@@ -1973,14 +1998,16 @@ try {
   const reminderQueued = Number(
     (
       await db.query(
-        "select public.service_enqueue_reservation_reminders(clock_timestamp()) as count",
+        "select public.service_enqueue_reservation_reminders($1::timestamptz - interval '90 minutes') as count",
+        [reminderTime],
       )
     ).rows[0].count,
   );
   const reminderReplay = Number(
     (
       await db.query(
-        "select public.service_enqueue_reservation_reminders(clock_timestamp()) as count",
+        "select public.service_enqueue_reservation_reminders($1::timestamptz - interval '90 minutes') as count",
+        [reminderTime],
       )
     ).rows[0].count,
   );
@@ -1999,13 +2026,17 @@ try {
   await db.exec("reset role");
   await db.exec("set role authenticated");
   await assumeUser(ids.owner);
-  await db.query(
-    `select public.save_reservation(
-      $1::uuid, $2::uuid, null::uuid, null::uuid, $3::timestamptz,
-      120, 10, 'Pacing boundary fixture', 'phone', array[]::uuid[]
-    )`,
-    [ids.pacingReservation, ids.location, publicTime],
-  );
+  // Ten existing covers must still come from parties allowed by the active
+  // service policy. Two five-person parties retain the original pacing proof.
+  for (const reservationId of [ids.pacingReservation, ids.pacingReservationSecond]) {
+    await db.query(
+      `select public.save_reservation(
+        $1::uuid, $2::uuid, null::uuid, null::uuid, $3::timestamptz,
+        120, 5, 'Pacing boundary fixture', 'phone', array[]::uuid[]
+      )`,
+      [reservationId, ids.location, publicTime],
+    );
+  }
   await db.exec("reset role");
 
   await expectDatabaseError(
@@ -2280,7 +2311,7 @@ try {
     )
   ).rows;
   if (
-    pacingSnapshot.filter((row) => row.kind === "reservation").length !== 1 ||
+    pacingSnapshot.filter((row) => row.kind === "reservation").length !== 2 ||
     pacingSnapshot.filter((row) => row.kind === "hold").length !== 1 ||
     pacingSnapshot.reduce((sum, row) => sum + Number(row.partySize), 0) !== 12
   ) {
@@ -2302,7 +2333,7 @@ try {
   ).rows;
   if (
     hostCapacitySnapshot.filter((row) => row.kind === "reservation").length !==
-      1 ||
+      2 ||
     hostCapacitySnapshot.filter((row) => row.kind === "hold").length !== 1 ||
     hostCapacitySnapshot.reduce(
       (sum, row) => sum + Number(row.partySize),
@@ -3391,6 +3422,20 @@ try {
           at time zone 'America/New_York') requested_start
     `)
   ).rows[0];
+  const crossBoundaryServiceDate = (await db.query(
+    "select (($1::timestamptz at time zone 'America/New_York')::date)::text value",
+    [crossBoundaryTimes.requested_start],
+  )).rows[0].value;
+  await db.exec("set role authenticated");
+  await assumeUser(ids.owner);
+  await configure("d3000000-0000-4000-8000-000000000003", "service_period.save", {
+    name: "Synthetic next-business-date cleanup service", daysOfWeek: [0,1,2,3,4,5,6],
+    startsLocal: "00:00", endsLocal: "02:00", defaultDurationMinutes: 15,
+    pacingIntervalMinutes: 15, pacingCoverLimit: 12, minPartySize: 1, maxPartySize: 8,
+    effectiveFrom: crossBoundaryServiceDate, effectiveTo: crossBoundaryServiceDate,
+    onlineEnabled: false, isActive: true, approved: true,
+  });
+  await db.exec("reset role");
   await db.exec(
     "alter table private.public_booking_holds disable trigger public_booking_holds_service_contract",
   );
@@ -4030,11 +4075,11 @@ try {
   );
   await db.query(
     `insert into public.reservations (
-      id, organization_id, location_id, guest_id, reserved_at, party_size,
+      id, organization_id, location_id, guest_id, reserved_at, duration_minutes, party_size,
       status, source, booking_channel
     ) values (
       $1::uuid, $2::uuid, $3::uuid, $4::uuid,
-      clock_timestamp() + interval '8 days', 2, 'booked', 'manual', 'staff'
+      (date_trunc('day',clock_timestamp() at time zone 'America/New_York')+interval '8 days 18 hours') at time zone 'America/New_York', 120, 2, 'booked', 'manual', 'staff'
     )`,
     [
       ids.crossLocationReservation,
@@ -6357,10 +6402,13 @@ try {
     );
   }
 
-  // Keep direct hold fixtures inside the configured 17:00-23:00 service in
-  // the location timezone; `serviceTime` is derived in the database session
-  // timezone and can land at 23:30 local on non-UTC runners.
-  const claimGuardNow = new Date(publicTime).toISOString();
+  // Direct hold fixtures and staff bookings use explicit location-local service
+  // times. No database-session timezone assumption is used for these inputs.
+  // Keep delivery-claim fixtures independent of the already-full pacing slot.
+  const claimGuardNow = (await db.query(`select (
+    date_trunc('day',clock_timestamp() at time zone 'America/New_York')
+    + interval '10 days 18 hours') at time zone 'America/New_York' value
+  `)).rows[0].value.toISOString();
   const claimGuardIds = {
     nonPendingHold: "e1000000-0000-4000-8000-000000000001",
     liveHold: "e1000000-0000-4000-8000-000000000002",
@@ -6374,6 +6422,34 @@ try {
     liveReminderReservation: "e3000000-0000-4000-8000-000000000003",
   };
 
+  // Admit normal staff records before injecting bulk legacy hold/outbox states.
+  // The later synthetic claim clock must not make those fixtures count as live
+  // inventory at the actual admission clock.
+  await db.query(
+    `insert into public.reservations (
+      id, organization_id, location_id, reserved_at, duration_minutes,
+      party_size, status, source, booking_channel, cancelled_at,
+      created_at, updated_at, created_by
+    ) values
+      ($1::uuid, $4::uuid, $5::uuid, $6::timestamptz + interval '1 day',
+       120, 2, 'cancelled', 'manual', 'staff', $6::timestamptz,
+       '2000-01-06 00:00:00+00', $6::timestamptz, $7::uuid),
+      ($2::uuid, $4::uuid, $5::uuid, $6::timestamptz - interval '1 minute',
+       120, 2, 'booked', 'manual', 'staff', null,
+       '2000-01-06 01:00:00+00', $6::timestamptz, $7::uuid),
+      ($3::uuid, $4::uuid, $5::uuid, $6::timestamptz + interval '1 hour',
+       120, 2, 'confirmed', 'manual', 'staff', null,
+       '2000-01-07 00:00:00+00', $6::timestamptz, $7::uuid)`,
+    [
+      claimGuardIds.cancelledReservation,
+      claimGuardIds.pastReservation,
+      claimGuardIds.liveReminderReservation,
+      ids.organization,
+      ids.location,
+      claimGuardNow,
+      ids.owner,
+    ],
+  );
   await db.query(
     `insert into private.public_booking_holds (
       id, organization_id, location_id, reserved_at, duration_minutes,
@@ -6554,30 +6630,6 @@ try {
     ],
   );
 
-  await db.query(
-    `insert into public.reservations (
-      id, organization_id, location_id, reserved_at, duration_minutes,
-      party_size, status, source, booking_channel, cancelled_at,
-      created_at, updated_at
-    ) values
-      ($1::uuid, $4::uuid, $5::uuid, $6::timestamptz + interval '1 day',
-       90, 2, 'cancelled', 'manual', 'staff', $6::timestamptz,
-       '2000-01-06 00:00:00+00', $6::timestamptz),
-      ($2::uuid, $4::uuid, $5::uuid, $6::timestamptz - interval '1 minute',
-       90, 2, 'booked', 'manual', 'staff', null,
-       '2000-01-06 01:00:00+00', $6::timestamptz),
-      ($3::uuid, $4::uuid, $5::uuid, $6::timestamptz + interval '1 hour',
-       90, 2, 'confirmed', 'manual', 'staff', null,
-       '2000-01-07 00:00:00+00', $6::timestamptz)`,
-    [
-      claimGuardIds.cancelledReservation,
-      claimGuardIds.pastReservation,
-      claimGuardIds.liveReminderReservation,
-      ids.organization,
-      ids.location,
-      claimGuardNow,
-    ],
-  );
   await expectDatabaseError(
     () =>
       db.query(
@@ -7437,6 +7489,10 @@ try {
     )`,
     [ids.organization, ids.location, nullableDurationTime],
   );
+  // Inject only this legacy shape, then prove the current admission trigger
+  // is re-enabled before invoking the real cancellation command.
+  await db.exec("alter table public.reservations disable trigger reservations_staff_creation_policy");
+  try {
   await db.query(
     `insert into public.reservations (
       id, organization_id, location_id, reserved_at, duration_minutes,
@@ -7452,6 +7508,11 @@ try {
       nullableDurationTime,
     ],
   );
+  } finally {
+    await db.exec("alter table public.reservations enable trigger reservations_staff_creation_policy");
+  }
+  const admissionTrigger = (await db.query("select tgenabled from pg_trigger where tgrelid='public.reservations'::regclass and tgname='reservations_staff_creation_policy'")).rows[0];
+  if (admissionTrigger?.tgenabled !== "O") throw new Error("Staff admission trigger was not restored after the legacy fixture");
   await db.exec("set role authenticated");
   await assumeUser(ids.owner);
   const nullableDurationCancellation = (
@@ -8117,16 +8178,20 @@ try {
     "23P01",
     "public pilot percentage cap",
   );
+  const pilotDuration = (await db.query(
+    "select private.staff_reservation_turn_quote($1::uuid,$2::uuid,$3::timestamptz,$4::integer,null::uuid) value",
+    [ids.organization,ids.location,pilotShift.reserved_at,pilotCoverLimit],
+  )).rows[0].value;
   await db.query(
     `insert into public.reservations (
       id, organization_id, location_id, reserved_at, duration_minutes,
-      party_size, status, source, booking_channel, version
+      party_size, status, source, booking_channel, version, created_by
     ) values (
       'f1100000-0000-4000-8000-000000000001',
-      $1::uuid, $2::uuid, $3::timestamptz, 120,
-      $4::integer, 'booked', 'manual', 'staff', 1
+      $1::uuid, $2::uuid, $3::timestamptz, $5::integer,
+      $4::integer, 'booked', 'manual', 'staff', 1, $6::uuid
     )`,
-    [ids.organization, ids.location, pilotShift.reserved_at, pilotCoverLimit],
+    [ids.organization, ids.location, pilotShift.reserved_at, pilotCoverLimit, pilotDuration.durationMinutes, ids.owner],
   );
   await expectDatabaseError(
     () =>

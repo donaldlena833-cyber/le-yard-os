@@ -220,7 +220,7 @@ describe("legacy connected mutation idempotency", () => {
     expect(changed.requestId).not.toBe(first.requestId);
   });
 
-  it("keeps connected timekeeping read-only because Toast POS owns punches", () => {
+  it("keeps connected timekeeping read-only while attendance authority is unconfigured", () => {
     const model: LiveTimeClockModel = {
       date: "2026-08-02",
       timeZone: "America/New_York",
@@ -236,7 +236,7 @@ describe("legacy connected mutation idempotency", () => {
       roster: [],
       corrections: [],
       posSource: {
-        provider: "toast",
+        provider: null,
         connectionStatus: "connected",
         lastSyncedAt: "2026-08-02T12:00:00.000Z",
         lastJobStatus: "succeeded",
@@ -252,7 +252,7 @@ describe("legacy connected mutation idempotency", () => {
     );
     expect(screen.queryByRole("button", { name: "Clock in" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Clock out" })).toBeNull();
-    expect(screen.getByText("Punch on the Toast POS")).toBeTruthy();
+    expect(screen.getByText("Attendance source not configured")).toBeTruthy();
   });
 
   it("reuses an open-shift claim ID until success and then rotates it", async () => {
@@ -384,7 +384,7 @@ describe("legacy connected mutation idempotency", () => {
     const input = dialog.querySelector(
       'input[type="file"]',
     ) as HTMLInputElement;
-    const content = "business_date,net_sales\n2026-08-01,1250.45\n";
+    const content = "name,base_unit\nTomatoes,each\n";
     const firstFile = new File([content], "sales.csv", { type: "text/csv" });
     Object.defineProperty(firstFile, "text", { value: async () => content });
     fireEvent.change(input, { target: { files: [firstFile] } });
@@ -482,7 +482,7 @@ describe("legacy connected mutation idempotency", () => {
       />,
     );
 
-    const content = "business_date,net_sales\n2026-08-01,1250.45\n";
+    const content = "name,base_unit\nTomatoes,each\n";
     const file = new File([content], "sales.csv", { type: "text/csv" });
     Object.defineProperty(file, "text", { value: async () => content });
     fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));

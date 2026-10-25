@@ -56,6 +56,7 @@ const approvedAuthenticatedFunctions = new Set([
   "complete_checklist_run",
   "complete_prep_task",
   "complete_owner_intelligence_run",
+  "configure_square_source_connection",
   "configure_inventory_catalog",
   "configure_job_role_capability",
   "configure_kitchen_foundation",
@@ -155,6 +156,7 @@ const approvedAuthenticatedFunctions = new Set([
   "save_preshift",
   "save_prep_task",
   "save_push_subscription",
+  "quote_staff_reservation_turn",
   "save_reservation",
   "save_startup_workspace",
   "save_startup_workspace_v3",
@@ -211,6 +213,7 @@ const approvedAuthenticatedFunctions = new Set([
 ]);
 
 const requiredServiceFunctions = new Set([
+  "service_ingest_square_source_window",
   "add_guest_note",
   "assign_guest_tag",
   "bind_verified_checklist_photo_response",

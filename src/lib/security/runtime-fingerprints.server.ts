@@ -39,12 +39,11 @@ export function runtimeHealthFingerprints(input: {
       ),
       smsProviderEnabled:
         process.env.RESERVATION_SMS_DELIVERY_ENABLED?.trim() === "true",
-      toastLaborReady: Boolean(
-        process.env.TOAST_CLIENT_ID?.trim() &&
-          process.env.TOAST_CLIENT_SECRET?.trim() &&
-          process.env.TOAST_RESTAURANT_GUID?.trim() &&
-          process.env.TOAST_LOCATION_ID?.trim() &&
-          (process.env.TOAST_LABOR_SYNC_SECRET?.trim().length ?? 0) >= 32,
+      squareSourceReady: Boolean(
+        process.env.LE_YARD_SQUARE_SOURCE_SYNC_ENABLED?.trim() === "true" &&
+          process.env.SQUARE_SOURCE_CONNECTION_ID?.trim() &&
+          process.env.SQUARE_SANDBOX_ACCESS_TOKEN?.trim() &&
+          (process.env.SQUARE_SOURCE_SYNC_SECRET?.trim().length ?? 0) >= 32,
       ),
       ownerIntelligenceEnabled:
         process.env.LE_YARD_OWNER_INTELLIGENCE_ENABLED?.trim() === "true",

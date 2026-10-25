@@ -836,7 +836,7 @@ export const transitionPrepTaskInputSchema = z
     requestId: uuid,
     taskId: uuid,
     expectedVersion: z.number().int().positive(),
-    command: z.enum(["publish", "start"]),
+    command: z.enum(["publish", "start", "bind_formula"]),
   })
   .strict();
 

@@ -1022,7 +1022,7 @@ describe("inventory catalog setup", () => {
     );
 
     fireEvent.click(screen.getByRole("tab", { name: "Setup" }));
-    expect(await screen.findByText("Inventory foundation")).toBeTruthy();
+    expect(await screen.findByText("Inventory catalog")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Unit" }));
     const dialog = screen.getByRole("dialog", { name: "Add measurement unit" });
     fireEvent.change(within(dialog).getByLabelText("Name"), {

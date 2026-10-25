@@ -121,7 +121,7 @@ test("opens the booking and waitlist workflows from the host stand", async ({
     page.getByTitle(/^Table 9 · 6 seats · occupied now/),
   ).toBeVisible();
   await expect(
-    page.getByText(/evaluated by exact overlap.*do not recolor the floor/i),
+    page.getByText(/^Observed /),
   ).toBeVisible();
 
   await page.getByTitle(/^Table 1 ·/).click();

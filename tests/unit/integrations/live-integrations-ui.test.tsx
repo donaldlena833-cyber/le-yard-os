@@ -68,11 +68,13 @@ describe("connected integrations UI", () => {
       <LiveIntegrationsWorkspace workspace={workspace} result={{ ok: true, data: model() }} />,
     );
 
-    expect(markup).toContain("Tenant scoped");
+    expect(markup).toContain("Integrations");
     expect(markup).toContain("Main Dining Room");
     expect(markup).toContain("Manual available");
     expect(markup).toContain("No sync jobs yet");
     expect(markup).not.toContain("Toast sales import");
+    expect(markup).not.toContain("Toast integration details");
+    expect(markup).toContain("Square integration details");
     expect(markup).not.toContain("18m");
   });
 
@@ -86,9 +88,9 @@ describe("connected integrations UI", () => {
             connections: [
               {
                 id: "50000000-0000-4000-8000-000000000001",
-                provider: "toast",
-                displayName: "Dining Room Toast",
-                adapterVersion: "toast-v1",
+                provider: "square",
+                displayName: "Dining Room Square",
+                adapterVersion: "square-source-evidence-v1",
                 status: "degraded",
                 capabilities: ["sales"],
                 locationId: workspace.activeLocation.id,
@@ -102,8 +104,8 @@ describe("connected integrations UI", () => {
               {
                 id: "60000000-0000-4000-8000-000000000001",
                 connectionId: "50000000-0000-4000-8000-000000000001",
-                provider: "toast",
-                connectionName: "Dining Room Toast",
+                provider: "square",
+                connectionName: "Dining Room Square",
                 direction: "import",
                 resourceType: "sales",
                 status: "failed",
@@ -125,7 +127,7 @@ describe("connected integrations UI", () => {
       />,
     );
 
-    expect(markup).toContain("Dining Room Toast");
+    expect(markup).toContain("Dining Room Square");
     expect(markup).toContain("Degraded");
     expect(markup).toContain("Partner endpoint timed out; token=[redacted]");
     expect(markup).toContain("Retry");

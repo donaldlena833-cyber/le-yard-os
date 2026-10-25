@@ -184,15 +184,28 @@ try {
      from public.locations location where location.id = $3::uuid`,
     [ids.expense, ids.organization, ids.location, ids.owner],
   );
+  // Read-model fixtures still retain the declared staff source and current
+  // admission requirements; no runtime policy is disabled for this row.
+  await db.query(`insert into public.reservation_service_periods (
+    organization_id,location_id,name,days_of_week,starts_local,ends_local,
+    default_duration_minutes,pacing_interval_minutes,pacing_cover_limit,
+    min_party_size,max_party_size,effective_from,effective_to,
+    online_enabled,is_active,approved_at,approved_by
+  ) select $1,$2,'Synthetic income fixture service',array[0,1,2,3,4,5,6],
+    '16:00','23:00',90,15,12,1,8,
+    (clock_timestamp() at time zone location.timezone)::date,
+    (clock_timestamp() at time zone location.timezone)::date,false,true,now(),$3
+    from public.locations location where location.id=$2`,
+  [ids.organization,ids.location,ids.owner]);
   await db.query(
     `insert into public.reservations (
-       id,organization_id,location_id,reserved_at,party_size,status,source
+       id,organization_id,location_id,reserved_at,duration_minutes,party_size,status,source,created_by
      ) select $1::uuid,$2::uuid,$3::uuid,
        ((clock_timestamp() at time zone location.timezone)::date + time '18:00')
          at time zone location.timezone,
-       4,'confirmed','manual'
+       90,4,'confirmed','manual',$4::uuid
      from public.locations location where location.id = $3::uuid`,
-    [ids.reservation, ids.organization, ids.location],
+    [ids.reservation, ids.organization, ids.location, ids.owner],
   );
 
   const ingestObservedAt = new Date();
@@ -237,7 +250,7 @@ try {
     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
   await expectError(
     () => db.query(ingestSql, staleArgs),
-    "40001",
+    "PT409",
     "stale sales update",
   );
 

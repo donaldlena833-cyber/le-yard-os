@@ -1,0 +1,212 @@
+[
+  {
+    "id": "utc_seconds",
+    "input": "2026-01-13T12:00:00Z",
+    "valid": true
+  },
+  {
+    "id": "utc_millis",
+    "input": "2026-01-13T12:00:00.123Z",
+    "valid": true
+  },
+  {
+    "id": "microseconds",
+    "input": "2026-01-13T12:00:00.123456Z",
+    "valid": true
+  },
+  {
+    "id": "west_offset",
+    "input": "2026-01-13T12:00:00-05:00",
+    "valid": true
+  },
+  {
+    "id": "fractional_zone",
+    "input": "2026-01-13T12:00:00+05:45",
+    "valid": true
+  },
+  {
+    "id": "east_limit",
+    "input": "2026-01-13T12:00:00+15:59",
+    "valid": true
+  },
+  {
+    "id": "west_limit",
+    "input": "2026-01-13T12:00:00-15:59",
+    "valid": true
+  },
+  {
+    "id": "leap_2024",
+    "input": "2024-02-29T23:59:59Z",
+    "valid": true
+  },
+  {
+    "id": "leap_2000",
+    "input": "2000-02-29T00:00:00Z",
+    "valid": true
+  },
+  {
+    "id": "year_one",
+    "input": "0001-01-01T00:00:00Z",
+    "valid": true
+  },
+  {
+    "id": "year_last",
+    "input": "9999-12-31T23:59:59Z",
+    "valid": true
+  },
+  {
+    "id": "locale_mdy",
+    "input": "01/13/2026 12:00Z",
+    "valid": false
+  },
+  {
+    "id": "locale_dmy",
+    "input": "13/01/2026 12:00Z",
+    "valid": false
+  },
+  {
+    "id": "locale_ambiguous",
+    "input": "01/02/2026 12:00Z",
+    "valid": false
+  },
+  {
+    "id": "named_month",
+    "input": "Jan 13 2026 12:00Z",
+    "valid": false
+  },
+  {
+    "id": "space_separator",
+    "input": "2026-01-13 12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "feb_thirty",
+    "input": "2026-02-30T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "not_leap",
+    "input": "2026-02-29T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "century_not_leap",
+    "input": "2100-02-29T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "april_thirty_one",
+    "input": "2026-04-31T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "month_zero",
+    "input": "2026-00-13T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "month_thirteen",
+    "input": "2026-13-13T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "day_zero",
+    "input": "2026-01-00T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "hour_twenty_four",
+    "input": "2026-01-13T24:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "minute_sixty",
+    "input": "2026-01-13T12:60:00Z",
+    "valid": false
+  },
+  {
+    "id": "leap_second_unsupported",
+    "input": "2026-01-13T12:00:60Z",
+    "valid": false
+  },
+  {
+    "id": "offset_sixteen",
+    "input": "2026-01-13T12:00:00+16:00",
+    "valid": false
+  },
+  {
+    "id": "offset_minutes",
+    "input": "2026-01-13T12:00:00+05:60",
+    "valid": false
+  },
+  {
+    "id": "compact_offset",
+    "input": "2026-01-13T12:00:00-0500",
+    "valid": false
+  },
+  {
+    "id": "no_zone",
+    "input": "2026-01-13T12:00:00",
+    "valid": false
+  },
+  {
+    "id": "no_seconds",
+    "input": "2026-01-13T12:00Z",
+    "valid": false
+  },
+  {
+    "id": "date_only",
+    "input": "2026-01-13",
+    "valid": false
+  },
+  {
+    "id": "year_zero",
+    "input": "0000-01-13T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "seven_fraction_digits",
+    "input": "2026-01-13T12:00:00.1234567Z",
+    "valid": false
+  },
+  {
+    "id": "leading_whitespace",
+    "input": " 2026-01-13T12:00:00Z",
+    "valid": false
+  },
+  {
+    "id": "trailing_whitespace",
+    "input": "2026-01-13T12:00:00Z ",
+    "valid": false
+  },
+  {
+    "id": "empty",
+    "input": "",
+    "valid": false
+  },
+  {
+    "id": "null",
+    "input": null,
+    "valid": false
+  },
+  {
+    "id": "trailing_lf",
+    "input": "2026-01-13T12:00:00Z\n",
+    "valid": false
+  },
+  {
+    "id": "trailing_cr",
+    "input": "2026-01-13T12:00:00Z\r",
+    "valid": false
+  },
+  {
+    "id": "trailing_crlf",
+    "input": "2026-01-13T12:00:00Z\r\n",
+    "valid": false
+  },
+  {
+    "id": "trailing_unicode_separator",
+    "input": "2026-01-13T12:00:00Z\u2028",
+    "valid": false
+  }
+]

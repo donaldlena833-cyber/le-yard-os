@@ -221,44 +221,69 @@ function MoneyField({
 
 function TipRunDetail({ run }: { run: LiveTipRun }) {
   const currencyCode = useContext(CurrencyCodeContext);
+  const controls = [
+    {
+      label: "Distributable",
+      value: formatCurrency(run.distributableCents, currencyCode),
+      detail: "Tips only",
+    },
+    {
+      label: "Allocated",
+      value: formatCurrency(run.allocatedCents, currencyCode),
+      detail: "Cent reconciled",
+    },
+    {
+      label: "Participants",
+      value: String(run.participants.length),
+      detail: `${run.participants.filter((item) => item.eligible).length} eligible`,
+    },
+    {
+      label: "Service charge",
+      value: formatCurrency(
+        run.sources
+          .filter((source) => source.sourceType === "service_charge")
+          .reduce((sum, source) => sum + source.amountCents, 0),
+        currencyCode,
+      ),
+      detail: "Tracked separately",
+    },
+  ];
   return (
     <div className="mt-5">
-      <div className="grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
-        <Metric
-          label="Distributable"
-          value={formatCurrency(run.distributableCents, currencyCode)}
-          detail="Tips only"
-        />
-        <Metric
-          label="Allocated"
-          value={formatCurrency(run.allocatedCents, currencyCode)}
-          detail="Cent reconciled"
-        />
-        <Metric
-          label="Participants"
-          value={String(run.participants.length)}
-          detail={`${run.participants.filter((item) => item.eligible).length} eligible`}
-        />
-        <Metric
-          label="Service charge"
-          value={formatCurrency(
-            run.sources
-              .filter((source) => source.sourceType === "service_charge")
-              .reduce((sum, source) => sum + source.amountCents, 0),
-            currencyCode,
-          )}
-          detail="Tracked separately"
-        />
-      </div>
+      <dl
+        aria-label="Tip run control totals"
+        className="grid grid-cols-2 gap-x-5 gap-y-4 border-y border-[var(--line)] py-4"
+      >
+        {controls.map((control) => (
+          <div key={control.label} className="min-w-0">
+            <dt className="text-xs leading-4 font-medium text-[var(--ink-faint)]">
+              {control.label}
+            </dt>
+            <dd className="mt-1.5 min-w-0">
+              <span
+                data-slot="tip-control-value"
+                className="numeric block break-all text-xl leading-tight font-semibold tracking-[-0.035em] text-[var(--ink)]"
+              >
+                {control.value}
+              </span>
+              <span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">
+                {control.detail}
+              </span>
+            </dd>
+          </div>
+        ))}
+      </dl>
       <div className="mt-6 overflow-hidden rounded-[18px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
         {run.allocations.map((allocation) => {
           const explanation = allocation.explanation;
           return (
             <div
               key={allocation.id}
-              className="grid grid-cols-[1fr_auto] gap-3 border-t border-[var(--line)] px-4 py-4 first:border-t-0 sm:grid-cols-[1fr_120px_120px]"
+              role="group"
+              aria-label={`Tip allocation for ${allocation.employeeName}`}
+              className="grid grid-cols-2 gap-3 border-t border-[var(--line)] px-4 py-4 first:border-t-0"
             >
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-semibold">
                   {allocation.employeeName}
                 </p>
@@ -268,12 +293,20 @@ function TipRunDetail({ run }: { run: LiveTipRun }) {
                   remainder rank {allocation.remainderRank ?? "—"}
                 </p>
               </div>
-              <span className="numeric hidden text-right text-xs text-[var(--ink-faint)] sm:block">
-                {formatCurrency(allocation.baseAmountCents, currencyCode)} base
-              </span>
-              <span className="numeric text-right text-xs font-semibold">
-                {formatCurrency(allocation.finalAmountCents, currencyCode)}
-              </span>
+              <dl className="min-w-0 text-right">
+                <div>
+                  <dt className="sr-only">Final allocation</dt>
+                  <dd className="numeric break-all text-xs font-semibold">
+                    {formatCurrency(allocation.finalAmountCents, currencyCode)}
+                  </dd>
+                </div>
+                <div className="mt-1">
+                  <dt className="sr-only">Base allocation</dt>
+                  <dd className="numeric break-all text-xs text-[var(--ink-faint)]">
+                    {formatCurrency(allocation.baseAmountCents, currencyCode)} base
+                  </dd>
+                </div>
+              </dl>
             </div>
           );
         })}
@@ -682,7 +715,7 @@ export function LiveCloseoutWorkspace({
             </div>
           </aside>
 
-          <main>
+          <section aria-label="Closeout record">
             <div className="flex items-end justify-between gap-3">
               <SectionHeading
                 eyebrow={locked ? "Submitted record" : "Working form"}
@@ -975,7 +1008,7 @@ export function LiveCloseoutWorkspace({
                 </div>
               ) : null}
             </form>
-          </main>
+          </section>
 
           <aside>
             <SectionHeading

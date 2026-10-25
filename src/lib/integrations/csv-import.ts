@@ -4,7 +4,6 @@ export const MANUAL_CSV_MAX_COLUMNS = 100;
 export const MANUAL_CSV_MAX_CELL_CHARACTERS = 20_000;
 
 export const manualCsvImportTypeValues = [
-  "toast_sales",
   "resy_reservations",
   "guest_profiles",
   "inventory_items",
@@ -24,12 +23,6 @@ export const manualCsvImportDefinitions: Record<
   ManualCsvImportType,
   ManualCsvImportDefinition
 > = {
-  toast_sales: {
-    label: "Sales summary",
-    sourceLabel: "Toast / POS CSV",
-    description: "Daily sales evidence. This does not enable live Toast API access.",
-    requiredHeaders: ["business_date", "net_sales"],
-  },
   resy_reservations: {
     label: "Reservations",
     sourceLabel: "Resy / reservations CSV",

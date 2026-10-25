@@ -989,7 +989,7 @@ try {
   if (!loserOutcome.ok) throw loserOutcome.error;
   await loserClient.query("commit");
 
-  // Two modifications of one reservation serialize; the loser gets 40001.
+  // Two modifications of one reservation serialize; the loser gets PT409.
   await first.query("begin");
   await second.query("begin");
   await first.query(
@@ -1031,7 +1031,7 @@ try {
   } catch (error) {
     modifyError = error;
   }
-  requireCode(modifyError, "40001", "same-reservation modification");
+  requireCode(modifyError, "PT409", "same-reservation modification");
   await rollbackQuietly(second);
 
   // Cancellation releases inventory before a serialized public rebook.
@@ -1178,7 +1178,7 @@ try {
   }
   requireCode(
     staffModifyLoserError,
-    "40001",
+    "PT409",
     "staff modify/modify version serialization",
   );
   await rollbackQuietly(second);
@@ -1230,7 +1230,7 @@ try {
   }
   requireCode(
     staffModifyBehindCancelError,
-    "40001",
+    "PT409",
     "staff cancel/modify version serialization",
   );
   await rollbackQuietly(second);
@@ -2096,7 +2096,7 @@ try {
   } catch (error) {
     staleIdentityError = error;
   }
-  requireCode(staleIdentityError, "40001", "guest identity post-lock recheck");
+  requireCode(staleIdentityError, "PT409", "guest identity post-lock recheck");
   await rollbackQuietly(second);
   const staleIdentityEvidence = (
     await setup.query(

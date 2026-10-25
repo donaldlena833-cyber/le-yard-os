@@ -166,12 +166,22 @@ export async function retryIntegrationSync(
 ) {
   const { data: jobData, error: jobError } = await context.supabase
     .from("integration_sync_jobs")
-    .select("id, organization_id, status, attempts, max_attempts")
+    .select("id, organization_id, connection_id, status, attempts, max_attempts")
     .eq("id", input.syncJobId)
     .maybeSingle();
   if (jobError) throwDatabaseError(jobError, "The sync job could not be verified.");
   const job = assertFound(jobData, "The failed sync job was not found.");
   requireIntegrationAdministrator(context, job.organization_id);
+  const { data: connection, error: connectionError } = await context.supabase
+    .from("integration_connections")
+    .select("provider")
+    .eq("id", job.connection_id)
+    .eq("organization_id", job.organization_id)
+    .maybeSingle();
+  if (connectionError) throwDatabaseError(connectionError, "The sync connection could not be verified.");
+  assertFound(connection, "The sync connection was not found.");
+  assertCondition(connection!.provider !== "toast", "conflict", "This integration has been retired. No retry was queued.");
+
   assertCondition(job.status === "failed", "conflict", "Only a failed sync job can be retried.");
   assertCondition(
     job.attempts < job.max_attempts,

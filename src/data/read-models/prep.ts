@@ -28,6 +28,9 @@ export interface LivePrepTask {
   version: number;
   completionNote: string | null;
   correctionNote: string | null;
+  formulaCapturedAt: string | null;
+  formulaRecipeVersion: number | null;
+  needsFormulaReview: boolean;
 }
 
 export interface LivePrepModel {
@@ -67,7 +70,7 @@ export async function loadLivePrep(
         supabase
           .from("prep_tasks")
           .select(
-            "id, business_date, service_period, station, recipe_id, output_inventory_item_id, target_quantity, target_unit_id, due_at, assignee_user_id, state, actual_yield, note, completion_note, stock_override, stock_warnings, version, correction_note",
+            "id, business_date, service_period, station, recipe_id, output_inventory_item_id, target_quantity, target_unit_id, due_at, assignee_user_id, state, actual_yield, note, completion_note, stock_override, stock_warnings, version, correction_note, formula_captured_at, formula_recipe_name, formula_recipe_version, formula_target_symbol",
           )
           .eq("organization_id", organizationId)
           .eq("location_id", locationId)
@@ -157,14 +160,14 @@ export async function loadLivePrep(
         servicePeriod: row.service_period as LivePrepTask["servicePeriod"],
         station: row.station,
         recipeId: row.recipe_id,
-        recipeName: row.recipe_id ? recipeById.get(row.recipe_id)?.name ?? "Recipe" : null,
+        recipeName: row.formula_recipe_name ?? (row.recipe_id ? recipeById.get(row.recipe_id)?.name ?? "Recipe" : null),
         outputInventoryItemId: row.output_inventory_item_id,
         outputItemName: row.output_inventory_item_id
           ? itemById.get(row.output_inventory_item_id)?.name ?? "Finished batch"
           : null,
         targetQuantity: Number(row.target_quantity),
         targetUnitId: row.target_unit_id,
-        targetUnitSymbol: unitById.get(row.target_unit_id)?.symbol ?? "unit",
+        targetUnitSymbol: row.formula_target_symbol ?? unitById.get(row.target_unit_id)?.symbol ?? "unit",
         dueAt: row.due_at,
         assigneeUserId: row.assignee_user_id,
         assigneeName: row.assignee_user_id
@@ -178,6 +181,9 @@ export async function loadLivePrep(
         stockWarnings: Array.isArray(row.stock_warnings) ? row.stock_warnings : [],
         version: row.version,
         correctionNote: row.correction_note,
+        formulaCapturedAt: row.formula_captured_at,
+        formulaRecipeVersion: row.formula_recipe_version,
+        needsFormulaReview: ["published", "in_progress"].includes(row.state) && !row.formula_captured_at,
       })),
     });
   } catch {

@@ -15,7 +15,7 @@ The approved playground is for product familiarization, usability testing, and d
 - Treat every operational record as mock data. Changes reset and are not reliably shared between owners; do not enter employee, guest, payroll, receipt, vendor, or other confidential restaurant data.
 - Do not rely on the URL being unadvertised, robots directives, or the per-instance login throttle as the only security boundary. Keep use limited to the two owners; broader testing requires Vercel Deployment Protection or an approved durable rate-limiting service first.
 - The address `858 9th Ave, New York, NY 10019` is owner-supplied. Its presence does not convert surrounding synthetic data into production records.
-- Leave Supabase, SMTP, monitoring, push, Toast, Resy, OpenAI, external AI, and OCR provider configuration out of this playground.
+- Leave Supabase, SMTP, monitoring, push, Square, Resy, OpenAI, external AI, and OCR provider configuration out of this playground.
 - When testing ends, remove the Production playground values, rotate the session-signing secret, and delete, disable, or protect the public playground deployment.
 
 The Supabase account currently has two active projects, which is the free-project limit. Neither unrelated project may be paused, modified, or reused without separate explicit approval. The temporary identities therefore remain non-Supabase accounts until isolated project capacity is available.
@@ -42,10 +42,10 @@ Retention is the rule for how long each kind of record is kept before archival o
 2. In Settings, assign the Executive Chef job role only the location-scoped operational capabilities it needs. Do not promote the Chef to Admin.
 3. Open Kitchen/Inventory Setup and add real units, categories, items, per-unit costs, opening stock, pars, and draft recipes. Add vendors and purchase packs only when the real purchasing records are available. Do not copy synthetic demo values.
 4. Open Service Control to test a running-low event, restore it with a compensating event, add a Manager Log handoff, publish a pre-shift, and acknowledge it as an employee.
-5. Verify `/time-clock` with an employee and a manager. Confirm there are no local punch controls, the Toast freshness stamp is visible, and corrections are directed back to Toast POS.
+5. Verify `/time-clock` with an employee and a manager. Confirm there are no local punch controls, attendance setup is pending, and retained history does not imply current clock state.
 6. Review the explicit function-grant verifier output before migration approval. Do not grant browser execution to trigger-only or service-only functions.
 
-Service Control is internal. It does not change Toast menu availability, send email/push, or invent reservation data. Production rollout still requires the normal connected acceptance gate and separate deployment authorization.
+Service Control is internal. It does not change POS menu availability, send email/push, or invent reservation data. Production rollout still requires the normal connected acceptance gate and separate deployment authorization.
 
 ## Production launch gate
 
@@ -62,7 +62,7 @@ Do not bootstrap the live tenant until both owners approve all items below:
 - [ ] payroll export format and receiving provider
 - [ ] receipt, employee-document, guest, audit, and backup retention policy
 - [ ] isolated Supabase project capacity and production Vercel access plus separate explicit live-back-office deployment approval
-- [ ] SMTP, push, Toast, Resy, and payroll/accounting credentials that are actually approved
+- [ ] SMTP, push, Square, Resy, and payroll/accounting credentials that are actually approved
 
 The application must not infer these inputs from demo content or from the temporary playground identities.
 

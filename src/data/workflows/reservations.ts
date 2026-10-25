@@ -24,17 +24,37 @@ import type {
   SaveReservationWithGuestInput,
   SaveWaitlistEntryInput,
   SeatWaitlistEntryInput,
+  StaffReservationTurnInput,
   SetReservationTableStatusInput,
   TransitionReservationInput,
   TransitionWaitlistEntryInput,
   UndoWaitlistRemovalInput,
 } from "../reservation-schemas";
 import {
+  staffReservationTurnSchema,
   reservationLifecycleHeadSchema,
   reservationLifecycleRpcResultSchema,
   reservationStatusCorrectionResultSchema,
   reservationFloorSaveResultSchema,
 } from "../reservation-schemas";
+
+export async function quoteStaffReservationTurn(
+  { supabase }: WorkflowContext,
+  input: StaffReservationTurnInput,
+) {
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    name: "quote_staff_reservation_turn",
+    args: { p_location_id: string; p_starts_at: string; p_party_size: number; p_reservation_id: string | null },
+  ) => Promise<{ data: unknown; error: unknown }>;
+  const { data, error } = await rpc("quote_staff_reservation_turn", {
+    p_location_id: input.locationId,
+    p_starts_at: input.startsAt,
+    p_party_size: input.partySize,
+    p_reservation_id: input.reservationId,
+  });
+  if (error) throwDatabaseError(error, "The current service turn policy could not be loaded.");
+  return staffReservationTurnSchema.parse(assertFound(data, "No service turn policy was returned."));
+}
 
 type ReservationLifecycleRpc = {
   (
@@ -93,7 +113,7 @@ export async function saveReservationFloorPositions(
   { supabase }: WorkflowContext,
   input: SaveReservationFloorPositionsInput,
 ) {
-  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const lifecycleRpc = supabase.rpc.bind(supabase) as unknown as ReservationLifecycleRpc;
   const { data, error } = await lifecycleRpc("save_reservation_floor_positions", {
     p_request_id: input.requestId,
     p_location_id: input.locationId,
@@ -109,7 +129,7 @@ export async function correctReservationStatus(
   { supabase }: WorkflowContext,
   input: CorrectReservationStatusInput,
 ) {
-  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const lifecycleRpc = supabase.rpc.bind(supabase) as unknown as ReservationLifecycleRpc;
   const { data, error } = await lifecycleRpc("correct_reservation_status", {
     p_request_id: input.requestId,
     p_location_id: input.locationId,
@@ -304,7 +324,7 @@ export async function modifyReservation(
   { supabase }: WorkflowContext,
   input: ModifyReservationInput,
 ) {
-  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const lifecycleRpc = supabase.rpc.bind(supabase) as unknown as ReservationLifecycleRpc;
   const { data, error } = await lifecycleRpc("modify_reservation", {
     p_request_id: input.requestId,
     p_location_id: input.locationId,
@@ -328,7 +348,7 @@ export async function cancelReservation(
   { supabase }: WorkflowContext,
   input: CancelReservationInput,
 ) {
-  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const lifecycleRpc = supabase.rpc.bind(supabase) as unknown as ReservationLifecycleRpc;
   const { data, error } = await lifecycleRpc("cancel_reservation", {
     p_request_id: input.requestId,
     p_location_id: input.locationId,
@@ -347,7 +367,7 @@ export async function loadReservationLifecycleHead(
   { supabase }: WorkflowContext,
   input: ReservationLifecycleHeadInput,
 ) {
-  const lifecycleRpc = supabase.rpc as unknown as ReservationLifecycleRpc;
+  const lifecycleRpc = supabase.rpc.bind(supabase) as unknown as ReservationLifecycleRpc;
   const { data, error } = await lifecycleRpc(
     "service_reservation_lifecycle_head",
     {

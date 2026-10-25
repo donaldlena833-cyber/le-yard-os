@@ -4813,6 +4813,12 @@ export type Database = {
           "cancelled_at": string | null
           "created_at": string
           "updated_at": string
+          "formula_snapshot": Json | null
+          "formula_captured_at": string | null
+          "formula_captured_by": string | null
+          "formula_recipe_name": string | null
+          "formula_recipe_version": number | null
+          "formula_target_symbol": string | null
         }
         Insert: {
           "id"?: string
@@ -4848,6 +4854,12 @@ export type Database = {
           "cancelled_at"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "formula_snapshot"?: Json | null
+          "formula_captured_at"?: string | null
+          "formula_captured_by"?: string | null
+          "formula_recipe_name"?: string | null
+          "formula_recipe_version"?: number | null
+          "formula_target_symbol"?: string | null
         }
         Update: {
           "id"?: string
@@ -4883,6 +4895,12 @@ export type Database = {
           "cancelled_at"?: string | null
           "created_at"?: string
           "updated_at"?: string
+          "formula_snapshot"?: Json | null
+          "formula_captured_at"?: string | null
+          "formula_captured_by"?: string | null
+          "formula_recipe_name"?: string | null
+          "formula_recipe_version"?: number | null
+          "formula_target_symbol"?: string | null
         }
         Relationships: [
           {
@@ -5800,6 +5818,37 @@ export type Database = {
             foreignKeyName: "reservation_events_organization_id_reservation_id_fkey"
             columns: ["organization_id","reservation_id"]
             referencedRelation: "reservations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
+      "reservation_invalidation_signals": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "revision": number
+          "updated_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "revision"?: number
+          "updated_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "revision"?: number
+          "updated_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_invalidation_signa_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
             referencedColumns: ["organization_id","id"]
           },
         ]
@@ -6946,6 +6995,37 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "service_availability_events_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
+      "service_control_invalidation_signals": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "revision": number
+          "updated_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "revision"?: number
+          "updated_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "revision"?: number
+          "updated_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_control_invalidation_s_organization_id_location_id_fkey"
             columns: ["organization_id","location_id"]
             referencedRelation: "locations"
             referencedColumns: ["organization_id","id"]
@@ -9797,6 +9877,16 @@ export type Database = {
         }
         Returns: Json
       };
+      "configure_square_source_connection": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_enabled": boolean | null
+        }
+        Returns: Json
+      };
       "configure_tip_pool_policy": {
         Args: {
           "p_request_id": string | null
@@ -10551,6 +10641,15 @@ export type Database = {
           "p_sop_version_id": string | null
         }
         Returns: Database["public"]["Tables"]["sop_versions"]["Row"]
+      };
+      "quote_staff_reservation_turn": {
+        Args: {
+          "p_location_id": string | null
+          "p_starts_at": string | null
+          "p_party_size": number | null
+          "p_reservation_id"?: string | null
+        }
+        Returns: Json
       };
       "read_preshifts_safe": {
         Args: {
@@ -11619,6 +11718,16 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_ingest_square_source_window": {
+        Args: {
+          "p_request_id": string | null
+          "p_connection_id": string | null
+          "p_window_from": string | null
+          "p_window_to": string | null
+          "p_snapshots": Json | null
+        }
+        Returns: Json
+      };
       "service_merge_guests": {
         Args: {
           "p_request_id": string | null
@@ -12047,7 +12156,7 @@ export type Database = {
       "app_role": "owner" | "admin" | "manager" | "employee"
       "channel_kind": "all_staff" | "location" | "management" | "private"
       "consent_status": "unknown" | "granted" | "revoked"
-      "integration_provider": "toast" | "resy" | "csv" | "manual" | "payroll" | "accounting" | "other"
+      "integration_provider": "toast" | "resy" | "csv" | "manual" | "payroll" | "accounting" | "other" | "square"
       "inventory_transaction_kind": "purchase" | "count_adjustment" | "waste" | "transfer_in" | "transfer_out" | "recipe_usage" | "manual_adjustment"
       "job_status": "queued" | "running" | "succeeded" | "partially_succeeded" | "failed" | "cancelled"
       "membership_status": "invited" | "active" | "suspended"
@@ -12082,7 +12191,7 @@ export const DatabaseConstants = {
       "app_role": ["owner","admin","manager","employee"],
       "channel_kind": ["all_staff","location","management","private"],
       "consent_status": ["unknown","granted","revoked"],
-      "integration_provider": ["toast","resy","csv","manual","payroll","accounting","other"],
+      "integration_provider": ["toast","resy","csv","manual","payroll","accounting","other","square"],
       "inventory_transaction_kind": ["purchase","count_adjustment","waste","transfer_in","transfer_out","recipe_usage","manual_adjustment"],
       "job_status": ["queued","running","succeeded","partially_succeeded","failed","cancelled"],
       "membership_status": ["invited","active","suspended"],
@@ -12202,6 +12311,7 @@ export const DatabaseObjectNames = {
       "recipes",
       "report_runs",
       "reservation_events",
+      "reservation_invalidation_signals",
       "reservation_message_outbox",
       "reservation_push_deliveries",
       "reservation_revisions",
@@ -12219,6 +12329,7 @@ export const DatabaseObjectNames = {
       "schedule_templates",
       "schedules",
       "service_availability_events",
+      "service_control_invalidation_signals",
       "service_shift_exceptions",
       "service_shifts",
       "shift_acknowledgements",
@@ -12323,6 +12434,7 @@ export const DatabaseObjectNames = {
       "configure_reservation_location",
       "configure_retention_policy",
       "configure_service_shift_exception",
+      "configure_square_source_connection",
       "configure_tip_pool_policy",
       "configure_user_capability_override",
       "correct_prep_completion",
@@ -12431,6 +12543,7 @@ export const DatabaseObjectNames = {
       "publish_checklist_template",
       "publish_schedule",
       "publish_sop_version",
+      "quote_staff_reservation_turn",
       "read_preshifts_safe",
       "receive_inventory_delivery",
       "receive_inventory_delivery_with_exceptions",
@@ -12530,6 +12643,7 @@ export const DatabaseObjectNames = {
       "service_guest_sensitive_notes",
       "service_guest_sensitive_profiles",
       "service_ingest_pos_time_entry",
+      "service_ingest_square_source_window",
       "service_merge_guests",
       "service_modify_public_reservation",
       "service_provision_user_invitation_request",

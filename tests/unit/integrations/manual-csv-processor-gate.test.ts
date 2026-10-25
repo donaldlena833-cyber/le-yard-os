@@ -22,7 +22,7 @@ describe("manual CSV processor gate", () => {
       requestId,
       uploadId,
       locationId,
-      importType: "toast_sales" as const,
+      importType: "inventory_items" as const,
       fileName: "sales.csv",
       mimeType: "text/csv" as const,
       sizeBytes: 48,

@@ -1,0 +1,12 @@
+{
+  "id": "connected-service-day-v2",
+  "classification": "isolated_local_synthetic_nonproduction",
+  "floorRevision": "DD08",
+  "tables": 20,
+  "seats": 40,
+  "turnMinutes": 75,
+  "lunch": { "starts": "11:30", "ends": "15:00", "coverLimit": 12, "waves": ["11:30", "11:50", "12:10"], "partiesPerWave": 6, "partySize": 2, "covers": 36 },
+  "dinner": { "waves": ["17:00", "17:20", "17:40", "18:00", "18:30", "18:50"], "partiesPerWave": 5, "partySize": 2, "covers": 60 },
+  "manualFinancialVector": { "grossSalesCents": 556000, "netSalesCents": 546000, "compsCents": 6000, "voidsCents": 4000, "cashSalesCents": 146000, "cardSalesCents": 400000, "actualCashCents": 145500, "cardTipsCents": 60001 },
+  "requiredPhases": ["preflight", "receiving", "opening", "prep", "lunch_brief", "lunch", "handoff", "dinner_brief", "dinner", "availability", "closing_inventory", "financial", "final_reconciliation"]
+}

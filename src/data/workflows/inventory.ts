@@ -366,21 +366,29 @@ async function buildAuthoritativeCountLines(
     assertCondition(
       !submittedByItem.has(line.inventoryItemId),
       "conflict",
-      "Each tracked item may appear only once in a full inventory count.",
+      "Each tracked item may appear only once in an inventory count.",
     );
     submittedByItem.set(line.inventoryItemId, line);
   }
+  const selectedItems = items.filter((item) => submittedByItem.has(item.id));
   assertCondition(
-    submittedByItem.size === items.length &&
-      items.every((item) => {
-        const submitted = submittedByItem.get(item.id);
-        return submitted?.unitId === item.base_unit_id;
-      }),
+    submittedByItem.size > 0 &&
+      selectedItems.length === submittedByItem.size &&
+      selectedItems.every(
+        (item) => submittedByItem.get(item.id)?.unitId === item.base_unit_id,
+      ),
     "conflict",
-    "A full count must include every active tracked item in its current base unit.",
+    "Every selected count item must be active, tracked and use its current base unit.",
   );
+  if (input.countType === "full") {
+    assertCondition(
+      selectedItems.length === items.length,
+      "conflict",
+      "A full count must include every active tracked item in its current base unit.",
+    );
+  }
 
-  const itemIds = items.map((item) => item.id);
+  const itemIds = selectedItems.map((item) => item.id);
   const [
     { data: onHandRows, error: onHandError },
     { data: priceRows, error: priceError },
@@ -431,7 +439,7 @@ async function buildAuthoritativeCountLines(
     }
   }
 
-  return items.map((item) => {
+  return selectedItems.map((item) => {
     const submitted = submittedByItem.get(item.id)!;
     return {
       inventory_item_id: item.id,

@@ -8,15 +8,15 @@ import {
 describe("manual CSV validation", () => {
   it("normalizes headers and parses quoted RFC-style cells", () => {
     const result = validateManualCsvText({
-      importType: "toast_sales",
-      text: '\uFEFFBusiness Date,Net Sales,Note\r\n2026-08-01,1250.45,"Dinner, patio"\r\n',
+      importType: "inventory_items",
+      text: '\uFEFFName,Base Unit,Note\r\nTomatoes,each,"Dinner, patio"\r\n',
     });
 
     expect(result).toMatchObject({
       ok: true,
-      headers: ["business_date", "net_sales", "note"],
+      headers: ["name", "base_unit", "note"],
       totalRows: 1,
-      preview: [["2026-08-01", "1250.45", "Dinner, patio"]],
+      preview: [["Tomatoes", "each", "Dinner, patio"]],
     });
   });
 
@@ -56,8 +56,8 @@ describe("manual CSV validation", () => {
 
   it("accepts negative numeric values without treating them as formulas", () => {
     const result = validateManualCsvText({
-      importType: "toast_sales",
-      text: "business_date,net_sales\n2026-08-01,-12.50\n",
+      importType: "inventory_items",
+      text: "name,base_unit,quantity\nTomatoes,each,-12.50\n",
     });
     expect(result).toMatchObject({ ok: true, totalRows: 1 });
   });

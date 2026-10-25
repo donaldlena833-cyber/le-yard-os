@@ -28,4 +28,10 @@ Run the focused portable verifier with:
 npm run test:inventory-catalog:pglite
 ```
 
-It applies all forward migrations in an isolated PGlite database and proves Owner/Admin and capability boundaries, direct-cost replay/location isolation, cross-tenant resource denial, history preservation, audit evidence, and direct-DML revocation. Migration 020 remains frozen; direct costs are added by migration `20260809142645_password_only_owners_and_direct_inventory_costs.sql`. Connected Owner/Admin MFA is an opt-in deployment gate and remains deferred until enrollment/recovery is ready. The consolidated generated database contract includes this catalog surface.
+It applies all forward migrations in an isolated PGlite database and proves Owner/Admin and capability boundaries, direct-cost replay/location isolation, cross-tenant resource denial, history preservation, audit evidence, and direct-DML revocation. Migration 020 remains frozen; direct costs are added by migration `20260809142645_password_only_owners_and_direct_inventory_costs.sql`. Owner/Admin administration uses authenticated password sessions under the current permission matrix; hosted identity/device acceptance remains separate. The consolidated generated database contract includes this catalog surface.
+
+## Receiving proposal integrity
+
+At the local117 review head, fresh receiving validates finite original delivered/accepted quantities and at most four decimals before exception lines are withheld from stock. An independent review also checks retained pending proposals against delivered quantity and their original captured evidence. Invalid pending evidence can be rejected; completed historical results remain replayable and no legacy inventory row is rewritten. This boundary has25 native receiving cases within362 total,26 concurrency checks and27 actual local Auth/Data API cases.
+
+Stock acceptance, PO completion, vendor acknowledgement, credit document, invoice application and payment are distinct outcomes. The current receiving exception review establishes stock acceptance. Invoice identifiers can be reused by legitimate corrective entries; they are not a complete duplicate-invoice or financial-reconciliation control. Vendor cutoffs/minimums/calendars, actual alternate-item substitution mapping and independent credit closure remain operating expansion/acceptance work.

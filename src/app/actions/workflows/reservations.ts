@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { executeWorkflowAction } from "@/data/execute";
 import {
+  staffReservationTurnInputSchema,
   approveReservationDraftInputSchema,
   assignReservationTablesInputSchema,
   cancelReservationInputSchema,
@@ -25,6 +26,7 @@ import {
   undoWaitlistRemovalInputSchema,
 } from "@/data/reservation-schemas";
 import {
+  quoteStaffReservationTurn,
   approveReservationDraft,
   assignReservationTables,
   cancelReservation,
@@ -46,6 +48,16 @@ import {
   transitionWaitlistEntry,
   undoWaitlistRemoval,
 } from "@/data/workflows/reservations";
+
+export async function quoteStaffReservationTurnAction(input: unknown) {
+  return executeWorkflowAction({
+    operation: "reservation.turn_quote",
+    schema: staffReservationTurnInputSchema,
+    input,
+    persists: false,
+    run: quoteStaffReservationTurn,
+  });
+}
 
 function refreshOnSuccess(result: { ok: boolean; persisted: boolean }) {
   if (result.ok && result.persisted) {

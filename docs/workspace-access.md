@@ -1,0 +1,19 @@
+# Current workspace access checks
+
+Connected Operations, Host and Phone render a server-derived authorization revision. The revision covers the current user, membership, organization/location, role, operational capabilities, available workspace/location choices, timezone and active job/persona. Names and JWT expiry are not authorization revisions. The guard is disabled for clearly synthetic demo/playground mode.
+
+`GET /api/workspace/access` is an authenticated, no-store, read-only endpoint. It accepts no caller-selected identity or scope. It checks the actual Auth user, resolves current RLS-filtered membership/location/capabilities through the same server resolver as the layout, verifies that the identities agree and returns only a SHA-256 revision. It never changes roles, exposes member names/capability lists or uses a service-role client. A failure returns a generic401,403 or503 response. Phone allows this exact API path, not a broader public route prefix.
+
+The client covers/inerts private workspace content until the initial matching check completes. It rechecks on a configured30-second visible-tab interval, focus, return from hidden state, page restoration, reconnection and relevant Auth events. Requests have an8-second timeout; duplicate concurrent checks coalesce. Hidden/offline/error states remain covered until another current check succeeds. A late or aborted old response cannot restore the screen.
+
+Temporary failures preserve the mounted form state behind the covered screen. A confirmed changed revision, membership withdrawal or changed/signed-out identity unmounts the old workspace and replaces the document with the surface's default route or sign-in. This discards old route/form/request state and clears local action recents. A generic notice explains that workspace access changed; browser storage failures cannot prevent withdrawal. It does not automatically submit drafts or reinterpret prior uncertain mutation results.
+
+Polling is not an immediate revocation SLA. Actual browser timer scheduling, request latency and document reload time affect observation. Current database/RPC authorization still governs every write/read independently; the client guard is an interface boundary, not a substitute for RLS. It cannot erase records already viewed or copied. Remote Auth-session revocation, access-token lifetime semantics, hosted producer/consumer rollout, restore behavior and physical shared-tablet acceptance remain separate gates.
+
+## Verification
+
+`tests/unit/security/workspace-access.test.ts` covers revision changes, authenticated own-user scope, privacy, refusal, outage and actor mismatch. `workspace-access-guard.test.tsx` covers initial checks, unchanged drafts, changed scope,401/403, offline/stale responses, timeouts, malformed responses, hidden tabs, Auth events, cleanup and demo isolation.
+
+`tests/local-readiness/workspace-access.spec.ts` requires the explicit local fixture/status/access-fixture paths and localhost3110. It uses a dedicated fake account, Owner capability/membership commands and actual local Auth/API/UI. It tests initial-render withdrawal, regular-poll role/location change, suspension, offline/reconnect and second-tab sign-out. It also checks Closeout's single main landmark with the actual axe rules. It suspends/bans only its dedicated fake identity at cleanup and retains its audit records. Initial fixture setup and later Owner workflow changes have distinct provenance. Failed setup/selector runs remain separate evidence; they never count as acceptance.
+
+No schema migration is added by this client/API correction. Native194-assertion and complete portable-chain evidence remains version-bound to the unchanged112-migration SQL digest. The current source build, types, lint, unit and browser results are recorded separately in the readiness package.

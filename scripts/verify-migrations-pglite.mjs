@@ -1531,7 +1531,24 @@ try {
       `Atomic shift claim failed: ${JSON.stringify(claimedShift.rows[0])}`,
     );
   }
+  // Reopening follows effective schedule.manage, rather than Manager title.
+  // Give this positive fixture an explicit location grant before exercising it.
   await db.exec(`
+    select set_config(
+      'request.jwt.claims',
+      '{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',
+      false
+    );
+    select public.configure_user_capability_override(
+      'c3500000-0000-4000-8000-000000000001',
+      '20000000-0000-4000-8000-000000000001',
+      null,
+      '10000000-0000-4000-8000-000000000004',
+      'schedule.manage',
+      '30000000-0000-4000-8000-000000000001',
+      'grant', 'READINESS ONLY - explicit scheduling fixture',
+      date '2026-01-01', null, true
+    );
     select set_config(
       'request.jwt.claims',
       '{"sub":"10000000-0000-4000-8000-000000000004","role":"authenticated","aal":"aal1"}',
@@ -3459,7 +3476,7 @@ try {
       '2026-08-13T18:00:00Z', '2026-08-13T21:30:00Z', false, null,
       '[]'::jsonb
     )`,
-    "40001",
+    "PT409",
     "conflicting Toast source version",
   );
   await db.exec(`
@@ -4777,7 +4794,7 @@ try {
       'dd120000-0000-4000-8000-000000000001',
       '${completionResult.proposalId}', repeat('0', 64)
     )`,
-    "40001",
+    "PT409",
     "Mismatched intelligence confirmation fingerprint",
   );
   const execution = await db.query(

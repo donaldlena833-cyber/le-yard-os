@@ -20,6 +20,7 @@ import { TabPanel, Tabs } from "@/components/ui/tabs";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { StatusPill } from "@/components/ui/status-pill";
 import { demoWorkspace, isFullServiceDayPreview } from "@/lib/demo";
+import { buildServiceScorecard, runServiceScenario } from "@/lib/simulation/engine.ts";
 import { canAccessReportKind } from "@/lib/permissions/report-access";
 import { cn } from "@/lib/utils";
 import type { ReportKind } from "@/types";
@@ -60,6 +61,10 @@ const toneFill: Record<NonNullable<ReportChartPoint["tone"]>, string> = {
   danger: "var(--danger)",
   neutral: "var(--ink-faint)",
 };
+
+const previewScorecard = isFullServiceDayPreview
+  ? buildServiceScorecard(runServiceScenario("reports-preview"))
+  : null;
 
 function AccessibleBarChart({
   reportKind,
@@ -178,7 +183,7 @@ export function ReportsWorkspace() {
       <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
           <div className="flex items-center gap-2">
-            <StatusPill tone={isFullServiceDayPreview ? "warning" : "positive"} dot>{isFullServiceDayPreview ? "Local replay passed · release blocked" : "Live"}</StatusPill>
+            <StatusPill tone={previewScorecard?.localStatus === "failed" ? "danger" : "warning"} dot>{previewScorecard ? `Local replay ${previewScorecard.localStatus} · release ${previewScorecard.releaseStatus}` : "Demo"}</StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">Synthetic workspace · {demoWorkspace.asOf.slice(0, 10)}</span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Reports</h2>
