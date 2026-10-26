@@ -55,6 +55,8 @@ import {
   transitionWaitlistEntryAction,
   assignReservationTablesAction,
 } from "@/app/actions/workflows/reservations";
+import type { SaveReservationWithGuestInput, SeatWaitlistEntryInput } from "@/data/reservation-schemas";
+import { readStaffTurnPolicy, StaffTurnPolicyNotice, useStaffTurnPolicy } from "@/components/reservations/staff-turn-policy";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import {
@@ -109,8 +111,9 @@ import { cn, formatMoney } from "@/lib/utils";
 import styles from "./reservations.module.css";
 
 type BookMode = "reservation" | "walk_in";
-const noReservationPostgresBindings = [] as const;
-const reservationBroadcastEvents = ["INSERT", "UPDATE", "DELETE"] as const;
+const reservationRealtimeBindings = [
+  { table: "reservation_invalidation_signals", scope: "location" },
+] as const;
 const assignableReservationStatuses = new Set<ReservationStatus>([
   "booked",
   "confirmed",
@@ -540,6 +543,29 @@ export function ReservationsWorkspace({
     "book",
   );
   const [bookMode, setBookMode] = useState<BookMode | null>(null);
+  const [bookingParty, setBookingParty] = useState("2");
+  const [bookingDate, setBookingDate] = useState(incomingModel?.businessDate ?? "");
+  const [bookingTime, setBookingTime] = useState("19:00");
+  const [bookingClock, setBookingClock] = useState(() => new Date().toISOString());
+  const [pendingBooking, setPendingBooking] = useState<{ command: SaveReservationWithGuestInput; scope: string } | null>(null);
+  const clockParts = model ? localDateTimeParts(bookingClock, model.timeZone) : { date: "", time: "" };
+  const bookingStartsAt = model ? zonedLocalToIso(
+    bookMode === "walk_in" ? clockParts.date : bookingDate,
+    bookMode === "walk_in" ? clockParts.time : bookingTime,
+    model.timeZone,
+  ) : null;
+  const bookingPolicy = useStaffTurnPolicy(
+    bookingStartsAt && Number.isInteger(Number(bookingParty)) && Number(bookingParty) >= 1 && Number(bookingParty) <= 100
+      ? { locationId: workspace.activeLocation.id, startsAt: bookingStartsAt, partySize: Number(bookingParty), reservationId: null }
+      : null,
+    Boolean(bookMode && workspace.mode === "live" && model?.permissions.operate && !pendingBooking),
+  );
+  useEffect(() => {
+    if (bookMode !== "walk_in") return;
+    const timer = window.setInterval(() => setBookingClock(new Date().toISOString()), 15_000);
+    return () => window.clearInterval(timer);
+  }, [bookMode]);
+  const [pendingSeat, setPendingSeat] = useState<{ command: SeatWaitlistEntryInput; scope: string; label: string } | null>(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [noShowConfirmOpen, setNoShowConfirmOpen] = useState(false);
   const [editReservationTarget, setEditReservationTarget] =
@@ -596,10 +622,8 @@ export function ReservationsWorkspace({
     enabled:
       workspace.mode === "live" &&
       Boolean(model && canAccessReservationHost(model.permissions)),
-    channelName: `reservations:${workspace.organization.id}:${workspace.activeLocation.id}`,
-    bindings: noReservationPostgresBindings,
-    broadcastEvents: reservationBroadcastEvents,
-    privateChannel: true,
+    channelName: `reservation-signals:${workspace.organization.id}:${workspace.activeLocation.id}`,
+    bindings: reservationRealtimeBindings,
     organizationId: workspace.organization.id,
     locationId: workspace.activeLocation.id,
   });
@@ -1240,6 +1264,27 @@ export function ReservationsWorkspace({
     }
   }
 
+  async function persistBooking(command: SaveReservationWithGuestInput, scope: string) {
+    setPendingBooking({ command, scope });
+    setBusy(true);
+    setMessage("");
+    try {
+      const response = await saveReservationWithGuestAction(command);
+      if (response.ok) {
+        rotateRequestId(scope);
+        setPendingBooking(null);
+        setMessage(command.source === "walk_in" ? "Walk-in added. Assign or adjust the table from the current floor when ready." : "Reservation saved and table suggested.");
+        setBookMode(null);
+        reconcileInBackground();
+      } else {
+        setMessage(response.message);
+        if (response.code !== "database") { setPendingBooking(null); void bookingPolicy.refresh(); }
+      }
+    } catch {
+      setMessage("The reservation result was not confirmed. Recover this same reservation before starting another; do not create a duplicate.");
+    } finally { setBusy(false); }
+  }
+
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!canOperate) {
@@ -1248,10 +1293,15 @@ export function ReservationsWorkspace({
       );
       return;
     }
+    if (busy) return;
+    if (pendingBooking) {
+      await persistBooking(pendingBooking.command, pendingBooking.scope);
+      return;
+    }
     const data = new FormData(event.currentTarget);
     const displayName = String(data.get("displayName") ?? "").trim();
     const partySize = Number(data.get("partySize"));
-    const durationMinutes = Number(data.get("durationMinutes"));
+    let durationMinutes = Number(data.get("durationMinutes"));
     if (!displayName || !Number.isInteger(partySize) || partySize < 1) {
       setMessage("Guest name and a valid party size are required.");
       return;
@@ -1279,6 +1329,23 @@ export function ReservationsWorkspace({
         "That local reservation time does not exist. Choose another time.",
       );
       return;
+    }
+    if (workspace.mode === "live") {
+      const displayed = bookingPolicy.quote;
+      if (bookingPolicy.status !== "ready" || !displayed || tentative !== bookingStartsAt) {
+        setBookingClock(new Date().toISOString());
+        setMessage("Wait for the current time and party policy before saving.");
+        return;
+      }
+      setBusy(true);
+      const checked = await bookingPolicy.refresh();
+      setBusy(false);
+      if (!checked) { setMessage("The service policy could not be confirmed. Retry the policy check before saving."); return; }
+      if (checked.policyHash !== displayed.policyHash || checked.durationMinutes !== displayed.durationMinutes) {
+        setMessage("The service policy changed. Review the updated turn time, then save again.");
+        return;
+      }
+      durationMinutes = checked.durationMinutes;
     }
     const suggestions = suggestTables({
       partySize,
@@ -1391,25 +1458,7 @@ export function ReservationsWorkspace({
       setBookMode(null);
       return;
     }
-    setBusy(true);
-    setMessage("");
-    const response = await saveReservationWithGuestAction({
-      ...payload,
-      requestId: requestIdFor(reservationScope, payload),
-    });
-    setBusy(false);
-    setMessage(
-      response.ok
-        ? bookMode === "walk_in"
-          ? "Walk-in added. Assign or adjust the table from the current floor when ready."
-          : "Reservation saved and table suggested."
-        : response.message,
-    );
-    if (response.ok) {
-      rotateRequestId(reservationScope);
-      setBookMode(null);
-      reconcileInBackground();
-    }
+    await persistBooking({ ...payload, requestId: requestIdFor(reservationScope, payload) }, reservationScope);
   }
 
   async function submitWaitlist(event: FormEvent<HTMLFormElement>) {
@@ -1565,6 +1614,26 @@ export function ReservationsWorkspace({
     }
   }
 
+  async function persistWaitlistSeat(command: SeatWaitlistEntryInput, scope: string, label: string) {
+    setPendingSeat({ command, scope, label });
+    setBusy(true);
+    try {
+      const response = await seatWaitlistEntryAction(command);
+      if (response.ok) {
+        rotateRequestId(scope);
+        setPendingSeat(null);
+        setMessage(`Party seated at ${label}.`);
+        updateModel((current) => ({ ...current, waitlist: current.waitlist.filter((entry) => entry.id !== command.waitlistEntryId) }));
+        reconcileInBackground();
+      } else {
+        setMessage(response.message);
+        if (response.code !== "database") setPendingSeat(null);
+      }
+    } catch {
+      setMessage("The seating result was not confirmed. Recover the original seating before trying another party or table.");
+    } finally { setBusy(false); }
+  }
+
   async function seatWaitlist(entryId: string, partySize: number) {
     if (!canOperate || !isCurrentBook) {
       setMessage(
@@ -1574,8 +1643,24 @@ export function ReservationsWorkspace({
       );
       return;
     }
-    const startsAt = readyModel.floorNow.observedAt;
-    const durationMinutes = partySize >= 5 ? 120 : 90;
+    if (busy) return;
+    if (pendingSeat) {
+      await persistWaitlistSeat(pendingSeat.command, pendingSeat.scope, pendingSeat.label);
+      return;
+    }
+    const startsAt = workspace.mode === "live" ? new Date().toISOString() : readyModel.floorNow.observedAt;
+    let durationMinutes = partySize >= 5 ? 120 : 90;
+    if (workspace.mode === "live") {
+      setBusy(true);
+      setMessage("Checking the current service policy before seating…");
+      try {
+        const quote = await readStaffTurnPolicy({ locationId: workspace.activeLocation.id, startsAt, partySize, reservationId: null });
+        durationMinutes = quote.durationMinutes;
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "The current service policy could not be checked. The party was not seated.");
+        return;
+      } finally { setBusy(false); }
+    }
     const suggestions = suggestTables({
       partySize,
       startsAt,
@@ -1695,23 +1780,7 @@ export function ReservationsWorkspace({
       durationMinutes,
     };
     const scope = `waitlist-seat-${entryId}`;
-    setBusy(true);
-    const response = await seatWaitlistEntryAction({
-      ...payload,
-      requestId: requestIdFor(scope, payload),
-    });
-    setBusy(false);
-    setMessage(
-      response.ok ? `Party seated at ${suggestion.label}.` : response.message,
-    );
-    if (response.ok) {
-      rotateRequestId(scope);
-      updateModel((current) => ({
-        ...current,
-        waitlist: current.waitlist.filter((entry) => entry.id !== entryId),
-      }));
-      reconcileInBackground();
-    }
+    await persistWaitlistSeat({ ...payload, requestId: requestIdFor(scope, payload) }, scope, suggestion.label);
   }
 
   return (
@@ -1780,6 +1849,7 @@ export function ReservationsWorkspace({
               onClick={(event) => {
                 setDialogTrigger(event.currentTarget);
                 setMessage("");
+                setBookingParty("2"); setBookingDate(model.businessDate); setBookingTime("19:00");
                 setBookMode("reservation");
               }}
             >
@@ -1794,6 +1864,10 @@ export function ReservationsWorkspace({
         isRefreshing={realtime.isRefreshing || isReconciling}
       />
 
+      {pendingSeat ? <InlineNotice tone="warning" title="Seating result not confirmed" className="mt-4">
+        Recover the original party and table before starting another seating.
+        <Button type="button" variant="quiet" disabled={busy} onClick={() => void persistWaitlistSeat(pendingSeat.command, pendingSeat.scope, pendingSeat.label)}>Recover seating</Button>
+      </InlineNotice> : null}
       {message ? (
         <div
           role="status"
@@ -1961,6 +2035,7 @@ export function ReservationsWorkspace({
                 onClick={(event) => {
                   setDialogTrigger(event.currentTarget);
                   setMessage("");
+                  setBookingParty("2"); setBookingClock(new Date().toISOString());
                   setBookMode("walk_in");
                 }}
               >
@@ -2588,6 +2663,8 @@ export function ReservationsWorkspace({
                 {message}
               </InlineNotice>
             ) : null}
+            {pendingBooking ? <p role="status" className="col-span-2">The result for {pendingBooking.command.displayName} is not confirmed. Recover this reservation before starting another.</p> : null}
+            <fieldset className="contents" disabled={busy || Boolean(pendingBooking)}>
             <label className="col-span-2">
               <span className="mb-1.5 block text-xs font-semibold">
                 Guest name
@@ -2615,14 +2692,15 @@ export function ReservationsWorkspace({
                 type="number"
                 min="1"
                 max="100"
-                defaultValue="2"
+                value={bookingParty}
+                onChange={(event) => setBookingParty(event.target.value)}
                 required
               />
             </label>
             <FormField
               id="reservation-book-duration"
               label="Turn time"
-              description="Whole minutes from 15 to 720. Service policy is checked when saved."
+              description={workspace.mode === "live" ? "Configured for this service and party size." : "Demo duration; no connected service policy."}
               required
             >
               <input
@@ -2632,7 +2710,9 @@ export function ReservationsWorkspace({
                 min="15"
                 max="720"
                 step="1"
-                defaultValue="90"
+                readOnly={workspace.mode === "live"}
+                value={workspace.mode === "live" ? bookingPolicy.quote?.durationMinutes ?? "" : undefined}
+                defaultValue={workspace.mode === "demo" ? "90" : undefined}
               />
             </FormField>
             <label>
@@ -2641,7 +2721,9 @@ export function ReservationsWorkspace({
                 className={fieldClass}
                 name="date"
                 type="date"
-                defaultValue={model.businessDate}
+                value={bookMode === "walk_in" ? clockParts.date : bookingDate}
+                readOnly={bookMode === "walk_in"}
+                onChange={(event) => setBookingDate(event.target.value)}
                 required
               />
             </label>
@@ -2651,7 +2733,8 @@ export function ReservationsWorkspace({
                 className={fieldClass}
                 name="time"
                 type="time"
-                defaultValue="19:00"
+                value={bookMode === "walk_in" ? clockParts.time : bookingTime}
+                onChange={(event) => setBookingTime(event.target.value)}
                 disabled={bookMode === "walk_in"}
                 required={bookMode !== "walk_in"}
               />
@@ -2665,6 +2748,8 @@ export function ReservationsWorkspace({
                 name="notes"
               />
             </label>
+            </fieldset>
+            {workspace.mode === "live" && !pendingBooking ? <StaffTurnPolicyNotice policy={bookingPolicy} /> : null}
             <div className={cn(styles.dialogActions, "col-span-2 mt-2 flex justify-end gap-2")}>
               <Button
                 variant="quiet"
@@ -2676,13 +2761,13 @@ export function ReservationsWorkspace({
               <Button
                 variant="accent"
                 type="submit"
-                disabled={busy || !canOperate}
+                disabled={busy || !canOperate || (workspace.mode === "live" && !pendingBooking && bookingPolicy.status !== "ready")}
                 aria-describedby={operationDescription}
               >
                 <CalendarPlus className="size-4" />
                 {busy
                   ? "Saving…"
-                  : bookMode === "walk_in"
+                  : pendingBooking ? "Recover reservation" : bookMode === "walk_in"
                     ? "Add walk-in"
                     : "Save reservation"}
               </Button>
@@ -2803,6 +2888,12 @@ export function ReservationsWorkspace({
           workspace={workspace}
           model={model}
           reservation={editReservation}
+          onCommitted={(committed) => {
+            updateModel((current) => ({
+              ...current,
+              reservations: current.reservations.map((entry) => entry.id === committed.id && entry.version <= committed.version ? { ...entry, ...committed } : entry),
+            }));
+          }}
           onClose={() => setEditReservationTarget(null)}
           onCompleted={(nextMessage) => {
             setMessage(nextMessage);

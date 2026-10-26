@@ -6,6 +6,10 @@ The repository is intentionally isolated from the existing `le-yard` public webs
 
 ## Delivery status
 
+Square is the selected POS. Toast has been retired from active integrations, configuration, imports and staff instructions in this local readiness branch. Earlier dated documents that describe Toast as the attendance authority are superseded by this decision. Attendance and payroll sources still need to be confirmed; selecting Square POS does not configure them. See [current implementation status](docs/le-yard-os-expansion-status.md). These local changes have not been deployed.
+
+The isolated October 24 readiness branch adds a [connected current-floor service-day rehearsal](docs/connected-service-day-v2.md). It runs actual local Auth and workflow commands against synthetic records, replacing the retired v1 projection for command validation. A passing mechanical score remains separate from unresolved operational work and hosted/staff acceptance. Run it only with explicit private loopback fixture/status paths and a fresh synthetic service date; it does not deploy or contact providers.
+
 The codebase is a production-oriented release candidate with both a synthetic demo and tenant-scoped connected surfaces. The interface, database model, RLS policies, deterministic tip engine, CSV/PDF exports, PWA shell, authentication paths, private-file boundaries, realtime subscriptions, and guarded workflows are implemented. Connected mode is fail-safe: it never substitutes synthetic operational records, and controls remain visibly locked whenever their atomic database workflow or required owner policy is unavailable.
 
 An owner-approved Vercel Production playground can expose the synthetic demo at a stable public URL behind a temporary two-Owner application sign-in. "Production" here describes Vercel's hosting channel only: this remains a resettable product playground, not the restaurant's live back office. It is deliberately separate from Supabase Auth and from the public restaurant website. A new isolated Supabase project could not be created because the connected account already has two active projects at its free-project limit; those unrelated projects were not modified. Live production bootstrap remains intentionally blocked until the owners provide and approve:
@@ -60,7 +64,7 @@ flowchart LR
   Data --> RLS["Postgres + forced RLS"]
   RLS --> Storage["Private Storage + signed URLs"]
   RLS --> Realtime["Realtime channels"]
-  Next --> Adapters["CSV / Toast / Resy adapters"]
+  Next --> Adapters["Square source evidence / CSV / reservation adapters"]
   Next --> Exports["CSV + PDF generators"]
   Next --> Guarded["Cited deterministic analysis boundary"]
   Vercel["Vercel hosting"] --> Next
@@ -125,13 +129,15 @@ npm run typecheck
 npm run test
 npm run test:integration
 npm run test:db:pglite
-npm run test:rls
+RLS_TEST_DATABASE_URL="${RLS_TEST_DATABASE_URL:?Set the isolated loopback control URL}" npm run test:rls
 npm run test:e2e
 npm run test:a11y
 npm run build
 ```
 
 `npm run verify` runs lint, the read-only generated-database-contract check, TypeScript, unit tests, the portable migration/catalog integration check, and the production build. `npm run verify:full` adds the desktop/mobile browser suite and dependency audit. Native pgTAP RLS tests remain separate because they require the local Supabase stack.
+
+`npm run test:rls` creates and removes a clean disposable PostgreSQL 17 database, runs all four required SQL files, and fails on incomplete TAP plans. Set `RLS_TEST_DATABASE_URL` for the isolated control database; see [native RLS setup](tests/rls/README.md). It uses SQL JWT helpers; real Auth is a separate connected gate.
 
 `npm run verify:connected` is the production-like release-candidate gate. It adds native Supabase RLS tests, database lint, and the separate connected Playwright project. Before reading any role password or sending an Auth request, Playwright requires a nonce-bound HMAC from the exact Vercel Preview commit after a service-role-only RPC resolves a short-lived private marker for the isolated target, schema contract, and fixture revision. The release matrix requires synthetic Owner, Manager, Host, view-only, operate-only, denied, expired-assignment, and cross-location identities and fails when any fixture is absent. Its desktop/mobile core matrix is read-only and blocks unexpected writes; the isolated Employee chat probe remains opt-in behind the same attestation and exact mutation contract. `npm run test:e2e:connected:smoke` is a separately named loopback-only developer aid and is never release evidence.
 
@@ -140,7 +146,7 @@ The tip engine uses integer cents and minutes, deterministic largest-remainder a
 ## Security invariants
 
 - Only Owner and Admin roles can create, invite, suspend, or assign roles to users.
-- Owner administrative writes require Authenticator Assurance Level 2 in the database.
+- Owner administrative writes retain their explicit role and scope checks. Current connected Owners use password-only access; enrolled Supabase MFA factors remain optional and are not removed by the application.
 - Admins never create or retrieve an employee's existing password; invitees set their own.
 - The final active Owner cannot be removed or demoted.
 - Browser requests use a user JWT and remain subject to forced RLS.
@@ -177,6 +183,8 @@ docs/                     Operational and technical handoff
 
 ## Handoff documents
 
+- [Connected current-floor service-day rehearsal](docs/connected-service-day-v2.md)
+- [Business-conflict API and native database verification](docs/business-conflict-handling.md)
 - [Database and relationship model](docs/database.md)
 - [Permission matrix](docs/permission-matrix.md)
 - [Environment variables](docs/environment.md)
@@ -192,3 +200,12 @@ docs/                     Operational and technical handoff
 ## Deployment boundary
 
 The application is designed for Vercel and Supabase. The public restaurant website now contains the server-side reservation client and guest flow, but neither repository has been deployed by this work. The existing playground remains login-gated, synthetic, resettable, and nonpersistent because a third free Supabase project is currently unavailable. Follow the [reservation runbook](docs/reservations.md) and the live-production gate in the [owner runbook](docs/owner-runbook.md) only after the missing inputs, an isolated Supabase project, connected acceptance, and separate explicit live-production approval are present.
+
+
+Local readiness corrections (not deployed): current-scope revision counters replace cached private invalidation topics; unchanged service-shift reads no longer emit updates; bounded pre-shift reads prioritize the latest versions from each service/status before history. Native coverage includes all fourteen files (362 assertions, including44 Square source,21 SQL-warning,72 checklist-boundary 50 staffing and25 receiving-proposal checks). The actual-Auth and browser drills remain separate from physical staff, Square and hosted release acceptance.
+
+The local [Square source-evidence adapter](docs/square-source-evidence.md) adds an explicit provider, exact Sandbox mapping, read-only protocol client, private immutable source versions and atomic receipts. It follows the existing Owner-approved retry chain and keeps financial posting disabled. Fake-provider rehearsal is separate from real Square, reconciliation and live-use acceptance.
+
+Current implementation and acceptance status is maintained in [the version-bound register](docs/le-yard-os-expansion-status.md) and [permission matrix](docs/permission-matrix.md). Dated release/design snapshots are historical.
+
+[Workspace access checks](docs/workspace-access.md) explain current-context verification, covered offline states and the separate session/device acceptance gates.

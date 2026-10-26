@@ -339,10 +339,10 @@ try {
 
     insert into public.reservations (
       id, organization_id, location_id, reserved_at, party_size, status,
-      source, duration_minutes, booking_channel, version
+      source, duration_minutes, booking_channel, version, created_by
     ) values (
       'd9300000-0000-4000-8000-000000000001', '${ids.organization}', '${ids.location}',
-      '2026-08-10T03:55:00Z', 8, 'confirmed', 'manual', 90, 'staff', 1
+      '2026-08-10T03:55:00Z', 8, 'confirmed', 'manual', 90, 'staff', 1, '${ids.admin}'
     );
   `);
 

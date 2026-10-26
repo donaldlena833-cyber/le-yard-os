@@ -124,7 +124,7 @@ function PreshiftBrief({
       <div className="flex items-center gap-3">
         <span className="min-w-0 flex-1">
           <span className="block text-xs font-semibold">
-            {sentence(preshift.servicePeriod)} · {preshift.businessDate}
+            {sentence(preshift.servicePeriod)} · {preshift.businessDate} · Version {preshift.versionNumber}
           </span>
           <span className="mt-1 block text-xs text-[var(--ink-faint)]">
             {preshift.bookedCovers == null
@@ -162,7 +162,13 @@ function PreshiftBrief({
           </div>
         ) : null}
       </dl>
+      {preshift.supersededByVersionNumber ? (
+        <p className="mt-4 text-sm font-semibold text-[var(--ink-soft)]">
+          Replaced by version {preshift.supersededByVersionNumber}. Review the latest published brief above.
+        </p>
+      ) : null}
       {preshift.status === "published" &&
+      !preshift.supersededByVersionNumber &&
       !preshift.acknowledgedByCurrentEmployee ? (
         <Button
           size="sm"
@@ -184,11 +190,11 @@ function PreshiftBrief({
   );
 }
 const serviceControlRealtimeBindings = [
+  { table: "service_control_invalidation_signals", scope: "location" },
   { table: "service_availability_events", scope: "location" },
   { table: "manager_log_entries", scope: "location" },
-  { table: "preshifts", scope: "location" },
-  { table: "preshift_acknowledgements", scope: "location" },
 ] satisfies readonly RealtimeInvalidationBinding[];
+
 
 export function LiveServiceControlWorkspace({
   workspace,
@@ -207,7 +213,7 @@ export function LiveServiceControlWorkspace({
 
   const realtime = useRealtimeInvalidation({
     enabled: workspace.mode === "live" && result.ok,
-    channelName: `service-control:${workspace.activeLocation.id}`,
+    channelName: `service-control-signals:${workspace.organization.id}:${workspace.activeLocation.id}`,
     bindings: serviceControlRealtimeBindings,
     organizationId: workspace.organization.id,
     locationId: workspace.activeLocation.id,
@@ -398,7 +404,7 @@ export function LiveServiceControlWorkspace({
         <SectionHeading
           eyebrow="Live availability"
           title="Running low & 86"
-          detail="Internal status only; Toast is not changed."
+          detail="Internal status only; POS availability is not changed."
         />
         {model.canManageAvailability ? (
           <form
@@ -725,7 +731,7 @@ export function LiveServiceControlWorkspace({
         open={Boolean(availabilityReview)}
         labelledBy="confirm-service-availability"
         title={availabilityReview ? `Confirm ${availabilityReview.subjectLabel} update?` : "Confirm availability update?"}
-        description="This immediately changes the shared service status seen by the team. Toast is not changed."
+        description="This immediately changes the shared service status seen by the team. POS availability is not changed."
         confirmLabel="Confirm & update"
         confirmVariant={availabilityReview?.status === "eighty_sixed" ? "danger" : "accent"}
         busy={busy}

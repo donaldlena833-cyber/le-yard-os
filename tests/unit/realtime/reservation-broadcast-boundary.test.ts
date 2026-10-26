@@ -25,7 +25,7 @@ const todayWorkspace = readFileSync(
 );
 
 describe("reservation Realtime payload boundary", () => {
-  it("broadcasts scoped identity only and requires an exact reservation capability", () => {
+  it("preserves the historical identity-only upgrade boundary before the current-scope migration", () => {
     const functionBody = compatibilityMigration.match(
       /create or replace function public\.broadcast_reservation_change\(\)[\s\S]*?\n\$\$;/,
     )?.[0];
@@ -52,16 +52,14 @@ describe("reservation Realtime payload boundary", () => {
     expect(policy).not.toMatch(/can_access_location/);
   });
 
-  it("routes Today reservation invalidation through the same private topic", () => {
-    expect(todayWorkspace).not.toMatch(
-      /todayRealtimeBindings[\s\S]*?table:\s*"reservations"/,
-    );
-    expect(todayWorkspace).toMatch(
-      /channelName:\s*`reservations:\$\{workspace\.organization\.id\}:\$\{workspace\.activeLocation\.id\}`/,
-    );
-    expect(todayWorkspace).toMatch(/privateChannel:\s*true/);
-    expect(todayWorkspace).toMatch(
-      /todayReservationBroadcastEvents\s*=\s*\["INSERT",\s*"UPDATE",\s*"DELETE"\]/,
-    );
+  it("uses current-scope safe counters for Today, Host and Service", () => {
+    for (const path of ["src/components/today/live-today-workspace.tsx", "src/components/reservations/reservations-workspace.tsx", "src/components/service/live-service-control-workspace.tsx"]) {
+      const source = readFileSync(join(process.cwd(), path), "utf8");
+      expect(source).not.toMatch(/privateChannel:\s*true/);
+      expect(source).not.toMatch(/broadcastEvents:/);
+      expect(source).toMatch(/table: "(?:reservation|service_control)_invalidation_signals"/);
+    }
+    expect(todayWorkspace).toMatch(/table: "reservation_invalidation_signals"/);
+    expect(todayWorkspace).toMatch(/table: "service_control_invalidation_signals"/);
   });
 });

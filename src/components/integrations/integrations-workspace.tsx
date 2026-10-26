@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import type { IntegrationProvider, IntegrationSync } from "@/types";
 
 const providerMarks: Record<IntegrationProvider, string> = {
-  toast: "T",
+  square: "S",
   resy: "R",
   csv: "CSV",
   payroll: "P",
@@ -101,7 +101,7 @@ export function IntegrationsWorkspace() {
 
       <section className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">
         <Metric label="Connected" value={`${configured}/${connections.length}`} detail="Live or manual adapters" />
-        <Metric label="Last successful sync" value="—" detail="Connect Toast or Resy" />
+        <Metric label="Last successful sync" value="—" detail="Connect an approved source" />
         <Metric label="Records · 7d" value={syncs.reduce((sum, sync) => sum + sync.recordsWritten, 0).toLocaleString()} detail="Validated and accepted" />
         <Metric label="Failed jobs" value={String(failures)} detail="Exponential retry enabled" trend={{ label: failures ? "Review" : "Clear", tone: failures ? "negative" : "positive" }} />
       </section>
@@ -139,7 +139,7 @@ export function IntegrationsWorkspace() {
 
       <div className="mt-7 grid gap-3 sm:grid-cols-2">
         <div className="flex items-start gap-3 rounded-[16px] bg-[var(--positive-soft)] px-4 py-3 text-xs leading-4 text-[var(--positive)]"><ShieldCheck className="mt-0.5 size-4 shrink-0" /><span>Credential ciphertext lives in a private database schema unavailable to browser roles. The UI stores only a connection status and masked hint.</span></div>
-        <div className="flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" /><span>Toast write access and Resy access remain disabled until the restaurant supplies approved credentials and authorizes production sync.</span></div>
+        <div className="flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-xs leading-4 text-[var(--warning)]"><CircleAlert className="mt-0.5 size-4 shrink-0" /><span>Provider access remains disabled until the restaurant supplies approved credentials and verifies the connection scope.</span></div>
       </div>
 
       <AnimatePresence>{selected ? (() => {

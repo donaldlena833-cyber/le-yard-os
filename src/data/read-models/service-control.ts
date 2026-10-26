@@ -40,6 +40,8 @@ export interface ManagerLogEntry {
 
 export interface PreshiftRecord {
   id: string;
+  versionNumber: number;
+  supersededByVersionNumber: number | null;
   businessDate: string;
   servicePeriod: string;
   status: string;
@@ -180,12 +182,20 @@ export async function loadLiveServiceControl(
         id: string;
         business_date: string;
         service_period: string;
+        version_number: number;
         status: string;
       } =>
         Boolean(
-          row.id && row.business_date && row.service_period && row.status,
+          row.id && row.business_date && row.service_period && row.status &&
+          typeof row.version_number === "number" && Number.isInteger(row.version_number) && row.version_number > 0,
         ),
     );
+    const latestPublishedVersion = new Map<string, number>();
+    for (const row of preshiftRows) {
+      if (row.status !== "published") continue;
+      const scope = `${row.business_date}:${row.service_period}`;
+      latestPublishedVersion.set(scope, Math.max(latestPublishedVersion.get(scope) ?? 0, row.version_number));
+    }
     const preshiftIds = preshiftRows.map((row) => row.id);
     const acknowledgementResult = preshiftIds.length
       ? await supabase
@@ -249,6 +259,11 @@ export async function loadLiveServiceControl(
       })),
       preshifts: preshiftRows.map((row) => ({
         id: row.id,
+        versionNumber: row.version_number,
+        supersededByVersionNumber:
+          (latestPublishedVersion.get(`${row.business_date}:${row.service_period}`) ?? 0) > row.version_number
+            ? latestPublishedVersion.get(`${row.business_date}:${row.service_period}`)!
+            : null,
         businessDate: row.business_date,
         servicePeriod: row.service_period,
         status: row.status,

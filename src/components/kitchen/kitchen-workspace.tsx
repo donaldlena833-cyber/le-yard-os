@@ -133,7 +133,7 @@ export function KitchenWorkspace() {
           <Button disabled={!canEdit} variant="secondary" className="mt-4" onClick={addIngredient}><Plus className="size-4" /> Add ingredient</Button>
           <div className="mt-7 flex flex-col gap-4 border-t border-[var(--line)] pt-6 sm:flex-row sm:items-end sm:justify-between">
             <div><p className="text-xs text-[var(--ink-faint)]">Estimated portion cost</p><p className="numeric mt-1 text-3xl font-semibold tracking-[-0.05em]">${recipeCost(selected).toFixed(2)}</p></div>
-            <div className="flex flex-wrap gap-2"><Button variant="quiet" onClick={archiveRecipe} disabled={!canEdit || !selected.active}><X className="size-4" /> Archive</Button><Button disabled={!canEdit} variant="accent" onClick={() => setNotice(`${selected.name} saved. Inventory cost will recalculate from the latest item prices.`)}><Save className="size-4" /> Save recipe</Button></div>
+            <div className="flex flex-wrap gap-2"><Button variant="quiet" onClick={archiveRecipe} disabled={!canEdit || !selected.active}><X className="size-4" /> Archive</Button><Button disabled={!canEdit} variant="accent" onClick={() => setNotice(`${selected.name} updated in this demo. Changes reset when you reload; no inventory records were saved.`)}><Save className="size-4" /> Save recipe</Button></div>
           </div>
         </Surface>
       </section>

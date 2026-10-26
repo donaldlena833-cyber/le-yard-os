@@ -154,7 +154,7 @@ export async function loadLiveIntegrations(
 
     if (connectionResult.error || importResult.error || auditResult.error) return readFailure();
 
-    const connections = connectionResult.data ?? [];
+    const connections = (connectionResult.data ?? []).filter((connection) => connection.provider !== "toast");
     const connectionIds = connections.map((connection) => connection.id);
     const connectionById = new Map(connections.map((connection) => [connection.id, connection]));
     const emptyResult = Promise.resolve({ data: [], error: null });

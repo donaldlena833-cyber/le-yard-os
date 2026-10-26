@@ -52,11 +52,15 @@ const lifecycleResult = {
 };
 
 function context(result: unknown) {
-  const rpc = vi.fn(async () => ({ data: result, error: null }));
+  const client = { rpc: vi.fn(async function(this: unknown): Promise<{data: unknown; error: null}> {
+    expect(this, "Supabase RPC must retain its client receiver").toBe(client);
+    return { data: result, error: null };
+  }) };
+  const rpc = client.rpc;
   return {
     rpc,
     workflow: {
-      supabase: { rpc },
+      supabase: client,
       actor: {
         userId: "10000000-0000-4000-8000-000000000001",
         aal: "aal2",

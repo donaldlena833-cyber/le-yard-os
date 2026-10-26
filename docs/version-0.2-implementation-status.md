@@ -1,3 +1,5 @@
+> Historical dated status/design snapshot. Current implementation and acceptance boundaries are in the [current register](le-yard-os-expansion-status.md); this snapshot is not current release proof.
+
 # Le Yard OS Version 0.2 Implementation Status
 
 Branch: `codex/le-yard-os-v0-2-operational-authoring`
@@ -178,3 +180,7 @@ Initial tracked status document created:
 - Added forward migration `20260813144236_toast_labor_time_entry_sync.sql` with provider identities, deletion markers, a location-safe sync-health read, and a service-role-only replay-safe Toast time-entry/break ingestion command.
 - Added a protected Toast Labor worker, read-only connected/demo Time Clock surfaces, fail-closed employee/job mappings, provider freshness, and durable row outcomes. Production activation still requires approved credentials and a scheduler calling the canonical origin.
 - Verification: generated contract PASS (139 tables, 3 views, 262 functions, 16 enums); portable migration/Toast replay checks PASS; TypeScript PASS; unit suite PASS (756 tests across 134 files); production build PASS.
+
+## October25 local prep readiness correction
+
+The isolated118-migration review captures published prep formulas and units, current-authority/original-actor retries and inventory snapshot conflict guards. Native418, concurrency26, actual API25 and browser15 checks pass; full1488 units and build/types/type/lint pass after explicit actual-yield, recorded-yield visibility and restaurant-zone deadline corrections. Legacy adoption is explicit and historical data is preserved. This is local evidence, not a hosted release, production planner, food-policy approval or physical staff acceptance.

@@ -1,6 +1,19 @@
 # Full-service-day-v1 pressure test
 
-`full-service-day-v1` is the canonical, fixed-clock Le Yard service fixture. It is synthetic and nonproduction-only. One manifest drives Today, Host, Service Control, kitchen/Prep, Inventory, Income, Closeout, and Reports.
+`full-service-day-v1` is a historical, fixed-clock projection fixture. It uses the retired 17-table floor and is not the current readiness acceptance scenario. The [connected service-day v2 rehearsal](connected-service-day-v2.md) replaces it for current-floor command validation. This historical manifest still drives the demonstration projections in Today, Host, Service Control, kitchen/Prep, Inventory, Income, Closeout, and Reports; those screens are not evidence that its projected events were executed.
+
+## October 24 readiness finding
+
+This historical fixture uses the retired 17-table / 68-seat floor, rather than
+the current DD08 20-table / 40-seat definition. Its event results and timings are
+scripted projections, not measured connected commands. It must not be used to
+accept current room capacity or real response times.
+
+The scorecard now checks observed result codes and unresolved exceptions. The
+existing fixture finishes with two unresolved exceptions, so a replay correctly
+fails locally. Do not clear that count to make a test green: reconcile the
+exceptions with named resolution or accepted handoff evidence in the replacement
+current-floor scenario.
 
 ## Locked outcomes
 

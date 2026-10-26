@@ -20,6 +20,7 @@ import {
   loadReservationLifecycleHeadAction,
   modifyReservationAction,
 } from "@/app/actions/workflows/reservations";
+import { StaffTurnPolicyNotice, useStaffTurnPolicy } from "@/components/reservations/staff-turn-policy";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { FormField } from "@/components/ui/form-field";
@@ -169,12 +170,14 @@ export function ReservationEditDialog({
   reservation,
   onClose,
   onCompleted,
+  onCommitted,
 }: {
   workspace: WorkspaceContextValue;
   model: ReservationHostModel;
   reservation: ReservationSummary;
   onClose: () => void;
   onCompleted: (message: string) => void;
+  onCommitted?: (update: Pick<ReservationSummary, "id" | "version" | "startsAt" | "durationMinutes" | "partySize" | "specialRequests" | "tableIds" | "policyEvidenceCaptured">) => void;
 }) {
   const router = useRouter();
   const titleId = useId();
@@ -219,6 +222,15 @@ export function ReservationEditDialog({
     (!sourceOwned ||
       !["booked", "confirmed"].includes(currentReservation.status)) &&
     !recoveringUnconfirmed;
+
+  const [reviewPolicyHash, setReviewPolicyHash] = useState<string | null>(null);
+  const draftStartsAt = zonedLocalToIso(draft.date, draft.time, model.timeZone);
+  const turnPolicy = useStaffTurnPolicy(
+    draftStartsAt && Number.isInteger(Number(draft.partySize)) && Number(draft.partySize) >= 1 && Number(draft.partySize) <= 100
+      ? { locationId: workspace.activeLocation.id, startsAt: draftStartsAt, partySize: Number(draft.partySize), reservationId: currentReservation.id }
+      : null,
+    workspace.mode === "live" && !lifecycleUnavailable && !recoveringUnconfirmed,
+  );
 
   function requestDialogFocus(
     target: "edit-primary" | "review-back" | "review-save",
@@ -285,7 +297,7 @@ export function ReservationEditDialog({
     onClose();
   }
 
-  function reviewChanges(event: FormEvent<HTMLFormElement>) {
+  async function reviewChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setRecoveringUnconfirmed(false);
@@ -303,7 +315,24 @@ export function ReservationEditDialog({
       });
       return;
     }
-    const durationMinutes = Number(draft.durationMinutes);
+    let durationMinutes = Number(draft.durationMinutes);
+    if (workspace.mode === "live") {
+      const displayed = turnPolicy.quote;
+      if (turnPolicy.status !== "ready" || !displayed) {
+        setError({ code: "validation", message: "Wait for the current service policy before reviewing." });
+        return;
+      }
+      setBusy(true);
+      const checked = await turnPolicy.refresh();
+      setBusy(false);
+      if (!checked) { setError({ code: "validation", message: "The current service policy could not be confirmed. Retry before reviewing." }); return; }
+      if (checked.policyHash !== displayed.policyHash) {
+        setError({ code: "validation", message: "The service policy changed. Review the updated turn time, then continue." });
+        return;
+      }
+      durationMinutes = checked.durationMinutes;
+      setReviewPolicyHash(checked.policyHash);
+    }
     const partySize = Number(draft.partySize);
     const reason = draft.reason.trim();
     const durationInvalid =
@@ -374,6 +403,17 @@ export function ReservationEditDialog({
       onClose();
       return;
     }
+    if (!recoveringUnconfirmed) {
+      setBusy(true);
+      const checked = await turnPolicy.refresh();
+      setBusy(false);
+      if (!checked || checked.policyHash !== reviewPolicyHash || checked.durationMinutes !== reviewPayload.durationMinutes) {
+        setReviewPayload(null);
+        requestDialogFocus("edit-primary");
+        setError({ code: "validation", message: "The service policy changed or could not be confirmed. Review the current turn time before saving." });
+        return;
+      }
+    }
     const scope = `reservation-modify-${currentReservation.id}`;
     setBusy(true);
     setError(null);
@@ -405,6 +445,16 @@ export function ReservationEditDialog({
         return;
       }
       const result = response.data;
+      onCommitted?.({
+        id: result.id,
+        version: result.version,
+        startsAt: result.reservedAt,
+        durationMinutes: result.durationMinutes ?? currentReservation.durationMinutes,
+        partySize: result.partySize,
+        specialRequests: reviewPayload.specialRequests,
+        tableIds: reviewPayload.tableIds,
+        policyEvidenceCaptured: result.policyEvidenceCaptured,
+      });
       const notificationOutcome = result.guestNotificationQueued
         ? " A verified-channel guest update was queued."
         : " No guest update was queued; contact the guest manually through an approved channel.";
@@ -627,7 +677,7 @@ export function ReservationEditDialog({
                 <FormField
                   id="reservation-edit-duration"
                   label="Turn time"
-                  description="Enter any whole-minute duration from 15 to 720. Service policy is revalidated when you save."
+                  description={workspace.mode === "live" ? "Configured for this service and party size." : "Demo turn time; changes are not persisted."}
                   required
                   error={firstFieldError(error, "durationMinutes")}
                 >
@@ -637,13 +687,15 @@ export function ReservationEditDialog({
                     min={15}
                     max={720}
                     step={1}
-                    value={draft.durationMinutes}
+                    readOnly={workspace.mode === "live"}
+                    value={workspace.mode === "live" ? turnPolicy.quote?.durationMinutes ?? "" : draft.durationMinutes}
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, durationMinutes: event.target.value }))
                     }
                   />
                 </FormField>
               </div>
+              {workspace.mode === "live" ? <StaffTurnPolicyNotice policy={turnPolicy} /> : null}
               <FormField id="reservation-edit-requests" label="Requests and notes">
                 <textarea
                   rows={3}
@@ -686,7 +738,7 @@ export function ReservationEditDialog({
                   <Button
                     type="submit"
                     variant="accent"
-                    disabled={busy || staleUnresolved || lifecycleUnavailable}
+                    disabled={busy || staleUnresolved || lifecycleUnavailable || (workspace.mode === "live" && turnPolicy.status !== "ready")}
                   >
                     Review changes
                   </Button>

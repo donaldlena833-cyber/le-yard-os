@@ -254,7 +254,7 @@ describe("ServiceDaySnapshot", () => {
       deriveProviderHealth(
         [
           {
-            provider: "toast",
+            provider: "square",
             display_name: "POS",
             status: "connected",
             last_synced_at: "2026-08-09T21:00:00.000Z",
@@ -274,7 +274,7 @@ describe("ServiceDaySnapshot", () => {
       state: "degraded",
       providers: [
         {
-          provider: "toast",
+          provider: "square",
           displayName: "POS",
           state: "connected",
           syncFreshness: "stale",

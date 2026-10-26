@@ -19,12 +19,13 @@ describe("integration action schemas", () => {
       requestId: ids.request,
       uploadId: ids.upload,
       locationId: ids.location,
-      importType: "toast_sales",
+      importType: "inventory_items",
       fileName: "sales.csv",
       mimeType: "text/csv",
       sizeBytes: 4_096,
     };
     expect(manualCsvUploadUrlInputSchema.safeParse(upload).success).toBe(true);
+    expect(manualCsvUploadUrlInputSchema.safeParse({ ...upload, importType: "toast_sales" }).success).toBe(false);
     expect(
       finalizeManualCsvImportInputSchema.safeParse({
         ...upload,
@@ -44,7 +45,7 @@ describe("integration action schemas", () => {
       requestId: ids.request,
       uploadId: ids.upload,
       locationId: ids.location,
-      importType: "toast_sales",
+      importType: "inventory_items",
       fileName: "payload.xlsx",
       mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       sizeBytes: 4_096,

@@ -959,8 +959,8 @@ export function CloseoutWorkspace() {
         }
         actions={
           <>
-          {status === "draft" ? <><Button variant="secondary" size="sm" className="border-white/15 bg-white/10 text-white hover:bg-white/15" onClick={calculate}><Calculator className="size-3.5" /> Calculate</Button><Button variant="accent" size="sm" onClick={submitCloseout}><ShieldCheck className="size-3.5" /> Submit closeout</Button></> : null}
-          {status === "submitted" ? <><Button variant="quiet" size="sm" className="text-white/70 hover:bg-white/10 hover:text-white" onClick={returnToDraft}><RotateCcw className="size-3.5" /> Return to draft</Button><Button variant="accent" size="sm" onClick={approveCloseout} disabled={workspace.role !== "owner" || !submittedBy || submittedBy.userId === currentUserId} aria-describedby="closeout-approval-separation-note"><Check className="size-3.5" /> Owner approve</Button><span id="closeout-approval-separation-note" className="sr-only">Only a different owner from the submitter can approve this closeout.</span></> : null}
+          {status === "draft" ? <><Button variant="secondary" size="sm" onClick={calculate}><Calculator className="size-3.5" /> Calculate</Button><Button variant="accent" size="sm" onClick={submitCloseout}><ShieldCheck className="size-3.5" /> Submit closeout</Button></> : null}
+          {status === "submitted" ? <><Button variant="quiet" size="sm" onClick={returnToDraft}><RotateCcw className="size-3.5" /> Return to draft</Button><Button variant="accent" size="sm" onClick={approveCloseout} disabled={workspace.role !== "owner" || !submittedBy || submittedBy.userId === currentUserId} aria-describedby="closeout-approval-separation-note"><Check className="size-3.5" /> Owner approve</Button><span id="closeout-approval-separation-note" className="sr-only">Only a different owner from the submitter can approve this closeout.</span></> : null}
           {status === "approved" ? <Button variant="accent" size="sm" onClick={downloadPayroll}><ArrowDownToLine className="size-3.5" /> Payroll CSV</Button> : null}
           </>
         }

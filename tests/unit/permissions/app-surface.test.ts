@@ -50,7 +50,7 @@ describe("application surface selection", () => {
     for (const path of [
       "/phone", "/messages", "/le-yard-messages.vcf", "/api/phone",
       "/api/phone/media", "/api/phone/attachments", "/api/communications/groups",
-      "/api/communications/pilot", "/api/twilio/sms/owner-alert-status",
+      "/api/communications/pilot", "/api/twilio/sms/owner-alert-status", "/api/workspace/access",
       "/api/internal/communications/owner-alerts",
     ]) {
       expect(surface.isRequestPathAllowedForAppSurface(path), path).toBe(true);
@@ -59,7 +59,7 @@ describe("application surface selection", () => {
       "/today", "/reservations", "/messages/other", "/messages-admin",
       "/le-yard-messages.vcf.bak", "/api/communications", "/api/communications/admin",
       "/api/communications/groups/private", "/api/communications/pilot/private",
-      "/api/phone/attachments/private", "/api/exports/reports/csv",
+      "/api/phone/attachments/private", "/api/exports/reports/csv", "/api/workspace/access/extra",
     ]) {
       expect(surface.isRequestPathAllowedForAppSurface(path), path).toBe(false);
     }

@@ -58,6 +58,8 @@ export async function communicationsCreateReservation(request: Request, input: {
     p_first_name: input.firstName, p_last_name: input.lastName, p_email: input.email, p_phone: input.phone,
     p_special_requests: input.specialRequests ?? null, p_table_ids: slot.tableIds, p_available_channels: adapters,
   } as never);
+  if (error?.code === "PT409" || error?.code === "40001")
+    throw new BookingApiError(409, "reservation_changed", "Reservation details changed. Review the latest details and original request before trying again.");
   if (error?.code === "23P01" || error?.code === "23505")
     throw new BookingApiError(409, "slot_unavailable", "That time or request identifier is unavailable. Check the original request before retrying.");
   if (error) {

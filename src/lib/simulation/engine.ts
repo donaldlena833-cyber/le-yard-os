@@ -149,6 +149,14 @@ export function validateServiceScenario(
 
   const assignments = scenario.floor.assignments;
   assertScenario(
+    scenario.floor.targetPeakCovers <= scenario.floor.seatCount,
+    "peak covers cannot exceed floor seats",
+  );
+  assertScenario(
+    scenario.floor.targetOccupiedTables <= scenario.floor.tableCount,
+    "occupied tables cannot exceed floor tables",
+  );
+  assertScenario(
     new Set(assignments.map((assignment) => assignment.tableLabel)).size ===
       scenario.floor.targetOccupiedTables,
     "peak allocations must contain 17 unique tables",
@@ -406,7 +414,7 @@ export function buildServiceScorecard(
     check("dinner-covers", "Dinner covers", run.metrics.dinnerCompletedCovers === 60, "60", `${run.metrics.dinnerCompletedCovers}`, "Every completed dinner check maps to one cover total."),
     check("dinner-sales", "Dinner net sales", dinner.netSalesCents === 420_000 && run.metrics.dinnerNetSalesCents === 420_000, "$4,200", money(run.metrics.dinnerNetSalesCents), "Dinner gross less comps and voids equals dinner net."),
     check("dinner-mix", "Dinner menu mix", categoryQuantity("main") === 60 && categoryQuantity("starter") === 30 && categoryQuantity("dessert") === 24 && categoryQuantity("beverage") === 72, "60 mains / 30 starters / 24 desserts / 72 beverages", `${categoryQuantity("main")} / ${categoryQuantity("starter")} / ${categoryQuantity("dessert")} / ${categoryQuantity("beverage")}`, "Only sold lines count toward the requested mix; comps and voids remain separate facts."),
-    check("synthetic-pos", "Synthetic POS check adapter", posFixture.connectedProvider === null && checkGross === 556_000 && checkNet === 546_000 && checkCovers === 96 && checkCash === 109_200 && checkCard === 436_800 && checkTips === 106_680, "29 item-level checks / exact daily facts / no provider claim", `${posFixture.checks.length} checks / ${money(checkNet)} net / ${money(checkTips)} tips`, "Item-level checks emit service-period totals, tenders, tips, and ticket timing without claiming Toast connectivity."),
+    check("synthetic-pos", "Synthetic POS check adapter", posFixture.connectedProvider === null && checkGross === 556_000 && checkNet === 546_000 && checkCovers === 96 && checkCash === 109_200 && checkCard === 436_800 && checkTips === 106_680, "29 item-level checks / exact daily facts / no provider claim", `${posFixture.checks.length} checks / ${money(checkNet)} net / ${money(checkTips)} tips`, "Item-level checks emit service-period totals, tenders, tips, and ticket timing without claiming provider connectivity."),
     check("recipe-consumption", "Recipe consumption movements", posFixture.recipeConsumption.length > 0 && posFixture.recipeConsumption.every((movement) => movement.quantity > 0), "One positive movement per sold or comped recipe line", `${posFixture.recipeConsumption.length} append-only movements`, "Sold and comped recipe lines become inventory consumption; non-recipe beverages stay provider-neutral."),
     check("prep-inventory", "Prep, waste, and count expectations", posFixture.prepUsage.every((item) => item.plannedQuantity - item.usedQuantity === item.remainingQuantity) && posFixture.inventoryExpectations.every((item) => item.startingQuantity - item.recipeConsumptionQuantity - item.wasteQuantity === item.expectedCountQuantity && item.finalCountQuantity === item.expectedCountQuantity && item.finalCountQuantity >= 0 && item.varianceResolved) && posFixture.waste.length === 2, "No negative stock / two structured waste movements / resolved blind count", `${posFixture.inventoryExpectations.length} count expectations / ${posFixture.waste.length} waste movements`, "Recipe usage, structured waste, and the corrected blind count reconcile to nonnegative final quantities."),
     check("floor-peak", "Dining room peak", run.metrics.dinnerSeatedCovers === 60 && run.metrics.dinnerOccupiedTables === 17, "60 covers / 17 tables", `${run.metrics.dinnerSeatedCovers} covers / ${run.metrics.dinnerOccupiedTables} tables`, "All table labels are unique at the peak checkpoint."),
@@ -414,7 +422,8 @@ export function buildServiceScorecard(
     check("tenders", "Tender reconciliation", fullCash === 109_200 && fullCard === 436_800 && fullCash + fullCard === fullNet, "$1,092 cash / $4,368 card", `${money(fullCash)} cash / ${money(fullCard)} card`, "Cash plus card equals net sales exactly."),
     check("tips", "Tip reconciliation", totalTips === scenario.expectations.tipsCents, "$1,066.80", money(totalTips), "Cash and card tips balance to the cent."),
     check("cash-movements", "Derived closing drawer", cashMovementBalance === scenario.expectations.expectedClosingDrawerCents, "$552", money(cashMovementBalance), "Append-only opening bank, sales, paid-out, and drop movements derive the drawer."),
-    check("event-ledger", "Deterministic event ledger", run.status === "completed" && run.ledger.length === scenario.events.length && uniqueLedgerEvents === scenario.events.length && run.ledger.every((entry) => entry.status === PASSED), `${scenario.events.length} unique passed events`, `${run.ledger.length} ledger entries / ${uniqueLedgerEvents} unique`, "Every fixture event has actor, expected and observed results, timings, and audit references."),
+    check("event-ledger", "Deterministic event ledger", run.status === "completed" && run.ledger.length === scenario.events.length && uniqueLedgerEvents === scenario.events.length && run.ledger.every((entry, index) => entry.status === PASSED && entry.eventId === scenario.events[index]?.id && entry.expectedCode === scenario.events[index]?.expectedCode && entry.observedCode === scenario.events[index]?.expectedCode), `${scenario.events.length} unique passed events with matching observed results`, `${run.ledger.length} ledger entries / ${uniqueLedgerEvents} unique`, "Every fixture event has actor, expected and observed results, timings, and audit references. Observed result codes must match the ordered scenario contract."),
+    check("unresolved-exceptions", "Unresolved exceptions", run.metrics.openExceptions === 0, "0", `${run.metrics.openExceptions}`, "A completed replay cannot pass while any operational exception remains unresolved."),
     check("command-latency", "Command acknowledgement p95", commandP95Ms <= scenario.expectations.commandP95BudgetMs, `≤ ${scenario.expectations.commandP95BudgetMs} ms`, `${commandP95Ms} ms`, "Deterministic local adapter timing; connected preview remains a separate gate."),
     check("refresh-latency", "Authoritative refresh p95", refreshP95Ms <= scenario.expectations.refreshP95BudgetMs, `≤ ${scenario.expectations.refreshP95BudgetMs} ms`, `${refreshP95Ms} ms`, "Deterministic local adapter timing; connected preview remains a separate gate."),
   ];

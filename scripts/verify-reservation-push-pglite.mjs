@@ -15,6 +15,7 @@ const ids = {
   org: "20000000-0000-4000-8000-000000000001",
   location: "30000000-0000-4000-8000-000000000001",
   user: "10000000-0000-4000-8000-000000000004",
+  creator: "10000000-0000-4000-8000-000000000001",
   reservation: "fa000000-0000-4000-8000-000000000001",
   subscription: "fa100000-0000-4000-8000-000000000001",
   notificationA: "fa200000-0000-4000-8000-000000000001",
@@ -131,15 +132,24 @@ try {
   await db.exec(await readFile(join(root, "supabase", "seed.sql"), "utf8"));
 
   const t0 = "2035-01-01T17:00:00.000Z";
+  // The push subject remains a staff reservation with valid admission evidence.
+  await db.query(`insert into public.reservation_service_periods (
+    organization_id,location_id,name,days_of_week,starts_local,ends_local,
+    default_duration_minutes,pacing_interval_minutes,pacing_cover_limit,
+    min_party_size,max_party_size,effective_from,effective_to,
+    online_enabled,is_active,approved_at,approved_by
+  ) values ($1,$2,'Synthetic push fixture service',array[0,1,2,3,4,5,6],
+    '11:00','15:00',90,15,12,1,8,'2035-01-02','2035-01-02',false,true,now(),$3)`,
+  [ids.org,ids.location,ids.creator]);
   await db.query(
     `insert into public.reservations (
       id, organization_id, location_id, reserved_at, duration_minutes,
-      party_size, status, source, booking_channel
+      party_size, status, source, booking_channel, created_by
     ) values (
       $1::uuid, $2::uuid, $3::uuid, $4::timestamptz + interval '1 day',
-      90, 2, 'booked', 'manual', 'staff'
+      90, 2, 'booked', 'manual', 'staff', $5::uuid
     )`,
-    [ids.reservation, ids.org, ids.location, t0],
+    [ids.reservation, ids.org, ids.location, t0, ids.creator],
   );
   await db.query(
     `insert into public.reservation_settings (

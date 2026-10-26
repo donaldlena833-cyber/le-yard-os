@@ -91,13 +91,13 @@ describe("connected Operations UI", () => {
       />,
     );
 
-    expect(markup).toContain("Server-backed");
+    expect(markup).toContain("Tasks &amp; SOPs");
     expect(markup).toContain("Connecting live updates");
     expect(markup).toContain("Management controls");
     expect(markup).toContain("Main Dining Room");
-    expect(markup).toContain("No tasks in this location scope");
+    expect(markup).toContain("No tasks yet");
     expect(markup).toContain("Create task");
-    expect(markup).toContain("server-owned commands");
+    expect(markup).toContain("No tasks yet");
     expect(markup).not.toContain("Confirm ice machine service window");
     expect(markup).not.toContain("Route 66");
   });

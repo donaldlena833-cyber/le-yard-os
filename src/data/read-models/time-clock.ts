@@ -101,7 +101,7 @@ export interface LiveTimeClockModel {
   roster: LiveRosterRow[];
   corrections: LiveTimeCorrection[];
   posSource: {
-    provider: "toast";
+    provider: null;
     connectionStatus: string;
     lastSyncedAt: string | null;
     lastJobStatus: string | null;
@@ -182,7 +182,7 @@ export async function loadLiveTimeClock(
     const broadStart = new Date(nowMs - 36 * 60 * 60 * 1_000).toISOString();
     const broadEnd = new Date(nowMs + 48 * 60 * 60 * 1_000).toISOString();
 
-    const [employeeResult, scheduleResult, syncStatusResult] = await Promise.all([
+    const [employeeResult, scheduleResult] = await Promise.all([
       supabase
         .from("employees")
         .select("id, display_name")
@@ -198,9 +198,8 @@ export async function loadLiveTimeClock(
         .eq("status", "published")
         .order("week_start", { ascending: false })
         .limit(8),
-      supabase.rpc("get_pos_labor_sync_status", { p_location_id: locationId }),
     ]);
-    if (employeeResult.error || scheduleResult.error || syncStatusResult.error) {
+    if (employeeResult.error || scheduleResult.error) {
       return readFailure();
     }
 
@@ -471,8 +470,7 @@ export async function loadLiveTimeClock(
     const assignedRoleIds = new Set(
       (assignmentResult.data ?? []).map((assignment) => assignment.job_role_id),
     );
-    const syncStatus = syncStatusResult.data?.[0] ?? null;
-    const lastSyncedAt = syncStatus?.last_synced_at ?? null;
+
     return readSuccess({
       date,
       timeZone,
@@ -530,13 +528,12 @@ export async function loadLiveTimeClock(
         ];
       }),
       posSource: {
-        provider: "toast",
-        connectionStatus: syncStatus?.connection_status ?? "not_configured",
-        lastSyncedAt,
-        lastJobStatus: syncStatus?.last_job_status ?? null,
-        lastJobCompletedAt: syncStatus?.last_job_completed_at ?? null,
-        stale:
-          !lastSyncedAt || nowMs - new Date(lastSyncedAt).getTime() > 15 * 60_000,
+        provider: null,
+        connectionStatus: "not_configured",
+        lastSyncedAt: null,
+        lastJobStatus: null,
+        lastJobCompletedAt: null,
+        stale: true,
       },
     });
   } catch {

@@ -136,6 +136,28 @@ afterEach(() => {
 });
 
 describe("public reservation API contracts", () => {
+  it.each((["POST", "PATCH", "DELETE"] as const).flatMap(method => ["PT409", "40001"].map(code => ({ method, code }))))(
+    "returns a reviewable conflict for a stale $method response using $code",
+    async ({ method, code }) => {
+      mocks.rpc.mockResolvedValueOnce({ data: null, error: { code, message: "private replay details" } });
+      const handlers = await import("@/app/api/v1/reservations/route");
+      const body = method === "DELETE" ? { reason: "Guest cancellation" } : {
+        slotToken: "x".repeat(80), partySize: 2,
+        ...(method === "POST" ? { firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", phone: "+1 212 555 0100" } : {}),
+      };
+      const response = await handlers[method](new Request("https://os.example/api/v1/reservations", {
+        method,
+        headers: { "content-type": "application/json", "idempotency-key": "55555555-5555-4555-8555-555555555555", "x-booking-manage-token": "synthetic-manage-token" },
+        body: JSON.stringify(body),
+      }));
+      expect(response.status).toBe(409);
+      const payload = await response.json();
+      expect(payload.error.code).toBe("reservation_changed");
+      expect(payload.error.message).toContain("original request");
+      expect(JSON.stringify(payload)).not.toContain("private replay details");
+    },
+  );
+
   it("lets the emergency environment gate pause new public reservations", async () => {
     process.env.RESERVATION_PUBLIC_BOOKING_ENABLED = "false";
     const { POST } = await import("@/app/api/v1/reservations/route");

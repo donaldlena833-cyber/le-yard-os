@@ -458,7 +458,7 @@ export function TodayWorkspace() {
               Good afternoon, {firstName}.
             </h2>
             <p className="mt-4 max-w-lg text-sm leading-6 text-white/55">
-              Live sales, reservations, receipts, and inventory will appear here as Toast, Resy, and vendor data are connected.
+              Live sales, reservations, receipts, and inventory will appear here as approved Square, reservation and vendor sources are connected.
             </p>
           </div>
           <div className="flex items-end gap-10 border-t border-white/10 pt-5 xl:border-0 xl:pt-0">
@@ -479,7 +479,7 @@ export function TodayWorkspace() {
       <section aria-label="Today’s key metrics" className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Covers" value="—" detail="Connect Resy to import reservations" />
         <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Scheduled labor" value="—" detail="Publish a live schedule" />
-        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Projected sales" value="—" detail="Connect Toast to import sales" />
+        <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Projected sales" value="—" detail="Square source reconciliation pending" />
         <Metric className="rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] !px-4" label="Prep complete" value="—" detail="No checklist data yet" />
       </section>
 

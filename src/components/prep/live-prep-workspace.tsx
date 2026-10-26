@@ -76,8 +76,8 @@ function requestId() {
   return crypto.randomUUID();
 }
 
-function timeLabel(value: string) {
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(
+function timeLabel(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short", timeZone }).format(
     new Date(value),
   );
 }
@@ -118,7 +118,7 @@ export function LivePrepWorkspace({
   const [draft, setDraft] = useState<DraftForm | null>(model ? newDraft(model) : null);
   const [reviewDraft, setReviewDraft] = useState(false);
   const [pendingTask, setPendingTask] = useState<LivePrepTask | null>(null);
-  const [pendingCommand, setPendingCommand] = useState<"publish" | "complete" | "correct" | null>(null);
+  const [pendingCommand, setPendingCommand] = useState<"publish" | "bind_formula" | "complete" | "correct" | null>(null);
   const [actualYieldByTask, setActualYieldByTask] = useState<Record<string, string>>({});
   const [completionPreview, setCompletionPreview] = useState<CompletionPreview | null>(null);
   const [overrideShortage, setOverrideShortage] = useState(false);
@@ -208,9 +208,9 @@ export function LivePrepWorkspace({
   }
 
   async function reviewCompletion(task: LivePrepTask) {
-    const yieldValue = Number(actualYieldByTask[task.id] || task.targetQuantity);
+    const yieldValue = Number(actualYieldByTask[task.id] ?? "");
     if (!Number.isFinite(yieldValue) || yieldValue <= 0) {
-      setNotice({ tone: "error", message: "Actual yield must be greater than zero." });
+      setNotice({ tone: "error", message: "Enter an actual yield greater than zero." });
       return;
     }
     setBusy(true);
@@ -340,21 +340,33 @@ export function LivePrepWorkspace({
             <Surface key={task.id} variant="outlined" padding="md" as="article">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-semibold tracking-[0.1em] text-[var(--ink-faint)] uppercase">{task.station} · due {timeLabel(task.dueAt)}</p>
+                  <p className="text-xs font-semibold tracking-[0.1em] text-[var(--ink-faint)] uppercase">{task.station} · due {timeLabel(task.dueAt, model.timeZone)}</p>
                   <h3 className="mt-2 text-lg font-semibold">{task.recipeName ?? task.outputItemName}</h3>
                   <p className="mt-1 text-sm text-[var(--ink-faint)]">Target {task.targetQuantity} {task.targetUnitSymbol} · {task.assigneeName ?? "Unassigned"}</p>
                 </div>
                 <StatusPill tone={stateTone[task.state]}>{task.state.replace("_", " ")}</StatusPill>
               </div>
+              {task.formulaCapturedAt ? (
+                <p className="mt-3 text-xs text-[var(--ink-soft)]">
+                  {task.formulaRecipeVersion ? `Recipe v${task.formulaRecipeVersion}` : "Captured formula"}
+                  {" · "}Captured {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: model.timeZone }).format(new Date(task.formulaCapturedAt))}
+                </p>
+              ) : task.needsFormulaReview ? (
+                <p className="mt-3 rounded-xl bg-[var(--warning-soft)] px-3 py-2 text-xs text-[var(--warning)]">
+                  A manager must review the current formula before this existing task can start or complete.
+                </p>
+              ) : null}
+              {task.actualYield !== null ? <p className="mt-3 text-sm font-semibold">Recorded yield: {task.actualYield} {task.targetUnitSymbol}</p> : null}
               {task.note ? <p className="mt-4 text-sm leading-6 text-[var(--ink-soft)]">{task.note}</p> : null}
               {task.stockOverride ? <p className="mt-4 flex items-center gap-2 rounded-xl bg-[var(--warning-soft)] px-3 py-2 text-xs text-[var(--warning)]"><TriangleAlert className="size-4" />Completed with an acknowledged stock exception.</p> : null}
               {task.state === "corrected" ? <p className="mt-4 rounded-xl bg-[var(--canvas-strong)] px-3 py-2 text-xs text-[var(--ink-faint)]">Ledger reversed: {task.correctionNote}</p> : null}
               <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--line)] pt-4">
                 {task.state === "draft" && canManage ? <Button variant="accent" onClick={() => { setPendingTask(task); setPendingCommand("publish"); }}><Send className="size-4" /> Review & publish</Button> : null}
-                {task.state === "published" && canComplete ? <Button variant="secondary" disabled={busy} onClick={() => void finishAction(() => transitionPrepTaskAction({ requestId: requestId(), taskId: task.id, expectedVersion: task.version, command: "start" }), "Prep task started.")}><Play className="size-4" /> Start</Button> : null}
-                {["published", "in_progress"].includes(task.state) && canComplete ? (
+                {task.needsFormulaReview && canManage ? <Button variant="accent" onClick={() => { setPendingTask(task); setPendingCommand("bind_formula"); }}><ClipboardCheck className="size-4" /> Review existing formula</Button> : null}
+                {task.state === "published" && canComplete && !task.needsFormulaReview ? <Button variant="secondary" disabled={busy} onClick={() => void finishAction(() => transitionPrepTaskAction({ requestId: requestId(), taskId: task.id, expectedVersion: task.version, command: "start" }), "Prep task started.")}><Play className="size-4" /> Start</Button> : null}
+                {["published", "in_progress"].includes(task.state) && canComplete && !task.needsFormulaReview ? (
                   <div className="flex flex-1 flex-wrap gap-2">
-                    <input aria-label={`Actual yield for ${task.recipeName ?? task.outputItemName}`} className={`${inputClass} min-w-28 flex-1`} type="number" min="0.0001" step="0.0001" placeholder={`Actual ${task.targetQuantity}`} value={actualYieldByTask[task.id] ?? ""} onFocus={() => { setPendingTask(task); setActualYieldByTask({ [task.id]: actualYieldByTask[task.id] ?? String(task.targetQuantity) }); }} onChange={(event) => { setPendingTask(task); setActualYieldByTask({ [task.id]: event.target.value }); }} />
+                    <input aria-label={`Actual yield for ${task.recipeName ?? task.outputItemName}`} className={`${inputClass} min-w-28 flex-1`} type="number" min="0.0001" step="0.0001" placeholder="Enter actual yield" value={actualYieldByTask[task.id] ?? ""} onFocus={() => { setPendingTask(task); setActualYieldByTask({ [task.id]: actualYieldByTask[task.id] ?? "" }); }} onChange={(event) => { setPendingTask(task); setActualYieldByTask({ [task.id]: event.target.value }); }} />
                     <Button variant="accent" disabled={busy} onClick={() => void reviewCompletion(task)}>{busy && pendingTask?.id === task.id ? <LoaderCircle className="size-4 animate-spin" /> : <Check className="size-4" />} Review completion</Button>
                   </div>
                 ) : null}
@@ -382,15 +394,15 @@ export function LivePrepWorkspace({
       </ConfirmActionDialog>
 
       <ConfirmActionDialog
-        open={pendingCommand === "publish" && Boolean(pendingTask)}
+        open={(pendingCommand === "publish" || pendingCommand === "bind_formula") && Boolean(pendingTask)}
         labelledBy="prep-publish-review"
-        title="Publish this prep task?"
-        description="The task becomes actionable for the assigned station. Target, unit, due time, and assignee are frozen from the current draft version."
-        confirmLabel="Confirm & publish"
+        title={pendingCommand === "bind_formula" ? "Review the formula for this existing task?" : "Publish this prep task?"}
+        description={pendingCommand === "bind_formula" ? "Capture the current formula after checking the station instructions and any prep already done. This review records a new version of the plan." : "Recipe quantities and unit conversions are captured at publication with the target, unit, due time and assignee. Later recipe edits will not rewrite this plan."}
+        confirmLabel={pendingCommand === "bind_formula" ? "Capture reviewed formula" : "Confirm & publish"}
         confirmVariant="accent"
         busy={busy}
         onClose={() => { setPendingCommand(null); setPendingTask(null); }}
-        onConfirm={async () => { if (pendingTask) await finishAction(() => transitionPrepTaskAction({ requestId: requestId(), taskId: pendingTask.id, expectedVersion: pendingTask.version, command: "publish" }), "Prep task published."); }}
+        onConfirm={async () => { if (pendingTask) await finishAction(() => transitionPrepTaskAction({ requestId: requestId(), taskId: pendingTask.id, expectedVersion: pendingTask.version, command: pendingCommand === "bind_formula" ? "bind_formula" : "publish" }), pendingCommand === "bind_formula" ? "Current formula reviewed and captured." : "Prep task published."); }}
       >
         {pendingTask ? <p className="text-sm"><strong>{pendingTask.recipeName ?? pendingTask.outputItemName}</strong><br />{pendingTask.targetQuantity} {pendingTask.targetUnitSymbol} · {pendingTask.station} · {pendingTask.assigneeName ?? "Unassigned"}</p> : null}
       </ConfirmActionDialog>

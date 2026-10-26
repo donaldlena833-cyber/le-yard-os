@@ -218,7 +218,9 @@ export async function loadLiveSchedule(
 
     const employeeNames = new Map((employeeResult.data ?? []).map((employee) => [employee.id, employee.display_name]));
     const roleNames = new Map((jobRoleResult.data ?? []).map((role) => [role.id, role.name]));
-    const acknowledgedShiftIds = new Set((acknowledgementResult.data ?? []).map((ack) => ack.shift_id));
+    const acknowledgedAssignments = new Set(
+      (acknowledgementResult.data ?? []).map((ack) => `${ack.shift_id}:${ack.employee_id}`),
+    );
     const templateCounts = new Map<string, number>();
     for (const shift of templateShiftResult.data ?? []) {
       templateCounts.set(shift.template_id, (templateCounts.get(shift.template_id) ?? 0) + 1);
@@ -260,7 +262,8 @@ export async function loadLiveSchedule(
         status: shift.status,
         isOpen: shift.is_open,
         notes: shift.notes,
-        acknowledged: acknowledgedShiftIds.has(shift.id),
+        acknowledged: shift.employee_id !== null &&
+          acknowledgedAssignments.has(`${shift.id}:${shift.employee_id}`),
       })),
       employees: (employeeResult.data ?? []).map((employee) => ({ id: employee.id, name: employee.display_name })),
       jobRoles: (jobRoleResult.data ?? []).map((role) => ({ id: role.id, name: role.name, code: role.code })),

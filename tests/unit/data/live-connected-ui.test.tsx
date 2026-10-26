@@ -132,9 +132,9 @@ describe("connected Today UI", () => {
     );
 
     expect(markup).toContain("Connected · Main Dining Room");
-    expect(markup).toContain("Realtime: scoped invalidation");
-    expect(markup).toContain("Provider sync evidence: restricted");
-    expect(markup).toContain("No visible shifts today");
+    expect(markup).toContain("Live updates");
+    expect(markup).toContain("Integrations: restricted");
+    expect(markup).toContain("No shifts today");
     expect(markup).toContain("No live announcements yet");
     expect(markup).toContain("No closeout has been filed");
     expect(markup).not.toContain("Maya Chen");

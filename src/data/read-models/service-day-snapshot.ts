@@ -143,7 +143,7 @@ const sourceMaxAgeSeconds: Record<ServiceDaySource, number> = {
 };
 
 const providerSyncMaxAgeSeconds: Readonly<Record<string, number>> = {
-  toast: 15 * 60,
+  square: 15 * 60,
   resy: 15 * 60,
   payroll: 24 * 60 * 60,
   accounting: 24 * 60 * 60,
@@ -240,7 +240,7 @@ async function loadLiveProviderHealth(
       return readSuccess({ state: "restricted", providers: [] });
     }
     if (error) return readFailure("Provider health could not be loaded.");
-    return readSuccess(deriveProviderHealth((data ?? []) as ProviderRow[], new Date()));
+    return readSuccess(deriveProviderHealth(((data ?? []) as ProviderRow[]).filter((row) => row.provider !== "toast"), new Date()));
   } catch {
     return readFailure("Provider health could not be loaded.");
   }

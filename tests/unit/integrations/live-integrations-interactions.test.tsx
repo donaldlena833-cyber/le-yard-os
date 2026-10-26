@@ -114,12 +114,12 @@ describe("connected integration import interactions", () => {
     );
 
     const trigger = screen.getByRole("button", {
-      name: "Toast integration details",
+      name: "Square integration details",
     });
     trigger.focus();
     fireEvent.click(trigger);
 
-    const drawer = await screen.findByRole("dialog", { name: "Toast" });
+    const drawer = await screen.findByRole("dialog", { name: "Square" });
     expect(drawer.textContent).toContain("Credential material is intentionally absent");
     await waitFor(() => {
       expect(document.activeElement).toBe(
@@ -128,7 +128,7 @@ describe("connected integration import interactions", () => {
     });
 
     fireEvent.keyDown(document, { key: "Escape" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Toast" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Square" })).toBeNull());
     expect(document.activeElement).toBe(trigger);
   });
 
@@ -166,7 +166,7 @@ describe("connected integration import interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import CSV" }));
     const dialog = screen.getByRole("dialog", { name: "Validate and queue CSV" });
     const input = dialog.querySelector('input[type="file"]') as HTMLInputElement;
-    const content = "business_date,net_sales\n2026-08-01,1250.45\n";
+    const content = "name,base_unit\nTomatoes,each\n";
     const file = new File([content], "sales.csv", { type: "text/csv" });
     Object.defineProperty(file, "text", { value: async () => content });
     fireEvent.change(input, { target: { files: [file] } });
@@ -185,7 +185,7 @@ describe("connected integration import interactions", () => {
     >;
     expect(preparedInput).toMatchObject({
       locationId: workspace.activeLocation.id,
-      importType: "toast_sales",
+      importType: "inventory_items",
       fileName: "sales.csv",
       mimeType: "text/csv",
     });

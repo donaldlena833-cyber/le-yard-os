@@ -31,7 +31,7 @@ test("keeps the synthetic demo workspace available without a live MFA challenge"
   await expect(notificationTrigger).toBeFocused();
 
   if (isMobileProject(testInfo)) {
-    const openNavigation = page.getByRole("button", { name: "Open navigation" });
+    const openNavigation = page.getByRole("button", { name: "More", exact: true });
     await openNavigation.click();
     const drawer = page.getByRole("dialog", { name: "Le Yard OS" });
     await expect(drawer).toBeVisible();
@@ -52,7 +52,7 @@ test("exposes an accessible log out control and leaves no signed-in shell state"
   await openWorkspace(page, "/today", "Good afternoon, Donald.");
 
   if (isMobileProject(testInfo)) {
-    await page.getByRole("button", { name: "Open navigation" }).click();
+    await page.getByRole("button", { name: "More", exact: true }).click();
     await expect(
       page.getByRole("navigation", { name: "Mobile navigation", exact: true }),
     ).toBeVisible();
@@ -97,7 +97,7 @@ test("restores Time Clock instead of redirecting to Vendors", async ({ page }) =
 test("opens the realtime service-control surface", async ({ page }) => {
   await openWorkspace(page, "/service", "Service control");
   await expect(page.getByText("Steak frites", { exact: true })).toBeVisible();
-  await expect(page.getByText("Internal status only; Toast is not changed.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Internal status only; POS availability is not changed.", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("status").filter({ hasText: "No unresolved handoffs." }),
   ).toBeVisible();

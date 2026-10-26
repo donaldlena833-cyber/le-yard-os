@@ -149,9 +149,9 @@ Employee-document uploads use a five-part organization/location/employee path. A
 
 ## Integrations and AI
 
-Toast and Resy are represented by `integration_connections` adapters. The default adapter is manual/CSV and the application does not depend on live credentials. Sync jobs record direction, cursor, retry state, attempts, record-level results, and an append-only event history.
+Square source staging and optional reservation providers are represented by `integration_connections` adapters. The default adapter is manual/CSV and the application does not depend on live credentials. Sync jobs record direction, cursor, retry state, attempts, record-level results, and an append-only event history.
 
-Toast Labor is the authoritative source for attendance. `service_ingest_pos_time_entry` is a service-role-only, replay-safe boundary keyed by connection and Toast time-entry GUID. It rejects same-version/different-payload replays, ignores stale versions, preserves provider deletion markers, and replaces imported break facts without allowing browser writes. Employee mapping uses an explicit Toast identifier in `employee_number` or `payroll_reference`, then a unique email fallback; job mapping uses `job_roles.code`, then a unique normalized title fallback. Ambiguous mappings fail closed and leave record-level sync evidence.
+Attendance authority remains unconfigured. The unused prior POS client/worker/setup are retired; its former HTTP worker returns410. Historical `service_ingest_pos_time_entry` SQL names, enum values and source identities remain for audit/restore compatibility and do not establish a configured current attendance connection. Square source staging never posts timecards, payroll or canonical financial facts. See [Square source evidence](square-source-evidence.md).
 
 `income_sales_checks` is the provider-neutral latest-state sales fact used by the Income snapshot. Raw rows and external IDs are service-role only. `ingest_income_sales_check` supplies replay/stale-version protection, while `income_operating_snapshot` returns an exact-capability, location-scoped aggregate of live sales, labor accrual, recorded day costs, closeout evidence, and hourly planning signals.
 
@@ -216,3 +216,7 @@ The latest security migration revokes public-schema function execution from `PUB
 6. Configure platform point-in-time recovery/backups as approved, record backup evidence in `backup_runs`, and perform a restore drill.
 7. Approve explicit labor, break, overtime, tip, payroll-export, and retention rules before enabling them.
 8. Run RLS, migration lint, application integration, and Playwright workflows against the release candidate.
+
+### Opening Room timestamp wire contract
+
+The strict predicate in migration20261025052332 accepts a real ISO calendar date with T, required seconds,1–6 optional fractional digits, and Z or a colon offset through±15:59. It rejects locale dates, impossible days, year zero, leap seconds,24:00 and trailing characters. Opening Room uses the same42-case corpus. Inventory existing hosted JSON timestamp fields before rollout; retained local synthetic documents/history were compatible. Do not silently normalize history. Five clock-dependent reservation/acceptance readers are now VOLATILE without body or security changes. Native SQL-warning coverage is separate from actual Auth/Data API saves and hosted acceptance. Twenty-two analyzer warnings remain reviewed; the checklist pg_column_size boundary remains open.

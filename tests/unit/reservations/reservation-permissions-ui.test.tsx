@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReservationsWorkspace } from "@/components/reservations/reservations-workspace";
@@ -15,6 +16,7 @@ import { createDemoReservationModel } from "@/lib/reservations/demo";
 import type { ReservationHostPermissions } from "@/lib/reservations/model";
 
 const mocks = vi.hoisted(() => ({
+  quoteTurn: vi.fn(async (i: { startsAt: string; partySize: number }) => ({ ok: true, persisted: false, mode: "live", data: { ...i, durationMinutes: 73, serviceShiftId: "90000000-0000-4000-8000-000000000001", policyHash: "a".repeat(64) } })),
   assignTables: vi.fn(),
   cancelReservation: vi.fn(),
   loadLifecycleHead: vi.fn(),
@@ -34,6 +36,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/app/actions/workflows/reservations", () => ({
+  quoteStaffReservationTurnAction: mocks.quoteTurn,
   assignReservationTablesAction: mocks.assignTables,
   cancelReservationAction: mocks.cancelReservation,
   loadReservationLifecycleHeadAction: mocks.loadLifecycleHead,
@@ -252,7 +255,7 @@ describe("reservation host capability affordances", () => {
     );
   });
 
-  it("accepts any whole-minute turn from the database contract when staff book", async () => {
+  it("uses the configured nonstandard turn instead of a manual booking override", async () => {
     mocks.saveReservation.mockResolvedValue({
       ok: true,
       persisted: true,
@@ -278,7 +281,8 @@ describe("reservation host capability affordances", () => {
     fireEvent.change(screen.getByLabelText("Guest name"), {
       target: { value: "Flexible Turn" },
     });
-    fireEvent.change(duration, { target: { value: "73" } });
+    await waitFor(() => expect(duration).toHaveProperty("value", "73"));
+    expect(duration).toHaveProperty("readOnly", true);
     fireEvent.submit(dialog.querySelector("form")!);
 
     await waitFor(() => expect(mocks.saveReservation).toHaveBeenCalledOnce());
@@ -357,6 +361,41 @@ describe("reservation host capability affordances", () => {
         .querySelector('[data-state="active"]')?.textContent,
     ).toContain("Service");
     expect(mocks.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("uses the just-committed edit version for cancellation before refresh returns", async () => {
+    mocks.modifyReservation.mockImplementation(async (input) => ({
+      ok: true, persisted: true, mode: "live", data: {
+        id: input.reservationId, version: 8, status: "booked", reservedAt: input.reservedAt,
+        durationMinutes: input.durationMinutes, partySize: input.partySize,
+        revisionId: "90000000-0000-4000-8000-000000000002", revisionKind: "staff_modified",
+        policyEvidenceCaptured: true, guestNotificationQueued: false, replayed: false,
+      },
+    }));
+    mocks.cancelReservation.mockImplementation(async (input) => ({
+      ok: true, persisted: true, mode: "live", data: {
+        id: input.reservationId, version: 9, status: "cancelled", reservedAt: new Date().toISOString(),
+        durationMinutes: 73, partySize: 2, revisionId: "90000000-0000-4000-8000-000000000003",
+        revisionKind: "staff_cancelled", policyEvidenceCaptured: true, guestNotificationQueued: false, replayed: false,
+      },
+    }));
+    renderHost({ view: true, operate: true, override: false, configure: false }, currentDate, true,
+      model => { model.reservations.find(row => row.guest.displayName === "Nora Example")!.version = 7; });
+    fireEvent.click(screen.getByRole("button", { name: /Nora Example/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit / reschedule" }));
+    fireEvent.change(screen.getByLabelText(/^Time/), { target: { value: "20:10" } });
+    fireEvent.change(screen.getByLabelText(/Reason for change/), { target: { value: "Guest requested a later time." } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Review changes" })).toHaveProperty("disabled", false));
+    fireEvent.click(screen.getByRole("button", { name: "Review changes" }));
+    await screen.findByRole("dialog", { name: "Review reservation changes" });
+    fireEvent.click(screen.getByRole("button", { name: "Save revision" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Review reservation changes" })).toBeNull());
+    const actions = screen.getByRole("group", { name: "Actions for Nora Example" });
+    fireEvent.click(within(actions).getByRole("button", { name: "Cancel" }));
+    fireEvent.change(screen.getByLabelText(/Cancellation reason/), { target: { value: "Guest cancelled after the change." } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel reservation" }));
+    await waitFor(() => expect(mocks.cancelReservation).toHaveBeenCalledOnce());
+    expect(mocks.cancelReservation).toHaveBeenCalledWith(expect.objectContaining({ expectedVersion: 8 }));
   });
 
   it("inspects floor tables by default and assigns only after explicit mode", async () => {

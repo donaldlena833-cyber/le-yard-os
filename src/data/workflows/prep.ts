@@ -22,7 +22,7 @@ async function requirePrepCapability(
     context.actor,
     locationId,
   );
-  const { data, error } = await context.supabase.rpc("has_capability", {
+  const { data, error } = await context.supabase.rpc("has_current_location_capability", {
     p_organization_id: location.organizationId,
     p_location_id: location.id,
     p_capability_key: capability,
@@ -94,7 +94,9 @@ export async function transitionPrepTask(
   await requirePrepCapability(
     context,
     locationId,
-    input.command === "publish" ? "prep.manage" : "prep.complete",
+    input.command === "publish" || input.command === "bind_formula"
+      ? "prep.manage"
+      : "prep.complete",
   );
   const { data, error } = await context.supabase.rpc("transition_prep_task", {
     p_request_id: input.requestId,

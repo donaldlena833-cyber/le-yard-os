@@ -25,7 +25,7 @@ export function isRequestPathAllowedForAppSurface(pathname: string): boolean {
     return [
       "/", "/sign-in", "/invite", ...phoneWorkspacePaths,
       "/le-yard-messages.vcf", "/manifest.webmanifest", "/offline.html", "/offline.css", "/sw.js",
-      "/api/health", "/api/phone", "/api/phone/media", "/api/phone/attachments",
+      "/api/health", "/api/workspace/access", "/api/phone", "/api/phone/media", "/api/phone/attachments",
       "/api/communications/groups", "/api/communications/pilot",
     ].includes(pathname)
       || pathname.startsWith("/auth/") || pathname.startsWith("/api/twilio/")

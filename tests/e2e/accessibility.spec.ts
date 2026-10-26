@@ -17,7 +17,7 @@ const keyRoutes: Array<{ path: string; heading: string | RegExp }> = [
   { path: "/receipts", heading: "Receipts & invoices" },
   { path: "/inventory", heading: "Inventory" },
   { path: "/guests", heading: "Guestbook" },
-  { path: "/team", heading: "Your whole team, in one place" },
+  { path: "/team", heading: "People" },
   { path: "/closeout", heading: "Closeout & tips" },
   { path: "/income", heading: "Income" },
   { path: "/reports", heading: "Reports" },

@@ -154,3 +154,27 @@ values ('90000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-0000000
 on conflict (id) do nothing;
 
 -- Deliberately no labor-law, break, overtime, tip, payroll, or retention policy defaults.
+
+-- GoTrue scans these token fields as strings. SQL-created synthetic users must
+-- use empty strings rather than NULL so local Auth can list and sign them in.
+do $$
+begin
+  -- Portable database harnesses intentionally have a minimal Auth table.
+  -- The native Supabase stack supplies these GoTrue-managed columns.
+  if exists (select 1 from information_schema.columns
+    where table_schema = 'auth' and table_name = 'users'
+      and column_name = 'confirmation_token') then
+    execute $tokens$
+      update auth.users set
+        confirmation_token = coalesce(confirmation_token, ''),
+        recovery_token = coalesce(recovery_token, ''),
+        email_change_token_new = coalesce(email_change_token_new, ''),
+        email_change = coalesce(email_change, ''),
+        phone_change_token = coalesce(phone_change_token, ''),
+        email_change_token_current = coalesce(email_change_token_current, ''),
+        reauthentication_token = coalesce(reauthentication_token, '')
+      where email like '%@example.invalid'
+    $tokens$;
+  end if;
+end
+$$;

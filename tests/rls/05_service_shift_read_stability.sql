@@ -1,0 +1,23 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+set local search_path=public,extensions;
+select plan(7);
+select set_config('request.jwt.claims','{"sub":"10000000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',true);
+insert into public.reservation_service_periods(id,organization_id,location_id,name,days_of_week,starts_local,ends_local,default_duration_minutes,pacing_interval_minutes,pacing_cover_limit,min_party_size,max_party_size,effective_from,effective_to)
+values ('a4500000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001','Read stability breakfast',array[0,1,2,3,4,5,6],'09:00','10:30',60,15,8,1,6,'2035-01-07','2035-01-07');
+select private.ensure_service_shifts('20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',array['2035-01-07'::date]);
+select is((select count(*) from public.service_shifts where service_period_id='a4500000-0000-4000-8000-000000000001'),1::bigint,'first read materializes one scoped shift');
+create temporary table shift_before as select id,ctid::text pointer,updated_at,materialized_at from public.service_shifts where service_period_id='a4500000-0000-4000-8000-000000000001';
+select private.ensure_service_shifts('20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',array['2035-01-07'::date]);
+select ok((select s.ctid::text=b.pointer from public.service_shifts s join shift_before b using(id)),'unchanged service read makes no physical UPDATE');
+select ok((select s.updated_at=b.updated_at and s.materialized_at=b.materialized_at from public.service_shifts s join shift_before b using(id)),'unchanged read preserves real update and materialization timestamps');
+update public.reservation_service_periods set pacing_cover_limit=9 where id='a4500000-0000-4000-8000-000000000001';
+select private.ensure_service_shifts('20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',array['2035-01-07'::date]);
+select ok((select s.pacing_cover_limit=9 and s.ctid::text<>b.pointer and s.source_updated_at=p.updated_at from public.service_shifts s join shift_before b using(id) join public.reservation_service_periods p on p.id=s.service_period_id),'a real policy change still updates the materialized shift and source version');
+create temporary table shift_after as select id,ctid::text pointer,updated_at,materialized_at from public.service_shifts where service_period_id='a4500000-0000-4000-8000-000000000001';
+select private.ensure_service_shifts('20000000-0000-4000-8000-000000000001','30000000-0000-4000-8000-000000000001',array['2035-01-07'::date]);
+select ok((select s.ctid::text=b.pointer and s.updated_at=b.updated_at and s.materialized_at=b.materialized_at from public.service_shifts s join shift_after b using(id)),'repeated reads settle after the real configuration change');
+select is((select count(*) from public.service_shifts where service_period_id='a4500000-0000-4000-8000-000000000001'),1::bigint,'repeat materialization does not duplicate the shift');
+select ok(not has_function_privilege('authenticated','private.ensure_service_shifts(uuid,uuid,date[])','EXECUTE'),'private materialization helper remains unavailable to browser roles');
+select * from finish();
+rollback;

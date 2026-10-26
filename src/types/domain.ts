@@ -607,7 +607,7 @@ export interface ReportSnapshot extends RecordIdentity, Timestamped {
   exportFileIds: EntityId[];
 }
 
-export type IntegrationProvider = "toast" | "resy" | "csv" | "payroll" | "accounting";
+export type IntegrationProvider = "square" | "resy" | "csv" | "payroll" | "accounting";
 
 export interface IntegrationConnection extends RecordIdentity, Timestamped {
   locationIds: EntityId[];
@@ -618,7 +618,7 @@ export interface IntegrationConnection extends RecordIdentity, Timestamped {
   lastSyncAt: ISODateTime | null;
   nextRetryAt: ISODateTime | null;
   retryCount: number;
-  capabilities: Array<"read_sales" | "read_reservations" | "export_payroll" | "import_csv">;
+  capabilities: Array<"read_source_evidence" | "read_sales" | "read_reservations" | "export_payroll" | "import_csv">;
 }
 
 export type IntegrationSyncStatus =

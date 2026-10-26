@@ -1,3 +1,5 @@
+> Historical dated status/design snapshot. Current implementation and acceptance boundaries are in the [current register](le-yard-os-expansion-status.md); this snapshot is not current release proof.
+
 # Le Yard OS — Phase 2 implementation handoff and system grade
 
 > Historical checkpoint. Superseded by `phase-2-production-release-and-system-grade-2026-08-20.md` after the remaining repository-controlled Phase 2 blockers were implemented and released.

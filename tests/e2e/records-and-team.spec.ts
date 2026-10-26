@@ -86,7 +86,7 @@ test("searches CRM allergy data and opens the matching guest", async ({
 });
 
 test("prepares a tenant-scoped teammate invitation", async ({ page }) => {
-  await openWorkspace(page, "/team", "Your whole team, in one place");
+  await openWorkspace(page, "/team", "People");
 
   await page
     .getByRole("button", { name: "Invite teammate", exact: true })

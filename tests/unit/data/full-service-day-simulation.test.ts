@@ -24,6 +24,25 @@ afterEach(() => {
 });
 
 describe("full-service-day-v1", () => {
+  it("rejects a peak larger than the floor capacity", () => {
+    const scenario = { ...fullServiceDayScenario, floor: { ...fullServiceDayScenario.floor, seatCount: 40 as typeof fullServiceDayScenario.floor.seatCount } };
+    expect(() => validateServiceScenario(scenario)).toThrow(/peak covers cannot exceed floor seats/);
+  });
+
+  it("fails a completed run whose observed result disagrees with the scenario", () => {
+    const run = runServiceScenario("unexpected-result");
+    run.ledger[0]!.observedCode = "unexpected.failure";
+    const scorecard = buildServiceScorecard(run);
+    expect(scorecard.localStatus).toBe("failed");
+    expect(scorecard.checks.find((check) => check.id === "event-ledger")?.status).toBe("failed");
+  });
+
+  it("fails a completed run with unresolved operational exceptions", () => {
+    const run = runServiceScenario("unresolved-exception");
+    run.metrics.openExceptions = 1;
+    expect(buildServiceScorecard(run).localStatus).toBe("failed");
+  });
+
   it("locks the full-day covers, floor, financials, and dinner menu mix", () => {
     const scenario = validateServiceScenario(fullServiceDayScenario);
     const soldDinner = scenario.menuLines.filter(
@@ -84,14 +103,17 @@ describe("full-service-day-v1", () => {
     expect(fixture.waste).toHaveLength(2);
   });
 
-  it("runs ten deterministic isolated replays without state leakage", () => {
+  it("replays ten isolated legacy days and reports their unresolved exceptions without state leakage", () => {
     const scorecards = Array.from({ length: 10 }, (_, index) => {
       const run = runServiceScenario(`replay-${String(index + 1).padStart(2, "0")}`);
       return buildServiceScorecard(run);
     });
 
-    expect(scorecards.every((scorecard) => scorecard.localStatus === "passed")).toBe(true);
-    expect(scorecards.every((scorecard) => scorecard.releaseStatus === "blocked")).toBe(true);
+    expect(scorecards.every((scorecard) => scorecard.localStatus === "failed")).toBe(true);
+    expect(scorecards.every((scorecard) => scorecard.releaseStatus === "failed")).toBe(true);
+    expect(scorecards.every((scorecard) =>
+      scorecard.checks.filter((check) => check.status === "failed").map((check) => check.id).join(",") === "unresolved-exceptions",
+    )).toBe(true);
     expect(new Set(scorecards.map((scorecard) => scorecard.runId)).size).toBe(10);
     expect(
       scorecards.every(

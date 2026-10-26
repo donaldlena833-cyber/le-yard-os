@@ -1,4 +1,6 @@
-import { isPhoneSurface } from "@/lib/app-surface";
+import { WorkspaceAccessGuard } from "@/components/providers/workspace-access-guard";
+import { workspaceAccessRevision } from "@/lib/auth/workspace-access.server";
+import { defaultWorkspacePath, isPhoneSurface } from "@/lib/app-surface";
 import { LockKeyhole, LogOut, MapPinOff, ShieldAlert } from "lucide-react";
 import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions/auth";
@@ -113,7 +115,9 @@ export default async function WorkspaceLayout({
 
   return (
     <WorkspaceProvider value={resolution.context}>
-      {isPhoneSurface ? children : <AppShell>{children}</AppShell>}
+      <WorkspaceAccessGuard revision={resolution.context.mode === "live" ? workspaceAccessRevision(resolution.context) : null} userId={resolution.context.identity.userId} homePath={defaultWorkspacePath}>
+        {isPhoneSurface ? children : <AppShell>{children}</AppShell>}
+      </WorkspaceAccessGuard>
     </WorkspaceProvider>
   );
 }
