@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Boxes,
   CalendarDays,
+  Inbox,
   ChartNoAxesCombined,
   CheckSquare2,
   ChefHat,
@@ -58,6 +59,7 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
     label: "Service",
     items: [
       { href: "/reservations", label: "Reservations", icon: LayoutDashboard, mobile: true, roles: ["owner", "admin"], anyCapabilities: ["reservations.view", "reservations.operate", "reservations.override", "reservations.configure"], surfaces: ["operations", "host"] },
+      { href: "/catering-inquiries", label: "Catering inquiries", icon: Inbox, roles: ["owner"], surfaces: ["operations"] },
       { href: "/reservations/setup", label: "Reservation controls", icon: Settings2, roles: ["owner", "admin"], anyCapabilities: ["reservations.configure", "reservations.override"], surfaces: ["operations", "host"] },
       { href: "/schedule", label: "Schedule", icon: CalendarDays, mobile: true },
       { href: "/service", label: "Service Control", icon: RadioTower },
@@ -158,6 +160,7 @@ export function isWorkspaceRouteAccessible(
 export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/today": { title: "Today", detail: "Current service" },
   "/reservations": { title: "Reservations", detail: "Book, seat, pace, and know every guest" },
+  "/catering-inquiries": { title: "Catering inquiries", detail: "Corporate and offsite private-party requests" },
   "/reservations/setup": { title: "Reservation controls", detail: "Floor, service rules, exceptions, and public booking approval" },
   "/schedule": { title: "Service", detail: "Schedule and availability" },
   "/service": { title: "Service Control", detail: "Availability, pre-shift, and handoff" },

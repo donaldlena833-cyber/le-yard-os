@@ -5,6 +5,7 @@ import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 const ROUTES = [
   "/today",
   "/reservations",
+  "/catering-inquiries",
   "/reservations/setup",
   "/schedule",
   "/service",
@@ -76,7 +77,7 @@ describe("workspace direct-route authorization matrix", () => {
     for (const route of ["/today", "/schedule", "/service", "/time-clock", "/messages", "/team", "/earnings", "/receipts", "/tasks"]) {
       expect(actual[route]).toBe(true);
     }
-    for (const route of ["/reservations", "/reservations/setup", "/kitchen", "/inventory", "/vendors", "/guests", "/income", "/closeout", "/reports", "/assistant", "/integrations", "/settings"]) {
+    for (const route of ["/catering-inquiries", "/reservations", "/reservations/setup", "/kitchen", "/inventory", "/vendors", "/guests", "/income", "/closeout", "/reports", "/assistant", "/integrations", "/settings"]) {
       expect(actual[route]).toBe(false);
     }
   });
@@ -92,7 +93,7 @@ describe("workspace direct-route authorization matrix", () => {
     for (const route of ["/today", "/reservations", "/schedule", "/service", "/time-clock", "/messages", "/earnings", "/tasks"]) {
       expect(actual[route]).toBe(true);
     }
-    for (const route of ["/reservations/setup", "/team", "/inventory", "/guests", "/income", "/closeout", "/receipts", "/settings"]) {
+    for (const route of ["/catering-inquiries", "/reservations/setup", "/team", "/inventory", "/guests", "/income", "/closeout", "/receipts", "/settings"]) {
       expect(actual[route]).toBe(false);
     }
   });
@@ -102,8 +103,10 @@ describe("workspace direct-route authorization matrix", () => {
     for (const route of ["/today", "/schedule", "/service", "/time-clock", "/messages", "/earnings", "/tasks"]) {
       expect(actual[route]).toBe(true);
     }
-    for (const route of ["/reservations", "/team", "/inventory", "/guests", "/income", "/closeout", "/receipts", "/reports", "/settings"]) {
+    for (const route of ["/catering-inquiries", "/reservations", "/team", "/inventory", "/guests", "/income", "/closeout", "/receipts", "/reports", "/settings"]) {
       expect(actual[route]).toBe(false);
     }
   });
 });
+
+ it("keeps administrators out of owner-only catering briefs", () => { expect(isWorkspaceRouteAccessible("/catering-inquiries", workspace("admin", []))).toBe(false); });

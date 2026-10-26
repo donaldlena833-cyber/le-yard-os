@@ -22,6 +22,7 @@ const ids = {
   owner: randomUUID(),
   otherOwner: randomUUID(),
   manager: randomUUID(),
+  admin: randomUUID(),
   suspended: randomUUID(),
   client: randomUUID(),
 };
@@ -95,13 +96,24 @@ try {
   for (const file of (await readdir("supabase/migrations"))
     .filter((f) => f.endsWith(".sql"))
     .sort()) {
+    if (file.endsWith("_catering_inquiry_receiver.sql")) {
+      const predecessor = (await roleQuery("service_role", "select public.service_runtime_schema_contract() as value")).rows[0].value;
+      assert.equal(predecessor.migrationHead, "20261025085858");
+      assert.equal(predecessor.matchesExpected, true);
+      assert.equal((await db.query("select to_regclass('public.catering_inquiries') as relation")).rows[0].relation, null);
+    }
     try {
       await db.query(await readFile(`supabase/migrations/${file}`, "utf8"));
+      await db.query("insert into supabase_migrations.schema_migrations(version) values($1)", [file.split("_")[0]]);
     } catch (e) {
       throw new Error(`Migration ${file}: ${e.message}`, { cause: e });
     }
   }
   pass("full migration chain applied to disposable loopback PostgreSQL");
+  const upgraded = (await roleQuery("service_role", "select public.service_runtime_schema_contract() as value")).rows[0].value;
+  assert.equal(upgraded.migrationHead, "20261026101813");
+  assert.equal(upgraded.matchesExpected, true);
+  pass("current-main predecessor upgrades forward to the matching catering app contract");
   await db.query(
     "insert into public.organizations(id,name,slug) values($1,'Catering test','catering-test'),($2,'Other test','other-test')",
     [ids.org, ids.otherOrg],
@@ -114,6 +126,7 @@ try {
     [ids.owner, ids.org, "owner", "active"],
     [ids.otherOwner, ids.otherOrg, "owner", "active"],
     [ids.manager, ids.org, "manager", "active"],
+    [ids.admin, ids.org, "admin", "active"],
     [ids.suspended, ids.org, "owner", "suspended"],
   ]) {
     await db.query("insert into auth.users(id,email) values($1,$2)", [
@@ -221,6 +234,7 @@ try {
     [ids.owner, 2],
     [ids.otherOwner, 0],
     [ids.manager, 0],
+    [ids.admin, 0],
     [ids.suspended, 0],
   ])
     assert.equal(
@@ -269,7 +283,7 @@ try {
     "42501",
   );
   pass(
-    "owner-only organization reads; manager/suspended/cross-tenant/anon and direct RPC writes denied",
+    "owner-only organization reads; admin/manager/suspended/cross-tenant/anon and direct RPC writes denied",
   );
   // Force failure after counters have been incremented, before insert can commit.
   await db.query(

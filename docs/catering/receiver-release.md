@@ -1,5 +1,8 @@
 # Catering receiver: release and activation
 
+Current validation and owner register: see `validation-2026-10-26.md` and
+`owner-register.md`. October 26 final local checks pass; production is unchanged.
+
 This source adds a service-inquiry receiver, not catering availability, bookings,
 orders, marketing subscribers or notification delivery. It is disabled by default.
 Corporate and offsite private-party requests are equal. Onsite private dining is
@@ -30,7 +33,7 @@ public.catering_inquiries stores the qualified brief and source. Its RLS permits
 SELECT only to an active owner in the same organization, through the existing
 membership/authorization helper. Managers, suspended users, other organizations
 and anonymous callers do not get rows; authenticated roles cannot insert/update/
-delete or call service RPCs. The source contains no staff inbox UI yet.
+delete or call service RPCs. The owner-only read register is documented in `owner-register.md`. It does not add notification delivery or follow-up writes.
 
 Private dedicated clients are inactive by default. Their organization/location
 come from server credential configuration, never the browser body. Credential
@@ -49,18 +52,19 @@ approve before activation; it is not inferred from counter expiration.
 
 ## Coordinated release requirements
 
-The migration 20261023100420 and app EXPECTED_SCHEMA_CONTRACT head must ship
-together. Their schema/function/access fingerprints remain fail closed on drift;
+The complete migration chain, including 20261026101813, and the app
+EXPECTED_SCHEMA_CONTRACT head must ship together. After the October 26 merge of
+current main 8cafd31, that head is 20261026101813. Their schema/function/access fingerprints remain fail closed on drift;
 no old health guard is bypassed. Regenerate database types after schema changes.
 Do not apply this migration alone to a running older OS, or deploy the new OS
 without the migration and coordinated rollback plan. Rebase/revalidate against
-the OS release owner's current base before merge; another local OS branch contains
-unpublished work. Neither main nor production has been modified by this branch.
+the OS release owner's current base before merge; other OS checkouts must be preserved. Neither main nor production has been modified by this branch.
 
 Before production activation:
 
-1. Confirm inquiry owner and actual inbox responsibility, approved retention and
-   access handling, response process and a staff-readable operational handoff.
+1. Donald is the confirmed initial inquiry owner (October 24), then delegates.
+   Approve retention/access handling and response process; rehearse the owner
+   register described in `owner-register.md`.
 2. Rehearse the actual website relay/hosted RPC/owner path on an isolated preview;
    local SQL checks do not prove hosted PostgREST routing or UI access.
 3. Apply migration and matching app in a coordinated OS release after fresh Git,
@@ -109,6 +113,8 @@ The candidate pins Next.js and eslint-config-next to 16.4.2 and sharp to 0.35.5,
 with compatible follow-redirects/source-map-js lockfile patches. Runtime-only npm
 audit reports zero findings for this candidate; this does not represent the
 unchanged OS production runtime or every development dependency.
+
+## October 23 historical validation (superseded by validation-2026-10-26.md)
 
 Local results: 19 real PostgreSQL checks including parallel idempotency/global and
 contact limits and local Supabase security advisors; full migration and function

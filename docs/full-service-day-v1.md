@@ -62,3 +62,12 @@ The deterministic local replay may pass while release remains blocked. The expor
 - managed backup/PITR and private Storage recovery.
 
 Do not convert a local replay, screenshot, preview HTTP response, or passing build into evidence that a connected or physical gate passed. Public booking, provider delivery, Toast, payments, payroll, purchasing, and Opening Room mutation remain disabled or out of scope until separately authorized and evidenced.
+
+## Historical browser regression
+
+Run `npm run test:e2e:historical -- --project=desktop-chromium`. This uses a
+separate local server on port 3101 with the fixed-clock V1 fixture explicitly
+selected. Ordinary `test:e2e` uses the normal demo; CI and `verify:full` execute
+both commands. Run them sequentially because Next development servers in the
+same worktree share a build directory. These checks preserve historical display
+contracts and do not establish current-floor connected readiness.

@@ -151,7 +151,7 @@ comment on table public.catering_inquiries is 'Service requests only; no marketi
 -- Keep the application's fail-closed schema identity aligned with this exact
 -- forward migration. App and migration must be released as a coordinated batch.
 update private.runtime_schema_contract_expected expected
-set migration_head = '20261023100420',
+set migration_head = '20261026101813',
     table_fingerprint = snapshot.value ->> 'tableFingerprint',
     function_fingerprint = snapshot.value ->> 'functionFingerprint',
     access_fingerprint = snapshot.value ->> 'accessFingerprint',
