@@ -4,6 +4,8 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3100";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  // Executed separately with its fixed-clock simulation server, never skipped in CI.
+  testIgnore: "**/full-service-day.spec.ts",
   outputDir:
     process.env.PLAYWRIGHT_OUTPUT_DIR ??
     "/tmp/le-yard-os-playwright-results",

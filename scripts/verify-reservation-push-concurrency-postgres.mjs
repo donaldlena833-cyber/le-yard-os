@@ -33,6 +33,7 @@ const ids = {
   org: "20000000-0000-4000-8000-000000000001",
   location: "30000000-0000-4000-8000-000000000001",
   user: "10000000-0000-4000-8000-000000000004",
+  creator: "10000000-0000-4000-8000-000000000001",
   reservation: "fb000000-0000-4000-8000-000000000001",
   subscription: "fb100000-0000-4000-8000-000000000001",
   notification: "fb200000-0000-4000-8000-000000000001",
@@ -197,15 +198,25 @@ try {
   await setup.query(await readFile(join(root, "supabase", "seed.sql"), "utf8"));
   await setup.query("reset role");
   const t0 = "2035-02-01T17:00:00Z";
+  // Match the existing PGlite push fixture: a valid synthetic service window
+  // and creator satisfy the real staff-admission trigger without bypassing it.
+  await setup.query(`insert into public.reservation_service_periods (
+    organization_id,location_id,name,days_of_week,starts_local,ends_local,
+    default_duration_minutes,pacing_interval_minutes,pacing_cover_limit,
+    min_party_size,max_party_size,effective_from,effective_to,
+    online_enabled,is_active,approved_at,approved_by
+  ) values ($1,$2,'Synthetic push concurrency service',array[0,1,2,3,4,5,6],
+    '11:00','15:00',90,15,12,1,8,'2035-02-02','2035-02-02',false,true,now(),$3)`,
+  [ids.org,ids.location,ids.creator]);
   await setup.query(
     `insert into public.reservations (
       id, organization_id, location_id, reserved_at, duration_minutes,
-      party_size, status, source, booking_channel
+      party_size, status, source, booking_channel, created_by
     ) values (
       $1::uuid, $2::uuid, $3::uuid, $4::timestamptz + interval '1 day',
-      90, 2, 'booked', 'manual', 'staff'
+      90, 2, 'booked', 'manual', 'staff', $5::uuid
     )`,
-    [ids.reservation, ids.org, ids.location, t0],
+    [ids.reservation, ids.org, ids.location, t0, ids.creator],
   );
   await setup.query(
     `insert into public.reservation_settings (
