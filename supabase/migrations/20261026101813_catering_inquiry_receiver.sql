@@ -1,6 +1,10 @@
 -- Dormant until a dedicated client and receiver feature flag are explicitly enabled.
 -- This migration seeds no clients, sends no messages, and changes no booking state.
-create table private.catering_api_clients (
+-- Keep the existing private-schema attestation boundary intact. This separate
+-- internal schema is not exposed by the Data API and grants no browser access.
+create schema catering_private;
+revoke all on schema catering_private from public, anon, authenticated;
+create table catering_private.catering_api_clients (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null,
   location_id uuid not null,
@@ -14,8 +18,8 @@ create table private.catering_api_clients (
   unique (id, organization_id, location_id),
   foreign key (organization_id, location_id) references public.locations(organization_id, id) on delete cascade
 );
-create table private.catering_rate_buckets (
-  client_id uuid not null references private.catering_api_clients(id) on delete cascade,
+create table catering_private.catering_rate_buckets (
+  client_id uuid not null references catering_private.catering_api_clients(id) on delete cascade,
   window_start timestamptz not null,
   bucket_hash text not null,
   attempts integer not null check (attempts > 0),
@@ -33,25 +37,27 @@ create table public.catering_inquiries (
   notification_status text not null default 'not_configured' check (notification_status = 'not_configured'),
   created_at timestamptz not null default clock_timestamp(),
   unique (client_id, request_id),
-  foreign key (client_id, organization_id, location_id) references private.catering_api_clients(id, organization_id, location_id) on delete restrict,
+  foreign key (client_id, organization_id, location_id) references catering_private.catering_api_clients(id, organization_id, location_id) on delete restrict,
   foreign key (organization_id, location_id) references public.locations(organization_id, id) on delete restrict
 );
 create index catering_inquiries_org_created_idx on public.catering_inquiries(organization_id, created_at desc, id);
 create index catering_inquiries_location_idx on public.catering_inquiries(organization_id, location_id);
 -- Dedicated credentials have no reservation, guest-profile or marketing privileges.
-revoke all on private.catering_api_clients, private.catering_rate_buckets, public.catering_inquiries from public, anon, authenticated, service_role;
-grant usage on schema private, extensions to service_role;
+revoke all on catering_private.catering_api_clients, catering_private.catering_rate_buckets, public.catering_inquiries from public, anon, authenticated, service_role;
+grant usage on schema catering_private, extensions to service_role;
 grant execute on function extensions.digest(text,text) to service_role;
-grant select on private.catering_api_clients to service_role;
-grant select, insert, update, delete on private.catering_rate_buckets to service_role;
+grant select on catering_private.catering_api_clients to service_role;
+grant select, insert, update, delete on catering_private.catering_rate_buckets to service_role;
 grant select, insert on public.catering_inquiries to service_role;
 grant select on public.catering_inquiries to authenticated;
-alter table private.catering_api_clients enable row level security;
-alter table private.catering_rate_buckets enable row level security;
+alter table catering_private.catering_api_clients enable row level security;
+alter table catering_private.catering_api_clients force row level security;
+alter table catering_private.catering_rate_buckets enable row level security;
+alter table catering_private.catering_rate_buckets force row level security;
 alter table public.catering_inquiries enable row level security;
 alter table public.catering_inquiries force row level security;
-create policy catering_clients_service_read on private.catering_api_clients for select to service_role using (true);
-create policy catering_rates_service on private.catering_rate_buckets for all to service_role using (true) with check (true);
+create policy catering_clients_service_read on catering_private.catering_api_clients for select to service_role using (true);
+create policy catering_rates_service on catering_private.catering_rate_buckets for all to service_role using (true) with check (true);
 create policy catering_inquiries_service_read on public.catering_inquiries for select to service_role using (true);
 create policy catering_inquiries_service_insert on public.catering_inquiries for insert to service_role with check (true);
 create policy catering_inquiries_owner_read on public.catering_inquiries for select to authenticated
@@ -60,7 +66,7 @@ create policy catering_inquiries_owner_read on public.catering_inquiries for sel
 create function public.service_authenticate_catering_client(p_key_hash text)
 returns jsonb language sql stable security invoker set search_path = '' as $$
   select jsonb_build_object('id', c.id)
-  from private.catering_api_clients c
+  from catering_private.catering_api_clients c
   where c.key_hash = p_key_hash and c.is_active
     and (c.expires_at is null or c.expires_at > now())
 $$;
@@ -70,7 +76,7 @@ grant execute on function public.service_authenticate_catering_client(text) to s
 create function public.service_capture_catering_inquiry(p_client_id uuid, p_request_id uuid, p_payload jsonb)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
 declare
-  client private.catering_api_clients%rowtype;
+  client catering_private.catering_api_clients%rowtype;
   previous public.catering_inquiries%rowtype;
   inquiry_id uuid;
   fingerprint text;
@@ -84,7 +90,7 @@ declare
   global_attempts integer;
   contact_attempts integer;
 begin
-  select * into client from private.catering_api_clients where id = p_client_id and is_active and (expires_at is null or expires_at > clock_timestamp());
+  select * into client from catering_private.catering_api_clients where id = p_client_id and is_active and (expires_at is null or expires_at > clock_timestamp());
   if not found then raise exception 'catering_client_unavailable' using errcode = '28000'; end if;
   if p_request_id is null or p_request_id::text !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     or p_payload is null or jsonb_typeof(p_payload) <> 'object' or octet_length(p_payload::text) > 16384
@@ -129,18 +135,18 @@ begin
     end if;
   end if;
   contact_bucket := encode(extensions.digest(p_payload ->> 'email', 'sha256'), 'hex');
-  select attempts into global_attempts from private.catering_rate_buckets where client_id = p_client_id and window_start = bucket_window and bucket_hash = 'global';
-  select attempts into contact_attempts from private.catering_rate_buckets where client_id = p_client_id and window_start = bucket_window and bucket_hash = contact_bucket;
+  select attempts into global_attempts from catering_private.catering_rate_buckets where client_id = p_client_id and window_start = bucket_window and bucket_hash = 'global';
+  select attempts into contact_attempts from catering_private.catering_rate_buckets where client_id = p_client_id and window_start = bucket_window and bucket_hash = contact_bucket;
   if coalesce(global_attempts,0) >= client.hourly_limit or coalesce(contact_attempts,0) >= client.contact_hourly_limit then
     raise exception 'catering_rate_limited' using errcode = 'P0001';
   end if;
-  insert into private.catering_rate_buckets(client_id,window_start,bucket_hash,attempts)
+  insert into catering_private.catering_rate_buckets(client_id,window_start,bucket_hash,attempts)
     values(p_client_id,bucket_window,'global',1),(p_client_id,bucket_window,contact_bucket,1)
     on conflict(client_id,window_start,bucket_hash) do update set attempts = catering_rate_buckets.attempts + 1;
   insert into public.catering_inquiries(organization_id,location_id,client_id,request_id,payload_hash,payload)
     values(client.organization_id,client.location_id,p_client_id,p_request_id,fingerprint,p_payload) returning id into inquiry_id;
   -- Counter hashes are operational abuse metadata, not an inquiry retention rule.
-  delete from private.catering_rate_buckets where client_id = p_client_id and window_start < bucket_window - interval '24 hours';
+  delete from catering_private.catering_rate_buckets where client_id = p_client_id and window_start < bucket_window - interval '24 hours';
   return jsonb_build_object('status','accepted','stored',true,'inquiryId',inquiry_id);
 end;
 $$;

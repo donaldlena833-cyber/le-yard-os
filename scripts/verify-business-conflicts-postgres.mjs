@@ -105,6 +105,9 @@ try {
       check("owners_grants_and_security_attributes_preserved", after.every((row, i) => JSON.stringify(attributes(row)) === JSON.stringify(attributes(before[i]))), { functions: after.length });
       check("no_explicit_business_serialization_raises", after.every(row => !/errcode\s*=\s*'40001'/i.test(row.source)), { remaining: 0 });
       migrationValidated = true;
+      // The transformation probe intentionally used pg_catalog only. Later
+      // migrations have their own reviewed normal search-path expectations.
+      await db.query("reset search_path");
     } else {
       await db.query(sql);
     }

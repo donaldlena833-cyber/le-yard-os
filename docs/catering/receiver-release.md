@@ -71,7 +71,7 @@ Before production activation:
    provider/schema and dependency checks. Keep receiver feature flag false.
 4. Provision a new dedicated client under the correct organization/location using
    a high-entropy credential in private server configuration. Store only its
-   SHA256 hash in private.catering_api_clients; leave it inactive until ready.
+   SHA256 hash in catering_private.catering_api_clients; leave it inactive until ready.
    Do not copy any real credential into this document or source.
 5. Separately authorize any controlled external inquiry/notification test. Prove
    committed ID, correct owner access, actual recipient receipt and follow-up as
@@ -129,3 +129,13 @@ its original lockfile and Next 16.2.12. They are existing empty-state wording/
 selector assertions in live-connected-ui, live-inventory-interactions,
 live-inventory-ui, live-operations-ui and live-integrations-ui. No assertions were
 weakened. Resolve or explicitly track them in the coordinated OS release review.
+
+
+## October 28 least-privilege correction
+
+The pending, never-applied catering migration now keeps credentials/rate buckets
+in a dedicated `catering_private` schema. It remains unexposed by Data API config,
+with service-only schema usage and explicit table grants/forced RLS. No usage grant
+to the existing `private` schema is introduced: its attestation boundary and its
+unchanged regression assertions remain intact. This is a correction to the same
+unshipped migration, not a production migration or activation.

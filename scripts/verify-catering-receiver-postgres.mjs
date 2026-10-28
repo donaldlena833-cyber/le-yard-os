@@ -114,6 +114,14 @@ try {
   assert.equal(upgraded.migrationHead, "20261026101813");
   assert.equal(upgraded.matchesExpected, true);
   pass("current-main predecessor upgrades forward to the matching catering app contract");
+  const schemaBoundary = (await db.query(`select
+    has_schema_privilege('service_role','private','usage') as shared_private,
+    has_schema_privilege('service_role','catering_private','usage') as catering_service,
+    has_schema_privilege('anon','catering_private','usage') as catering_anon,
+    has_schema_privilege('authenticated','catering_private','usage') as catering_authenticated,
+    has_table_privilege('service_role','private.connected_acceptance_targets','select') as attestation_table`)).rows[0];
+  assert.deepEqual(schemaBoundary, { shared_private:false, catering_service:true, catering_anon:false, catering_authenticated:false, attestation_table:false });
+  pass("dedicated internal schema preserves existing private attestation isolation");
   await db.query(
     "insert into public.organizations(id,name,slug) values($1,'Catering test','catering-test'),($2,'Other test','other-test')",
     [ids.org, ids.otherOrg],
@@ -140,7 +148,7 @@ try {
   }
   const keyHash = hash("local-test-only-key-not-production");
   await db.query(
-    "insert into private.catering_api_clients(id,organization_id,location_id,key_hash,name) values($1,$2,$3,$4,'Local test')",
+    "insert into catering_private.catering_api_clients(id,organization_id,location_id,key_hash,name) values($1,$2,$3,$4,'Local test')",
     [ids.client, ids.org, ids.location, keyHash],
   );
   assert.equal(
@@ -156,7 +164,7 @@ try {
   await denied(() => capture(randomUUID()), "28000");
   pass("new client is inactive by default");
   await db.query(
-    "update private.catering_api_clients set is_active=true where id=$1",
+    "update catering_private.catering_api_clients set is_active=true where id=$1",
     [ids.client],
   );
   assert.equal(
@@ -170,12 +178,12 @@ try {
     ids.client,
   );
   await db.query(
-    "update private.catering_api_clients set expires_at=now()-interval '1 minute' where id=$1",
+    "update catering_private.catering_api_clients set expires_at=now()-interval '1 minute' where id=$1",
     [ids.client],
   );
   await denied(() => capture(randomUUID()), "28000");
   await db.query(
-    "update private.catering_api_clients set expires_at=null where id=$1",
+    "update catering_private.catering_api_clients set expires_at=null where id=$1",
     [ids.client],
   );
   pass("dedicated active/expired credential boundary");
@@ -197,7 +205,7 @@ try {
   assert.equal(
     (
       await db.query(
-        "select max(attempts) as n from private.catering_rate_buckets",
+        "select max(attempts) as n from catering_private.catering_rate_buckets",
       )
     ).rows[0].n,
     1,
@@ -291,7 +299,7 @@ try {
   );
   const before = (
     await db.query(
-      "select sum(attempts)::int as n from private.catering_rate_buckets",
+      "select sum(attempts)::int as n from catering_private.catering_rate_buckets",
     )
   ).rows[0].n;
   await denied(
@@ -301,7 +309,7 @@ try {
   assert.equal(
     (
       await db.query(
-        "select sum(attempts)::int as n from private.catering_rate_buckets",
+        "select sum(attempts)::int as n from catering_private.catering_rate_buckets",
       )
     ).rows[0].n,
     before,
@@ -310,9 +318,9 @@ try {
     "drop trigger test_catering_rollback on public.catering_inquiries; drop function public.test_reject_catering()",
   );
   pass("failed insert rolls counters back; no false accepted record");
-  await db.query("delete from private.catering_rate_buckets");
+  await db.query("delete from catering_private.catering_rate_buckets");
   await db.query(
-    "update private.catering_api_clients set hourly_limit=100,contact_hourly_limit=20 where id=$1",
+    "update catering_private.catering_api_clients set hourly_limit=100,contact_hourly_limit=20 where id=$1",
     [ids.client],
   );
   const sameKey = randomUUID();
@@ -339,9 +347,9 @@ try {
     "23505",
   );
   pass("concurrent conflicting reuse yields one acceptance and one conflict");
-  await db.query("delete from private.catering_rate_buckets");
+  await db.query("delete from catering_private.catering_rate_buckets");
   await db.query(
-    "update private.catering_api_clients set hourly_limit=3,contact_hourly_limit=20 where id=$1",
+    "update catering_private.catering_api_clients set hourly_limit=3,contact_hourly_limit=20 where id=$1",
     [ids.client],
   );
   const limited = await Promise.allSettled(
@@ -360,9 +368,9 @@ try {
   );
   assert.equal((await capture(request)).inquiryId, accepted.inquiryId);
   pass("accepted inquiry replays after the global quota is exhausted");
-  await db.query("delete from private.catering_rate_buckets");
+  await db.query("delete from catering_private.catering_rate_buckets");
   await db.query(
-    "update private.catering_api_clients set hourly_limit=100,contact_hourly_limit=2 where id=$1",
+    "update catering_private.catering_api_clients set hourly_limit=100,contact_hourly_limit=2 where id=$1",
     [ids.client],
   );
   const contactKeys = Array.from({ length: 8 }, () => randomUUID());
@@ -435,7 +443,7 @@ try {
     "fresh connection reads durable service record; guest/newsletter/notification actions absent",
   );
   await db.query(
-    "update private.catering_api_clients set is_active=false where id=$1",
+    "update catering_private.catering_api_clients set is_active=false where id=$1",
     [ids.client],
   );
   await denied(() => capture(request), "28000");
