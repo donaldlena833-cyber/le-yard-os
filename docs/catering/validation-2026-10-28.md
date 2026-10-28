@@ -53,3 +53,12 @@ migration into a running old app, relax the readiness guard or enable direct
 intake from a successful test/build. The next gate is actual isolated hosted
 relay→storage→owner access, plus approved handling/retention and operational
 handoff; local tests or a Vercel preview alone do not establish that outcome.
+
+A later CI step exposed another stale harness precondition. Current staffing
+publication serializes at an organization assignment-scope row before acquiring
+the shifts SHARE barrier; the old harness required two simultaneous SHARE holders.
+It now proves the winner holds SHARE, the follower reaches the scope table and
+is blocked specifically by the winner (pg_blocking_pids), then retains the exact
+winner-note replay, one publication, child evidence and no-deadlock assertions.
+The actual native schedule and service-shift concurrency gates both pass locally.
+No production staffing function or migration was changed for this correction.
