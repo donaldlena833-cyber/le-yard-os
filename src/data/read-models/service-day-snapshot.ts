@@ -3,6 +3,7 @@ import "server-only";
 import type { AppRole } from "@/types";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { createClient } from "@/lib/supabase/server";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import {
   getActionDefinition,
   getAvailableActionsForSurface,
@@ -295,6 +296,7 @@ function canReadReservations(
     persona: workspace.persona,
     workMode: resolveWorkMode(workspace, activeJob),
     capabilities: workspace.capabilities,
+    serviceSettings: workspace.serviceSettings,
   });
 }
 
@@ -495,6 +497,7 @@ export function composeServiceDaySnapshot({
     persona: workspace.persona,
     workMode,
     capabilities: workspace.capabilities,
+    serviceSettings: workspace.serviceSettings,
     servicePhase: reservationPhase,
     satisfiedPrerequisites,
   })[0];
@@ -572,7 +575,9 @@ export async function loadLiveServiceDaySnapshot(
   const serviceControlPromise = safeRead(() =>
     loaders.loadServiceControl(workspace, undefined, observedAt),
   );
-  const providerHealthPromise = safeRead(() => loaders.loadProviderHealth(workspace));
+  const providerHealthPromise = isTenantFeatureEnabled(workspace, "providerIntegrations")
+    ? safeRead(() => loaders.loadProviderHealth(workspace))
+    : Promise.resolve(readSuccess<ServiceDayProviderHealth>({ state: "restricted", providers: [] }));
 
   const todayResult = await todayPromise;
   if (!todayResult.ok) {

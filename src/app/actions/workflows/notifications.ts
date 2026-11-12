@@ -33,6 +33,7 @@ export async function setNotificationPreferenceAction(input: unknown) {
 export async function savePushSubscriptionAction(input: unknown) {
   return runNotificationAction(executeWorkflowAction({
     operation: "notification.push.save",
+    requiredTenantFeature: "reservations",
     schema: savePushSubscriptionInputSchema,
     input,
     run: savePushSubscription,

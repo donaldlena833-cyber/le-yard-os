@@ -19,6 +19,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import type {
   ServiceDayException,
   ServiceDayNowAction,
@@ -200,9 +201,11 @@ function ReservationNowResult({
 function SnapshotStatus({
   snapshot,
   realtimeSupported,
+  showIntegrations,
 }: {
   snapshot: ServiceDaySnapshot;
   realtimeSupported: boolean;
+  showIntegrations: boolean;
 }) {
   const unavailable = snapshot.sourceFreshness.filter(
     (source) => source.state === "unavailable",
@@ -228,7 +231,7 @@ function SnapshotStatus({
       <span>
         {realtimeSupported ? "Live updates" : "Refresh for updates"}
       </span>
-      <span>Integrations: {providerLabel}</span>
+      {showIntegrations ? <span>Integrations: {providerLabel}</span> : null}
 
     </section>
   );
@@ -313,6 +316,7 @@ function EmployeeTodayWorkspace({
       <SnapshotStatus
         snapshot={snapshot}
         realtimeSupported={workspace.mode === "live"}
+        showIntegrations={isTenantFeatureEnabled(workspace, "providerIntegrations")}
       />
       <RealtimeSyncStatus {...realtime} />
       <ServiceStatusSummary result={snapshot.serviceControl} />
@@ -427,6 +431,7 @@ function ChefTodayWorkspace({
       <SnapshotStatus
         snapshot={snapshot}
         realtimeSupported={workspace.mode === "live"}
+        showIntegrations={isTenantFeatureEnabled(workspace, "providerIntegrations")}
       />
       <RealtimeSyncStatus {...realtime} />
       <ServiceStatusSummary result={snapshot.serviceControl} />
@@ -520,6 +525,7 @@ export function LiveTodayWorkspace({
       <SnapshotStatus
         snapshot={snapshot.data}
         realtimeSupported={workspace.mode === "live"}
+        showIntegrations={isTenantFeatureEnabled(workspace, "providerIntegrations")}
       />
       <RealtimeSyncStatus {...realtime} />
       <ServiceStatusSummary result={snapshot.data.serviceControl} />

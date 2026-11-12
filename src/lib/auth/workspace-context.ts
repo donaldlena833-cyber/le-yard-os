@@ -1,6 +1,7 @@
 import type { AppRole } from "@/types";
 import type { TableRow } from "@/types/database.generated";
 import type { OperationalCapability } from "@/lib/permissions/capabilities";
+import type { TenantServiceSettings } from "@/lib/tenant-service";
 
 export type AssuranceLevel = "aal1" | "aal2";
 
@@ -55,6 +56,7 @@ export interface WorkspaceContextValue {
   role: AppRole;
   organizationWide: boolean;
   capabilities: readonly OperationalCapability[];
+  serviceSettings?: TenantServiceSettings;
   activeJob?: WorkspaceActiveJobAssignment;
   persona?: "chef";
 }
@@ -197,6 +199,7 @@ export function deriveWorkspaceScopes({
  */
 export function selectWorkspaceScope({
   preference,
+  fallbackLocationId,
   ...input
 }: {
   userId: string;
@@ -205,6 +208,7 @@ export function selectWorkspaceScope({
   locations: readonly WorkspaceLocationRow[];
   locationMemberships: readonly WorkspaceLocationMembershipRow[];
   preference?: WorkspacePreference | null;
+  fallbackLocationId?: string;
 }): WorkspaceScopeSelection | null {
   const scopes = deriveWorkspaceScopes(input);
   if (!scopes.length) return null;
@@ -218,6 +222,13 @@ export function selectWorkspaceScope({
     );
     if (preferredScope && preferredLocation) {
       return { ...preferredScope, activeLocation: preferredLocation };
+    }
+  }
+
+  if (fallbackLocationId) {
+    for (const scope of scopes) {
+      const location = scope.locations.find((candidate) => candidate.id === fallbackLocationId);
+      if (location) return { ...scope, activeLocation: location };
     }
   }
 

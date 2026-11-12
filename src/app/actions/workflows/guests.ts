@@ -20,6 +20,7 @@ import {
 export async function searchGuestsAction(input: unknown) {
   return executeWorkflowAction({
     operation: "guest.search",
+    requiredTenantFeature: "guestCrm",
     schema: searchGuestsInputSchema,
     input,
     persists: false,
@@ -30,6 +31,7 @@ export async function searchGuestsAction(input: unknown) {
 export async function saveGuestAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "guest.save",
+    requiredTenantFeature: "guestCrm",
     schema: saveGuestInputSchema,
     input,
     run: saveGuest,
@@ -41,6 +43,7 @@ export async function saveGuestAction(input: unknown) {
 export async function addGuestNoteAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "guest.note_add",
+    requiredTenantFeature: "guestCrm",
     schema: addGuestNoteInputSchema,
     input,
     run: addGuestNote,
@@ -52,6 +55,7 @@ export async function addGuestNoteAction(input: unknown) {
 export async function recordGuestConsentAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "guest.consent_record",
+    requiredTenantFeature: "guestCrm",
     schema: recordGuestConsentInputSchema,
     input,
     run: recordGuestConsent,
@@ -63,6 +67,7 @@ export async function recordGuestConsentAction(input: unknown) {
 export async function mergeGuestAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "guest.merge",
+    requiredTenantFeature: "guestCrm",
     schema: mergeGuestInputSchema,
     input,
     run: mergeGuest,

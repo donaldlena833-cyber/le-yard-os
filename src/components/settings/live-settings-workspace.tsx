@@ -44,6 +44,7 @@ import type { LiveReadResult } from "@/data/read-models/shared";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { publicEnv } from "@/lib/env";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import { cn } from "@/lib/utils";
 import type { AppRole } from "@/types";
 
@@ -441,6 +442,7 @@ function NotificationsPanel({
   workspace: WorkspaceContextValue;
 }) {
   const router = useRouter();
+  const reservationAlerts = isTenantFeatureEnabled(workspace, "reservations");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const { requestIdFor, rotateRequestId } = useStableRequestIds();
@@ -617,7 +619,7 @@ function NotificationsPanel({
           detail="Choose which server-derived events appear in your notification center."
         />
         <div className="border-y border-[var(--line)]">
-          {notificationCatalog.map(([type, label, detail]) => (
+          {notificationCatalog.filter(([type]) => reservationAlerts || type !== "reservation_changed").map(([type, label, detail]) => (
             <div
               key={type}
               className="grid gap-3 border-t border-[var(--line)] py-4 first:border-0 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center"
@@ -653,7 +655,7 @@ function NotificationsPanel({
                 <Mail className="size-3" />
                 Email inactive
               </StatusPill>
-              <StatusPill
+              {reservationAlerts ? <StatusPill
                 tone={
                   type === "reservation_changed" && reservationPushEnabled
                     ? "positive"
@@ -664,17 +666,17 @@ function NotificationsPanel({
                 {type === "reservation_changed" && reservationPushEnabled
                   ? "Push ready"
                   : "Push inactive"}
-              </StatusPill>
+              </StatusPill> : null}
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs leading-4 text-[var(--ink-faint)]">
+        {reservationAlerts ? <p className="mt-3 text-xs leading-4 text-[var(--ink-faint)]">
           Reservation-change push is available on registered browsers when the
           location owner enables staff push and the delivery worker is
           configured. Other push and staff email channels remain inactive.
-        </p>
+        </p> : null}
       </section>
-      <section>
+      {reservationAlerts ? <section>
         <SectionHeading
           title="Browser push"
           detail="Register this device for encrypted, server-delivered reservation alerts."
@@ -736,7 +738,7 @@ function NotificationsPanel({
             the push provider reports them gone.
           </span>
         </div>
-      </section>
+      </section> : null}
       {message ? (
         <p
           role="status"

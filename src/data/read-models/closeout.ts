@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import { toDomainTipDistributionMethod } from "@/lib/supabase/value-mappers";
 import { createClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database.generated";
@@ -153,6 +154,7 @@ export async function loadLiveCloseout(
     ) return readFailure();
     const location = locationResult.data;
     const date = localDateKey(new Date(), location.timezone);
+    const tipPoolingEnabled = isTenantFeatureEnabled(workspace, "tips");
 
     const [closeoutResult, policyResult, tipRunResult] = await Promise.all([
       supabase
@@ -165,14 +167,14 @@ export async function loadLiveCloseout(
         .order("business_date", { ascending: false })
         .order("submitted_at", { ascending: false })
         .limit(60),
-      supabase
+      tipPoolingEnabled ? supabase
         .from("tip_pool_policies")
         .select("id, name")
         .eq("organization_id", organizationId)
         .eq("is_active", true)
         .or(`location_id.is.null,location_id.eq.${locationId}`)
-        .order("name"),
-      supabase
+        .order("name") : { data: [], error: null },
+      tipPoolingEnabled ? supabase
         .from("tip_runs")
         .select(
           "id, closeout_id, policy_version_id, business_date, shift_label, status, distributable_cents, allocated_cents, calculation_version, calculated_at, approved_by, approved_at, locked_at, created_by",
@@ -181,7 +183,7 @@ export async function loadLiveCloseout(
         .eq("location_id", locationId)
         .order("business_date", { ascending: false })
         .order("created_at", { ascending: false })
-        .limit(60),
+        .limit(60) : { data: [], error: null },
     ]);
     if (closeoutResult.error || policyResult.error || tipRunResult.error) return readFailure();
 

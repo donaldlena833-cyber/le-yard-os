@@ -7,17 +7,13 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
-  createAdminClient: () => ({
-    rpc: mocks.rpc,
-    from: () => ({
-      select: () => ({
-        order: () => ({
-          order: () => ({
-            range: async () => ({ data: [], error: null }),
-          }),
-        }),
-      }),
-    }),
+  createAdminClient: () => ({ rpc: mocks.rpc }),
+}));
+
+vi.mock("@/lib/restaurant-location.server", () => ({
+  resolveRestaurantLocation: async () => ({
+    organizationId: "33333333-3333-4333-8333-333333333333",
+    locationId: "44444444-4444-4444-8444-444444444444",
   }),
 }));
 
@@ -52,6 +48,7 @@ function claimedMessage(
 function begunMessage(
   overrides: Partial<{
     id: string;
+    locationId: string;
     channel: "email" | "sms";
     templateKey: string;
     templateData: Record<string, unknown>;
@@ -64,7 +61,7 @@ function begunMessage(
     status: "dispatching",
     attempts: 1,
     organizationId: "33333333-3333-4333-8333-333333333333",
-    locationId: "44444444-4444-4444-8444-444444444444",
+    locationId: overrides.locationId ?? "44444444-4444-4444-8444-444444444444",
     reservationId: "55555555-5555-4555-8555-555555555555",
     bookingHoldId: null,
     waitlistEntryId: null,
@@ -118,6 +115,8 @@ beforeEach(() => {
         return { data: { runId: args.p_run_id, status: args.p_status }, error: null };
       if (name === "service_enqueue_reservation_reminders")
         return { data: null, error: null };
+      if (name === "service_expire_reservation_deadlines")
+        return { data: { holdsExpired: 0, waitlistExpired: 0 }, error: null };
       if (name === "service_claim_reservation_message_outbox")
         return { data: claimedMessages, error: null };
       if (name === "service_begin_reservation_message_delivery") {
@@ -154,6 +153,22 @@ afterEach(() => {
 });
 
 describe("reservation message worker completion accounting", () => {
+  it("expires Ninth Avenue deadlines and prevents delivery outside the restaurant scope", async () => {
+    claimedMessages = [claimedMessage()];
+    beginResults = [begunMessage({ locationId: "another-location" })];
+    const response = await runWorker();
+    expect(response.status).toBe(200);
+    expect(mocks.rpc).toHaveBeenCalledWith("service_expire_reservation_deadlines", expect.objectContaining({
+      p_organization_id: "33333333-3333-4333-8333-333333333333",
+      p_location_id: "44444444-4444-4444-8444-444444444444",
+    }));
+    expect(mocks.rpc).toHaveBeenCalledWith("service_complete_reservation_message_outbox", expect.objectContaining({
+      p_status: "cancelled",
+      p_error_code: "reservation_scope_invalid",
+    }));
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
   it("counts sent, failed, and skipped rows only after completion succeeds", async () => {
     claimedMessages = [
       claimedMessage({ id: "11111111-1111-4111-8111-111111111111" }),

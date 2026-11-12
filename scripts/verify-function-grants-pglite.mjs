@@ -214,6 +214,8 @@ const approvedAuthenticatedFunctions = new Set([
 
 const requiredServiceFunctions = new Set([
   "service_ingest_square_source_window",
+  "service_provision_church_street",
+  "service_set_church_street_active",
   "add_guest_note",
   "assign_guest_tag",
   "bind_verified_checklist_photo_response",

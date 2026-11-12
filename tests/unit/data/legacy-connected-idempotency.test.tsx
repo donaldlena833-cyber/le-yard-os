@@ -15,6 +15,7 @@ import {
   finalizeManualCsvImportAction,
 } from "@/app/actions/workflows/integrations";
 import { claimLiveOpenShiftAction } from "@/app/actions/workflows/live-schedule";
+import { clockInAction, clockOutAction, endBreakAction, startBreakAction } from "@/app/actions/workflows/time";
 import { LiveGuestsWorkspace } from "@/components/guests/live-guests-workspace";
 import { LiveIntegrationsWorkspace } from "@/components/integrations/live-integrations-workspace";
 import { LiveScheduleWorkspace } from "@/components/schedule/live-schedule-workspace";
@@ -40,6 +41,13 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mocks.push, refresh: mocks.refresh }),
+}));
+
+vi.mock("@/app/actions/workflows/time", () => ({
+  clockInAction: vi.fn(),
+  clockOutAction: vi.fn(),
+  endBreakAction: vi.fn(),
+  startBreakAction: vi.fn(),
 }));
 
 vi.mock("@dnd-kit/core", () => ({
@@ -253,6 +261,55 @@ describe("legacy connected mutation idempotency", () => {
     expect(screen.queryByRole("button", { name: "Clock in" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Clock out" })).toBeNull();
     expect(screen.getByText("Attendance source not configured")).toBeTruthy();
+  });
+
+  it("records counter-service punches and explicitly selected breaks in the rendered location", async () => {
+    const counter: WorkspaceContextValue = { ...workspace, serviceSettings: { serviceModel: "counter" } };
+    const scope = { organizationId: counter.organization.id, locationId: counter.activeLocation.id };
+    const timeEntryId = "30000000-0000-4000-8000-000000000101";
+    const breakId = "30000000-0000-4000-8000-000000000102";
+    const clockedInAt = "2026-08-02T12:00:00.000Z";
+    const model: LiveTimeClockModel = {
+      date: "2026-08-02", timeZone: "America/New_York", canManage: false,
+      employee: { id: employeeId, displayName: "Taylor" },
+      roles: [{ id: roleId, name: "Counter", code: "COUNTER" }],
+      shifts: [], activeEntry: null, recentEntries: [], roster: [], corrections: [],
+      posSource: { provider: null, connectionStatus: "not_configured", lastSyncedAt: null, lastJobStatus: null, lastJobCompletedAt: null, stale: true },
+    };
+    vi.mocked(clockInAction).mockResolvedValue({ ok: true, persisted: true, mode: "live", data: { id: timeEntryId, status: "open", clockedInAt, alreadyApplied: false } });
+    vi.mocked(startBreakAction).mockResolvedValue({ ok: true, persisted: true, mode: "live", data: { id: breakId, startedAt: clockedInAt, endedAt: null, alreadyApplied: false } });
+    vi.mocked(endBreakAction).mockResolvedValue({ ok: true, persisted: true, mode: "live", data: { id: breakId, endedAt: clockedInAt, alreadyApplied: false } });
+    vi.mocked(clockOutAction).mockResolvedValue({ ok: true, persisted: true, mode: "live", data: { id: timeEntryId, status: "submitted", clockedOutAt: clockedInAt, alreadyApplied: false } });
+
+    const view = (data: LiveTimeClockModel) => <LiveTimeClockWorkspace workspace={counter} result={{ ok: true, data }} />;
+    const { rerender } = render(view(model));
+    expect(screen.queryByText(/Square is the selected POS/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clock in" }));
+    await screen.findByText("Clock-in recorded.");
+    expect(clockInAction).toHaveBeenCalledWith({ ...scope, requestId: expect.any(String), jobRoleId: roleId, scheduledShiftId: null });
+
+    const activeEntry: NonNullable<LiveTimeClockModel["activeEntry"]> = {
+      id: timeEntryId, employeeId, employeeName: "Taylor", jobRoleId: roleId, jobName: "Counter", scheduledShiftId: null,
+      clockedInAt, clockedOutAt: null, clockedInLabel: "8:00 AM", clockedOutLabel: null, status: "open", source: "employee", sourceProvider: null,
+      breaks: [], paidBreakMinutes: 0, unpaidBreakMinutes: 0, workedMinutes: 0,
+    };
+    rerender(view({ ...model, activeEntry }));
+    expect(screen.getByRole("button", { name: "Start break" })).toHaveProperty("disabled", true);
+    fireEvent.change(screen.getByRole("combobox", { name: "Break type" }), { target: { value: "paid" } });
+    fireEvent.click(screen.getByRole("button", { name: "Start break" }));
+    await screen.findByText("Break started.");
+    expect(startBreakAction).toHaveBeenCalledWith({ ...scope, requestId: expect.any(String), timeEntryId, isPaid: true });
+
+    rerender(view({ ...model, activeEntry: { ...activeEntry, breaks: [{ id: breakId, startedAt: clockedInAt, endedAt: null, isPaid: true }] } }));
+    expect(screen.queryByRole("button", { name: "Clock out" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "End break" }));
+    await screen.findByText("Break ended.");
+    expect(endBreakAction).toHaveBeenCalledWith({ ...scope, breakId });
+
+    rerender(view({ ...model, activeEntry }));
+    fireEvent.click(screen.getByRole("button", { name: "Clock out" }));
+    await screen.findByText("Clock-out recorded.");
+    expect(clockOutAction).toHaveBeenCalledWith({ ...scope, timeEntryId });
   });
 
   it("reuses an open-shift claim ID until success and then rotates it", async () => {

@@ -52,6 +52,7 @@ const incomeRealtimeBindings = [
   { table: "reservations", scope: "location" },
   { table: "employee_job_roles", scope: "location" },
 ] satisfies readonly RealtimeInvalidationBinding[];
+const counterIncomeRealtimeBindings = incomeRealtimeBindings.filter((binding) => binding.table !== "reservations");
 
 function currency(cents: number | null, code: string): string {
   if (cents === null) return "—";
@@ -123,7 +124,7 @@ function hourlyMetricLabel(
   return `${(bucket.laborMinutes / 60).toFixed(1)}h`;
 }
 
-function HourlyProfile({ model }: { model: IncomeOperatingModel }) {
+function HourlyProfile({ model, showReservations }: { model: IncomeOperatingModel; showReservations: boolean }) {
   const [metric, setMetric] = useState<HourlyMetric>("revenue");
   const [selectedHour, setSelectedHour] = useState<number | null>(null);
   const [selectedTrigger, setSelectedTrigger] = useState<HTMLElement | null>(
@@ -149,7 +150,7 @@ function HourlyProfile({ model }: { model: IncomeOperatingModel }) {
       <Tabs
         id="income-hourly-metric"
         label="Hourly planning metric"
-        items={hourlyMetricTabs}
+        items={showReservations ? hourlyMetricTabs : hourlyMetricTabs.filter((item) => item.value !== "demand")}
         value={metric}
         onValueChange={setMetric}
       />
@@ -169,7 +170,7 @@ function HourlyProfile({ model }: { model: IncomeOperatingModel }) {
               key={bucket.hour}
               type="button"
               role="listitem"
-              aria-label={`${hourLabel(bucket.hour)}: ${currency(bucket.revenueCents, model.currencyCode)} recorded revenue across ${bucket.salesSampleDays} observed sales day${bucket.salesSampleDays === 1 ? "" : "s"}; ${bucket.reservationCovers} reserved covers; ${(bucket.laborMinutes / 60).toFixed(1)} labor hours. Open hour details.`}
+              aria-label={`${hourLabel(bucket.hour)}: ${currency(bucket.revenueCents, model.currencyCode)} recorded revenue across ${bucket.salesSampleDays} observed sales day${bucket.salesSampleDays === 1 ? "" : "s"}; ${showReservations ? `${bucket.reservationCovers} reserved covers; ` : ""}${(bucket.laborMinutes / 60).toFixed(1)} labor hours. Open hour details.`}
               onClick={(event) => {
                 setSelectedTrigger(event.currentTarget);
                 setSelectedHour(bucket.hour);
@@ -264,7 +265,7 @@ function HourlyProfile({ model }: { model: IncomeOperatingModel }) {
                   {selected.salesCovers} recorded covers
                 </p>
               </div>
-              <div className="rounded-[16px] bg-[var(--canvas)] p-4">
+              {showReservations ? <div className="rounded-[16px] bg-[var(--canvas)] p-4">
                 <p className="eyebrow">Reservation demand</p>
                 <p className="numeric mt-2 text-xl font-medium">
                   {selected.reservationCovers}
@@ -272,7 +273,7 @@ function HourlyProfile({ model }: { model: IncomeOperatingModel }) {
                 <p className="mt-1 text-xs text-[var(--ink-faint)]">
                   {selected.reservationCount} parties
                 </p>
-              </div>
+              </div> : null}
               <div className="rounded-[16px] bg-[var(--canvas)] p-4">
                 <p className="eyebrow">Known labor</p>
                 <p className="mt-2 text-xl font-medium">
@@ -296,7 +297,7 @@ function HourlyProfile({ model }: { model: IncomeOperatingModel }) {
             >
               {selected.salesSampleDays
                 ? `${currency(Math.round(selected.revenueCents / selected.salesSampleDays), model.currencyCode)} average revenue per observed sales day. Confirm source coverage and service context before changing staffing.`
-                : "Labor or reservation activity may still be present. Treat this as a coverage question until the sales source is proven complete."}
+                : `${showReservations ? "Labor or reservation activity" : "Labor activity"} may still be present. Check sales coverage for this hour.`}
             </InlineNotice>
           </>
         ) : null}
@@ -305,7 +306,7 @@ function HourlyProfile({ model }: { model: IncomeOperatingModel }) {
   );
 }
 
-function SlowBusySummary({ model }: { model: IncomeOperatingModel }) {
+function SlowBusySummary({ model, showReservations }: { model: IncomeOperatingModel; showReservations: boolean }) {
   const summary = deriveIncomePlanningSummary(model);
   const basisDescription =
     summary.basis === "recorded_revenue"
@@ -343,8 +344,7 @@ function SlowBusySummary({ model }: { model: IncomeOperatingModel }) {
           {summary.staffedWithoutDemand.length} hour(s)
         </p>
         <p className="mt-1 text-xs text-[var(--ink-faint)]">
-          Labor recorded without check or reservation demand; investigate before
-          changing staffing.
+          {showReservations ? "Labor hours without recorded checks or reservations." : "Labor hours without recorded checks."}
         </p>
       </div>
     </div>
@@ -436,9 +436,11 @@ function PlanningInsightAction({
 function PlanningInsights({
   model,
   access,
+  showReservations,
 }: {
   model: IncomeOperatingModel;
   access: IncomeActionAccess;
+  showReservations: boolean;
 }) {
   const insights = deriveIncomePlanningInsights(model);
 
@@ -478,9 +480,9 @@ function PlanningInsights({
                 <p className="mt-3 text-xs leading-5 text-[var(--ink-faint)]">
                   {insight.bucket && insight.average !== null
                     ? revenueBasis
-                      ? `${currency(Math.round(insight.average), model.currencyCode)} average recorded revenue across ${insight.sampleDays} observed sales ${insight.sampleDays === 1 ? "day" : "days"}; ${insight.bucket.salesCovers} recorded covers and ${insight.bucket.reservationCovers} reserved covers in the selected history.`
+                      ? `${currency(Math.round(insight.average), model.currencyCode)} average recorded revenue across ${insight.sampleDays} observed sales ${insight.sampleDays === 1 ? "day" : "days"}; ${insight.bucket.salesCovers} recorded covers${showReservations ? ` and ${insight.bucket.reservationCovers} reserved covers` : ""} in the selected history.`
                       : `${insight.average.toFixed(1)} reserved covers per day across ${insight.sampleDays} calendar day(s). Revenue was not used.`
-                    : "No comparable sales or reservation-demand evidence is available."}
+                    : showReservations ? "No comparable sales or reservation-demand evidence is available." : "No comparable sales records are available."}
                 </p>
                 <div className="mt-auto pt-5">
                   <PlanningInsightAction insight={insight} access={access} />
@@ -517,8 +519,8 @@ function PlanningInsights({
                 </p>
                 <p className="mt-3 text-xs leading-5 text-[var(--ink-faint)]">
                   {insight.buckets.length
-                    ? `${hourRange}: ${(insight.laborMinutes / 60).toFixed(1)} labor hours and ${currency(insight.laborCostCents, model.currencyCode)} known labor with no recorded check observation or reserved covers. Sales source is ${insight.salesFreshness}; verify context before changing staffing.`
-                    : "Every staffed hour has at least one recorded sales observation or reservation-demand signal in this view."}
+                    ? `${hourRange}: ${(insight.laborMinutes / 60).toFixed(1)} labor hours and ${currency(insight.laborCostCents, model.currencyCode)} known labor with no recorded checks${showReservations ? " or reserved covers" : ""}. Sales source is ${insight.salesFreshness}.`
+                    : `Every staffed hour has at least one recorded sales observation${showReservations ? " or reservation-demand signal" : ""} in this view.`}
                 </p>
                 <div className="mt-auto pt-5">
                   <PlanningInsightAction insight={insight} access={access} />
@@ -574,19 +576,21 @@ export function IncomeWorkspace({
   locationName,
   realtimeScope,
   actionAccess = noIncomeActionAccess,
+  showReservations = true,
   demo = false,
 }: {
   result: LiveReadResult<IncomeOperatingModel>;
   locationName: string;
   realtimeScope?: { organizationId: string; locationId: string };
   actionAccess?: IncomeActionAccess;
+  showReservations?: boolean;
   demo?: boolean;
 }) {
   const router = useRouter();
   const realtime = useRealtimeInvalidation({
     enabled: !demo && Boolean(realtimeScope) && result.ok,
     channelName: `income-${realtimeScope?.organizationId ?? "disabled"}-${realtimeScope?.locationId ?? "disabled"}`,
-    bindings: incomeRealtimeBindings,
+    bindings: showReservations ? incomeRealtimeBindings : counterIncomeRealtimeBindings,
     organizationId: realtimeScope?.organizationId ?? "",
     locationId: realtimeScope?.locationId ?? "",
   });
@@ -694,9 +698,8 @@ export function IncomeWorkspace({
           tone="warning"
           title="A real-time revenue source is not connected"
         >
-          Labor, recorded expenses, closeouts, and reservation demand remain
-          visible. Revenue and tracked contribution stay blank until approved
-          check facts arrive.
+          {showReservations ? "Labor, expenses, closeouts, and reservation demand are available." : "Labor, expenses, and closeouts are available."}
+          {" "}Revenue and tracked contribution appear when approved sales records arrive.
         </InlineNotice>
       ) : null}
 
@@ -737,13 +740,13 @@ export function IncomeWorkspace({
           <SectionHeading
             eyebrow={`${model.historyDays}-day profile`}
             title="When service is busy—and when it is not"
-            detail="Hourly recorded revenue, reservation demand, and accrued labor provide a planning baseline."
+            detail={showReservations ? "Hourly recorded revenue, reservation demand, and accrued labor." : "Hourly recorded revenue and accrued labor."}
           />
-          <HourlyProfile model={model} />
+          <HourlyProfile model={model} showReservations={showReservations} />
           <div className="mt-5">
-            <SlowBusySummary model={model} />
+            <SlowBusySummary model={model} showReservations={showReservations} />
           </div>
-          <PlanningInsights model={model} access={actionAccess} />
+          <PlanningInsights model={model} access={actionAccess} showReservations={showReservations} />
         </section>
 
         <aside className="space-y-7">
@@ -860,8 +863,9 @@ export function IncomeWorkspace({
 
       <InlineNotice className="mt-8" tone="info" title="How to read this view">
         This is an operating snapshot, not GAAP profit. Expenses are recorded
-        day-level costs; received inventory is a purchasing diagnostic;
-        reservation covers indicate demand only. Hourly comparisons become more
+        day-level costs. Received inventory is a purchasing diagnostic.{" "}
+        {showReservations ? "Reservation covers indicate demand. " : null}
+        Hourly comparisons become more
         reliable as complete check and time-clock history accumulates.
       </InlineNotice>
     </PageFrame>

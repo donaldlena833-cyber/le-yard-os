@@ -10,6 +10,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import type { LiveSettingsModel } from "@/data/read-models/settings";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import { cn } from "@/lib/utils";
 
 function dateInTimeZone(timeZone: string): string {
@@ -48,10 +49,15 @@ export function CapabilityConfiguration({
   const domains = useMemo(() => {
     const grouped = new Map<string, LiveSettingsModel["capabilityDefinitions"]>();
     for (const definition of data.capabilityDefinitions) {
+      const key = definition.key;
+      if (key.startsWith("reservations.") && !isTenantFeatureEnabled(workspace, "reservations")) continue;
+      if ((key.startsWith("guest.") || key.startsWith("guest_recovery.")) && !isTenantFeatureEnabled(workspace, "guestCrm")) continue;
+      if (key.startsWith("tip.") && !isTenantFeatureEnabled(workspace, "tips")) continue;
+      if (key.startsWith("integrations.") && !isTenantFeatureEnabled(workspace, "providerIntegrations")) continue;
       grouped.set(definition.domain, [...(grouped.get(definition.domain) ?? []), definition]);
     }
     return [...grouped.entries()];
-  }, [data.capabilityDefinitions]);
+  }, [data.capabilityDefinitions, workspace]);
 
   function toggle(capabilityKey: LiveSettingsModel["capabilityDefinitions"][number]["key"]) {
     if (!selectedRole) return;

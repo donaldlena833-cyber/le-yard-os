@@ -16,6 +16,7 @@ import {
 export async function createManualCsvUploadUrlAction(input: unknown) {
   return executeWorkflowAction({
     operation: "integrations.manual_csv.prepare_upload",
+    requiredTenantFeature: "providerIntegrations",
     schema: manualCsvUploadUrlInputSchema,
     input,
     persists: false,
@@ -26,6 +27,7 @@ export async function createManualCsvUploadUrlAction(input: unknown) {
 export async function finalizeManualCsvImportAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "integrations.manual_csv.queue",
+    requiredTenantFeature: "providerIntegrations",
     schema: finalizeManualCsvImportInputSchema,
     input,
     run: finalizeManualCsvImport,
@@ -37,6 +39,7 @@ export async function finalizeManualCsvImportAction(input: unknown) {
 export async function retryIntegrationSyncAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "integrations.sync.retry",
+    requiredTenantFeature: "providerIntegrations",
     schema: retryIntegrationSyncInputSchema,
     input,
     run: retryIntegrationSync,

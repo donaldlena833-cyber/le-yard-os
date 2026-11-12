@@ -471,4 +471,24 @@ describe("ServiceDaySnapshot", () => {
       (source) => source.state === "restricted",
     ).map((source) => source.source)).toEqual(["reservations", "providers"]);
   });
+
+  it("keeps counter service and Today available without making reservation or provider reads", async () => {
+    const counter: WorkspaceContextValue = { ...workspace, role: "owner", serviceSettings: { serviceModel: "counter" } };
+    const unexpectedRead = () => { throw new Error("A disabled module tried to load."); };
+    const loaders: ServiceDaySnapshotLoaders = {
+      loadToday: async () => ({ ok: true, data: today }),
+      loadServiceControl: async () => ({ ok: true, data: serviceControl }),
+      loadProviderHealth: unexpectedRead,
+      loadReservations: unexpectedRead,
+      now: () => new Date("2026-08-09T22:00:00.000Z"),
+    };
+
+    const result = await loadLiveServiceDaySnapshot(counter, loaders);
+
+    expect(result.ok && result.data.today).toEqual(today);
+    expect(result.ok && result.data.serviceControl.ok).toBe(true);
+    expect(result.ok && result.data.reservationSlice).toBeUndefined();
+    expect(result.ok && result.data.providerHealth.state).toBe("restricted");
+    expect(result.ok && result.data.nowAction).toBeNull();
+  });
 });

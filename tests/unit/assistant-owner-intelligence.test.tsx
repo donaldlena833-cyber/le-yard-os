@@ -111,6 +111,8 @@ describe("owner intelligence confirmation boundary", () => {
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Confirm & create task" }));
     await waitFor(() => expect(executeOwnerIntelligenceProposalAction).toHaveBeenCalledWith({
+      organizationId: workspace.organization.id,
+      locationId: workspace.activeLocation.id,
       proposalId: intelligenceAnswer.proposal.id,
       confirmationFingerprint: intelligenceAnswer.proposal.confirmationFingerprint,
     }));
@@ -118,6 +120,8 @@ describe("owner intelligence confirmation boundary", () => {
     await waitFor(() => expect(undoButton).toHaveProperty("disabled", false));
     fireEvent.click(undoButton);
     await waitFor(() => expect(undoOwnerIntelligenceProposalAction).toHaveBeenCalledWith({
+      organizationId: workspace.organization.id,
+      locationId: workspace.activeLocation.id,
       proposalId: intelligenceAnswer.proposal.id,
       reason: "Undone by the owner from Ask Le Yard.",
     }));

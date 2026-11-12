@@ -18,10 +18,13 @@ vi.mock("@/lib/supabase/admin", () => ({
         limit: () => q,
         gte: () => q,
         maybeSingle: async () =>
-          table === "locations"
+          table === "organizations"
+            ? { data: { id: "org" }, error: null }
+            : table === "locations"
             ? {
                 data: {
                   id: "loc",
+                  code: "MAIN",
                   organization_id: "org",
                   timezone: "America/New_York",
                 },

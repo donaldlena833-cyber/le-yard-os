@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { executeWorkflowAction } from "@/data/execute";
+import { z } from "zod";
+import { executeWorkflowAction, type WorkflowContext } from "@/data/execute";
+import { WorkflowError } from "@/data/errors";
+import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import {
   approveTimeCorrectionInputSchema,
   clockInInputSchema,
@@ -27,43 +30,48 @@ async function refreshTimeViews<T>(result: T): Promise<T> {
   return result;
 }
 
-export async function clockInAction(input: unknown) {
-  const result = await executeWorkflowAction({
-    operation: "time.clock_in",
-    schema: clockInInputSchema,
+const counterClockScope = { organizationId: z.uuid(), locationId: z.uuid() };
+
+function runCounterClock<TInput extends { organizationId: string; locationId: string }, TOutput>(
+  operation: string,
+  schema: z.ZodType<TInput>,
+  input: unknown,
+  run: (context: WorkflowContext, input: TInput, scope: TInput) => Promise<TOutput>,
+) {
+  return executeWorkflowAction({
+    operation,
+    schema,
     input,
-    run: clockIn,
+    run: async (context, parsed) => {
+      const session = await resolveWorkspaceSession();
+      if (session.status !== "ready" || session.context.mode !== "live" ||
+        session.context.serviceSettings?.serviceModel !== "counter" ||
+        session.context.organization.id !== parsed.organizationId ||
+        session.context.activeLocation.id !== parsed.locationId) {
+        throw new WorkflowError("forbidden", "Open the Time clock in your active Church Street workspace to record a punch.");
+      }
+      return run(context, parsed, parsed);
+    },
   });
+}
+
+export async function clockInAction(input: unknown) {
+  const result = await runCounterClock("time.clock_in", clockInInputSchema.extend(counterClockScope), input, clockIn);
   return result.ok && result.persisted ? refreshTimeViews(result) : result;
 }
 
 export async function clockOutAction(input: unknown) {
-  const result = await executeWorkflowAction({
-    operation: "time.clock_out",
-    schema: clockOutInputSchema,
-    input,
-    run: clockOut,
-  });
+  const result = await runCounterClock("time.clock_out", clockOutInputSchema.extend(counterClockScope), input, clockOut);
   return result.ok && result.persisted ? refreshTimeViews(result) : result;
 }
 
 export async function startBreakAction(input: unknown) {
-  const result = await executeWorkflowAction({
-    operation: "time.break_start",
-    schema: startBreakInputSchema,
-    input,
-    run: startBreak,
-  });
+  const result = await runCounterClock("time.break_start", startBreakInputSchema.extend(counterClockScope), input, startBreak);
   return result.ok && result.persisted ? refreshTimeViews(result) : result;
 }
 
 export async function endBreakAction(input: unknown) {
-  const result = await executeWorkflowAction({
-    operation: "time.break_end",
-    schema: endBreakInputSchema,
-    input,
-    run: endBreak,
-  });
+  const result = await runCounterClock("time.break_end", endBreakInputSchema.extend(counterClockScope), input, endBreak);
   return result.ok && result.persisted ? refreshTimeViews(result) : result;
 }
 

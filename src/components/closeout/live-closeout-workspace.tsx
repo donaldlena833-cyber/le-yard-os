@@ -38,6 +38,7 @@ import {
 import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/files";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
 import { TipPolicyConfiguration } from "@/components/closeout/tip-policy-configuration";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
@@ -85,9 +86,13 @@ type Draft = {
 
 const CurrencyCodeContext = createContext("USD");
 
-const closeoutRealtimeBindings = [
+const cashCloseoutRealtimeBindings = [
   { table: "shift_closeouts", scope: "location" },
   { table: "closeout_attachments", scope: "organization" },
+] satisfies readonly RealtimeInvalidationBinding[];
+
+const tipCloseoutRealtimeBindings = [
+  ...cashCloseoutRealtimeBindings,
   { table: "tip_pool_policies", scope: "organization" },
   { table: "tip_pool_policy_versions", scope: "organization" },
   { table: "tip_pool_eligibility_rules", scope: "organization" },
@@ -99,17 +104,17 @@ const closeoutRealtimeBindings = [
   { table: "time_entries", scope: "location" },
 ] satisfies readonly RealtimeInvalidationBinding[];
 
-function blankDraft(date: string): Draft {
+function blankDraft(date: string, counterService: boolean): Draft {
   return {
     businessDate: date,
-    shiftLabel: "Dinner",
+    shiftLabel: counterService ? "Counter shift" : "Dinner",
     grossSales: "",
     netSales: "",
     cashSales: "",
     cardSales: "",
     expectedCash: "",
     actualCash: "",
-    covers: "",
+    covers: counterService ? "0" : "",
     comps: "0.00",
     voids: "0.00",
     serviceCharges: "0.00",
@@ -327,14 +332,16 @@ export function LiveCloseoutWorkspace({
 }: {
   workspace: WorkspaceContextValue;
   result: LiveReadResult<LiveCloseoutModel>;
-  policyConfigurationResult: LiveReadResult<TipPolicyConfigurationModel>;
+  policyConfigurationResult: LiveReadResult<TipPolicyConfigurationModel> | null;
 }) {
   const router = useRouter();
+  const counterService = workspace.serviceSettings?.serviceModel === "counter";
+  const tipPoolingEnabled = isTenantFeatureEnabled(workspace, "tips");
   const model = result.ok ? result.data : null;
   const realtime = useRealtimeInvalidation({
     enabled: workspace.mode === "live" && result.ok,
     channelName: `closeout:${workspace.organization.id}:${workspace.activeLocation.id}`,
-    bindings: closeoutRealtimeBindings,
+    bindings: tipPoolingEnabled ? tipCloseoutRealtimeBindings : cashCloseoutRealtimeBindings,
     organizationId: workspace.organization.id,
     locationId: workspace.activeLocation.id,
   });
@@ -356,7 +363,7 @@ export function LiveCloseoutWorkspace({
   const [draft, setDraft] = useState<Draft>(
     initialCloseout
       ? draftFromCloseout(initialCloseout)
-      : blankDraft(model?.date ?? ""),
+      : blankDraft(model?.date ?? "", counterService),
   );
   const [busy, setBusy] = useState(false);
   const { requestIdFor, rotateRequestId } = useStableRequestIds();
@@ -414,7 +421,7 @@ export function LiveCloseoutWorkspace({
   function newCloseout() {
     if (!model) return;
     setSelectedId(null);
-    setDraft(blankDraft(model.date));
+    setDraft(blankDraft(model.date, counterService));
     setMessage("");
   }
 
@@ -471,7 +478,9 @@ export function LiveCloseoutWorkspace({
     ];
     if (requiredValues.some((value) => value === null) || covers === null) {
       setMessage(
-        "Complete every required amount and cover count with valid values.",
+        counterService
+          ? "Complete every required sales and cash amount."
+          : "Complete every required amount and cover count with valid values.",
       );
       return;
     }
@@ -658,10 +667,10 @@ export function LiveCloseoutWorkspace({
               </span>
             </div>
             <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">
-              Closeout & tips
+              {tipPoolingEnabled ? "Closeout & tips" : "Closeout"}
             </h2>
             <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
-              Sales, cash, source-separated tips, and payroll support for{" "}
+              {tipPoolingEnabled ? "Sales, cash, source-separated tips, and payroll support for " : "Sales and cash reconciliation for "}
               {workspace.activeLocation.name}.
             </p>
           </div>
@@ -672,7 +681,9 @@ export function LiveCloseoutWorkspace({
         </header>
         <RealtimeSyncStatus {...realtime} />
 
-        <div className="mt-7 grid gap-10 xl:grid-cols-[260px_minmax(0,1fr)_minmax(340px,.8fr)]">
+        <div className={cn("mt-7 grid gap-10", tipPoolingEnabled
+          ? "xl:grid-cols-[260px_minmax(0,1fr)_minmax(340px,.8fr)]"
+          : "lg:grid-cols-[260px_minmax(0,1fr)]")}>
           <aside>
             <SectionHeading
               eyebrow="History"
@@ -815,7 +826,7 @@ export function LiveCloseoutWorkspace({
               </div>
               <div className="mt-3 grid gap-x-8 md:grid-cols-2">
                 <section>
-                  <SectionHeading title="Sales & covers" />
+                  <SectionHeading title={counterService ? "Sales" : "Sales & covers"} />
                   <MoneyField
                     label="Gross sales"
                     name="grossSales"
@@ -858,7 +869,7 @@ export function LiveCloseoutWorkspace({
                     disabled={locked}
                     onChange={updateDraft}
                   />
-                  <label className="grid grid-cols-[1fr_132px] items-center gap-4 border-t border-[var(--line)] py-3">
+                  {!counterService ? <label className="grid grid-cols-[1fr_132px] items-center gap-4 border-t border-[var(--line)] py-3">
                     <span className="text-[13px] font-semibold">Covers</span>
                     <input
                       value={draft.covers}
@@ -869,10 +880,10 @@ export function LiveCloseoutWorkspace({
                       }
                       className="numeric h-10 rounded-xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-3 text-right text-xs font-semibold"
                     />
-                  </label>
+                  </label> : null}
                 </section>
                 <section>
-                  <SectionHeading title="Cash & tip sources" />
+                  <SectionHeading title={counterService ? "Cash & recorded tips" : "Cash & tip sources"} />
                   <MoneyField
                     label="Expected cash"
                     name="expectedCash"
@@ -1010,7 +1021,7 @@ export function LiveCloseoutWorkspace({
             </form>
           </section>
 
-          <aside>
+          {tipPoolingEnabled ? <aside>
             <SectionHeading
               eyebrow="Payroll support"
               title="Tip pool"
@@ -1185,12 +1196,12 @@ export function LiveCloseoutWorkspace({
                 integration.
               </p>
             </div>
-          </aside>
+          </aside> : null}
         </div>
-        <TipPolicyConfiguration
+        {policyConfigurationResult ? <TipPolicyConfiguration
           workspace={workspace}
           result={policyConfigurationResult}
-        />
+        /> : null}
         <ConfirmActionDialog
           open={Boolean(closeoutDecision)}
           labelledBy="closeout-decision-title"
@@ -1200,7 +1211,9 @@ export function LiveCloseoutWorkspace({
               : "Reject and lock this closeout?"
           }
           description={
-            closeoutDecision === "approve"
+            !tipPoolingEnabled
+              ? "This decision permanently locks the financial record and its private evidence."
+              : closeoutDecision === "approve"
               ? "Approval permanently locks the financial record and its private evidence. Tip calculation can proceed from the approved record."
               : "Rejection permanently locks the submitted record with its original evidence. The record will not be approved for tip preparation."
           }

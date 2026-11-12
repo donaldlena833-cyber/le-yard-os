@@ -24,6 +24,7 @@ function refreshFinancialConfiguration() {
 export async function configureTipPolicyAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "tip-policy.configure",
+    requiredTenantFeature: "tips",
     schema: configureTipPolicyInputSchema,
     input,
     run: configureTipPolicy,
@@ -35,6 +36,7 @@ export async function configureTipPolicyAction(input: unknown) {
 export async function saveTipPolicyDraftAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "tip-policy-draft.save",
+    requiredTenantFeature: "tips",
     schema: saveTipPolicyDraftInputSchema,
     input,
     run: saveTipPolicyDraft,
@@ -46,6 +48,7 @@ export async function saveTipPolicyDraftAction(input: unknown) {
 export async function approveTipPolicyVersionAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "tip-policy-version.approve",
+    requiredTenantFeature: "tips",
     schema: approveTipPolicyVersionInputSchema,
     input,
     run: approveTipPolicyVersion,

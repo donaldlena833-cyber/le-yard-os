@@ -16,15 +16,18 @@ import {
 import { reportKindForOperationsQuery } from "@/lib/ai/query-routing";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { createClient } from "@/lib/supabase/server";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
+import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import type { Json } from "@/types/database.generated";
 import type { ReportKind } from "@/types";
 
-const querySchema = z.string().trim().min(2).max(500);
-const proposalDecisionSchema = z.object({
+const scopeSchema = z.object({ organizationId: z.uuid(), locationId: z.uuid() });
+const querySchema = scopeSchema.extend({ query: z.string().trim().min(2).max(500) });
+const proposalDecisionSchema = scopeSchema.extend({
   proposalId: z.uuid(),
   confirmationFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
 });
-const proposalUndoSchema = z.object({
+const proposalUndoSchema = scopeSchema.extend({
   proposalId: z.uuid(),
   reason: z.string().trim().min(2).max(1_000),
 });
@@ -129,10 +132,20 @@ function evidenceFromReport(view: ReportView, requestId: string, question: strin
   return evidence;
 }
 
-async function resolveOwnerIntelligenceContext() {
+function matchesWorkspace(scope: z.infer<typeof scopeSchema>, context: WorkspaceContextValue) {
+  return scope.organizationId === context.organization.id && scope.locationId === context.activeLocation.id;
+}
+
+async function resolveOwnerIntelligenceContext(scope: z.infer<typeof scopeSchema>) {
   const resolution = await resolveWorkspaceSession();
   if (resolution.status !== "ready" || resolution.context.mode !== "live") {
     return { ok: false as const, message: "A connected tenant session is required." };
+  }
+  if (!matchesWorkspace(scope, resolution.context)) {
+    return { ok: false as const, message: "The active workspace changed. Reopen Ask Le Yard to continue." };
+  }
+  if (!isTenantFeatureEnabled(resolution.context, "externalAssistant")) {
+    return { ok: false as const, message: "Owner intelligence is unavailable in this workspace." };
   }
   if (resolution.context.role !== "owner") {
     return { ok: false as const, message: "Ask Le Yard intelligence requires your authorized owner account." };
@@ -155,6 +168,9 @@ export async function askLiveOperationsAction(input: unknown): Promise<AskLiveOp
   if (resolution.status !== "ready" || resolution.context.mode !== "live") {
     return { ok: false, message: "A connected tenant session is required." };
   }
+  if (!matchesWorkspace(query.data, resolution.context)) {
+    return { ok: false, message: "The active workspace changed. Reopen Ask Le Yard to continue." };
+  }
   if (resolution.context.role === "employee") {
     return {
       ok: false,
@@ -176,7 +192,7 @@ export async function askLiveOperationsAction(input: unknown): Promise<AskLiveOp
   const endsOn = localDateKey(new Date(), location.timezone);
   const report = await loadLiveReport(
     resolution.context,
-    reportKindForOperationsQuery(query.data),
+    reportKindForOperationsQuery(query.data.query),
     {
       locationId: resolution.context.activeLocation.id,
       startsOn: addIsoDays(endsOn, -29),
@@ -201,7 +217,7 @@ export async function askOwnerIntelligenceAction(input: unknown): Promise<AskOwn
     return { ok: false, message: "Owner intelligence is not enabled on this server." };
   }
 
-  const resolution = await resolveOwnerIntelligenceContext();
+  const resolution = await resolveOwnerIntelligenceContext(query.data);
   if (!resolution.ok) return resolution;
   const { context, supabase } = resolution;
   const locationResult = await supabase
@@ -218,16 +234,16 @@ export async function askOwnerIntelligenceAction(input: unknown): Promise<AskOwn
   const localDate = localDateKey(new Date(), locationResult.data.timezone);
   const report = await loadLiveReport(
     context,
-    reportKindForOperationsQuery(query.data),
+    reportKindForOperationsQuery(query.data.query),
     { locationId: context.activeLocation.id, startsOn: addIsoDays(localDate, -29), endsOn: localDate },
   );
   if (!report.ok) return { ok: false, message: report.message };
-  const evidence = evidenceFromReport(report.data.view, runId, query.data);
+  const evidence = evidenceFromReport(report.data.view, runId, query.data.query);
 
   const beginResult = await supabase.rpc("begin_owner_intelligence_run", {
     p_request_id: runId,
     p_location_id: context.activeLocation.id,
-    p_prompt: query.data,
+    p_prompt: query.data.query,
     p_input_parameters: {
       reportKind: report.data.view.kind,
       evidenceCount: evidence.length,
@@ -238,7 +254,7 @@ export async function askOwnerIntelligenceAction(input: unknown): Promise<AskOwn
 
   try {
     const providerResult = await runOwnerIntelligence({
-      question: query.data,
+      question: query.data.query,
       locationName: context.activeLocation.name,
       localDate,
       evidence,
@@ -300,7 +316,7 @@ export async function askOwnerIntelligenceAction(input: unknown): Promise<AskOwn
 export async function executeOwnerIntelligenceProposalAction(input: unknown): Promise<OwnerIntelligenceMutationResult> {
   const parsed = proposalDecisionSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "The reviewed proposal confirmation is invalid." };
-  const resolution = await resolveOwnerIntelligenceContext();
+  const resolution = await resolveOwnerIntelligenceContext(parsed.data);
   if (!resolution.ok) return resolution;
   const result = await resolution.supabase.rpc("execute_owner_intelligence_task_proposal", {
     p_request_id: crypto.randomUUID(),
@@ -318,7 +334,7 @@ export async function executeOwnerIntelligenceProposalAction(input: unknown): Pr
 export async function undoOwnerIntelligenceProposalAction(input: unknown): Promise<OwnerIntelligenceMutationResult> {
   const parsed = proposalUndoSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: "An undo reason between 2 and 1,000 characters is required." };
-  const resolution = await resolveOwnerIntelligenceContext();
+  const resolution = await resolveOwnerIntelligenceContext(parsed.data);
   if (!resolution.ok) return resolution;
   const result = await resolution.supabase.rpc("undo_owner_intelligence_task_proposal", {
     p_request_id: crypto.randomUUID(),

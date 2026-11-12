@@ -12,6 +12,12 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: mocks.createAdminClient,
 }));
 
+vi.mock("@/lib/restaurant-location.server", () => ({
+  resolveRestaurantLocation: async () => ({
+    organizationId: "33333333-3333-4333-8333-333333333333",
+  }),
+}));
+
 vi.mock("@/lib/notifications/push-subscription", () => ({
   decryptPushSubscription: mocks.decrypt,
 }));

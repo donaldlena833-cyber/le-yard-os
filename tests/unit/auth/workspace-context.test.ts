@@ -141,6 +141,26 @@ describe("workspace scope selection", () => {
     ).toBe("org-alpha");
   });
 
+  it("prefers the configured restaurant only when the user can access it and has no valid selection", () => {
+    const input = {
+      userId,
+      memberships: [
+        membership("membership-alpha", "org-alpha", "owner"),
+        membership("membership-bravo", "org-bravo", "owner"),
+      ],
+      organizations,
+      locations,
+      locationMemberships: [],
+      fallbackLocationId: "loc-bravo-b",
+    };
+    expect(selectWorkspaceScope(input)?.activeLocation?.id).toBe("loc-bravo-b");
+    expect(selectWorkspaceScope({
+      ...input,
+      preference: { userId, organizationId: "org-alpha", locationId: "loc-alpha" },
+    })?.activeLocation?.id).toBe("loc-alpha");
+    expect(selectWorkspaceScope({ ...input, memberships: [input.memberships[0]] })?.activeLocation?.id).toBe("loc-alpha");
+  });
+
   it("exposes every derived membership choice without widening location access", () => {
     const scopes = deriveWorkspaceScopes({
       userId,

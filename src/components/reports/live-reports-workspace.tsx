@@ -61,9 +61,10 @@ function reportUrl(
   return `/reports?${search.toString()}`;
 }
 
-function exportUrl(format: "csv" | "pdf", model: LiveReportsModel) {
+function exportUrl(format: "csv" | "pdf", model: LiveReportsModel, organizationId: string) {
   const search = new URLSearchParams({
     kind: model.view.kind,
+    organizationId,
     locationId: model.filters.locationId,
     startsOn: model.filters.startsOn,
     endsOn: model.filters.endsOn,
@@ -143,7 +144,7 @@ export function LiveReportsWorkspace({
       {model.truncated ? <div role="status" className="mt-4 rounded-xl bg-[var(--warning-soft)] px-4 py-3 text-xs text-[var(--warning)]">This view reached its 5,000-row safety bound. Narrow the date or location filter before exporting a complete report.</div> : null}
 
       <TabPanel id="live-report-views" value={report.kind}>
-      <div className="mt-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow">{group}</p><h3 className="mt-2 text-xl font-medium tracking-[-0.04em]">{report.title}</h3><p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">{report.description}</p></div><div className="flex gap-2"><ExportLink href={exportUrl("csv", model)} format="CSV" /><ExportLink href={exportUrl("pdf", model)} format="PDF" /></div></div>
+      <div className="mt-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow">{group}</p><h3 className="mt-2 text-xl font-medium tracking-[-0.04em]">{report.title}</h3><p className="mt-1 max-w-2xl text-[13px] leading-5 text-[var(--ink-faint)]">{report.description}</p></div><div className="flex gap-2"><ExportLink href={exportUrl("csv", model, workspace.organization.id)} format="CSV" /><ExportLink href={exportUrl("pdf", model, workspace.organization.id)} format="PDF" /></div></div>
 
       <section aria-label={`${report.title} metrics`} className="mt-5 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] sm:grid-cols-4 sm:divide-y-0">{report.metrics.map((metric) => <Metric key={metric.label} label={metric.label} value={metric.value} detail={metric.detail} />)}</section>
 

@@ -25,6 +25,11 @@ export async function liveReportFromRequest(
     return { error: "Sign in to export a report.", status: 401 };
   }
   const search = new URL(request.url).searchParams;
+  const organizationId = search.get("organizationId");
+  if (organizationId !== resolution.context.organization.id &&
+    (organizationId !== null || resolution.context.availableWorkspaces.length !== 1)) {
+    return { error: "Open the report from the active workspace before exporting.", status: 409 };
+  }
   const kind = search.get("kind") ?? "";
   const locationId = search.get("locationId") ?? "";
   const startsOn = search.get("startsOn") ?? "";

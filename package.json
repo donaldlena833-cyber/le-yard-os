@@ -52,6 +52,7 @@
     "test:db:lint": "supabase db lint --local --schema public --level error --fail-on error",
     "backup:restore-drill:create-fixture": "node scripts/create-synthetic-restore-drill-artifact.mjs",
     "backup:restore-drill:verify": "node scripts/verify-backup-restore-postgres.mjs",
+    "church-street": "node scripts/provision-church-street.mjs",
     "bootstrap:owners": "node scripts/bootstrap-initial-owners.mjs",
     "release:validate": "node scripts/validate-release-manifest.mjs",
     "release:capture-state": "node scripts/capture-release-state.mjs",

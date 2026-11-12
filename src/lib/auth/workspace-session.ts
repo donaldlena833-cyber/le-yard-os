@@ -26,6 +26,9 @@ import { localDateKey } from "@/data/read-models/local-time";
 import { getServerRuntimeConfiguration } from "@/lib/env.server";
 import { retryJwtIssuedAtFuture } from "@/lib/auth/jwt-clock-skew-retry";
 import { createClient } from "@/lib/supabase/server";
+import { appSurface } from "@/lib/app-surface";
+import { matchesRestaurantLocation, restaurantOrganizationSlug } from "@/lib/restaurant-location";
+import { resolveTenantServiceSettings } from "@/lib/tenant-service.server";
 import {
   DEMO_CAPABILITY_TEMPLATES,
   OPERATIONAL_CAPABILITIES,
@@ -321,12 +324,12 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
   const [organizationResult, locationResult, locationMembershipResult] = await Promise.all([
     supabase
       .from("organizations")
-      .select("id, name, status")
+      .select("id, name, slug, status")
       .in("id", organizationIds)
       .eq("status", "active"),
     supabase
       .from("locations")
-      .select("id, organization_id, name, is_active, timezone")
+      .select("id, organization_id, name, code, is_active, timezone")
       .in("organization_id", organizationIds)
       .eq("is_active", true),
     supabase
@@ -349,24 +352,35 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
     return { status: "data_error", identity };
   }
 
+  const organizations = organizationResult.data ?? [];
+  const locations = locationResult.data ?? [];
+  const restaurantOrganization = organizations.find((organization) => organization.slug === restaurantOrganizationSlug);
+  const restaurantLocation = locations.find((location) =>
+    location.organization_id === restaurantOrganization?.id && matchesRestaurantLocation(location));
+  const restaurantSurface = appSurface !== "operations";
+  if (restaurantSurface && !restaurantLocation) return { status: "no_access", identity };
+
   const scopeInput = {
     userId,
     memberships,
-    organizations: (organizationResult.data ?? []) as WorkspaceOrganizationRow[],
-    locations: (locationResult.data ?? []) as WorkspaceLocationRow[],
+    organizations: organizations.filter((organization) =>
+      !restaurantSurface || organization.id === restaurantOrganization?.id) as WorkspaceOrganizationRow[],
+    locations: locations.filter((location) =>
+      !restaurantSurface || location.id === restaurantLocation?.id) as WorkspaceLocationRow[],
     locationMemberships: (locationMembershipResult.data ?? []) as WorkspaceLocationMembershipRow[],
   };
   const scopes = deriveWorkspaceScopes(scopeInput);
   const scope = selectWorkspaceScope({
     ...scopeInput,
     preference: await preferencePromise,
+    fallbackLocationId: restaurantLocation?.id,
   });
 
   if (!scope) return { status: "no_access", identity };
   if (!scope.activeLocation) return { status: "no_location", identity };
   if (!scope.activeLocation.timeZone) return { status: "data_error", identity };
   const effectiveOn = localDateKey(new Date(), scope.activeLocation.timeZone);
-  const [jobContext, capabilityResult] = await Promise.all([
+  const [jobContext, capabilityResult, serviceSettingsResult] = await Promise.all([
     resolveWorkspaceJobContext(
       supabase,
       scope.organization.id,
@@ -379,12 +393,21 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
       p_location_id: scope.activeLocation.id,
       p_effective_on: effectiveOn,
     }),
+    resolveTenantServiceSettings(supabase, scope.organization.id)
+      .then((settings) => ({ ok: true as const, settings }))
+      .catch(() => ({ ok: false as const })),
   ]);
   if (capabilityResult.error) {
     console.error("[workspace-session] effective capability query failed", {
       organizationId: scope.organization.id,
       locationId: scope.activeLocation.id,
       error: capabilityResult.error.message,
+    });
+    return { status: "data_error", identity };
+  }
+  if (!serviceSettingsResult.ok) {
+    console.error("[workspace-session] tenant service settings query failed", {
+      organizationId: scope.organization.id,
     });
     return { status: "data_error", identity };
   }
@@ -407,6 +430,7 @@ export async function resolveWorkspaceSession(): Promise<WorkspaceSessionResolut
     organizationWide:
       scope.membership.role === "owner" || scope.membership.role === "admin",
     capabilities,
+    serviceSettings: serviceSettingsResult.settings,
     ...jobContext,
   };
 

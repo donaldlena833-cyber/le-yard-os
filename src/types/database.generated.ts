@@ -11754,6 +11754,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_provision_church_street": {
+        Args: {
+          "p_members": Json | null
+        }
+        Returns: Json
+      };
       "service_provision_user_invitation_request": {
         Args: {
           "p_request_id": string | null
@@ -11869,6 +11875,13 @@ export type Database = {
           "p_notes": string | null
         }
         Returns: { "id": string | null; "display_name": string | null; "updated_at": string | null }[]
+      };
+      "service_set_church_street_active": {
+        Args: {
+          "p_organization_id": string | null
+          "p_active": boolean | null
+        }
+        Returns: Json
       };
       "set_chat_channel_archived": {
         Args: {
@@ -12646,6 +12659,7 @@ export const DatabaseObjectNames = {
       "service_ingest_square_source_window",
       "service_merge_guests",
       "service_modify_public_reservation",
+      "service_provision_church_street",
       "service_provision_user_invitation_request",
       "service_public_release_state",
       "service_queue_user_invitation_delivery",
@@ -12660,6 +12674,7 @@ export const DatabaseObjectNames = {
       "service_reservation_shift_snapshot",
       "service_runtime_schema_contract",
       "service_save_guest",
+      "service_set_church_street_active",
       "set_chat_channel_archived",
       "set_delivery_receipt_link",
       "set_expense_category_active",

@@ -30,6 +30,7 @@ import {
   type OperationalCapability,
 } from "@/lib/permissions/capabilities";
 import type { AppRole } from "@/types";
+import { isTenantRouteEnabled } from "@/lib/tenant-service";
 import {
   type AppSurface,
   appSurface,
@@ -123,6 +124,7 @@ export const allNavItems = [
 
 export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue): boolean {
   if (!(item.surfaces ?? ["operations"]).includes(appSurface)) return false;
+  if (!isTenantRouteEnabled(workspace, item.href)) return false;
   if (item.personas && (!workspace.persona || !item.personas.includes(workspace.persona))) return false;
   if (item.hiddenPersonas?.includes(workspace.persona as "chef")) return false;
   if (!item.roles && !item.anyCapabilities) return true;
@@ -151,6 +153,7 @@ export function isWorkspaceRouteAccessible(
   workspace: WorkspaceContextValue,
 ): boolean {
   if (!isDestinationAllowedForAppSurface(pathname)) return false;
+  if (!isTenantRouteEnabled(workspace, pathname)) return false;
   const item = allNavItems.find((candidate) => candidate.href === pathname);
   return item ? isNavItemVisible(item, workspace) : true;
 }

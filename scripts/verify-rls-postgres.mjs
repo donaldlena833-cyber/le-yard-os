@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Client } from "pg";
+import { verifyChurchStreetTenant } from "./verify-church-street-tenant.mjs";
 import { requireLocalPostgresControlUrl } from "./lib/require-local-postgres-control-url.mjs";
 
 const controlUrl = requireLocalPostgresControlUrl(process.env.RLS_TEST_DATABASE_URL, "RLS_TEST_DATABASE_URL");
@@ -94,6 +95,11 @@ try {
     }
     report.files.push(item);
   }
+  await verifyChurchStreetTenant({
+    query: (sql) => db.query(sql),
+    exec: (sql) => db.query(sql),
+  });
+  report.churchStreetTenant = "passed";
   report.completed = true;
 } catch (error) {
   report.error = error.message;

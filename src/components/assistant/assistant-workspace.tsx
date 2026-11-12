@@ -30,6 +30,7 @@ import { confidenceBand, guardedActionPolicy, validateCitations, type Operations
 import type { OwnerIntelligenceAnswer } from "@/lib/ai/intelligence-contract";
 import { runDemoOperationsQuery } from "@/lib/ai/demo-search";
 import { cn } from "@/lib/utils";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 
 const prompts = [
   "What needs attention before service?",
@@ -154,6 +155,9 @@ function OwnerAnswerCard({
 
 export function AssistantWorkspace() {
   const workspace = useWorkspaceContext();
+  const scope = { organizationId: workspace.organization.id, locationId: workspace.activeLocation.id };
+  const ownerIntelligence = workspace.role === "owner" && isTenantFeatureEnabled(workspace, "externalAssistant");
+  const guestSearch = isTenantFeatureEnabled(workspace, "guestCrm");
   const [query, setQuery] = useState("");
   const [answer, setAnswer] = useState<OperationsAnswer | null>(() => workspace.mode === "demo" ? runDemoOperationsQuery(prompts[0]) : null);
   const [ownerAnswer, setOwnerAnswer] = useState<OwnerIntelligenceAnswer | null>(null);
@@ -174,9 +178,10 @@ export function AssistantWorkspace() {
       return;
     }
     startTransition(async () => {
-      const result = workspace.role === "owner"
-        ? await askOwnerIntelligenceAction(clean)
-        : await askLiveOperationsAction(clean);
+      const input = { ...scope, query: clean };
+      const result = ownerIntelligence
+        ? await askOwnerIntelligenceAction(input)
+        : await askLiveOperationsAction(input);
       if (!result.ok) {
         setNotice(result.message);
         return;
@@ -197,6 +202,7 @@ export function AssistantWorkspace() {
     setNotice(null);
     startTransition(async () => {
       const result = await executeOwnerIntelligenceProposalAction({
+        ...scope,
         proposalId: proposal.id,
         confirmationFingerprint: proposal.confirmationFingerprint,
       });
@@ -218,6 +224,7 @@ export function AssistantWorkspace() {
     setNotice(null);
     startTransition(async () => {
       const result = await undoOwnerIntelligenceProposalAction({
+        ...scope,
         proposalId: proposal.id,
         reason: "Undone by the owner from Ask Le Yard.",
       });
@@ -247,7 +254,7 @@ export function AssistantWorkspace() {
           <p className="mt-4 max-w-2xl text-xs leading-5 text-white/55">Ask about service, your team, and daily operations. Review suggested tasks before saving.</p>
           <form onSubmit={submit} className="mt-7 flex items-center gap-2 rounded-[17px] bg-white/[.08] p-2 ring-1 ring-white/10 focus-within:ring-[#e1a34d]/70">
             <Search className="ml-2 size-4 shrink-0 text-white/55" />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Ask a question about restaurant operations" placeholder="Ask about labor, receipts, guests, inventory…" className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/55" />
+            <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label="Ask a question about operations" placeholder={guestSearch ? "Ask about labor, receipts, guests, inventory…" : "Ask about labor, receipts, or inventory…"} className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/55" />
             <Button type="submit" variant="accent" size="icon" aria-label="Ask Le Yard" disabled={!query.trim() || isPending}>{isPending ? <LoaderCircle className="size-4 animate-spin" /> : <CornerDownLeft className="size-4" />}</Button>
           </form>
         </div>

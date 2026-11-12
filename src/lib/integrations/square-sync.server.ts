@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/types/database.generated";
+import { resolveRestaurantLocation } from "@/lib/restaurant-location.server";
 import { sanitizeIntegrationError } from "./adapters";
 import { SquareReadClient, squareSourceHash, type SquareReadConfiguration } from "./square-read.server";
 
@@ -30,6 +31,10 @@ export async function runSquareSourceSync(input: SquareSyncInput, dependencies: 
   const loaded = await admin.from("integration_connections").select("id, organization_id, location_id, provider, status, configuration").eq("id", connectionId).eq("provider", "square").maybeSingle();
   if (loaded.error || !loaded.data || !loaded.data.location_id || !["pending", "connected", "degraded"].includes(loaded.data.status)) throw new SquareSourceSyncError("An enabled Square source connection is required.", 409);
   const connection = loaded.data, config = connection.configuration as Record<string, Json | undefined>;
+  const restaurant = await resolveRestaurantLocation(admin).catch(() => null);
+  if (!restaurant || connection.organization_id !== restaurant.organizationId || connection.location_id !== restaurant.locationId) {
+    throw new SquareSourceSyncError("The Square source connection must belong to the Ninth Avenue restaurant.", 409);
+  }
   const scope = scopeSchema.parse(config.squareScope);
   if (config.financialPostingEnabled !== false) throw new SquareSourceSyncError("Square financial posting must remain disabled for this rehearsal.", 409);
   const existing = await admin.from("integration_sync_jobs").select("id, connection_id, resource_type, direction, status, cursor").eq("id", request.requestId).maybeSingle();

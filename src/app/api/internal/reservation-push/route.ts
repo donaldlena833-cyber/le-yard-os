@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveRestaurantLocation } from "@/lib/restaurant-location.server";
 import { decryptPushSubscription } from "@/lib/notifications/push-subscription";
 
 const pushClaimLimit = 8;
@@ -199,9 +200,11 @@ async function deliverReservationPush(request: Request) {
   }
 
   let rpc: PushRpc;
+  let restaurantOrganizationId: string;
   try {
     const admin = createAdminClient();
-    rpc = admin.rpc as unknown as PushRpc;
+    restaurantOrganizationId = (await resolveRestaurantLocation(admin)).organizationId;
+    rpc = admin.rpc.bind(admin) as unknown as PushRpc;
   } catch {
     return response(counters, {
       error: "Reservation push storage is unavailable.",
@@ -238,6 +241,10 @@ async function deliverReservationPush(request: Request) {
   const pushes = claimResult.data;
   counters.claimed = pushes.length;
   for (const [index, push] of pushes.entries()) {
+    if (push.organizationId !== restaurantOrganizationId) {
+      counters.deferred += 1;
+      continue;
+    }
     const dispatchAt = new Date();
     let began: PushRpcResult;
     try {

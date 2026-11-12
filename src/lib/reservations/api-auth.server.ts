@@ -6,6 +6,7 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveRestaurantLocation } from "@/lib/restaurant-location.server";
 
 export interface BookingApiClientContext {
   id: string;
@@ -114,6 +115,13 @@ export async function authenticateBookingApiRequest(request: Request, requiredSc
   if (!data.scopes.includes(requiredScope)) throw new BookingApiError(403, "forbidden", "This API client does not have the required scope.");
   const origin = request.headers.get("origin");
   if (origin && data.allowed_origins.length && !data.allowed_origins.includes(origin)) throw new BookingApiError(403, "origin_not_allowed", "This origin is not allowed for the booking API client.");
+  const restaurant = await resolveRestaurantLocation(admin).catch(() => null);
+  if (!restaurant) {
+    throw new BookingApiError(503, "booking_unavailable", "The booking service is temporarily unavailable.");
+  }
+  if (data.organization_id !== restaurant.organizationId || data.location_id !== restaurant.locationId) {
+    throw new BookingApiError(403, "forbidden", "This API client cannot access the restaurant location.");
+  }
   void admin.from("booking_api_clients").update({ last_used_at: new Date().toISOString() }).eq("id", data.id);
   return {
     id: data.id,

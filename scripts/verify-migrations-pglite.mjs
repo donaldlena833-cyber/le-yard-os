@@ -1,3 +1,4 @@
+import { verifyChurchStreetTenant } from "./verify-church-street-tenant.mjs";
 import { verifyOpeningRoomV3 } from "./verify-opening-room-v3.mjs";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -5169,6 +5170,7 @@ try {
     "PASS secure invitation functions and owner-role guard\n",
   );
   await verifyOpeningRoomV3(db);
+  await verifyChurchStreetTenant(db);
 } finally {
   await db.close();
 }

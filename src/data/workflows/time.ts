@@ -28,11 +28,26 @@ function sameInstant(left: string | null, right: string | null): boolean {
   return new Date(left).getTime() === new Date(right).getTime();
 }
 
+type PunchScope = { organizationId: string; locationId: string };
+
+function assertPunchScope(entry: { organization_id: string; location_id: string }, scope: PunchScope | undefined) {
+  assertCondition(!scope || (entry.organization_id === scope.organizationId && entry.location_id === scope.locationId),
+    "forbidden", "This punch belongs to a different workspace.");
+}
+
+function assertNativePunch(entry: { organization_id: string; location_id: string; source: string; source_provider: string | null }, scope: PunchScope | undefined) {
+  assertPunchScope(entry, scope);
+  assertCondition(!scope || (entry.source === "employee" && entry.source_provider === null),
+    "forbidden", "Ask your manager about this attendance record.");
+}
+
 export async function clockIn(
   { supabase, actor }: WorkflowContext,
   input: ClockInInput,
+  scope?: PunchScope,
 ) {
   const location = await requireAccessibleLocation(supabase, actor, input.locationId);
+  assertPunchScope({ organization_id: location.organizationId, location_id: location.id }, scope);
   const employee = await requireActorEmployee(supabase, actor, location.organizationId);
 
   const { data: role, error: roleError } = await supabase
@@ -122,14 +137,16 @@ export async function clockIn(
 export async function clockOut(
   { supabase, actor }: WorkflowContext,
   input: ClockOutInput,
+  scope?: PunchScope,
 ) {
   const { data, error } = await supabase
     .from("time_entries")
-    .select("id, organization_id, employee_id, status, clocked_out_at")
+    .select("id, organization_id, location_id, employee_id, status, clocked_out_at, source, source_provider")
     .eq("id", input.timeEntryId)
     .maybeSingle();
   if (error) throwDatabaseError(error, "The time entry could not be loaded.");
   const entry = assertFound(data, "The time entry was not found.");
+  assertNativePunch(entry, scope);
   const employee = await requireActorEmployee(supabase, actor, entry.organization_id);
   assertCondition(
     entry.employee_id === employee.id,
@@ -165,14 +182,16 @@ export async function clockOut(
 export async function startBreak(
   { supabase, actor }: WorkflowContext,
   input: StartBreakInput,
+  scope?: PunchScope,
 ) {
   const { data, error } = await supabase
     .from("time_entries")
-    .select("id, organization_id, employee_id, status")
+    .select("id, organization_id, location_id, employee_id, status, source, source_provider")
     .eq("id", input.timeEntryId)
     .maybeSingle();
   if (error) throwDatabaseError(error, "The time entry could not be loaded.");
   const entry = assertFound(data, "The time entry was not found.");
+  assertNativePunch(entry, scope);
   const employee = await requireActorEmployee(supabase, actor, entry.organization_id);
   assertCondition(
     entry.employee_id === employee.id,
@@ -223,6 +242,7 @@ export async function startBreak(
 export async function endBreak(
   { supabase, actor }: WorkflowContext,
   input: EndBreakInput,
+  scope?: PunchScope,
 ) {
   const { data, error } = await supabase
     .from("time_breaks")
@@ -234,11 +254,12 @@ export async function endBreak(
 
   const { data: entry, error: entryError } = await supabase
     .from("time_entries")
-    .select("id, organization_id, employee_id, status")
+    .select("id, organization_id, location_id, employee_id, status, source, source_provider")
     .eq("id", breakRow.time_entry_id)
     .maybeSingle();
   if (entryError) throwDatabaseError(entryError, "The time entry could not be loaded.");
   const parent = assertFound(entry, "The break's time entry was not found.");
+  assertNativePunch(parent, scope);
   const employee = await requireActorEmployee(supabase, actor, parent.organization_id);
   assertCondition(
     parent.employee_id === employee.id,

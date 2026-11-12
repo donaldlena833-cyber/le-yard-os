@@ -9,6 +9,7 @@ import {
 } from "@/lib/permissions/capabilities";
 import type { AppRole } from "@/types";
 import { isDestinationAllowedForAppSurface } from "@/lib/app-surface";
+import { isTenantFeatureEnabled, isTenantRouteEnabled } from "@/lib/tenant-service";
 
 export type WorkMode =
   | "owner_operator"
@@ -1845,6 +1846,7 @@ export interface ActionResolutionContext {
   persona?: WorkspaceContextValue["persona"];
   workMode: WorkMode;
   capabilities: readonly OperationalCapability[];
+  serviceSettings?: WorkspaceContextValue["serviceSettings"];
   servicePhase: ServicePhase;
   satisfiedPrerequisites: readonly ActionPrerequisite[];
 }
@@ -1940,10 +1942,11 @@ export function isActionAuthorized(
   action: ActionDefinition,
   context: Pick<
     ActionResolutionContext,
-    "role" | "persona" | "workMode" | "capabilities"
+    "role" | "persona" | "workMode" | "capabilities" | "serviceSettings"
   >,
 ): boolean {
   return (
+    isTenantRouteEnabled(context, action.destination) &&
     action.workModes.includes(context.workMode) &&
     !action.hiddenPersonas?.includes(context.persona as "chef") &&
     hasActionCapability(action.capabilities, context)
@@ -2008,7 +2011,7 @@ export function getObjectActionResolutions(
 }
 
 export function getStableMobileDestinationActions(
-  workspace: Pick<WorkspaceContextValue, "role" | "persona" | "capabilities">,
+  workspace: Pick<WorkspaceContextValue, "role" | "persona" | "capabilities" | "serviceSettings">,
   activeJob?: ActiveJobAssignmentDescriptor | null,
 ): ActionDefinition[] {
   const workMode = resolveWorkMode(workspace, activeJob);
@@ -2017,6 +2020,7 @@ export function getStableMobileDestinationActions(
     persona: workspace.persona,
     workMode,
     capabilities: workspace.capabilities,
+    serviceSettings: workspace.serviceSettings,
   };
   const actions: readonly ActionDefinition[] = ACTION_REGISTRY;
   const authorized = actions
@@ -2051,7 +2055,7 @@ export function getStableMobileDestinationActions(
 export function getAuthorizedOmniboxActions(
   workspace: Pick<
     WorkspaceContextValue,
-    "role" | "persona" | "capabilities" | "activeJob"
+    "role" | "persona" | "capabilities" | "activeJob" | "serviceSettings"
   >,
   pathname: string,
 ): ActionDefinition[] {
@@ -2061,6 +2065,7 @@ export function getAuthorizedOmniboxActions(
     persona: workspace.persona,
     workMode,
     capabilities: workspace.capabilities,
+    serviceSettings: workspace.serviceSettings,
     servicePhase: "off_hours",
     satisfiedPrerequisites: ["active_workspace"],
   }).filter((action) => {
@@ -2068,5 +2073,7 @@ export function getAuthorizedOmniboxActions(
     return (
       !contextPaths || contextPaths.includes(pathname as WorkspaceDestination)
     );
-  });
+  }).map((action) => action.id === "navigate.closeout" && !isTenantFeatureEnabled(workspace, "tips")
+    ? { ...action, label: "Closeout", description: "Review cash and sales at shift close." }
+    : action);
 }

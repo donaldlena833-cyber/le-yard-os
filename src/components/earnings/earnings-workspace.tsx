@@ -6,6 +6,7 @@ import { useWorkspaceContext } from "@/components/providers/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { StatusPill } from "@/components/ui/status-pill";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import { cn } from "@/lib/utils";
 
 type PayDay = {
@@ -92,10 +93,11 @@ export function EarningsWorkspace() {
   const total = selected.hourly + selected.tips;
   const summary = periodTotals[period];
   if (workspace.mode === "live") {
+    const pooledTips = isTenantFeatureEnabled(workspace, "tips");
     return (
       <PageFrame width="standard">
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow">Private to you</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Earnings</h2><p className="mt-1 text-[13px] text-[var(--ink-faint)]">Hours, approved tips, and hourly pay organized by Friday payday.</p></div><StatusPill tone="warning">Awaiting approved records</StatusPill></div>
-        <section className="mt-8 rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[var(--paper)] px-6 py-14 text-center"><WalletCards className="mx-auto size-6 text-[var(--ink-faint)]" /><h3 className="mt-4 text-base font-semibold">No paystubs yet</h3><p className="mx-auto mt-2 max-w-md text-[13px] leading-5 text-[var(--ink-faint)]">Approved recorded hours and manager-approved tip runs will populate your Friday paystubs here. No earnings are estimated before those records exist.</p></section>
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="eyebrow">Private to you</p><h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">Earnings</h2><p className="mt-1 text-[13px] text-[var(--ink-faint)]">{pooledTips ? "Hours, approved tips, and hourly pay organized by Friday payday." : "Approved hours and hourly pay records."}</p></div><StatusPill tone="warning">Awaiting approved records</StatusPill></div>
+        <section className="mt-8 rounded-[24px] border border-dashed border-[var(--line-strong)] bg-[var(--paper)] px-6 py-14 text-center"><WalletCards className="mx-auto size-6 text-[var(--ink-faint)]" /><h3 className="mt-4 text-base font-semibold">No paystubs yet</h3><p className="mx-auto mt-2 max-w-md text-[13px] leading-5 text-[var(--ink-faint)]">{pooledTips ? "Approved recorded hours and manager-approved tip runs will populate your Friday paystubs here. No earnings are estimated before those records exist." : "Use Time Clock to review your recorded hours."}</p></section>
       </PageFrame>
     );
   }

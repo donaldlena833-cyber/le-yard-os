@@ -50,6 +50,7 @@ import {
   settingsItem,
 } from "@/components/shell/navigation";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import { safeInternalRedirect } from "@/lib/auth/safe-redirect";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -277,8 +278,9 @@ function NotificationsControl({ workspace }: { workspace: WorkspaceContextValue 
   );
 }
 
-function EmergencyContactControl() {
+function EmergencyContactControl({ workspace }: { workspace: WorkspaceContextValue }) {
   const [open, setOpen] = useState(false);
+  const showRestaurantContact = isTenantFeatureEnabled(workspace, "customerCommunications");
 
   return (
     <Popover
@@ -292,16 +294,17 @@ function EmergencyContactControl() {
       <div className="px-2 py-2">
         <p className="text-sm font-semibold">Emergency &amp; support</p>
         <p className="mt-1 text-xs leading-4 text-[var(--muted)]">
-          Reach the founders through the shared restaurant line. For immediate danger, contact emergency services.
+          {showRestaurantContact ? "Reach the founders through the shared restaurant line. " : "For site support, contact your shift manager. "}
+          For immediate danger, contact emergency services.
         </p>
         <div className="mt-4 grid gap-2">
-          <a
+          {showRestaurantContact ? <a
             href={`tel:${LE_YARD_PUBLIC_PHONE}`}
             className={cn(buttonVariants({ variant: "secondary", size: "lg" }), "w-full justify-between")}
           >
             <span>Call Le Yard</span>
             <span className="numeric text-xs text-[var(--muted)]">{LE_YARD_PUBLIC_PHONE_DISPLAY}</span>
-          </a>
+          </a> : null}
           <a
             href="tel:911"
             className={cn(buttonVariants({ variant: "danger", size: "lg" }), "w-full")}
@@ -326,6 +329,7 @@ function NavigationLink({
   onNavigate?: () => void;
   showBadges?: boolean;
 }) {
+  const workspace = useWorkspaceContext();
   const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
   const Icon = item.icon;
   const reducedMotion = useReducedMotion();
@@ -347,7 +351,7 @@ function NavigationLink({
         ) : null}
         <Icon className="size-[17px] shrink-0" strokeWidth={active ? 2.1 : 1.7} />
       </span>
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      <span className="min-w-0 flex-1 truncate">{item.href === "/closeout" && !isTenantFeatureEnabled(workspace, "tips") ? "Closeout" : item.label}</span>
       {showBadges && item.badge ? (
         <span
           className={styles.badge}
@@ -409,13 +413,13 @@ function Sidebar({
       </nav>
 
       <div className={styles.sidebarFooter}>
-        <a
+        {isTenantFeatureEnabled(workspace, "customerCommunications") ? <a
           href={`tel:${LE_YARD_PUBLIC_PHONE}`}
           className="focus-ring mb-2 flex min-h-10 items-center gap-3 rounded-xl px-3 text-[13px] font-medium text-[var(--muted)] transition-colors hover:bg-[var(--inner)] hover:text-[var(--text)]"
         >
           <Phone className="size-[17px] shrink-0" />
           <span className="min-w-0"><span className="block">Call Le Yard</span><span className="numeric mt-0.5 block text-xs">{LE_YARD_PUBLIC_PHONE_DISPLAY}</span></span>
-        </a>
+        </a> : null}
         {isNavItemVisible(settingsItem, workspace) ? (
           <NavigationLink item={settingsItem} pathname={pathname} />
         ) : null}
@@ -622,7 +626,7 @@ function ShellContent({ children }: { children: ReactNode }) {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className={styles.title}>
-                  {meta.title}
+                  {pathname === "/closeout" && !isTenantFeatureEnabled(workspace, "tips") ? "Closeout" : meta.title}
                 </h1>
                 {workspace.mode === "demo" && pathname === "/today" ? (
                   <span className="hidden items-center gap-1.5 text-xs font-semibold text-[var(--positive)] sm:flex">
@@ -680,7 +684,7 @@ function ShellContent({ children }: { children: ReactNode }) {
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
             <NotificationsControl workspace={workspace} />
-            <EmergencyContactControl />
+            <EmergencyContactControl workspace={workspace} />
             {workspace.mode === "demo" && !isHostSurface ? (
               <Button
                 variant="primary"
@@ -723,7 +727,7 @@ function ShellContent({ children }: { children: ReactNode }) {
             <MobileNavigationControl
               key={item.href}
               href={item.href}
-              label={item.label}
+              label={item.href === "/closeout" && !isTenantFeatureEnabled(workspace, "tips") ? "Closeout" : item.label}
               icon={item.icon}
               active={active}
             />

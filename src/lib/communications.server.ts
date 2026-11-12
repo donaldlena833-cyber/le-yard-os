@@ -4,21 +4,12 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizeE164 } from "@/lib/twilio.server";
 import type { Json } from "@/types/database.generated";
 import { communicationTestOwner } from "@/lib/communication-test-routing";
+import { resolveRestaurantLocation, type RestaurantLocation } from "@/lib/restaurant-location.server";
 
-export type LeYardTenant = { organizationId: string; locationId: string; timezone: string };
-let tenantPromise: Promise<LeYardTenant> | null = null;
+export type LeYardTenant = RestaurantLocation;
 
-export function resolveLeYardTenant() {
-  tenantPromise ??= (async () => {
-    const admin = createAdminClient();
-    const configuredLocation = process.env.LE_YARD_LOCATION_ID?.trim();
-    let query = admin.from("locations").select("id,organization_id,timezone").limit(1);
-    query = configuredLocation ? query.eq("id", configuredLocation) : query.eq("name", "Le Yard");
-    const { data, error } = await query.maybeSingle();
-    if (error || !data) throw new Error("Le Yard tenant/location could not be resolved.");
-    return { organizationId: data.organization_id, locationId: data.id, timezone: data.timezone };
-  })().catch((error) => { tenantPromise = null; throw error; });
-  return tenantPromise;
+export function resolveLeYardTenant(): Promise<LeYardTenant> {
+  return resolveRestaurantLocation();
 }
 
 export async function logCommunicationEvent(input: {

@@ -28,7 +28,9 @@ import type {
   PreshiftRecord,
 } from "@/data/read-models/service-control";
 import type { LiveReadResult } from "@/data/read-models/shared";
+import type { RecordServiceAvailabilityInput } from "@/data/service-control-schemas";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 import {
   useRealtimeInvalidation,
   type RealtimeInvalidationBinding,
@@ -69,39 +71,30 @@ type AvailabilityStatus =
   | "restored";
 
 interface AvailabilityReview {
-  requestId: string;
-  locationId: string;
-  subjectType: "menu_item" | "component";
-  subjectId: string;
+  input: RecordServiceAvailabilityInput;
   subjectLabel: string;
-  expectedEventId: string | null;
-  status: AvailabilityStatus;
-  estimatedPortions: number | null;
-  reason: string | null;
-  effectiveAt: string;
-  expectedRestorationAt: null;
-  notes: string | null;
   undoStatus: AvailabilityStatus;
 }
 
 function PreshiftBrief({
   preshift,
+  showReservations,
   canManage,
   busy,
   acknowledge,
 }: {
   preshift: PreshiftRecord;
+  showReservations: boolean;
   canManage: boolean;
   busy: boolean;
   acknowledge: () => void;
 }) {
   const fields = [
     ["Allergies", preshift.allergyNotes || "No allergy notes recorded"],
-    ["VIPs", preshift.vipNotes || "No VIP notes recorded"],
-    [
-      "Large parties",
-      preshift.largePartyNotes || "No large-party notes recorded",
-    ],
+    ...(showReservations ? [
+      ["VIPs", preshift.vipNotes || "No VIP notes recorded"],
+      ["Large parties", preshift.largePartyNotes || "No large-party notes recorded"],
+    ] : []),
     [
       "Specials and 86 context",
       preshift.specials || "No specials or 86 context recorded",
@@ -127,13 +120,14 @@ function PreshiftBrief({
             {sentence(preshift.servicePeriod)} · {preshift.businessDate} · Version {preshift.versionNumber}
           </span>
           <span className="mt-1 block text-xs text-[var(--ink-faint)]">
-            {preshift.bookedCovers == null
-              ? "No reservation total connected"
-              : `${preshift.bookedCovers} booked covers`}
-            {preshift.projectedCovers == null
-              ? ""
-              : ` · ${preshift.projectedCovers} projected`}{" "}
-            · {preshift.acknowledgementCount} acknowledged
+            {showReservations ? <>
+              {preshift.bookedCovers == null
+                ? "No reservation total connected"
+                : `${preshift.bookedCovers} booked covers`}
+              {preshift.projectedCovers == null ? "" : ` · ${preshift.projectedCovers} projected`}
+              {" · "}
+            </> : null}
+            {preshift.acknowledgementCount} acknowledged
           </span>
         </span>
         <StatusPill
@@ -204,6 +198,7 @@ export function LiveServiceControlWorkspace({
   result: LiveReadResult<LiveServiceControlModel>;
 }) {
   const router = useRouter();
+  const showReservations = isTenantFeatureEnabled(workspace, "reservations");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [availabilityReview, setAvailabilityReview] =
@@ -270,18 +265,20 @@ export function LiveServiceControlWorkspace({
         item.subjectType === subject.subjectType && item.subjectId === subject.id,
     );
     setAvailabilityReview({
-      requestId: crypto.randomUUID(),
-      locationId: workspace.activeLocation.id,
-      subjectType: subject.subjectType,
-      subjectId: subject.id,
       subjectLabel: subject.label,
-      expectedEventId: current?.id ?? null,
-      status,
-      estimatedPortions: numberOrNull(form.get("estimatedPortions")),
-      reason: optional(form.get("reason")),
-      effectiveAt: new Date().toISOString(),
-      expectedRestorationAt: null,
-      notes: optional(form.get("notes")),
+      input: {
+        requestId: crypto.randomUUID(),
+        locationId: workspace.activeLocation.id,
+        subjectType: subject.subjectType,
+        subjectId: subject.id,
+        expectedEventId: current?.id ?? null,
+        status,
+        estimatedPortions: numberOrNull(form.get("estimatedPortions")),
+        reason: optional(form.get("reason")),
+        effectiveAt: new Date().toISOString(),
+        expectedRestorationAt: null,
+        notes: optional(form.get("notes")),
+      },
       undoStatus:
         current?.status === "running_low" || current?.status === "eighty_sixed"
           ? current.status
@@ -295,7 +292,7 @@ export function LiveServiceControlWorkspace({
     if (!availabilityReview) return;
     const change = availabilityReview;
     const saved = await perform(
-      recordServiceAvailabilityAction(change),
+      recordServiceAvailabilityAction(change.input),
       `${change.subjectLabel} updated for the whole team.`,
     );
     setAvailabilityReview(null);
@@ -307,14 +304,14 @@ export function LiveServiceControlWorkspace({
     const change = availabilityUndo;
     const restored = await perform(
       recordServiceAvailabilityAction({
-        ...change,
+        ...change.input,
         requestId: crypto.randomUUID(),
-        expectedEventId: change.requestId,
+        expectedEventId: change.input.requestId,
         status: change.undoStatus,
         estimatedPortions: null,
         reason: "Undone from Service Control",
         effectiveAt: new Date().toISOString(),
-        notes: `Reversed ${sentence(change.status)} update.`,
+        notes: `Reversed ${sentence(change.input.status)} update.`,
       }),
       `${change.subjectLabel} returned to its previous status.`,
     );
@@ -382,8 +379,7 @@ export function LiveServiceControlWorkspace({
           Service control
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-          Availability, shift handoff, and the published pre-shift—one shared
-          operating picture without invented reservation data.
+          Track menu availability, record shift handoffs, and publish pre-shift notes.
         </p>
       </section>
       <RealtimeSyncStatus {...realtime} />
@@ -403,7 +399,7 @@ export function LiveServiceControlWorkspace({
       <section className="mt-8">
         <SectionHeading
           eyebrow="Live availability"
-          title="Running low & 86"
+          title={showReservations ? "Running low & 86" : "Running low & sold out"}
           detail="Internal status only; POS availability is not changed."
         />
         {model.canManageAvailability ? (
@@ -431,7 +427,7 @@ export function LiveServiceControlWorkspace({
               className={field}
             >
               <option value="running_low">Running low</option>
-              <option value="eighty_sixed">86</option>
+              <option value="eighty_sixed">{showReservations ? "86" : "Sold out"}</option>
               <option value="restored">Restored</option>
             </select>
             <input
@@ -492,7 +488,7 @@ export function LiveServiceControlWorkspace({
                       : "positive"
                 }
               >
-                {item.status === "eighty_sixed" ? "86" : sentence(item.status)}
+                {item.status === "eighty_sixed" ? (showReservations ? "86" : "Sold out") : sentence(item.status)}
               </StatusPill>
             </div>
           ))}
@@ -532,6 +528,7 @@ export function LiveServiceControlWorkspace({
               <select
                 aria-label="Manager log service period"
                 name="servicePeriod"
+                defaultValue={showReservations ? "dinner" : "all_day"}
                 className={field}
               >
                 <option value="dinner">Dinner</option>
@@ -542,6 +539,7 @@ export function LiveServiceControlWorkspace({
               <select
                 aria-label="Manager log category"
                 name="category"
+                defaultValue={showReservations ? "foh" : "other"}
                 className={field}
               >
                 <option value="foh">FOH</option>
@@ -632,34 +630,35 @@ export function LiveServiceControlWorkspace({
               <select
                 aria-label="Pre-shift service period"
                 name="servicePeriod"
+                defaultValue={showReservations ? "dinner" : "all_day"}
                 className={field}
               >
                 <option value="dinner">Dinner</option>
                 <option value="lunch">Lunch</option>
                 <option value="all_day">All day</option>
               </select>
-              <input
+              {showReservations ? <input
                 name="bookedCovers"
                 type="number"
                 min="0"
                 placeholder="Booked covers (if known)"
                 className={field}
-              />
-              <textarea
+              /> : null}
+              {showReservations ? <textarea
                 name="vipNotes"
                 placeholder="VIP notes"
                 className={area}
-              />
+              /> : null}
               <textarea
                 name="allergyNotes"
                 placeholder="Allergies"
                 className={area}
               />
-              <textarea
+              {showReservations ? <textarea
                 name="largePartyNotes"
                 placeholder="Large parties"
                 className={area}
-              />
+              /> : null}
               <textarea
                 name="specials"
                 placeholder="Specials and 86 context"
@@ -704,6 +703,7 @@ export function LiveServiceControlWorkspace({
               <PreshiftBrief
                 key={preshift.id}
                 preshift={preshift}
+                showReservations={showReservations}
                 canManage={model.canManagePreshift}
                 busy={busy}
                 acknowledge={() =>
@@ -733,7 +733,7 @@ export function LiveServiceControlWorkspace({
         title={availabilityReview ? `Confirm ${availabilityReview.subjectLabel} update?` : "Confirm availability update?"}
         description="This immediately changes the shared service status seen by the team. POS availability is not changed."
         confirmLabel="Confirm & update"
-        confirmVariant={availabilityReview?.status === "eighty_sixed" ? "danger" : "accent"}
+        confirmVariant={availabilityReview?.input.status === "eighty_sixed" ? "danger" : "accent"}
         busy={busy}
         onClose={() => setAvailabilityReview(null)}
         onConfirm={confirmAvailability}
@@ -741,8 +741,8 @@ export function LiveServiceControlWorkspace({
         {availabilityReview ? (
           <dl className="grid gap-3 rounded-[16px] bg-[var(--canvas)] p-4 text-xs">
             <div><dt className="font-semibold text-[var(--ink-faint)]">Item</dt><dd className="mt-1">{availabilityReview.subjectLabel}</dd></div>
-            <div><dt className="font-semibold text-[var(--ink-faint)]">New status</dt><dd className="mt-1">{availabilityReview.status === "eighty_sixed" ? "86" : sentence(availabilityReview.status)}</dd></div>
-            <div><dt className="font-semibold text-[var(--ink-faint)]">Reason</dt><dd className="mt-1">{availabilityReview.reason || "No reason entered"}</dd></div>
+            <div><dt className="font-semibold text-[var(--ink-faint)]">New status</dt><dd className="mt-1">{availabilityReview.input.status === "eighty_sixed" ? (showReservations ? "86" : "Sold out") : sentence(availabilityReview.input.status)}</dd></div>
+            <div><dt className="font-semibold text-[var(--ink-faint)]">Reason</dt><dd className="mt-1">{availabilityReview.input.reason || "No reason entered"}</dd></div>
           </dl>
         ) : null}
       </ConfirmActionDialog>

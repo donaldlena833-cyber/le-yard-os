@@ -6,8 +6,9 @@ import { loadLiveCloseout } from "@/data/read-models/closeout";
 import { loadTipPolicyConfiguration } from "@/data/read-models/financial-configuration";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 
-export const metadata: Metadata = { title: "Closeout & tips" };
+export const metadata: Metadata = { title: "Closeout" };
 
 export default async function CloseoutPage() {
   const resolution = await resolveWorkspaceSession();
@@ -16,7 +17,9 @@ export default async function CloseoutPage() {
   if (resolution.context.mode === "demo") return <CloseoutWorkspace />;
   const [result, policyConfigurationResult] = await Promise.all([
     loadLiveCloseout(resolution.context),
-    loadTipPolicyConfiguration(resolution.context),
+    isTenantFeatureEnabled(resolution.context, "tips")
+      ? loadTipPolicyConfiguration(resolution.context)
+      : null,
   ]);
   return (
     <LiveCloseoutWorkspace

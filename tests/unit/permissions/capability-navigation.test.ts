@@ -10,6 +10,9 @@ import type {
   WorkspaceContextValue,
 } from "@/lib/auth/workspace-context";
 import { DEMO_CAPABILITY_TEMPLATES } from "@/lib/permissions/capabilities";
+import { getAuthorizedOmniboxActions } from "@/lib/actions/action-registry";
+import { accessibleReportKinds } from "@/lib/permissions/report-access";
+import { parseTenantServiceSettings } from "@/lib/tenant-service";
 
 function workspace(
   role: WorkspaceContextValue["role"],
@@ -49,6 +52,24 @@ function visibleLabels(context: WorkspaceContextValue): string[] {
 }
 
 describe("capability-aware navigation", () => {
+  it("applies counter service settings even to owners with every restaurant capability", () => {
+    const owner = workspace("owner", ["reports.operational.view", "reports.financial.view", "reservations.view"]);
+    const counter = { ...owner, serviceSettings: parseTenantServiceSettings({ service_model: "counter" }) };
+
+    for (const route of ["/reservations", "/reservations/setup", "/guests", "/phone", "/integrations"]) {
+      expect(isWorkspaceRouteAccessible(route, owner)).toBe(true);
+      expect(isWorkspaceRouteAccessible(route, counter)).toBe(false);
+    }
+    expect(visibleLabels(counter)).toEqual(expect.arrayContaining(["Service Control", "Groups", "Inventory", "Time Clock", "Reports"]));
+    expect(getMobileNavItems(counter).map((item) => item.href)).not.toContain("/reservations");
+    expect(getAuthorizedOmniboxActions(counter, "/today").every((action) => isWorkspaceRouteAccessible(action.destination, counter))).toBe(true);
+    expect(accessibleReportKinds(counter)).toContain("labor");
+    expect(accessibleReportKinds(counter)).not.toContain("guest_activity");
+    expect(accessibleReportKinds(counter)).not.toContain("payroll");
+    expect(parseTenantServiceSettings({})).toEqual({ serviceModel: "full-service" });
+    expect(() => parseTenantServiceSettings({ service_model: "typo" })).toThrow("Unsupported tenant service model");
+  });
+
   it("gives an Executive Chef kitchen operations without tenant security or money", () => {
     const labels = visibleLabels(workspace("manager", DEMO_CAPABILITY_TEMPLATES.executiveChef, "chef"));
     expect(labels).toContain("Kitchen");

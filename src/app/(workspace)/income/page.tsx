@@ -9,6 +9,7 @@ import { readSuccess } from "@/data/read-models/shared";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { createDemoIncomeModel } from "@/lib/income/model";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 
 export const metadata: Metadata = { title: "Income" };
 
@@ -52,13 +53,15 @@ export default async function IncomePage({
     canViewSchedule: true,
     canOpenTimeClock: true,
     canManageIntegrations:
-      privileged || capabilities.has("integrations.manage"),
+      isTenantFeatureEnabled(resolution.context, "providerIntegrations") &&
+      (privileged || capabilities.has("integrations.manage")),
   };
   return (
     <IncomeWorkspace
       result={await loadLiveIncome(resolution.context, days)}
       locationName={resolution.context.activeLocation.name}
       actionAccess={actionAccess}
+      showReservations={isTenantFeatureEnabled(resolution.context, "reservations")}
       realtimeScope={{
         organizationId: resolution.context.organization.id,
         locationId: resolution.context.activeLocation.id,

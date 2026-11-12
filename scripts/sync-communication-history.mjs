@@ -26,13 +26,18 @@ const db = createClient(
 );
 const business =
   process.env.TWILIO_FROM_NUMBER?.trim() || required("TWILIO_PHONE_NUMBER");
+const organization = await db.from("organizations").select("id")
+  .eq("slug", "le-yard").eq("status", "active").single();
+if (organization.error || !organization.data)
+  throw Error("The Ninth Avenue restaurant organization is required");
 let tenantQuery = db
   .from("locations")
   .select("id,organization_id")
+  .eq("organization_id", organization.data.id)
+  .eq("code", "MAIN")
   .eq("is_active", true);
-tenantQuery = process.env.LE_YARD_LOCATION_ID
-  ? tenantQuery.eq("id", process.env.LE_YARD_LOCATION_ID)
-  : tenantQuery.eq("name", "Le Yard");
+const configuredLocation = process.env.LE_YARD_LOCATION_ID?.trim();
+if (configuredLocation) tenantQuery = tenantQuery.eq("id", configuredLocation);
 const tenant = await tenantQuery.single();
 if (tenant.error || !tenant.data)
   throw Error("Exactly one existing Le Yard location is required");

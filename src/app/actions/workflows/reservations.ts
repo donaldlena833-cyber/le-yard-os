@@ -52,6 +52,7 @@ import {
 export async function quoteStaffReservationTurnAction(input: unknown) {
   return executeWorkflowAction({
     operation: "reservation.turn_quote",
+    requiredTenantFeature: "reservations",
     schema: staffReservationTurnInputSchema,
     input,
     persists: false,
@@ -70,6 +71,7 @@ function refreshOnSuccess(result: { ok: boolean; persisted: boolean }) {
 export async function configureServiceShiftExceptionAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "service_shift.exception.configure",
+    requiredTenantFeature: "reservations",
     schema: configureServiceShiftExceptionInputSchema,
     input,
     run: configureServiceShiftException,
@@ -81,6 +83,7 @@ export async function configureServiceShiftExceptionAction(input: unknown) {
 export async function revokeServiceShiftExceptionAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "service_shift.exception.revoke",
+    requiredTenantFeature: "reservations",
     schema: revokeServiceShiftExceptionInputSchema,
     input,
     run: revokeServiceShiftException,
@@ -92,6 +95,7 @@ export async function revokeServiceShiftExceptionAction(input: unknown) {
 export async function saveReservationAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.save",
+    requiredTenantFeature: "reservations",
     schema: saveReservationInputSchema,
     input,
     run: saveReservation,
@@ -103,6 +107,7 @@ export async function saveReservationAction(input: unknown) {
 export async function saveReservationWithGuestAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.save_with_guest",
+    requiredTenantFeature: "reservations",
     schema: saveReservationWithGuestInputSchema,
     input,
     run: saveReservationWithGuest,
@@ -114,6 +119,7 @@ export async function saveReservationWithGuestAction(input: unknown) {
 export async function saveReservationFloorPositionsAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.floor_positions.save",
+    requiredTenantFeature: "reservations",
     schema: saveReservationFloorPositionsInputSchema,
     input,
     run: saveReservationFloorPositions,
@@ -125,6 +131,7 @@ export async function saveReservationFloorPositionsAction(input: unknown) {
 export async function installReservationDraftAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.install_draft",
+    requiredTenantFeature: "reservations",
     schema: installReservationDraftInputSchema,
     input,
     run: installReservationDraft,
@@ -136,6 +143,7 @@ export async function installReservationDraftAction(input: unknown) {
 export async function approveReservationDraftAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.approve_draft",
+    requiredTenantFeature: "reservations",
     schema: approveReservationDraftInputSchema,
     input,
     run: approveReservationDraft,
@@ -147,6 +155,7 @@ export async function approveReservationDraftAction(input: unknown) {
 export async function transitionReservationAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.transition",
+    requiredTenantFeature: "reservations",
     schema: transitionReservationInputSchema,
     input,
     run: transitionReservation,
@@ -158,6 +167,7 @@ export async function transitionReservationAction(input: unknown) {
 export async function correctReservationStatusAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.status.correct",
+    requiredTenantFeature: "reservations",
     schema: correctReservationStatusInputSchema,
     input,
     run: correctReservationStatus,
@@ -169,6 +179,7 @@ export async function correctReservationStatusAction(input: unknown) {
 export async function modifyReservationAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.modify",
+    requiredTenantFeature: "reservations",
     schema: modifyReservationInputSchema,
     input,
     run: modifyReservation,
@@ -180,6 +191,7 @@ export async function modifyReservationAction(input: unknown) {
 export async function cancelReservationAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.cancel",
+    requiredTenantFeature: "reservations",
     schema: cancelReservationInputSchema,
     input,
     run: cancelReservation,
@@ -191,6 +203,7 @@ export async function cancelReservationAction(input: unknown) {
 export async function loadReservationLifecycleHeadAction(input: unknown) {
   return executeWorkflowAction({
     operation: "reservation.lifecycle_head",
+    requiredTenantFeature: "reservations",
     schema: reservationLifecycleHeadInputSchema,
     input,
     persists: false,
@@ -201,6 +214,7 @@ export async function loadReservationLifecycleHeadAction(input: unknown) {
 export async function assignReservationTablesAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.assign_tables",
+    requiredTenantFeature: "reservations",
     schema: assignReservationTablesInputSchema,
     input,
     run: assignReservationTables,
@@ -212,6 +226,7 @@ export async function assignReservationTablesAction(input: unknown) {
 export async function saveWaitlistEntryAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.waitlist_save",
+    requiredTenantFeature: "reservations",
     schema: saveWaitlistEntryInputSchema,
     input,
     run: saveWaitlistEntry,
@@ -223,6 +238,7 @@ export async function saveWaitlistEntryAction(input: unknown) {
 export async function transitionWaitlistEntryAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.waitlist_transition",
+    requiredTenantFeature: "reservations",
     schema: transitionWaitlistEntryInputSchema,
     input,
     run: transitionWaitlistEntry,
@@ -234,6 +250,7 @@ export async function transitionWaitlistEntryAction(input: unknown) {
 export async function seatWaitlistEntryAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.waitlist_seat",
+    requiredTenantFeature: "reservations",
     schema: seatWaitlistEntryInputSchema,
     input,
     run: seatWaitlistEntry,
@@ -245,6 +262,7 @@ export async function seatWaitlistEntryAction(input: unknown) {
 export async function retryWaitlistDeliveryAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.waitlist_delivery_retry",
+    requiredTenantFeature: "reservations",
     schema: retryWaitlistDeliveryInputSchema,
     input,
     run: retryWaitlistDelivery,
@@ -256,6 +274,7 @@ export async function retryWaitlistDeliveryAction(input: unknown) {
 export async function undoWaitlistRemovalAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.waitlist_removal_undo",
+    requiredTenantFeature: "reservations",
     schema: undoWaitlistRemovalInputSchema,
     input,
     run: undoWaitlistRemoval,
@@ -267,6 +286,7 @@ export async function undoWaitlistRemovalAction(input: unknown) {
 export async function setReservationTableStatusAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.table_status",
+    requiredTenantFeature: "reservations",
     schema: setReservationTableStatusInputSchema,
     input,
     run: setReservationTableStatus,
@@ -278,6 +298,7 @@ export async function setReservationTableStatusAction(input: unknown) {
 export async function moveReservationTableAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "reservation.table_move",
+    requiredTenantFeature: "reservations",
     schema: moveReservationTableInputSchema,
     input,
     run: moveReservationTable,

@@ -59,7 +59,7 @@ afterEach(() => {
 });
 
 describe("reservation maintenance worker", () => {
-  it("expires every explicit tenant/location scope before reminders and claims", async () => {
+  it("expires Ninth Avenue deadlines before reminders and claims", async () => {
     const source = await readFile(workerUrl, "utf8");
     const expiry = source.indexOf("service_expire_reservation_deadlines");
     const reminders = source.indexOf("service_enqueue_reservation_reminders");
@@ -67,8 +67,8 @@ describe("reservation maintenance worker", () => {
     expect(expiry).toBeGreaterThan(-1);
     expect(reminders).toBeGreaterThan(expiry);
     expect(claim).toBeGreaterThan(reminders);
-    expect(source).toContain("p_organization_id: scope.organizationId");
-    expect(source).toContain("p_location_id: scope.locationId");
+    expect(source).toContain("p_organization_id: restaurant.organizationId");
+    expect(source).toContain("p_location_id: restaurant.locationId");
   });
 
   it("uses leased atomic claim and claim-token completion RPCs", async () => {

@@ -166,6 +166,7 @@ export async function loadLiveTimeClock(
     const supabase = await createClient();
     const organizationId = workspace.organization.id;
     const locationId = workspace.activeLocation.id;
+    const nativeClock = workspace.serviceSettings?.serviceModel === "counter";
     const canManage = workspace.role !== "employee";
     const { data: location, error: locationError } = await supabase
       .from("locations")
@@ -206,7 +207,7 @@ export async function loadLiveTimeClock(
     const employee = employeeResult.data;
     const scheduleIds = (scheduleResult.data ?? []).map((schedule) => schedule.id);
     const emptyResult = Promise.resolve({ data: [], error: null });
-    const [assignmentResult, selfEntryResult, shiftResult, locationEntryResult, correctionResult] =
+    const [assignmentResult, selfEntryResult, activeEntryResult, shiftResult, locationEntryResult, correctionResult] =
       await Promise.all([
         employee
           ? supabase
@@ -230,6 +231,18 @@ export async function loadLiveTimeClock(
               .order("clocked_in_at", { ascending: false })
               .limit(16)
           : emptyResult,
+        nativeClock && employee
+          ? supabase
+              .from("time_entries")
+              .select("id, employee_id, job_role_id, scheduled_shift_id, clocked_in_at, clocked_out_at, status, source, source_provider")
+              .eq("organization_id", organizationId)
+              .eq("location_id", locationId)
+              .eq("employee_id", employee.id)
+              .eq("status", "open")
+              .is("clocked_out_at", null)
+              .is("source_deleted_at", null)
+              .maybeSingle()
+          : { data: null, error: null },
         scheduleIds.length
           ? supabase
               .from("shifts")
@@ -269,6 +282,7 @@ export async function loadLiveTimeClock(
     if (
       assignmentResult.error ||
       selfEntryResult.error ||
+      activeEntryResult.error ||
       shiftResult.error ||
       locationEntryResult.error ||
       correctionResult.error
@@ -277,12 +291,14 @@ export async function loadLiveTimeClock(
     }
 
     const selfEntries = (selfEntryResult.data ?? []) as EntryRow[];
+    const currentEntry = activeEntryResult.data as EntryRow | null;
     const locationEntries = (locationEntryResult.data ?? []) as EntryRow[];
     const shifts = (shiftResult.data ?? []) as ShiftRow[];
     const correctionRows = (correctionResult.data ?? []) as CorrectionRow[];
     const knownEntries = new Map(
       [...selfEntries, ...locationEntries].map((entry) => [entry.id, entry]),
     );
+    if (currentEntry) knownEntries.set(currentEntry.id, currentEntry);
     const missingCorrectionEntryIds = correctionRows
       .map((correction) => correction.time_entry_id)
       .filter((id) => !knownEntries.has(id));
@@ -331,7 +347,7 @@ export async function loadLiveTimeClock(
       roleIds.length
         ? supabase
             .from("job_roles")
-            .select("id, name, code")
+            .select("id, name, code, is_active")
             .eq("organization_id", organizationId)
             .in("id", roleIds)
         : emptyResult,
@@ -351,6 +367,7 @@ export async function loadLiveTimeClock(
       id: string;
       name: string;
       code: string;
+      is_active: boolean;
     }>;
     const roleNames = new Map(roleRows.map((role) => [role.id, role.name]));
     const employeeNames = new Map(
@@ -413,7 +430,9 @@ export async function loadLiveTimeClock(
       (shift) => localDateKey(shift.starts_at, timeZone) === date,
     );
     const mappedSelfEntries = selfEntries.map(mapEntry);
-    const activeEntry = mappedSelfEntries.find((entry) => !entry.clockedOutAt) ?? null;
+    const activeEntry = nativeClock
+      ? (currentEntry ? mapEntry(currentEntry) : null)
+      : mappedSelfEntries.find((entry) => !entry.clockedOutAt) ?? null;
     const pendingCorrectionEntryIds = new Set(
       correctionRows
         .filter((correction) => correction.status === "pending")
@@ -479,7 +498,8 @@ export async function loadLiveTimeClock(
         ? { id: employee.id, displayName: employee.display_name }
         : null,
       roles: roleRows
-        .filter((role) => assignedRoleIds.has(role.id))
+        .filter((role) => assignedRoleIds.has(role.id) && (!nativeClock || role.is_active))
+        .map(({ id, name, code }) => ({ id, name, code }))
         .sort((left, right) => left.name.localeCompare(right.name)),
       shifts: todayShifts
         .filter((shift) => shift.employee_id === employee?.id)

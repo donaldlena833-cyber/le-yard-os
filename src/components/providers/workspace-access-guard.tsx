@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { replaceWorkspaceDocument, WORKSPACE_ACCESS_NOTICE_KEY } from "@/lib/auth/workspace-access.client";
+import { replaceWorkspaceDocument, WORKSPACE_ACCESS_NOTICE_KEY, WORKSPACE_SELECTION_EVENT_KEY } from "@/lib/auth/workspace-access.client";
 
 export const WORKSPACE_ACCESS_POLL_MS = 30_000;
 export const WORKSPACE_ACCESS_TIMEOUT_MS = 8_000;
@@ -74,10 +74,16 @@ export function WorkspaceAccessGuard({ revision, userId, homePath, children }: {
     const pause = () => { if (!leaving) { cancel(); phase("unavailable"); } };
     const focus = () => { if (!document.hidden) void verify(true); };
     const visibility = () => { if (document.hidden) pause(); else focus(); };
+    const selectionChanged = (event: StorageEvent) => {
+      if (event.key !== WORKSPACE_SELECTION_EVENT_KEY) return;
+      if (document.hidden) pause();
+      else { cancel(); focus(); }
+    };
     window.addEventListener("offline", pause);
     window.addEventListener("online", focus);
     window.addEventListener("focus", focus);
     window.addEventListener("pageshow", focus);
+    window.addEventListener("storage", selectionChanged);
     document.addEventListener("visibilitychange", visibility);
     let unsubscribe: (() => void) | undefined;
     try {
@@ -100,6 +106,7 @@ export function WorkspaceAccessGuard({ revision, userId, homePath, children }: {
       if (noticeTimer !== null) window.clearTimeout(noticeTimer);
       window.removeEventListener("offline", pause); window.removeEventListener("online", focus);
       window.removeEventListener("focus", focus); window.removeEventListener("pageshow", focus);
+      window.removeEventListener("storage", selectionChanged);
       document.removeEventListener("visibilitychange", visibility);
     };
   }, [revision, userId, homePath, retry]);

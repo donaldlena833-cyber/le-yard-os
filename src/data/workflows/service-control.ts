@@ -1,7 +1,7 @@
 import "server-only";
 
 import { assertCondition, throwDatabaseError } from "@/data/errors";
-import { requireManagedLocation } from "@/data/resources";
+import { requireAccessibleLocation, requireManagedLocation } from "@/data/resources";
 import type { WorkflowContext } from "@/data/execute";
 import type {
   AcknowledgePreshiftInput,
@@ -18,7 +18,7 @@ export async function recordServiceAvailability(
   context: WorkflowContext,
   input: RecordServiceAvailabilityInput,
 ) {
-  const location = await scopedLocation(context, input.locationId);
+  const location = await requireAccessibleLocation(context.supabase, context.actor, input.locationId);
   const { data, error } = await context.supabase.rpc("record_canonical_service_availability_event", {
     p_request_id: input.requestId,
     p_organization_id: location.organizationId,

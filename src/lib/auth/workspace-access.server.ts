@@ -18,6 +18,7 @@ export function workspaceAccessRevision(context: WorkspaceContextValue): string 
     timeZone: context.activeLocation.timeZone ?? null,
     organizationWide: context.organizationWide,
     capabilities: [...new Set(context.capabilities)].sort(),
+    serviceModel: context.serviceSettings?.serviceModel ?? null,
     locations: locations(context.locations),
     choices: context.availableWorkspaces.map(choice => ({
       membershipId: choice.membershipId, organizationId: choice.organization.id,

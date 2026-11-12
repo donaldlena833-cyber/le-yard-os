@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { resolveRestaurantLocation } from "@/lib/restaurant-location.server";
 import {
   isReservationMessageChannelBound,
   sendReservationOutboxMessage,
@@ -157,26 +158,6 @@ function authorized(request: Request) {
   );
 }
 
-async function reservationScopes(admin: ReturnType<typeof createAdminClient>) {
-  const scopes: Array<{ organizationId: string; locationId: string }> = [];
-  const pageSize = 500;
-  for (let offset = 0; ; offset += pageSize) {
-    const result = await admin
-      .from("reservation_settings")
-      .select("organization_id,location_id")
-      .order("organization_id")
-      .order("location_id")
-      .range(offset, offset + pageSize - 1);
-    if (result.error) throw new Error("reservation_scopes_unavailable");
-    for (const row of result.data ?? [])
-      scopes.push({
-        organizationId: row.organization_id,
-        locationId: row.location_id,
-      });
-    if ((result.data?.length ?? 0) < pageSize) return scopes;
-  }
-}
-
 async function deliverReservationMessages(request: Request) {
   if (!authorized(request))
     return Response.json(
@@ -218,42 +199,27 @@ async function deliverReservationMessages(request: Request) {
       { status: 503, headers: { "cache-control": "no-store" } },
     );
   };
-  let scopes: Array<{ organizationId: string; locationId: string }>;
-  try {
-    scopes = await reservationScopes(admin);
-  } catch {
+  const restaurant = await resolveRestaurantLocation(admin).catch(() => null);
+  if (!restaurant) {
     return failRun(
       "Reservation expiry scopes could not be loaded.",
       "scope_load_failed",
     );
   }
-  const expired = { holds: 0, waitlist: 0 };
-  const expiryConcurrency = 8;
-  for (let offset = 0; offset < scopes.length; offset += expiryConcurrency) {
-    const expiryResults = await Promise.all(
-      scopes.slice(offset, offset + expiryConcurrency).map((scope) =>
-        rpc("service_expire_reservation_deadlines", {
-          p_organization_id: scope.organizationId,
-          p_location_id: scope.locationId,
-          p_now: now.toISOString(),
-          p_limit: 500,
-        }),
-      ),
+  const expiry = await rpc("service_expire_reservation_deadlines", {
+    p_organization_id: restaurant.organizationId,
+    p_location_id: restaurant.locationId,
+    p_now: now.toISOString(),
+    p_limit: 500,
+  });
+  if (expiry.error) {
+    return failRun(
+      "Reservation deadlines could not be expired.",
+      "deadline_expiry_failed",
     );
-    if (expiryResults.some((result) => result.error))
-      return failRun(
-        "Reservation deadlines could not be expired.",
-        "deadline_expiry_failed",
-      );
-    for (const result of expiryResults) {
-      const value = result.data as {
-        holdsExpired?: number;
-        waitlistExpired?: number;
-      } | null;
-      expired.holds += value?.holdsExpired ?? 0;
-      expired.waitlist += value?.waitlistExpired ?? 0;
-    }
   }
+  const expiredCounts = expiry.data as { holdsExpired?: number; waitlistExpired?: number } | null;
+  const expired = { holds: expiredCounts?.holdsExpired ?? 0, waitlist: expiredCounts?.waitlistExpired ?? 0 };
   const { error: reminderError } = await admin.rpc(
     "service_enqueue_reservation_reminders",
     { p_now: now.toISOString() },
@@ -314,7 +280,10 @@ async function deliverReservationMessages(request: Request) {
 
     const message = begun.message;
     const templateKey = message.templateKey;
+    const restaurantMessage = message.organizationId === restaurant.organizationId &&
+      message.locationId === restaurant.locationId;
     if (
+      !restaurantMessage ||
       !isSupportedTemplate(templateKey) ||
       !isReservationMessageChannelBound(message)
     ) {
@@ -322,9 +291,9 @@ async function deliverReservationMessages(request: Request) {
         p_id: claim.id,
         p_claim_token: claim.claimToken,
         p_status: "cancelled",
-        p_error_code: !isSupportedTemplate(templateKey)
-          ? "unsupported_template"
-          : "channel_binding_invalid",
+        p_error_code: !restaurantMessage
+          ? "reservation_scope_invalid"
+          : !isSupportedTemplate(templateKey) ? "unsupported_template" : "channel_binding_invalid",
         p_next_attempt_at: null,
         p_provider_message_id: null,
       });

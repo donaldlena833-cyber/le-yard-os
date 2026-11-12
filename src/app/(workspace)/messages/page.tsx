@@ -8,6 +8,7 @@ import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 import { resolveCommunicationMessageLink } from "@/lib/communication-message-link.server";
 import { redirect } from "next/navigation";
+import { isTenantFeatureEnabled } from "@/lib/tenant-service";
 
 export const metadata: Metadata = { title: "Groups" };
 
@@ -46,6 +47,7 @@ export default async function MessagesPage({
   }
   const model = await loadLiveMessages(resolution.context);
   const channels = <LiveMessagesWorkspace workspace={resolution.context} model={model} />;
+  if (!isTenantFeatureEnabled(resolution.context, "customerCommunications")) return channels;
   if (!["owner", "admin"].includes(resolution.context.role)) {
     return <>
       {hasMessageLink ? <p role="alert" className="mx-6 mt-5 text-sm">This conversation link requires a Le Yard owner or admin account.</p> : null}

@@ -24,6 +24,7 @@ function refreshFinancialViews() {
 export async function prepareTipRunAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "tips.prepare_from_closeout",
+    requiredTenantFeature: "tips",
     schema: prepareTipRunInputSchema,
     input,
     run: prepareTipRun,
@@ -35,6 +36,7 @@ export async function prepareTipRunAction(input: unknown) {
 export async function calculateTipRunAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "tips.calculate",
+    requiredTenantFeature: "tips",
     schema: calculateTipRunInputSchema,
     input,
     run: calculateTipRun,
@@ -46,6 +48,7 @@ export async function calculateTipRunAction(input: unknown) {
 export async function approveTipRunAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "tips.approve",
+    requiredTenantFeature: "tips",
     schema: approveTipRunInputSchema,
     input,
     run: approveTipRun,
@@ -57,6 +60,7 @@ export async function approveTipRunAction(input: unknown) {
 export async function exportTipPayrollAction(input: unknown) {
   const result = await executeWorkflowAction({
     operation: "tips.export_payroll_csv",
+    requiredTenantFeature: "tips",
     schema: exportTipPayrollInputSchema,
     input,
     run: exportTipPayroll,

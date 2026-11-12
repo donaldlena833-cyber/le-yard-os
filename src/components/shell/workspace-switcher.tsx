@@ -1,10 +1,11 @@
 "use client";
 
 import { ChevronsUpDown, LoaderCircle, MapPin } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { setWorkspaceSelectionAction } from "@/app/actions/workspace";
 import { useWorkspaceContext } from "@/components/providers/workspace-provider";
+import { notifyWorkspaceSelectionChanged } from "@/lib/auth/workspace-access.client";
+import { defaultWorkspacePath } from "@/lib/app-surface";
 import { cn } from "@/lib/utils";
 import styles from "./shell.module.css";
 
@@ -20,7 +21,6 @@ export function WorkspaceSwitcher({
   onSelected?: () => void;
 }) {
   const workspace = useWorkspaceContext();
-  const router = useRouter();
   const currentKey = selectionKey(
     workspace.organization.id,
     workspace.activeLocation.id,
@@ -58,7 +58,9 @@ export function WorkspaceSwitcher({
           return;
         }
         onSelected?.();
-        router.refresh();
+        notifyWorkspaceSelectionChanged();
+        if (organizationId === workspace.organization.id) window.location.reload();
+        else window.location.assign(defaultWorkspacePath);
       } catch {
         setSelectedKey(currentKey);
         setMessage("Workspace switching is temporarily unavailable.");
