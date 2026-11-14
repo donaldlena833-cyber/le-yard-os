@@ -30,7 +30,7 @@ Demo mode remains synthetic. Connected mode reads only persisted connection/job 
 
 ## Selected POS and attendance
 
-[Square source evidence](square-source-evidence.md) describes the local Sandbox adapter, exact scope, limits, retries and remaining acceptance. The worker is disabled by default. No financial posting, Square timecard import or payroll transmission is enabled.
+[Square source evidence](square-source-evidence.md) describes Sandbox and the manual Ninth Avenue production pilot, exact scope, limits, retries and remaining acceptance. The worker is disabled by default. No financial posting, Square timecard import or payroll transmission is enabled.
 
 The unused prior POS client, configuration fields, adapter card and sales CSV contract have been removed. Its former worker URL is a permanent410 response with no provider/database access, so an old scheduler cannot resume it. Historical migrations, source labels and records remain intact for audit and restore compatibility; they are not an active integration. Attendance source setup remains pending and Time Clock shows retained records without claiming current punch state.
 

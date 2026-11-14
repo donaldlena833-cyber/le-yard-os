@@ -6,12 +6,39 @@ import { POST } from "@/app/api/internal/integrations/square-source/route";
 import { SquareSourceSyncError } from "@/lib/integrations/square-sync.server";
 const body = { requestId: "a5100000-0000-4000-8000-000000000001", windowFrom: "2026-10-22T00:00:00Z", windowTo: "2026-10-23T00:00:00Z" };
 function request(value: string | object = body, headers: Record<string, string> = {}) { return new Request("https://example.invalid/api/internal/integrations/square-source", { method: "POST", headers: { authorization: "Bearer " + "s".repeat(32), "content-type": "application/json", ...headers }, body: typeof value === "string" ? value : JSON.stringify(value) }); }
-beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("SQUARE_SOURCE_SYNC_SECRET", "s".repeat(32)); vi.stubEnv("LE_YARD_SQUARE_SOURCE_SYNC_ENABLED", "true"); vi.stubEnv("SQUARE_SOURCE_CONNECTION_ID", "a5100000-0000-4000-8000-000000000002"); vi.stubEnv("SQUARE_SANDBOX_ACCESS_TOKEN", "fake-only-token"); mocks.createAdmin.mockReturnValue({ fakeAdmin: true }); });
+beforeEach(() => { vi.resetAllMocks(); vi.stubEnv("SQUARE_SOURCE_SYNC_SECRET", "s".repeat(32)); vi.stubEnv("LE_YARD_SQUARE_SOURCE_SYNC_ENABLED", "true"); vi.stubEnv("SQUARE_SOURCE_CONNECTION_ID", "a5100000-0000-4000-8000-000000000002"); vi.stubEnv("SQUARE_SOURCE_ENVIRONMENT", undefined); vi.stubEnv("SQUARE_SANDBOX_ACCESS_TOKEN", "fake-only-token"); vi.stubEnv("SQUARE_PRODUCTION_ACCESS_TOKEN", undefined); vi.stubEnv("VERCEL_ENV", undefined); mocks.createAdmin.mockReturnValue({ fakeAdmin: true }); });
 afterEach(() => vi.unstubAllEnvs());
 describe("Square source worker boundary", () => {
   it("refuses an unauthorized request before provider or database access", async () => { const r = await POST(request(body, { authorization: "Bearer wrong" })); expect(r.status).toBe(401); expect(r.headers.get("cache-control")).toBe("no-store"); expect(mocks.run).not.toHaveBeenCalled(); expect(mocks.createAdmin).not.toHaveBeenCalled(); });
   it("stays disabled until explicitly configured", async () => { vi.stubEnv("LE_YARD_SQUARE_SOURCE_SYNC_ENABLED", "false"); const r = await POST(request()); expect(r.status).toBe(503); expect(mocks.createAdmin).not.toHaveBeenCalled(); });
   it("requires the isolated Sandbox token and bound connection", async () => { vi.stubEnv("SQUARE_SANDBOX_ACCESS_TOKEN", ""); expect((await POST(request())).status).toBe(503); expect(mocks.createAdmin).not.toHaveBeenCalled(); });
+  it("cannot use the production token in preview, development or local invocations", async () => {
+    vi.stubEnv("SQUARE_SOURCE_ENVIRONMENT", "production");
+    vi.stubEnv("SQUARE_PRODUCTION_ACCESS_TOKEN", "fake-production-token");
+    for (const env of [undefined, "preview", "development"]) {
+      vi.stubEnv("VERCEL_ENV", env);
+      expect((await POST(request())).status).toBe(503);
+    }
+    expect(mocks.createAdmin).not.toHaveBeenCalled();
+  });
+  it("requires a separate production secret and caps the pilot to 72 hours", async () => {
+    vi.stubEnv("SQUARE_SOURCE_ENVIRONMENT", "production");
+    vi.stubEnv("VERCEL_ENV", "production");
+    expect((await POST(request())).status).toBe(503);
+    vi.stubEnv("SQUARE_PRODUCTION_ACCESS_TOKEN", "fake-production-token");
+    expect((await POST(request({ ...body, windowTo: "2026-10-25T00:00:01Z" }))).status).toBe(400);
+    expect(mocks.createAdmin).not.toHaveBeenCalled();
+    mocks.run.mockResolvedValue({ financialPostingEnabled: false, reconciliation: "pending" });
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ environment: "production", financialPostingEnabled: false, providerAccepted: false });
+    expect(mocks.run.mock.calls[0][1]).toMatchObject({ accessToken: "fake-production-token", environment: "production" });
+  });
+  it("rejects a misspelled environment without falling back to another token", async () => {
+    vi.stubEnv("SQUARE_SOURCE_ENVIRONMENT", "Production");
+    expect((await POST(request())).status).toBe(503);
+    expect(mocks.createAdmin).not.toHaveBeenCalled();
+  });
   it.each(["{", { ...body, connectionId: "a5100000-0000-4000-8000-000000000003" }, { ...body, windowTo: body.windowFrom }])("refuses invalid JSON, request scope overrides and invalid elapsed dates", async value => { expect((await POST(request(value))).status).toBe(400); expect(mocks.run).not.toHaveBeenCalled(); });
   it("bounds chunked body bytes before parsing", async () => { expect((await POST(request("x".repeat(4097)))).status).toBe(413); expect(mocks.createAdmin).not.toHaveBeenCalled(); });
   it("rejects other content types", async () => { expect((await POST(request(body, { "content-type": "text/plain" }))).status).toBe(415); });

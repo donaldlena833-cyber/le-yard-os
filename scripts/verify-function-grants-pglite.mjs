@@ -57,6 +57,7 @@ const approvedAuthenticatedFunctions = new Set([
   "complete_prep_task",
   "complete_owner_intelligence_run",
   "configure_square_source_connection",
+  "configure_square_production_source_connection",
   "configure_inventory_catalog",
   "configure_job_role_capability",
   "configure_kitchen_foundation",
@@ -214,6 +215,7 @@ const approvedAuthenticatedFunctions = new Set([
 
 const requiredServiceFunctions = new Set([
   "service_ingest_square_source_window",
+  "service_ingest_square_production_source_window",
   "service_provision_church_street",
   "service_set_church_street_active",
   "add_guest_note",

@@ -9877,6 +9877,16 @@ export type Database = {
         }
         Returns: Json
       };
+      "configure_square_production_source_connection": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_enabled": boolean | null
+        }
+        Returns: Json
+      };
       "configure_square_source_connection": {
         Args: {
           "p_request_id": string | null
@@ -11718,6 +11728,17 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_ingest_square_production_source_window": {
+        Args: {
+          "p_request_id": string | null
+          "p_connection_id": string | null
+          "p_window_from": string | null
+          "p_window_to": string | null
+          "p_snapshots": Json | null
+          "p_source_scope": Json | null
+        }
+        Returns: Json
+      };
       "service_ingest_square_source_window": {
         Args: {
           "p_request_id": string | null
@@ -12447,6 +12468,7 @@ export const DatabaseObjectNames = {
       "configure_reservation_location",
       "configure_retention_policy",
       "configure_service_shift_exception",
+      "configure_square_production_source_connection",
       "configure_square_source_connection",
       "configure_tip_pool_policy",
       "configure_user_capability_override",
@@ -12656,6 +12678,7 @@ export const DatabaseObjectNames = {
       "service_guest_sensitive_notes",
       "service_guest_sensitive_profiles",
       "service_ingest_pos_time_entry",
+      "service_ingest_square_production_source_window",
       "service_ingest_square_source_window",
       "service_merge_guests",
       "service_modify_public_reservation",

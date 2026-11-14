@@ -15,6 +15,11 @@ const pageSchema = z.object({ cursor: z.string().min(1).max(4096).optional(), er
 const MAX_PAGES = 100;
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_WINDOW_BYTES = 32 * 1024 * 1024;
+function isNinthAvenueAddress(address: { address_line_1?: string; postal_code?: string; country?: string } | undefined) {
+  const street = address?.address_line_1?.toLowerCase().replace(/[.,]/g, "").trim().replace(/\s+/g, " ");
+  return Boolean(street && /^858 (?:9th|ninth) (?:ave|avenue)$/.test(street)
+    && /^10019(?:-\d{4})?$/.test(address?.postal_code?.trim() ?? "") && address?.country === "US");
+}
 export class SquareReadError extends Error {
   constructor(message: string, readonly status: number | null = null) { super(message); this.name = "SquareReadError"; }
 }
@@ -66,8 +71,14 @@ export class SquareReadClient {
   }
   async verifyScope(): Promise<void> {
     const merchant = z.object({ id: reference, country: z.string(), currency: z.string().optional(), status: z.string().optional() }).parse((await this.read(`/v2/merchants/${this.configuration.merchantId}`)).merchant);
-    const location = z.object({ id: reference, merchant_id: reference, status: z.string(), currency: z.string(), timezone: z.string() }).parse((await this.read(`/v2/locations/${this.configuration.locationId}`)).location);
+    const location = z.object({
+      id: reference, merchant_id: reference, status: z.string(), currency: z.string(), timezone: z.string(),
+      address: z.object({ address_line_1: z.string().optional(), postal_code: z.string().optional(), country: z.string().optional() }).optional(),
+    }).parse((await this.read(`/v2/locations/${this.configuration.locationId}`)).location);
     if (merchant.id !== this.configuration.merchantId || location.id !== this.configuration.locationId || location.merchant_id !== merchant.id || location.status !== "ACTIVE" || location.currency !== this.configuration.currency || location.timezone !== this.configuration.timeZone || (merchant.currency && merchant.currency !== this.configuration.currency) || (merchant.status && merchant.status !== "ACTIVE")) throw new SquareReadError("Square account/location does not match the approved scope.");
+    if (this.configuration.environment === "production" && (merchant.country !== "US" || !isNinthAvenueAddress(location.address))) {
+      throw new SquareReadError("The Square location must match the Ninth Avenue restaurant address.");
+    }
   }
   async readWindow(from: string, to: string): Promise<SquareSourceSnapshot[]> {
     const begin = z.iso.datetime({ offset: true }).parse(from), end = z.iso.datetime({ offset: true }).parse(to);

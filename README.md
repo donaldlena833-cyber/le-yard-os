@@ -204,7 +204,7 @@ The application is designed for Vercel and Supabase. The public restaurant websi
 
 Local readiness corrections (not deployed): current-scope revision counters replace cached private invalidation topics; unchanged service-shift reads no longer emit updates; bounded pre-shift reads prioritize the latest versions from each service/status before history. Native coverage includes all fourteen files (362 assertions, including44 Square source,21 SQL-warning,72 checklist-boundary 50 staffing and25 receiving-proposal checks). The actual-Auth and browser drills remain separate from physical staff, Square and hosted release acceptance.
 
-The local [Square source-evidence adapter](docs/square-source-evidence.md) adds an explicit provider, exact Sandbox mapping, read-only protocol client, private immutable source versions and atomic receipts. It follows the existing Owner-approved retry chain and keeps financial posting disabled. Fake-provider rehearsal is separate from real Square, reconciliation and live-use acceptance.
+The [Square source-evidence adapter](docs/square-source-evidence.md) supports exact Sandbox and Ninth Avenue production mappings, a read-only protocol client, private immutable source versions and atomic receipts. It follows the existing Owner-approved retry chain and keeps financial posting disabled. A real Square service shift must be reconciled before operating use.
 
 Current implementation and acceptance status is maintained in [the version-bound register](docs/le-yard-os-expansion-status.md) and [permission matrix](docs/permission-matrix.md). Dated release/design snapshots are historical.
 

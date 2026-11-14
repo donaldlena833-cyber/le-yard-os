@@ -1,5 +1,6 @@
 import { verifyChurchStreetTenant } from "./verify-church-street-tenant.mjs";
 import { verifyOpeningRoomV3 } from "./verify-opening-room-v3.mjs";
+import { verifySquareProductionSource } from "./verify-square-production-source.mjs";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
@@ -5170,6 +5171,8 @@ try {
     "PASS secure invitation functions and owner-role guard\n",
   );
   await verifyOpeningRoomV3(db);
+  await verifySquareProductionSource(db);
+  process.stdout.write("PASS Square production mapping, read scope, and source evidence boundaries\n");
   await verifyChurchStreetTenant(db);
 } finally {
   await db.close();
