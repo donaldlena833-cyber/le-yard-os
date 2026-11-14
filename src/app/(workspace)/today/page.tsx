@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { listChurchSquareCateringJobsAction } from "@/app/actions/workflows/church-square-catering-jobs";
+import { ChurchSquareOrderWatchPanel } from "@/components/today/church-square-order-watch";
 import { ChurchSquareOrderWindow } from "@/components/today/church-square-order-window";
 import { LiveTodayWorkspace } from "@/components/today/live-today-workspace";
 import { TodayWorkspace } from "@/components/today/today-workspace";
@@ -21,6 +22,10 @@ async function ChurchSquareOrderSection({ workspace }: {
   return allowed
     ? (
       <>
+        <ChurchSquareOrderWatchPanel
+          key={`${workspace.identity.userId}:${workspace.organization.id}:${workspace.activeLocation.id}`}
+          locationId={workspace.activeLocation.id}
+        />
         <Suspense fallback={null}><ChurchCateringThisWeek /></Suspense>
         <ChurchSquareOrderWindow key={`${workspace.organization.id}:${workspace.activeLocation.id}`} />
       </>

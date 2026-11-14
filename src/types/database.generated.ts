@@ -10595,6 +10595,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_square_order_watch": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_square_reconciliation": {
         Args: {
           "p_location_id": string | null
@@ -12923,6 +12929,7 @@ export const DatabaseObjectNames = {
       "list_church_sandwich_formulas",
       "list_church_sandwich_timing_runs",
       "list_church_square_count_items",
+      "list_church_square_order_watch",
       "list_church_square_reconciliation",
       "list_church_square_stock_alerts",
       "list_church_square_webhook_receipts",

@@ -121,6 +121,7 @@ const approvedAuthenticatedFunctions = new Set([
   "list_church_sandwich_formulas",
   "list_church_sandwich_timing_runs",
   "list_church_square_reconciliation",
+  "list_church_square_order_watch",
   "list_church_square_stock_alerts",
   "list_church_square_webhook_receipts",
   "mark_channel_read",
