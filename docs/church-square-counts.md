@@ -9,6 +9,8 @@ Operations → Inventory shows Square stock counts to assigned Church Street man
 3. Start with one item. The manager or chef physically counts the units. In Square’s item editor at Le Yard Cafe, switch the item to **Track by stock count** and initialize it using that observation. Square can mark an item sold out when tracking starts without stock. In Operations → Church Street → Inventory → Square stock counts, the owner selects **Find tracked items in Square** and adds that variation.
 4. Have a manager and an appropriately authorized chef each take a fresh count and verify the saved count in Square inventory history. Compare POS availability, and separately check any connected customer storefront. For an actual zero, verify sold-out behavior, then repeat with an actual restock. Use Sandbox or a controlled test item to exercise zero and restore before doing so with a live item.
 
+For a production rehearsal, Operations can optionally display the stock-only Square item whose exact variation ID is configured in `SQUARE_CHURCH_TEST_VARIATION_ID`. The item must have SKU `LY-OPS-STOCK-TEST`, be tracked at the café, and be explicitly non-sellable. The café's dedicated test item is excluded from customer menus. Leave this setting empty on deployments that don't need a rehearsal.
+
 ## During service
 
 Enter the whole number of units currently on hand and a short reason. Square applies a physical count in order of observation and may report a different current quantity if sales have occurred since the count. Operations shows a confirmed result after it finds the matching Square history entry and reads current in-stock quantity.

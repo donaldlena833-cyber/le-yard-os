@@ -16,6 +16,7 @@ const configurationSchema = z.strictObject({
   accessToken: z.string().trim().regex(/^[!-~]{1,4096}$/),
   merchantId: squareId,
   locationId: squareId,
+  testVariationId: squareId.optional(),
   address: addressSchema.optional(),
   timeZone: z.string().min(1).max(100),
   currency: z.literal("USD"),
@@ -58,6 +59,7 @@ const variationSchema = catalogLocationSchema.extend({
   item_variation_data: z.object({
     item_id: squareId,
     name: z.string().trim().min(1).max(2048),
+    sku: z.string().max(255).optional(),
     track_inventory: z.boolean().optional(),
     sellable: z.boolean().optional(),
     stockable: z.boolean().optional(),
@@ -98,7 +100,7 @@ const currentCountSchema = z.object({
   is_estimated: z.boolean().optional(),
 });
 const envelopeSchema = z.object({
-  cursor: z.string().min(1).max(4096).optional(),
+  cursor: z.string().max(4096).optional(),
   errors: z.array(z.unknown()).optional(),
 }).passthrough();
 const changeSchema = z.object({ type: z.string(), physical_count: z.unknown().optional() });
@@ -107,6 +109,7 @@ const DAY_MS = 86_400_000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_PAGES = 10;
 const MAX_VARIATIONS = 150;
+const STOCK_TEST_SKU = "LY-OPS-STOCK-TEST";
 
 export type SquareCountConfiguration = z.input<typeof configurationSchema>;
 export type SquarePhysicalCountInput = z.infer<typeof physicalCountRequest>;
@@ -158,12 +161,21 @@ function itemPresentAtLocation(item: z.infer<typeof parentSchema>, locationId: s
   return !item.item_data.is_archived && presentAtLocation(item, locationId);
 }
 
-function isWholeTrackedVariation(variation: z.infer<typeof variationSchema>, locationId: string) {
+function canCountVariation(
+  variation: z.infer<typeof variationSchema>,
+  { locationId, testVariationId }: Pick<SquareCountConfiguration, "locationId" | "testVariationId">,
+) {
   const data = variation.item_variation_data;
   const overrides = data.location_overrides?.filter((override) => override.location_id === locationId) ?? [];
   const tracked = overrides[0]?.track_inventory ?? data.track_inventory;
-  return overrides.length <= 1 && tracked === true && data.sellable !== false && data.stockable !== false
-    && data.stockable_conversion == null && !data.measurement_unit_id;
+  if (overrides.length > 1 || tracked !== true || data.stockable_conversion != null || data.measurement_unit_id) {
+    return false;
+  }
+  if (variation.id === testVariationId || data.sku === STOCK_TEST_SKU) {
+    return variation.id === testVariationId && data.sku === STOCK_TEST_SKU
+      && data.sellable === false && data.stockable === true;
+  }
+  return data.sellable !== false && data.stockable !== false;
 }
 
 function trackedVariationLabels(item: z.infer<typeof parentSchema>, variation: z.infer<typeof variationSchema>): SquareTrackedVariation {
@@ -282,7 +294,7 @@ export class SquareCountClient {
           if (variation.item_variation_data.item_id !== item.id) {
             throw new SquareCountError("Square returned an inconsistent parent item.", "scope_mismatch");
           }
-          if (!presentAtLocation(variation, locationId) || !isWholeTrackedVariation(variation, locationId)) continue;
+          if (!presentAtLocation(variation, locationId) || !canCountVariation(variation, this.configuration)) continue;
           const option = trackedVariationLabels(item, variation);
           if (!option.itemName || !option.variationName || trackedVariations.has(option.variationId)) {
             throw new SquareCountError("Square returned an ambiguous catalog variation.", "scope_mismatch");
@@ -329,8 +341,8 @@ export class SquareCountClient {
     if (parents.length !== 1 || !itemPresentAtLocation(parents[0], locationId)) {
       throw new SquareCountError("The Square variation must have one active parent item at this location.", "variation_ineligible");
     }
-    if (!isWholeTrackedVariation(variation.data, locationId)) {
-      throw new SquareCountError("The Square variation must track directly counted, whole sellable units at this location.", "variation_ineligible");
+    if (!canCountVariation(variation.data, this.configuration)) {
+      throw new SquareCountError("The Square variation must track directly counted, whole units and be eligible at this location.", "variation_ineligible");
     }
     const option = trackedVariationLabels(parents[0], variation.data);
     if (!option.itemName || !option.variationName) {

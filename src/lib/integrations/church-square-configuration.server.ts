@@ -8,6 +8,7 @@ const environmentSchema = z.object({
   accessToken: z.string().trim().regex(/^[!-~]{1,4096}$/),
   merchantId: z.string().trim().regex(/^[A-Za-z0-9_-]{1,100}$/),
   locationId: z.string().trim().regex(/^[A-Za-z0-9_-]{1,100}$/),
+  testVariationId: z.string().trim().regex(/^[A-Za-z0-9_-]{1,100}$/).optional(),
 });
 
 export function churchSquareCountConfiguration(): SquareCountConfiguration | undefined {
@@ -17,6 +18,7 @@ export function churchSquareCountConfiguration(): SquareCountConfiguration | und
     accessToken: process.env.SQUARE_CHURCH_ACCESS_TOKEN,
     merchantId: process.env.SQUARE_CHURCH_MERCHANT_ID,
     locationId: process.env.SQUARE_CHURCH_LOCATION_ID,
+    testVariationId: process.env.SQUARE_CHURCH_TEST_VARIATION_ID?.trim() || undefined,
   });
   if (!parsed.success) return undefined;
   return {

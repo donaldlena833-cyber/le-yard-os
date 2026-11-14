@@ -21,6 +21,9 @@ const input: SquarePhysicalCountInput = {
   teamMemberId: "CHEF_TEAM_ID",
 };
 const variationData = { item_id: "CROISSANT_ITEM", name: "Regular", track_inventory: true };
+const stockTestVariationData = {
+  ...variationData, sku: "LY-OPS-STOCK-TEST", sellable: false, stockable: true,
+};
 const baseParent = { type: "ITEM", id: "CROISSANT_ITEM", item_data: { name: "Croissant" } };
 const baseLocation = {
   id: config.locationId, merchant_id: config.merchantId, status: "ACTIVE",
@@ -124,7 +127,7 @@ describe("Square physical count client", () => {
     const request = mockSquare({ catalog: (query) => {
       expect(query.get("types")).toBe("ITEM");
       return query.get("cursor") === "page two"
-        ? respond({ objects: [otherCafeItem] })
+        ? respond({ objects: [otherCafeItem], cursor: "" })
         : respond({ objects: [cafeItem, unavailableItem], cursor: "page two" });
     } });
     await expect(new SquareCountClient(config, request).listTrackedVariations()).resolves.toEqual([
@@ -133,6 +136,46 @@ describe("Square physical count client", () => {
     ]);
     expect(requestsTo(request, urls.catalog)).toHaveLength(2);
     expect(request.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
+  it("lists and writes the single configured non-sellable stock fixture", async () => {
+    const listedFixture = {
+      id: input.variationId, type: "ITEM_VARIATION", item_variation_data: stockTestVariationData,
+    };
+    const unauthorizedDuplicateSku = { ...listedFixture, id: "OTHER_FIXTURE" };
+    const request = mockSquare({
+      variation: { item_variation_data: stockTestVariationData },
+      catalog: () => respond({
+        objects: [{ ...baseParent, item_data: { ...baseParent.item_data, variations: [
+          listedFixture, unauthorizedDuplicateSku,
+        ] } }],
+        cursor: "",
+      }),
+      history: () => respond({ changes: [change()], cursor: "" }),
+      current: () => respond({ counts: [currentCount], cursor: "" }),
+    });
+
+    await expect(new SquareCountClient(config, request).listTrackedVariations()).resolves.toEqual([]);
+    const client = new SquareCountClient({ ...config, testVariationId: input.variationId }, request);
+    await expect(client.listTrackedVariations()).resolves.toEqual([{
+      itemId: baseParent.id, itemName: "Croissant", variationId: input.variationId, variationName: "Regular",
+    }]);
+    await expect(client.writePhysicalCount(input)).resolves.toMatchObject({ status: "confirmed" });
+    expect(requestsTo(request, urls.write)).toHaveLength(1);
+  });
+
+  it.each([
+    { changed: {}, testVariationId: undefined },
+    { changed: {}, testVariationId: "OTHER_FIXTURE" },
+    { changed: { sku: "OTHER_SKU" }, testVariationId: input.variationId },
+    { changed: { stockable: undefined }, testVariationId: input.variationId },
+    { changed: { sellable: true }, testVariationId: input.variationId },
+    { changed: { track_inventory: false }, testVariationId: input.variationId },
+  ])("refuses non-sellable fixtures without an exact eligible configuration", async ({ changed, testVariationId }) => {
+    const request = mockSquare({ variation: { item_variation_data: { ...stockTestVariationData, ...changed } } });
+    const client = new SquareCountClient({ ...config, testVariationId }, request);
+    await expect(client.writePhysicalCount(input)).rejects.toMatchObject({ code: "variation_ineligible" });
+    expect(requestsTo(request, urls.write)).toHaveLength(0);
   });
 
   it("refuses to show a partial or duplicated catalog as the eligible list", async () => {
@@ -199,6 +242,7 @@ describe("Square physical count client", () => {
     { variation: { absent_at_location_ids: [config.locationId] } },
     { variation: { item_variation_data: { ...variationData, location_overrides: [{ location_id: config.locationId, track_inventory: false }] } } },
     { variation: { item_variation_data: { ...variationData, stockable: false } } },
+    { variation: { item_variation_data: { ...variationData, sellable: false } } },
     { parent: { ...baseParent, present_at_all_locations: false, present_at_location_ids: ["OTHER_LOCATION"] } },
     { parent: { ...baseParent, item_data: { ...baseParent.item_data, is_archived: true } } },
   ])("refuses ineligible catalog variations before writing", async (result) => {

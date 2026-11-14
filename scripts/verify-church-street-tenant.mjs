@@ -54,7 +54,11 @@ async function verifyChurchSquareCountLedger(db, churchId, locationId) {
   await claims(db, ownerId);
   assert.deepEqual(await read(list()), []);
   await expectDenial(db, list(restaurantLocationId), "42501", "Square count listing is Church only");
-  await expectDenial(db, configure(), "42501", "Authenticated owner cannot call privileged mapping directly");
+  // Supabase PostgreSQL 17.6 can terminate the backend on a direct ACL-denied
+  // call to a definer RPC. Check the exact execution privilege without invoking it.
+  assert.equal(await read(`select has_function_privilege(
+    current_user, 'public.service_configure_church_square_count_item(uuid,uuid,uuid,text,text,text,text,boolean)', 'EXECUTE'
+  ) as result`), false, "Authenticated owner cannot call privileged mapping directly");
   await claims(db, churchEmployeeId);
   await expectDenial(db, list(), "42501", "Prep staff require a separate count capability");
   await asService();
@@ -75,7 +79,9 @@ async function verifyChurchSquareCountLedger(db, churchId, locationId) {
     id: itemId, label: "Fixture Sandwich", pendingRequestId: null, pendingQuantity: null,
     pendingReason: null, pendingObservedAt: null, lastConfirmedQuantity: null, lastConfirmedObservedAt: null,
   }]);
-  await expectDenial(db, claim(), "42501", "Authenticated staff cannot get provider scope from service claim");
+  assert.equal(await read(`select has_function_privilege(
+    current_user, 'public.service_claim_church_square_count(uuid,uuid,uuid,uuid,text,text)', 'EXECUTE'
+  ) as result`), false, "Authenticated staff cannot get provider scope from service claim");
   await asService();
   await expectDenial(db, claim(churchEmployeeId, requestId, "1.5"), "22023", "Only whole item counts are allowed");
   const pending = await read(claim());
