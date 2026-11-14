@@ -10897,6 +10897,17 @@ export type Database = {
         }
         Returns: Json
       };
+      "record_church_ingredient_batch_measurement": {
+        Args: {
+          "p_location_id": string | null
+          "p_batch_id": string | null
+          "p_request_id": string | null
+          "p_expected_latest_id": string | null
+          "p_quantity": number | null
+          "p_observed_at": string | null
+        }
+        Returns: Json
+      };
       "record_church_sandwich_timing_run": {
         Args: {
           "p_location_id": string | null
@@ -13001,6 +13012,7 @@ export const DatabaseObjectNames = {
       "record_canonical_service_availability_event",
       "record_checklist_response",
       "record_church_ingredient_batch",
+      "record_church_ingredient_batch_measurement",
       "record_church_sandwich_timing_run",
       "record_clock_in",
       "record_clock_out",

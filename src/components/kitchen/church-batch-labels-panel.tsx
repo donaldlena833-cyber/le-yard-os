@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { recordChurchIngredientBatchAction, resolveChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
+import { measureChurchIngredientBatchAction, recordChurchIngredientBatchAction, resolveChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
-import { zonedLocalToIso } from "@/data/read-models/local-time";
+import { localDateTimeParts, zonedLocalToIso } from "@/data/read-models/local-time";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
-import type { ChurchBatchLabel } from "@/lib/kitchen/church-ingredient-batches";
-import { churchSandwichComponents } from "@/lib/kitchen/church-sandwich-bench";
+import type { ChurchBatchLabel, ChurchBatchMeasurement } from "@/lib/kitchen/church-ingredient-batches";
+import { churchSandwichBread, churchSandwichComponents } from "@/lib/kitchen/church-sandwich-bench";
+import { validChurchAvailabilityStock } from "@/lib/kitchen/church-sandwich-availability";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
 
 type Props = {
@@ -25,6 +26,10 @@ const zone = "America/New_York";
 const easternTime = new Intl.DateTimeFormat("en-US", {
   timeZone: zone, year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short",
 });
+const measurementTime = new Intl.DateTimeFormat("en-US", {
+  timeZone: zone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short",
+});
+const quantityLabel = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
 const field = "focus-ring mt-1 block w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm font-normal";
 const appearance = {
   current: { label: "Recorded label", tone: "positive" },
@@ -37,7 +42,17 @@ const appearance = {
 
 function easternInput(value: FormDataEntryValue | null) {
   const [date, time] = String(value ?? "").split("T");
-  return date && time ? zonedLocalToIso(date, time, zone) : null;
+  const match = /^(\d{2}:\d{2}(?::\d{2})?)(?:\.(\d{1,3}))?$/.exec(time ?? "");
+  if (!date || !match) return null;
+  const instant = zonedLocalToIso(date, match[1], zone);
+  return instant && match[2] ? instant.replace(".000Z", `.${match[2].padEnd(3, "0")}Z`) : instant;
+}
+
+function currentEasternInput() {
+  const instant = new Date(Date.now()).toISOString();
+  const { date, time } = localDateTimeParts(instant, zone);
+  const input = `${date}T${time}:${instant.slice(17, 19)}`;
+  return easternInput(input) ? input : "";
 }
 
 function localLabel(value: string) {
@@ -48,12 +63,25 @@ function isCurrentEvidence(batch: ChurchBatchLabel, evidence?: ChurchIngredientE
   return batch.evidenceCurrent && evidence?.status === "reviewed" && evidence.revision === batch.evidenceRevision;
 }
 
+function compareMeasurementTimes(left: string, right: string) {
+  const fraction = (value: string) => Number((/\.(\d+)/.exec(value)?.[1] ?? "").padEnd(6, "0"));
+  return Date.parse(left) - Date.parse(right) || fraction(left) - fraction(right);
+}
+
+function latestMeasurement(first?: ChurchBatchMeasurement | null, second?: ChurchBatchMeasurement | null) {
+  if (!first || !second) return first ?? second ?? null;
+  const observedOrder = compareMeasurementTimes(second.observedAt, first.observedAt);
+  const recordedOrder = compareMeasurementTimes(second.recordedAt, first.recordedAt);
+  return (observedOrder || recordedOrder) > 0 ? second : first;
+}
+
 function mergeBatch(existing: ChurchBatchLabel | undefined, local: ChurchBatchLabel): ChurchBatchLabel {
   if (!existing) return local;
-  if (existing.voidedAt || existing.disposition) return existing;
-  if (local.voidedAt) return { ...existing, voidedAt: local.voidedAt, voidReason: local.voidReason };
-  if (local.disposition) return { ...existing, disposition: local.disposition };
-  return existing;
+  const merged = { ...existing, latestMeasurement: latestMeasurement(existing.latestMeasurement, local.latestMeasurement) };
+  if (existing.voidedAt || existing.disposition) return merged;
+  if (local.voidedAt) return { ...merged, voidedAt: local.voidedAt, voidReason: local.voidReason };
+  if (local.disposition) return { ...merged, disposition: local.disposition };
+  return merged;
 }
 
 function activityTime(batch: ChurchBatchLabel) {
@@ -168,15 +196,19 @@ function RecordBatchLabel({ evidence, onSave }: {
   );
 }
 
-function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave }: {
+function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave, onMeasure, onRefresh }: {
   record: ChurchBatchLabel;
   evidence?: ChurchIngredientEvidence;
   now: number;
   canRecord: boolean;
   canResolve: boolean;
   onSave: (record: ChurchBatchLabel) => void;
+  onMeasure: (measurement: ChurchBatchMeasurement) => void;
+  onRefresh: () => void;
 }) {
-  const [command, setCommand] = useState<"void" | Outcome | null>(null);
+  const [command, setCommand] = useState<"void" | "measure" | Outcome | null>(null);
+  const [measurementBaseline, setMeasurementBaseline] = useState<string | null>(null);
+  const [initialObservedAt, setInitialObservedAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const { requestIdFor } = useStableRequestIds();
@@ -184,7 +216,63 @@ function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave }:
   const discard = Date.parse(record.discardAt);
   const expired = now >= discard;
   const unresolved = !record.voidedAt && !record.disposition;
+  const canMeasure = canRecord && unresolved && current && !expired;
+  const measurement = record.latestMeasurement;
+  const latestId = measurement?.id ?? null;
+  const isBread = record.ingredientKey === churchSandwichBread;
+  const unit = isBread ? "each" : "g";
   const status = appearance[record.voidedAt ? "voided" : record.disposition?.outcome ?? (expired ? "expired" : current ? "current" : "recheck")];
+
+  async function recordMeasurement(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    if (!canMeasure || Date.now() >= discard || measurementBaseline !== latestId) {
+      setMessage("The batch or its latest measurement changed. Review it before taking another measurement.");
+      return;
+    }
+    const form = new FormData(event.currentTarget);
+    const amount = String(form.get("quantity") ?? "").trim();
+    const quantity = Number(amount);
+    if (!(isBread ? /^\d+$/.test(amount) : /^\d+(\.\d{1,3})?$/.test(amount)) || !validChurchAvailabilityStock(record.ingredientKey, quantity)) {
+      setMessage(isBread ? "Enter a whole baguette count from 0 to 1,000,000." : "Enter net grams from 0 to 1,000,000 with up to three decimals.");
+      return;
+    }
+    const observedAt = easternInput(form.get("observedAt"));
+    if (!observedAt) {
+      setMessage("Enter the actual Eastern observation time. Times skipped or repeated during a clock change need review.");
+      return;
+    }
+    const observation = Date.parse(observedAt);
+    if (observation < Date.parse(record.handledAt) || observation > Date.now()) {
+      setMessage("Use an observation time since the batch was opened or prepped, through now.");
+      return;
+    }
+    if (measurement && compareMeasurementTimes(observedAt, measurement.observedAt) < 0) {
+      setMessage("The observation cannot be earlier than the last measurement shown. Check the time or take a new reading.");
+      return;
+    }
+    const payload = { batchId: record.id, expectedLatestId: measurementBaseline, quantity, observedAt };
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await measureChurchIngredientBatchAction({ ...payload, requestId: requestIdFor(`measurement:${record.id}`, payload) });
+      if (result.ok && result.mode === "live" && result.persisted && result.data.batchId === record.id) {
+        onMeasure(result.data);
+        setCommand(null);
+        setMessage("Batch measurement recorded.");
+      } else if (!result.ok && (result.code === "stale" || result.code === "conflict")) {
+        setCommand(null);
+        setMessage("The batch or its latest measurement changed. Check the latest label before taking another measurement.");
+        onRefresh();
+      } else {
+        setMessage("message" in result ? result.message : "The batch measurement could not be confirmed.");
+      }
+    } catch {
+      setMessage("The batch measurement could not be confirmed. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function voidRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -254,15 +342,34 @@ function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave }:
         <p className="whitespace-pre-wrap">Storage · {record.storageRule}</p>
         <p className="whitespace-pre-wrap">Recorded rule · {record.handlingRule}</p>
         <p>Recorded by {record.recordedByName} · <time dateTime={record.recordedAt}>{localLabel(record.recordedAt)}</time>.</p>
+        {measurement && (
+          <p>
+            {unresolved && current && !expired ? "Last measured remaining" : "Historical measurement"} · {quantityLabel.format(measurement.quantity)} {unit} · <time dateTime={measurement.observedAt}>{measurementTime.format(new Date(measurement.observedAt))}</time> · recorded by {measurement.recordedByName}.
+          </p>
+        )}
         {!current && !record.disposition && <p>Recheck the current supplier label and the physical batch before use.</p>}
         {record.voidedAt && <p className="whitespace-pre-wrap">Voided <time dateTime={record.voidedAt}>{localLabel(record.voidedAt)}</time> · {record.voidReason}</p>}
         {record.disposition && <p>{appearance[record.disposition.outcome].label} recorded by {record.disposition.resolvedByName} · <time dateTime={record.disposition.resolvedAt}>{localLabel(record.disposition.resolvedAt)}</time>.</p>}
         {unresolved && command === null && (canResolve || canRecord) && (
           <div className="flex flex-wrap gap-2">
+            {canMeasure && <Button variant="secondary" size="sm" onClick={() => { setMeasurementBaseline(latestId); setInitialObservedAt(currentEasternInput()); setCommand("measure"); setMessage(""); }}>Measure remaining</Button>}
             {canResolve && current && !expired && <Button variant="secondary" size="sm" onClick={() => setCommand("used_up")}>Record used up</Button>}
             {canResolve && <Button variant="secondary" size="sm" onClick={() => setCommand("discarded")}>Record discard</Button>}
             {canRecord && <Button variant="quiet" size="sm" onClick={() => setCommand("void")}>Void label</Button>}
           </div>
+        )}
+        {canRecord && unresolved && command === "measure" && (
+          <form aria-label={`Measure remaining for ${record.batchCode}`} onSubmit={(event) => void recordMeasurement(event)} noValidate className="space-y-2">
+            <p>{!canMeasure || latestId !== measurementBaseline ? "The batch or its latest measurement changed. Cancel and review the latest label before measuring again." : "Measure this batch only. Count whole baguettes or weigh usable filling without the container. Check the observation time and enter 0 only for a confirmed empty batch."}</p>
+            <fieldset disabled={busy || !canMeasure || latestId !== measurementBaseline} className="grid gap-2 sm:grid-cols-2">
+              <label className="block font-semibold">Remaining quantity ({unit})<input className={field} name="quantity" inputMode={isBread ? "numeric" : "decimal"} autoComplete="off" required maxLength={11} /></label>
+              <label className="block font-semibold">Observed at (Eastern)<input className={field} name="observedAt" type="datetime-local" step={1} required defaultValue={initialObservedAt} /></label>
+            </fieldset>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" size="sm" type="submit" disabled={busy || !canMeasure || latestId !== measurementBaseline}>{busy ? "Recording…" : "Record measurement"}</Button>
+              <Button variant="quiet" size="sm" disabled={busy} onClick={() => { setCommand(null); setMessage(""); }}>Cancel</Button>
+            </div>
+          </form>
         )}
         {canResolve && unresolved && (command === "used_up" || command === "discarded") && (
           <div className="space-y-2">
@@ -298,6 +405,7 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, que
   const [refreshing, startRefresh] = useTransition();
   const [clock, setClock] = useState(() => Date.parse(asOf));
   const [changes, setChanges] = useState<Record<string, ChurchBatchLabel>>({});
+  const [measurements, setMeasurements] = useState<Record<string, ChurchBatchMeasurement>>({});
   const [resolutionMessage, setResolutionMessage] = useState("");
 
   const byIngredient = new Map(evidence.map((row) => [row.ingredientKey, row]));
@@ -342,6 +450,16 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, que
     setClock(Date.now());
   }
 
+  function measured(receipt: ChurchBatchMeasurement) {
+    setMeasurements((previous) => ({ ...previous, [receipt.batchId]: latestMeasurement(previous[receipt.batchId], receipt) ?? receipt }));
+  }
+
+  function renderBatch(record: ChurchBatchLabel, canResolve: boolean) {
+    const latest = latestMeasurement(record.latestMeasurement, measurements[record.id]);
+    return <BatchLabelRow key={record.id} record={{ ...record, latestMeasurement: latest }} evidence={byIngredient.get(record.ingredientKey)}
+      now={now} canRecord={canRecord} canResolve={canResolve} onSave={saved} onMeasure={measured} onRefresh={() => startRefresh(refresh)} />;
+  }
+
   return (
     <section aria-labelledby="church-batch-labels-heading" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
       <h2 id="church-batch-labels-heading" className="text-lg font-semibold">Batch labels</h2>
@@ -359,7 +477,7 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, que
               <p className="mt-1 text-xs text-[var(--ink-soft)]">{queueTotal === 0 ? "No open batches." : `${queueTotal} open ${queueTotal === 1 ? "batch" : "batches"}. Earliest deadline first.`}</p>
               {queueTotal > visibleQueue.length && <p className="mt-1 text-xs text-[var(--ink-soft)]">Showing {visibleQueue.length} of {queueTotal}. Refresh Kitchen to see more after recording outcomes.</p>}
               <div className="mt-1 divide-y divide-[var(--line)]">
-                {visibleQueue.map((record) => <BatchLabelRow key={record.id} record={record} evidence={byIngredient.get(record.ingredientKey)} now={now} canRecord={canRecord} canResolve={canRecord} onSave={saved} />)}
+                {visibleQueue.map((record) => renderBatch(record, canRecord))}
               </div>
             </>
           )}
@@ -369,7 +487,7 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, que
         <h3 id="church-batch-activity-heading" className="text-sm font-semibold">Recent batch label activity</h3>
         {activity.length === 0 ? <p className="mt-2 text-xs text-[var(--ink-soft)]">No other recent batch labels.</p> : (
           <div className="mt-1 divide-y divide-[var(--line)]">
-            {activity.map((record) => <BatchLabelRow key={record.id} record={record} evidence={byIngredient.get(record.ingredientKey)} now={now} canRecord={canRecord} canResolve={canRecord && queue !== undefined} onSave={saved} />)}
+            {activity.map((record) => renderBatch(record, canRecord && queue !== undefined))}
           </div>
         )}
       </section>

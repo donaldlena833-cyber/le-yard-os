@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { churchSandwichComponents } from "./church-sandwich-bench";
+import { validChurchAvailabilityStock, validChurchUsableGrams } from "./church-sandwich-availability";
 
 const ingredientKey = z.enum(churchSandwichComponents);
 const evidenceRevision = z.number().int().min(1).max(2_147_483_647);
@@ -8,6 +9,26 @@ const dispositionOutcome = z.enum(["used_up", "discarded"]);
 const instant = z.iso.datetime({ offset: true });
 const identifier = z.string().trim().min(1).max(120).regex(/^[^\p{Cc}\p{Cf}]+$/u);
 const postgresText = (maximum: number) => z.string().min(1).refine((value) => Array.from(value).length <= maximum);
+const measuredQuantity = z.number().refine(validChurchUsableGrams);
+
+export const measureChurchIngredientBatchInput = z.strictObject({
+  requestId: z.uuid(),
+  batchId: z.uuid(),
+  expectedLatestId: z.uuid().nullable(),
+  quantity: measuredQuantity,
+  observedAt: instant,
+});
+
+export const churchBatchMeasurement = z.object({
+  id: z.uuid(),
+  batchId: z.uuid(),
+  quantity: measuredQuantity,
+  observedAt: instant,
+  recordedAt: instant,
+  recordedByName: postgresText(120),
+}).refine(({ observedAt, recordedAt }) => Date.parse(observedAt) <= Date.parse(recordedAt));
+
+export type ChurchBatchMeasurement = z.infer<typeof churchBatchMeasurement>;
 
 export const recordChurchIngredientBatchInput = z.strictObject({
   requestId: z.uuid(),
@@ -51,12 +72,15 @@ export const churchBatchLabel = z.object({
   evidenceCurrent: z.boolean(),
   voidedAt: instant.nullable(),
   voidReason: postgresText(240).nullable(),
+  latestMeasurement: churchBatchMeasurement.nullish(),
   disposition: z.object({
     outcome: dispositionOutcome,
     resolvedAt: instant,
     resolvedByName: postgresText(120),
   }).nullish(),
-}).refine(({ voidedAt, voidReason, disposition }) => Boolean(voidedAt) === Boolean(voidReason) && !(voidedAt && disposition));
+}).refine(({ id, ingredientKey, voidedAt, voidReason, disposition, latestMeasurement }) =>
+  Boolean(voidedAt) === Boolean(voidReason) && !(voidedAt && disposition)
+  && (!latestMeasurement || (latestMeasurement.batchId === id && validChurchAvailabilityStock(ingredientKey, latestMeasurement.quantity))));
 
 export const churchBatchLabelList = z.array(churchBatchLabel).max(50)
   .refine((records) => new Set(records.map(({ id }) => id)).size === records.length);

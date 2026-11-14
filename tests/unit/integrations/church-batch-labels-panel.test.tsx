@@ -2,13 +2,14 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { recordChurchIngredientBatchAction, resolveChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
+import { measureChurchIngredientBatchAction, recordChurchIngredientBatchAction, resolveChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
 import { ChurchBatchLabelsPanel } from "@/components/kitchen/church-batch-labels-panel";
-import type { ChurchBatchLabel } from "@/lib/kitchen/church-ingredient-batches";
+import type { ChurchBatchLabel, ChurchBatchMeasurement } from "@/lib/kitchen/church-ingredient-batches";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
 
 vi.mock("@/app/actions/workflows/church-ingredient-batches", () => ({
-  recordChurchIngredientBatchAction: vi.fn(), resolveChurchIngredientBatchAction: vi.fn(), voidChurchIngredientBatchAction: vi.fn(),
+  measureChurchIngredientBatchAction: vi.fn(), recordChurchIngredientBatchAction: vi.fn(),
+  resolveChurchIngredientBatchAction: vi.fn(), voidChurchIngredientBatchAction: vi.fn(),
 }));
 
 const asOf = "2026-11-14T16:00:00Z";
@@ -25,6 +26,10 @@ const recorded: ChurchBatchLabel = {
   supplierLot: "LOT-22", batchCode: "HAM-07", handledAs: "prepped", handledAt: "2026-11-14T15:30:00.000Z", discardAt: "2026-11-14T18:00:00.000Z",
   handlingRule: evidence.preppedRule!, storageRule: evidence.storageRule!, recordedAt: asOf, recordedByName: "Kitchen lead",
   evidenceCurrent: true, voidedAt: null, voidReason: null,
+};
+const measurement: ChurchBatchMeasurement = {
+  id: "11111111-1111-4111-8111-111111111111", batchId: recorded.id, quantity: 125.125,
+  observedAt: asOf, recordedAt: "2026-11-14T16:00:00.123456Z", recordedByName: "Chef lead",
 };
 
 function openDetails(detail: string) {
@@ -174,7 +179,84 @@ it("updates due status exactly at the next visible deadline", async () => {
   const row = openDetails("French-style ham · HAM-07");
   await act(async () => { await vi.advanceTimersByTimeAsync(1_999); });
   expect(row.getByRole("button", { name: "Record used up" })).toBeTruthy();
+  expect(row.getByRole("button", { name: "Measure remaining" })).toBeTruthy();
   await act(async () => { await vi.advanceTimersByTimeAsync(1); });
   expect(row.getByText("Discard time reached")).toBeTruthy();
   expect(row.queryByRole("button", { name: "Record used up" })).toBeNull();
+  expect(row.queryByRole("button", { name: "Measure remaining" })).toBeNull();
+});
+
+it("records an explicit zero against the latest batch reading and leaves the batch open", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-14T16:01:00.300Z"));
+  const withReading = { ...recorded, latestMeasurement: measurement };
+  vi.mocked(measureChurchIngredientBatchAction).mockResolvedValue({ ok: true, mode: "live", persisted: true, data: {
+    ...measurement, id: "22222222-2222-4222-8222-222222222222", quantity: 0,
+    observedAt: "2026-11-14T16:01:00.000Z", recordedAt: "2026-11-14T16:01:00.306Z", recordedByName: "Prep lead",
+  } });
+  render(<ChurchBatchLabelsPanel evidence={[evidence]} records={[withReading]} queue={{ batches: [withReading], total: 1 }} asOf={asOf} canRecord />);
+  const row = openDetails("French-style ham · HAM-07");
+  fireEvent.click(row.getByRole("button", { name: "Measure remaining" }));
+  expect((row.getByLabelText("Observed at (Eastern)") as HTMLInputElement).value).toMatch(/^2026-11-14T11:01(:00)?$/);
+  fireEvent.click(row.getByRole("button", { name: "Record measurement" }));
+  expect(measureChurchIngredientBatchAction).not.toHaveBeenCalled();
+  change("Remaining quantity (g)", "0");
+  change("Observed at (Eastern)", "2026-11-14T10:59:59");
+  fireEvent.click(row.getByRole("button", { name: "Record measurement" }));
+  expect(row.getByText(/cannot be earlier than the last measurement/)).toBeTruthy();
+  expect(measureChurchIngredientBatchAction).not.toHaveBeenCalled();
+  change("Observed at (Eastern)", "2026-11-14T11:01:00");
+  fireEvent.click(row.getByRole("button", { name: "Record measurement" }));
+  expect(await row.findByText("Batch measurement recorded.")).toBeTruthy();
+  expect(measureChurchIngredientBatchAction).toHaveBeenCalledExactlyOnceWith({
+    requestId: expect.any(String), expectedLatestId: measurement.id, batchId: recorded.id,
+    quantity: 0, observedAt: "2026-11-14T16:01:00.000Z",
+  });
+  expect(row.getByText(/Last measured remaining.*0 g.*Prep lead/)).toBeTruthy();
+  expect(row.getByRole("button", { name: "Record used up" })).toBeTruthy();
+  expect(resolveChurchIngredientBatchAction).not.toHaveBeenCalled();
+});
+
+it("refreshes concurrent batch conflicts and shows newer readings only as history after evidence changes", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(asOf));
+  let finish!: (result: Awaited<ReturnType<typeof measureChurchIngredientBatchAction>>) => void;
+  vi.mocked(measureChurchIngredientBatchAction)
+    .mockResolvedValueOnce({ ok: false, persisted: false, code: "stale", message: "Newer reading" })
+    .mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+  const renderPanel = (row: ChurchBatchLabel, revision = evidence.revision) => <ChurchBatchLabelsPanel evidence={[{ ...evidence, revision }]} records={[row]}
+    queue={{ batches: [row], total: 1 }} asOf={asOf} canRecord />;
+  const view = render(renderPanel(recorded));
+  const row = openDetails("French-style ham · HAM-07");
+  fireEvent.click(row.getByRole("button", { name: "Measure remaining" }));
+  change("Remaining quantity (g)", "125.125");
+  fireEvent.click(row.getByRole("button", { name: "Record measurement" }));
+  await row.findByText(/latest measurement changed/);
+  expect(refresh).toHaveBeenCalledOnce();
+
+  fireEvent.click(row.getByRole("button", { name: "Measure remaining" }));
+  change("Remaining quantity (g)", "125.125");
+  fireEvent.click(row.getByRole("button", { name: "Record measurement" }));
+  const newer = { ...measurement, id: "33333333-3333-4333-8333-333333333333", quantity: 30, recordedAt: "2026-11-14T16:00:00.123999Z", recordedByName: "Incoming lead" };
+  view.rerender(renderPanel({ ...recorded, latestMeasurement: newer }, 5));
+  await act(async () => finish({ ok: true, mode: "live", persisted: true, data: measurement }));
+  expect(row.getByText(/Historical measurement.*30 g.*Incoming lead/)).toBeTruthy();
+  expect(row.queryByText(/125\.125 g/)).toBeNull();
+  expect(row.queryByRole("button", { name: "Measure remaining" })).toBeNull();
+});
+
+it("leaves an ambiguous Eastern wall clock time blank and requires an unambiguous observation", async () => {
+  const clockChangeTime = "2026-11-01T06:30:04.000Z";
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(clockChangeTime));
+  const bread = { ...recorded, ingredientKey: "10-inch baguette", handledAt: "2026-11-01T04:30:00Z" };
+  render(<ChurchBatchLabelsPanel evidence={[{ ...evidence, ingredientKey: bread.ingredientKey }]} records={[bread]} asOf={clockChangeTime} canRecord />);
+  const row = openDetails("10-inch baguette · HAM-07");
+  fireEvent.click(row.getByRole("button", { name: "Measure remaining" }));
+  expect((row.getByLabelText("Observed at (Eastern)") as HTMLInputElement).value).toBe("");
+  change("Remaining quantity (each)", "1.5");
+  fireEvent.click(row.getByRole("button", { name: "Record measurement" }));
+  expect(row.getByText(/Enter a whole baguette count/)).toBeTruthy();
+  change("Remaining quantity (each)", "2");
+  change("Observed at (Eastern)", "2026-11-01T01:30:04");
+  fireEvent.click(row.getByRole("button", { name: "Record measurement" }));
+  expect(row.getByText(/Times skipped or repeated/)).toBeTruthy();
+  expect(measureChurchIngredientBatchAction).not.toHaveBeenCalled();
 });

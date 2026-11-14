@@ -1,8 +1,9 @@
 import { expect, it } from "vitest";
 import { zonedLocalToIso } from "@/data/read-models/local-time";
-import { churchBatchLabelList, churchBatchQueue, recordChurchIngredientBatchInput, resolveChurchIngredientBatchInput, voidChurchIngredientBatchInput } from "@/lib/kitchen/church-ingredient-batches";
+import { churchBatchLabelList, churchBatchMeasurement, churchBatchQueue, measureChurchIngredientBatchInput, recordChurchIngredientBatchInput, resolveChurchIngredientBatchInput, voidChurchIngredientBatchInput } from "@/lib/kitchen/church-ingredient-batches";
 
 const batchId = "12345678-1234-4234-9234-1234567890ab";
+const measurementId = "22345678-1234-4234-9234-1234567890ab";
 const input = {
   requestId: batchId,
   ingredientKey: "French-style ham",
@@ -53,4 +54,29 @@ it("retains batch trace facts and rejects inconsistent or repeated void records"
   expect(churchBatchLabelList.safeParse([{ ...label, disposition }]).success).toBe(false);
   expect(resolveChurchIngredientBatchInput.safeParse({ requestId: batchId, batchId, outcome: "discarded" }).success).toBe(true);
   expect(resolveChurchIngredientBatchInput.safeParse({ requestId: batchId, batchId, outcome: "discarded", resolvedAt: disposition.resolvedAt }).success).toBe(false);
+});
+
+it("accepts a measured zero and rejects over-precision, wrong batches and fractional bread", () => {
+  const measurement = {
+    id: measurementId, batchId, quantity: 0, observedAt: "2026-11-14T11:30:13Z",
+    recordedAt: "2026-11-14T11:30:14Z", recordedByName: "Fixture lead",
+  };
+  const write = {
+    requestId: measurementId, batchId, expectedLatestId: null, quantity: 0,
+    observedAt: measurement.observedAt,
+  };
+  expect(measureChurchIngredientBatchInput.safeParse(write).success).toBe(true);
+  expect(measureChurchIngredientBatchInput.safeParse({ ...write, quantity: 34.567 }).success).toBe(true);
+  expect(measureChurchIngredientBatchInput.safeParse({ ...write, quantity: 34.5678 }).success).toBe(false);
+  expect(measureChurchIngredientBatchInput.safeParse({ ...write, quantity: -1 }).success).toBe(false);
+  expect(churchBatchMeasurement.safeParse({ ...measurement, observedAt: "2026-11-14T11:30:15Z" }).success).toBe(false);
+  const record = {
+    ...input, id: batchId, supplierSku: "HAM SKU", evidenceCurrent: true,
+    storageRule: "Approved pack instruction", handlingRule: "Reviewed prep rule",
+    recordedAt: "2026-11-14T11:30:10Z", recordedByName: "Fixture chef",
+    voidedAt: null, voidReason: null,
+  };
+  expect(churchBatchLabelList.parse([{ ...record, latestMeasurement: measurement }])[0].latestMeasurement).toEqual(measurement);
+  expect(churchBatchLabelList.safeParse([{ ...record, latestMeasurement: { ...measurement, batchId: measurementId } }]).success).toBe(false);
+  expect(churchBatchLabelList.safeParse([{ ...record, ingredientKey: "10-inch baguette", latestMeasurement: { ...measurement, quantity: 2.5 } }]).success).toBe(false);
 });

@@ -45,9 +45,13 @@ const QUANTITY_SCALE = 1_000;
 const maxStock = 1_000_000;
 const maxMix = 999;
 
-export function validChurchAvailabilityStock(ingredient: ChurchAvailabilityIngredient, value: number): boolean {
+export function validChurchUsableGrams(value: number): boolean {
   return Number.isFinite(value) && value >= 0 && value <= maxStock
-    && (ingredient === churchSandwichBread ? Number.isInteger(value) : Math.round(value * QUANTITY_SCALE) / QUANTITY_SCALE === value);
+    && Math.round(value * QUANTITY_SCALE) / QUANTITY_SCALE === value;
+}
+
+export function validChurchAvailabilityStock(ingredient: ChurchAvailabilityIngredient, value: number): boolean {
+  return validChurchUsableGrams(value) && (ingredient !== churchSandwichBread || Number.isInteger(value));
 }
 
 export function validChurchAvailabilityMix(value: number): boolean {

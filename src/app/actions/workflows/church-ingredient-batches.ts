@@ -6,7 +6,8 @@ import { executeWorkflowAction, type WorkflowContext } from "@/data/execute";
 import { canRecordChurchBatchLabels } from "@/data/read-models/church-ingredient-batches.server";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import {
-  churchBatchLabel, recordChurchIngredientBatchInput, resolveChurchIngredientBatchInput, voidChurchIngredientBatchInput,
+  churchBatchLabel, churchBatchMeasurement, measureChurchIngredientBatchInput, recordChurchIngredientBatchInput,
+  resolveChurchIngredientBatchInput, voidChurchIngredientBatchInput,
 } from "@/lib/kitchen/church-ingredient-batches";
 
 async function batchLocation(context: WorkflowContext) {
@@ -64,6 +65,32 @@ export async function voidChurchIngredientBatchAction(input: unknown) {
       }).abortSignal(AbortSignal.timeout(6_000));
       if (error) throwDatabaseError(error, "The Church Street batch label could not be voided.");
       return parseBatchLabel(data);
+    },
+  });
+  if (result.ok && result.persisted) revalidatePath("/kitchen");
+  return result;
+}
+
+export async function measureChurchIngredientBatchAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "church.kitchen.batch-label.measure",
+    schema: measureChurchIngredientBatchInput,
+    input,
+    run: async (context, measurement) => {
+      const location = await batchLocation(context);
+      const { data, error } = await context.supabase.rpc("record_church_ingredient_batch_measurement", {
+        p_location_id: location,
+        p_batch_id: measurement.batchId,
+        p_request_id: measurement.requestId,
+        p_expected_latest_id: measurement.expectedLatestId,
+        p_quantity: measurement.quantity,
+        p_observed_at: measurement.observedAt,
+      }).abortSignal(AbortSignal.timeout(6_000));
+      if (error) throwDatabaseError(error, "The usable quantity could not be recorded.");
+      const receipt = churchBatchMeasurement.safeParse(data);
+      assertCondition(receipt.success && receipt.data.id === measurement.requestId && receipt.data.batchId === measurement.batchId,
+        "database", "The saved batch measurement could not be confirmed.");
+      return receipt.data;
     },
   });
   if (result.ok && result.persisted) revalidatePath("/kitchen");
