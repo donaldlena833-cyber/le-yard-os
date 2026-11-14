@@ -61,6 +61,7 @@ const workspace: WorkspaceContextValue = {
 const emptyModel: LiveOperationsModel = {
   date: "2026-08-01",
   loadedAt: "2026-08-01T16:00:00.000Z",
+  churchStreet: false,
   timeZone: "America/New_York",
   currencyCode: "USD",
   currentEmployeeId: "50000000-0000-4000-8000-000000000001",

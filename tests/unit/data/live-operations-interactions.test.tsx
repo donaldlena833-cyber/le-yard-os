@@ -11,6 +11,8 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   acknowledgeSopAction,
+  createChecklistTemplateVersionAction,
+  createSopDraftAction,
   createTaskAction,
   startChecklistRunAction,
   transitionTaskAction,
@@ -90,6 +92,7 @@ const workspace: WorkspaceContextValue = {
 const model: LiveOperationsModel = {
   date: "2026-08-01",
   loadedAt: "2026-08-01T16:00:00.000Z",
+  churchStreet: false,
   timeZone: "America/New_York",
   currencyCode: "USD",
   currentEmployeeId: "50000000-0000-4000-8000-000000000001",
@@ -209,6 +212,65 @@ function managementWorkspace(
 }
 
 describe("connected Operations review interactions", () => {
+  it("opens the location-scoped sandwich playbook as an editable, unpublished SOP", async () => {
+    vi.mocked(createSopDraftAction).mockResolvedValue({
+      ok: true, mode: "live", persisted: true,
+      data: { id: "a1000000-0000-4000-8000-000000000001", documentId: "a2000000-0000-4000-8000-000000000001", version: 1 },
+    });
+    render(
+      <LiveTasksWorkspace workspace={managementWorkspace("manager")}
+        result={{ ok: true, data: { ...managementModel, churchStreet: true } }} />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /SOPs/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Draft sandwich station playbook" }));
+    const dialog = screen.getByRole("dialog", { name: "Author SOP draft" });
+    const body = within(dialog).getByLabelText("Procedure body") as HTMLTextAreaElement;
+    expect(body.value).toContain("Le Bleu · 111 g filling");
+    expect(body.value).toContain("Danish blue cheese 38 g, apple 42 g, arugula 10 g, honey 8 g, pistachios 13 g");
+    expect(body.value).toContain("ALLERGEN REVIEW");
+    fireEvent.change(body, { target: { value: `${body.value}\nChef review scheduled` } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create draft" }));
+    await waitFor(() => expect(createSopDraftAction).toHaveBeenCalledWith(expect.objectContaining({
+      locationId: workspace.activeLocation.id,
+      requiresAcknowledgement: true,
+      body: expect.stringContaining("Chef review scheduled"),
+    })));
+  });
+
+  it("puts six timed builds and a label trace in the native checklist draft", async () => {
+    render(
+      <LiveTasksWorkspace workspace={managementWorkspace("manager")}
+        result={{ ok: true, data: { ...managementModel, churchStreet: true } }} />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /Checklists/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Draft sandwich rehearsal checklist" }));
+    const dialog = screen.getByRole("dialog", { name: "Author checklist version" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create draft version" }));
+    await waitFor(() => expect(createChecklistTemplateVersionAction).toHaveBeenCalledWith(expect.objectContaining({
+      locationId: workspace.activeLocation.id,
+      checklistType: "custom",
+      items: expect.arrayContaining([
+        expect.objectContaining({ label: "Batch label and trace", required: true }),
+        expect.objectContaining({ label: "Le Parisien build and pack", responseType: "text", instructions: expect.stringContaining("≤60s") }),
+        expect.objectContaining({ label: "Le Bleu build and pack", responseType: "text", instructions: expect.stringContaining("≤90s") }),
+        expect.objectContaining({ label: "Chef and manager review", required: true }),
+      ]),
+    })));
+  });
+
+  it.each([
+    { role: "manager", churchStreet: false },
+    { role: "employee", churchStreet: true },
+  ] as const)("keeps playbook draft starters out of the $role workspace when scope or role differs", async ({ role, churchStreet }) => {
+    render(
+      <LiveTasksWorkspace workspace={role === "manager" ? managementWorkspace(role) : workspace}
+        result={{ ok: true, data: { ...model, churchStreet } }} />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /SOPs/ }));
+    await screen.findByRole("heading", { name: "Procedures" });
+    expect(screen.queryByRole("button", { name: "Draft sandwich station playbook" })).toBeNull();
+  });
+
   it("reveals task evidence on demand and opens the selected named transition", async () => {
     vi.mocked(transitionTaskAction).mockResolvedValue({
       ok: true,

@@ -57,6 +57,7 @@ import {
 import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/files";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
+import { churchSandwichRehearsal, churchSandwichSop } from "@/components/tasks/church-sandwich-starters";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { ReadState } from "@/components/ui/read-state";
@@ -108,8 +109,8 @@ type DialogState =
       suggestedStatus?: LiveTaskStatus;
     }
   | { kind: "checklist-start" }
-  | { kind: "checklist-author" }
-  | { kind: "sop-create" }
+  | { kind: "checklist-author"; sandwichStarter?: true }
+  | { kind: "sop-create"; sandwichStarter?: true }
   | { kind: "sop-edit"; sop: LiveSopDocument }
   | { kind: "sop-version"; sop: LiveSopDocument }
   | { kind: "maintenance-create" }
@@ -989,6 +990,14 @@ function ChecklistPanel({
             </div>
           }
         />
+        {canManage && model.churchStreet && !model.checklistTemplates.some((template) => template.name === churchSandwichRehearsal.name) ? (
+          <div className="mb-4">
+            <Button variant="quiet" size="sm" disabled={busy}
+              onClick={() => onDialog({ kind: "checklist-author", sandwichStarter: true })}>
+              Draft sandwich rehearsal checklist
+            </Button>
+          </div>
+        ) : null}
         {model.checklistRuns.length ? (
           <div className="border-y border-[var(--line)]">
             {model.checklistRuns.map((run) => (
@@ -1306,6 +1315,14 @@ function SopPanel({
             ) : undefined
           }
         />
+        {canManage && model.churchStreet && !model.sops.some((sop) => sop.title === churchSandwichSop.title) ? (
+          <div className="mb-4">
+            <Button variant="quiet" size="sm" disabled={busy}
+              onClick={() => onDialog({ kind: "sop-create", sandwichStarter: true })}>
+              Draft sandwich station playbook
+            </Button>
+          </div>
+        ) : null}
         {model.sops.length ? (
           <div className="border-y border-[var(--line)]">
             {model.sops.map((sop) => (
@@ -2174,6 +2191,7 @@ function OperationDialog({
   }
 
   if (dialog.kind === "checklist-author") {
+    const starter = model.churchStreet && dialog.sandwichStarter ? churchSandwichRehearsal : undefined;
     return (
       <ModalFrame
         title="Author checklist version"
@@ -2217,6 +2235,7 @@ function OperationDialog({
                   maxLength={240}
                   autoFocus
                   placeholder="Closing bar"
+                  defaultValue={starter?.name}
                   className={fieldClass}
                 />
               </FieldLabel>
@@ -2240,6 +2259,7 @@ function OperationDialog({
                 required
                 rows={9}
                 maxLength={100_000}
+                defaultValue={starter?.items}
                 placeholder={
                   "Lock front door | checkbox | required | Confirm deadbolt\nWalk-in temperature | temperature | required | Enter °F\nClosing photo | photo | optional | Photograph clean bar"
                 }
@@ -2263,6 +2283,7 @@ function OperationDialog({
   }
 
   if (dialog.kind === "sop-create") {
+    const starter = model.churchStreet && dialog.sandwichStarter ? churchSandwichSop : undefined;
     return (
       <ModalFrame
         title="Author SOP draft"
@@ -2298,6 +2319,7 @@ function OperationDialog({
                   required
                   maxLength={240}
                   autoFocus
+                  defaultValue={starter?.title}
                   className={fieldClass}
                 />
               </FieldLabel>
@@ -2306,6 +2328,7 @@ function OperationDialog({
                   name="category"
                   maxLength={120}
                   placeholder="Service, safety…"
+                  defaultValue={starter?.category}
                   className={fieldClass}
                 />
               </FieldLabel>
@@ -2316,6 +2339,7 @@ function OperationDialog({
                 required
                 rows={12}
                 maxLength={100_000}
+                defaultValue={starter?.body}
                 className={textAreaClass}
               />
             </FieldLabel>
@@ -2325,6 +2349,7 @@ function OperationDialog({
                 rows={2}
                 maxLength={2_000}
                 placeholder="Why this procedure exists"
+                defaultValue={starter?.changeSummary}
                 className={textAreaClass}
               />
             </FieldLabel>
@@ -2332,6 +2357,7 @@ function OperationDialog({
               <input
                 name="requiresAcknowledgement"
                 type="checkbox"
+                defaultChecked={Boolean(starter)}
                 className="size-4 rounded border-[var(--line)]"
               />
               Require each employee to acknowledge the published version
