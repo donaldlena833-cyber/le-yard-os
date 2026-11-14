@@ -70,12 +70,19 @@ const fulfillmentDates = z.object({
   canceled_at: instant.nullish(),
   rejected_at: instant.nullish(),
 });
+const scheduleType = z.enum(["ASAP", "SCHEDULED", "UNKNOWN"]).catch("UNKNOWN");
+const optionalProviderInstant = instant.nullish().catch(null);
 const fulfillment = z.object({
   uid: churchSquareResourceId.nullish(),
   type: openEnum,
   state: openEnum.nullish(),
-  pickup_details: fulfillmentDates.extend({ pickup_at: instant.nullish(), picked_up_at: instant.nullish() }).nullish(),
-  delivery_details: fulfillmentDates.extend({ deliver_at: instant.nullish(), delivered_at: instant.nullish() }).nullish(),
+  pickup_details: fulfillmentDates.extend({
+    pickup_at: instant.nullish(), picked_up_at: instant.nullish(), accepted_at: optionalProviderInstant, schedule_type: scheduleType,
+  }).nullish(),
+  delivery_details: fulfillmentDates.extend({
+    deliver_at: instant.nullish(), delivered_at: instant.nullish(), in_progress_at: optionalProviderInstant,
+    courier_pickup_at: optionalProviderInstant, schedule_type: scheduleType,
+  }).nullish(),
   shipment_details: fulfillmentDates.extend({ shipped_at: instant.nullish() }).nullish(),
 });
 
@@ -179,11 +186,19 @@ function projectFulfillment(value: z.infer<typeof fulfillment>) {
   const handoffAt = value.type === "PICKUP" ? value.pickup_details?.picked_up_at
     : value.type === "DELIVERY" ? value.delivery_details?.delivered_at
       : value.type === "SHIPMENT" ? value.shipment_details?.shipped_at : undefined;
+  const startDetails = value.type === "PICKUP" ? value.pickup_details
+    : value.type === "DELIVERY" ? value.delivery_details : null;
+  const acceptedAt = value.type === "PICKUP" ? value.pickup_details?.accepted_at
+    : value.type === "DELIVERY" ? value.delivery_details?.in_progress_at : null;
   return {
     id: value.uid ?? null,
     type: known(value.type, fulfillmentTypes),
     status: known(value.state ?? "UNKNOWN", fulfillmentStates),
     placedAt: detail?.placed_at ?? null,
+    acceptedAt: acceptedAt ?? null,
+    scheduleType: startDetails?.schedule_type ?? "UNKNOWN",
+    // Square's courier pickup window start, before the separate customer delivery window.
+    courierPickupAt: value.type === "DELIVERY" ? value.delivery_details?.courier_pickup_at ?? null : null,
     promisedAt: promisedAt ?? null,
     readyAt: detail?.ready_at ?? null,
     handoffAt: handoffAt ?? null,

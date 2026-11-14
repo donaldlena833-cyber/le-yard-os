@@ -14,7 +14,7 @@ import {
   summarizeChurchSquareFulfillmentDemand,
   type ChurchSquareOrderWindowResponse,
 } from "@/lib/integrations/church-square-order-window";
-import { summarizeChurchSquareSources } from "@/lib/integrations/church-square-source-summary";
+import { churchSquareReadySampleMinimum, summarizeChurchSquareReadiness, summarizeChurchSquareSources } from "@/lib/integrations/church-square-source-summary";
 import { churchSandwichBenchRecipes } from "@/lib/kitchen/church-sandwich-bench";
 
 type Order = ChurchSquareOrderWindowResponse["orders"][number];
@@ -74,6 +74,7 @@ const handoffLabels: Record<Fulfillment["type"], string> = {
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const number = new Intl.NumberFormat("en-US");
+const minutes = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const sandwichNames = new Map(churchSandwichBenchRecipes.map(({ key, name }) => [key, name]));
 const localTime = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
@@ -172,6 +173,67 @@ function SquareSourceActivity({ window }: { window: ChurchSquareOrderWindowRespo
   );
 }
 
+function durationMinutes(value: number | null) {
+  if (value === null) return "—";
+  if (value > 0 && value < 3_000) return "<0.1 min";
+  return `${minutes.format(value / 60_000)} min`;
+}
+
+function SquareReadinessTiming({ window }: { window: ChurchSquareOrderWindowResponse }) {
+  const rows = summarizeChurchSquareReadiness(window);
+  return (
+    <section aria-labelledby="church-square-ready-title" className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4">
+      <h4 id="church-square-ready-title" className="text-sm font-semibold">Kitchen readiness from Square</h4>
+      <p id="church-square-ready-scope" className="mt-1 text-xs leading-relaxed text-[var(--ink-soft)]">
+        For ASAP orders, elapsed time runs from accepted or marked in progress to marked ready in Square. Across all schedules, the ready-by-target check uses the customer pickup window start or the courier pickup window start for delivery.
+        {window.hasMore && " This is a partial sample. Square may have more orders in the window."}
+        {!!window.fulfillmentConflictCount && ` Conflicting Square fulfillments excluded: ${window.fulfillmentConflictCount}.`}
+      </p>
+      {rows.length ? (
+        <>
+          <div className="mt-2 overflow-x-auto">
+            <table aria-labelledby="church-square-ready-title" aria-describedby="church-square-ready-scope church-square-ready-coverage church-square-orders-bounds" className="w-full text-left text-xs">
+              <thead className="border-b border-[var(--line)] text-[var(--ink-soft)]">
+                <tr>
+                  <th scope="col" className="py-2 pr-2">Source hint</th>
+                  <th scope="col" className="px-2 py-2">Type</th>
+                  <th scope="col" className="px-2 py-2">ASAP time pairs</th>
+                  <th scope="col" className="px-2 py-2">Median</th>
+                  <th scope="col" className="px-2 py-2">90th percentile</th>
+                  <th scope="col" className="py-2 pl-2">Ready by target</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line)] tabular-nums">
+                {rows.map((row) => (
+                  <tr key={`${row.source}:${row.type}`} className="align-top">
+                    <th scope="row" className="py-2 pr-2 font-medium">{row.source === "UNKNOWN" ? "Unknown source" : sources[row.source]}</th>
+                    <td className="px-2 py-2">{fulfillmentTypes[row.type]}</td>
+                    <td className="px-2 py-2">
+                      <p>{row.count} of {row.asapCount}</p>
+                      {(row.scheduledCount > 0 || row.unknownScheduleCount > 0) && (
+                        <p className="mt-0.5 text-[var(--ink-soft)]">{row.scheduledCount} scheduled · {row.unknownScheduleCount} schedule unknown</p>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2">{durationMinutes(row.medianMs)}</td>
+                    <td className="whitespace-nowrap px-2 py-2">{durationMinutes(row.p90Ms)}</td>
+                    <td className="py-2 pl-2">
+                      <p>{row.targetComparable ? `${row.readyByTarget} of ${row.targetComparable}` : "No comparable times"}</p>
+                      <p className="mt-0.5 text-[var(--ink-soft)]">{row.asapCount + row.scheduledCount + row.unknownScheduleCount} ready or completed</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p id="church-square-ready-coverage" className="mt-2 text-xs text-[var(--ink-soft)]">
+            A dash means too few valid time pairs. Median needs {churchSquareReadySampleMinimum.median}, and the 90th percentile needs {churchSquareReadySampleMinimum.p90}.
+          </p>
+        </>
+      ) : <p className="mt-2 text-xs text-[var(--ink-soft)]">No ready or completed pickup or delivery fulfillments in this sample.</p>}
+    </section>
+  );
+}
+
 function SquareSandwichMix({ window }: { window: ChurchSquareOrderWindowResponse }) {
   const mix = window.itemMix;
   if (!mix) return null;
@@ -236,7 +298,10 @@ function OrderFulfillmentSummary({ fulfillments }: { fulfillments: Order["fulfil
     <ul className="min-w-40 space-y-2">
       {fulfillments.map((fulfillment, index) => {
         const milestones = [
+          ["Placed", fulfillment.placedAt],
+          ["Accepted", fulfillment.acceptedAt],
           [scheduledLabels[fulfillment.type], fulfillment.promisedAt],
+          ["Courier pickup target", fulfillment.courierPickupAt],
           ["Ready", fulfillment.readyAt],
           [handoffLabels[fulfillment.type], fulfillment.handoffAt],
           ["Completed", fulfillment.completedAt === fulfillment.handoffAt ? null : fulfillment.completedAt],
@@ -313,6 +378,7 @@ export function ChurchSquareOrderWindow() {
         )}
       </div>
       {state.status === "ready" && <SquareFulfillmentDemand window={state.window} />}
+      {state.status === "ready" && <SquareReadinessTiming window={state.window} />}
       {state.status === "ready" && state.window.orders.length > 0 && <SquareSourceActivity window={state.window} />}
       {state.status === "ready" && <SquareSandwichMix window={state.window} />}
       {state.status === "ready" && state.window.orders.length > 0 && (

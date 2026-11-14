@@ -99,7 +99,10 @@ function canSaveMarketplaceLink({ canLinkMarketplace, marketplace, operations }:
 
 function milestones(fulfillment: Evidence["square"]["fulfillments"][number]) {
   return [
+    ["Placed", fulfillment.placedAt],
+    ["Accepted / in progress", fulfillment.acceptedAt],
     ["Promised", fulfillment.promisedAt],
+    ["Courier pickup target", fulfillment.courierPickupAt],
     ["Ready", fulfillment.readyAt],
     [fulfillment.type === "DELIVERY" ? "Delivered" : fulfillment.type === "PICKUP" ? "Picked up" : "Handoff", fulfillment.handoffAt],
     ["Completed", fulfillment.completedAt === fulfillment.handoffAt ? null : fulfillment.completedAt],
@@ -329,7 +332,9 @@ export function ChurchSquareOrderEvidence() {
             <ul className="space-y-2 border-l border-[var(--line)] pl-3 text-xs">
               {result.square.fulfillments.map((fulfillment, index) => (
                 <li key={index}>
-                  <p className="font-medium">{label(fulfillment.type)} · {label(fulfillment.status)}</p>
+                  <p className="font-medium">{label(fulfillment.type)} · {label(fulfillment.status)}
+                    {fulfillment.scheduleType && <> · {fulfillment.scheduleType === "ASAP" ? "ASAP" : "Scheduled"}</>}
+                  </p>
                   {milestones(fulfillment).map(([name, value]) => value && <p key={name}>{name} <Time value={value} /></p>)}
                 </li>
               ))}

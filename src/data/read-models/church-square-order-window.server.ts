@@ -31,6 +31,25 @@ function uniqueOrderSnapshots(orders: readonly ChurchSquareOrder[]): ChurchSquar
   return [...seen.values()];
 }
 
+function uniqueFulfillments(fulfillments: ChurchSquareOrder["fulfillments"]) {
+  const seen = new Map<string, ChurchSquareOrder["fulfillments"][number]>();
+  const conflicting = new Set<string>();
+  for (const fulfillment of fulfillments) {
+    if (!fulfillment.id) continue;
+    const prior = seen.get(fulfillment.id);
+    if (!prior) seen.set(fulfillment.id, fulfillment);
+    else if (JSON.stringify(prior) !== JSON.stringify(fulfillment)) conflicting.add(fulfillment.id);
+  }
+  const unique = fulfillments.filter((fulfillment) => {
+    const { id } = fulfillment;
+    if (!id) return true;
+    if (conflicting.has(id) || !seen.has(id)) return false;
+    seen.delete(id);
+    return true;
+  });
+  return { unique, conflictCount: conflicting.size };
+}
+
 function regularSandwichVariationMap(catalog: readonly SquareChurchSandwichCatalogItem[]) {
   const mapping = new Map<string, ChurchSandwichRecipeKey>();
   for (const { key, name } of churchSandwichBenchRecipes) {
@@ -104,20 +123,26 @@ export async function loadChurchSquareOrderWindow(): Promise<ChurchSquareOrderWi
   // Suffixes are display-only and can collide across distinct provider orders.
   const orders = uniqueOrderSnapshots(result.orders);
   const sample = orders.slice(0, churchSquareOrderWindowLimit);
+  const observed = sample.map(order => ({ order, ...uniqueFulfillments(order.fulfillments) }));
   return {
     checkedAt,
     hasMore: Boolean(result.nextCursor) || orders.length > churchSquareOrderWindowLimit,
     itemMix: sandwichMix(catalog, sample),
-    orders: sample.map(order => ({
+    fulfillmentConflictCount: observed.reduce((sum, entry) => sum + entry.conflictCount, 0),
+    orders: observed.map(({ order, unique }) => ({
       reference: order.id.slice(-10),
       // Square's OrderSource is a display name, often the originating app.
       source: order.sourceHint,
       status: order.status,
       updatedAt: order.updatedAt,
       totalCents: order.totalCents,
-      fulfillments: order.fulfillments.map(fulfillment => ({
+      fulfillments: unique.map(fulfillment => ({
         type: fulfillment.type,
         status: fulfillment.status,
+        placedAt: fulfillment.placedAt,
+        acceptedAt: fulfillment.acceptedAt,
+        scheduleType: fulfillment.scheduleType,
+        courierPickupAt: fulfillment.courierPickupAt,
         promisedAt: fulfillment.promisedAt,
         readyAt: fulfillment.readyAt,
         handoffAt: fulfillment.handoffAt,

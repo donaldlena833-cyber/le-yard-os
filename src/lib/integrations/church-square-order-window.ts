@@ -10,6 +10,10 @@ const orderSource = z.enum(["DOORDASH", "UBER_EATS", "GRUBHUB", "SQUARE_ONLINE",
 const orderFulfillment = z.object({
   type: z.enum(["PICKUP", "DELIVERY", "SHIPMENT", "UNKNOWN"]),
   status: z.enum(["PROPOSED", "RESERVED", "PREPARED", "COMPLETED", "CANCELED", "FAILED", "UNKNOWN"]),
+  placedAt: fulfillmentTime.optional(),
+  acceptedAt: fulfillmentTime.optional(),
+  scheduleType: z.enum(["ASAP", "SCHEDULED", "UNKNOWN"]).optional(),
+  courierPickupAt: fulfillmentTime.optional(),
   promisedAt: fulfillmentTime,
   readyAt: fulfillmentTime,
   handoffAt: fulfillmentTime,
@@ -39,6 +43,7 @@ export type ChurchSquareSandwichMixReady = z.infer<typeof sandwichMixReady>;
 export const churchSquareOrderWindowResponse = z.object({
   checkedAt: z.iso.datetime(),
   hasMore: z.boolean(),
+  fulfillmentConflictCount: z.number().int().min(0).max(churchSquareOrderWindowLimit * 100).optional(),
   orders: z.array(z.object({
     reference: z.string().min(1).max(10),
     source: orderSource,

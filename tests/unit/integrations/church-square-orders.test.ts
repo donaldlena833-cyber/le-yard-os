@@ -51,6 +51,9 @@ const order = {
     state: "PREPARED",
     delivery_details: {
       placed_at: "2026-10-11T14:20:00Z",
+      in_progress_at: "2026-10-11T14:22:00Z",
+      schedule_type: "ASAP",
+      courier_pickup_at: "2026-10-11T14:30:00Z",
       deliver_at: "2026-10-11T14:45:00Z",
       ready_at: "2026-10-11T14:25:00Z",
       note: "PRIVATE delivery instructions",
@@ -125,7 +128,9 @@ describe("Square Church Street canonical order reads", () => {
       kind: "order", id: "order-id", version: 4, sourceHint: "DOORDASH", totalCents: 1300,
       netTotalCents: 1275, taxCents: 100, discountCents: 25,
       lineItems: [{ variationId: "variation", quantity: "2.5", modifiers: [{ catalogModifierId: "mocha", totalCents: 100 }] }],
-      fulfillments: [{ type: "DELIVERY", status: "PREPARED", readyAt: "2026-10-11T14:25:00Z", promisedAt: "2026-10-11T14:45:00Z" }],
+      fulfillments: [{ type: "DELIVERY", status: "PREPARED", placedAt: "2026-10-11T14:20:00Z",
+        acceptedAt: "2026-10-11T14:22:00Z", scheduleType: "ASAP", courierPickupAt: "2026-10-11T14:30:00Z",
+        readyAt: "2026-10-11T14:25:00Z", promisedAt: "2026-10-11T14:45:00Z", handoffAt: null }],
       tenders: [{ paymentId: "payment-id" }], refundIds: ["refund_id"],
     });
     expect(paid).toMatchObject({
@@ -144,6 +149,22 @@ describe("Square Church Street canonical order reads", () => {
       new URL(String(url)).origin === "https://connect.squareup.com" && init?.method === "GET"
         && init.redirect === "error" && new Headers(init.headers).get("Square-Version") === "2026-09-16",
     )).toBe(true);
+  });
+
+  it("projects pickup acceptance only from pickup details and leaves absent or unknown timing evidence unavailable", () => {
+    const pickupAt = "2026-10-11T09:45:00-05:00";
+    const acceptedAt = "2026-10-11T14:20:02Z";
+    const partial = projectChurchSquareResource("order", { ...order, fulfillments: [
+      { type: "PICKUP", pickup_details: { accepted_at: acceptedAt, pickup_at: pickupAt, schedule_type: "SCHEDULED" },
+        delivery_details: order.fulfillments[0].delivery_details },
+      { type: "DELIVERY", delivery_details: { in_progress_at: "invalid", courier_pickup_at: "invalid", schedule_type: "future_type" } },
+      { type: "PICKUP" },
+    ] }, { locationId: "church", id: "order-id" });
+    expect(partial.fulfillments).toMatchObject([
+      { type: "PICKUP", scheduleType: "SCHEDULED", acceptedAt, promisedAt: pickupAt, placedAt: null, courierPickupAt: null },
+      { type: "DELIVERY", scheduleType: "UNKNOWN", acceptedAt: null, courierPickupAt: null },
+      { type: "PICKUP", scheduleType: "UNKNOWN", acceptedAt: null, courierPickupAt: null, readyAt: null },
+    ]);
   });
 
   it("rejects another store or an unexpected resource ID", async () => {

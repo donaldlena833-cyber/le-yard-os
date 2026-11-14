@@ -20,7 +20,10 @@ const workspace = {
 
 const request = (query = "") => new Request("https://example.invalid" + churchSquareOrderWindowPath + query);
 const fulfillmentTimes = {
+  placed: "2026-11-13T16:59:00Z",
+  accepted: "2026-11-13T17:00:00Z",
   ready: "2026-11-13T17:02:00Z",
+  courierPickup: "2026-11-13T17:10:00Z",
   scheduled: "2026-11-13T17:20:00Z",
   delivered: "2026-11-13T17:24:00Z",
   canceled: "2026-11-13T17:05:00Z",
@@ -81,6 +84,10 @@ function stubProvider(
           type: "DELIVERY",
           state: "COMPLETED",
           delivery_details: {
+            placed_at: fulfillmentTimes.placed,
+            in_progress_at: fulfillmentTimes.accepted,
+            schedule_type: "ASAP",
+            courier_pickup_at: fulfillmentTimes.courierPickup,
             deliver_at: fulfillmentTimes.scheduled,
             ready_at: fulfillmentTimes.ready,
             delivered_at: fulfillmentTimes.delivered,
@@ -161,7 +168,7 @@ describe("Church Square order window", () => {
       query: { filter: { date_time_filter: { updated_at: period } }, sort: { sort_field: "UPDATED_AT", sort_order: "DESC" } },
     });
     expect(await response.json()).toEqual({
-      checkedAt: period.end_at, hasMore: true, itemMix: { status: "unavailable" },
+      checkedAt: period.end_at, hasMore: true, fulfillmentConflictCount: 0, itemMix: { status: "unavailable" },
       orders: [
         {
           reference: "9876543210", source: "GRUBHUB", status: "COMPLETED",
@@ -169,11 +176,14 @@ describe("Church Square order window", () => {
           fulfillments: [
             {
               type: "DELIVERY", status: "COMPLETED",
+              placedAt: fulfillmentTimes.placed, acceptedAt: fulfillmentTimes.accepted,
+              scheduleType: "ASAP", courierPickupAt: fulfillmentTimes.courierPickup,
               promisedAt: fulfillmentTimes.scheduled, readyAt: fulfillmentTimes.ready,
               handoffAt: fulfillmentTimes.delivered, completedAt: null, canceledAt: null, rejectedAt: null,
             },
             {
               type: "PICKUP", status: "CANCELED",
+              placedAt: null, acceptedAt: null, scheduleType: "UNKNOWN", courierPickupAt: null,
               promisedAt: null, readyAt: null, handoffAt: null, completedAt: null,
               canceledAt: fulfillmentTimes.canceled, rejectedAt: null,
             },
@@ -185,6 +195,23 @@ describe("Church Square order window", () => {
         },
       ],
     });
+  });
+
+  it("keeps distinct fulfillment IDs with the same times and excludes conflicting duplicates", async () => {
+    scopedRows();
+    stubProvider((updatedAt) => {
+      const pickup = { uid: "private-pickup", type: "PICKUP", state: "PREPARED", pickup_details: { ready_at: updatedAt } };
+      const conflicting = { ...pickup, uid: "private-conflict" };
+      return { orders: [{ id: "order-with-fulfillments", location_id: "square-location", created_at: updatedAt, updated_at: updatedAt,
+        fulfillments: [pickup, pickup, conflicting, { ...pickup, uid: "distinct-same-time" }, { ...conflicting, state: "COMPLETED" }],
+      }] };
+    });
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.orders[0].fulfillments).toHaveLength(2);
+    expect(payload.fulfillmentConflictCount).toBe(1);
+    expect(JSON.stringify(payload)).not.toMatch(/private-pickup|private-conflict|distinct-same-time/);
   });
 
   it.each(["verified", "ambiguous"] as const)("returns only exact catalog-based aggregate facts with a %s menu", async (catalog) => {

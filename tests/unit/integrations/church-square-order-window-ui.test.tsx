@@ -433,6 +433,7 @@ it("counts active pickup and delivery fulfillments at the last manual check", as
   expect(within(refreshedDemand).getAllByRole("cell").every((cell) => cell.textContent === "0")).toBe(true);
   expect(screen.queryByText(/partial results/i)).toBeNull();
   expect(screen.getByText(/no orders in this read/i)).toBeTruthy();
+  expect(screen.getByText("No ready or completed pickup or delivery fulfillments in this sample.")).toBeTruthy();
 });
 
 it("compares explicit Square timing pairs by source and shows attribution gaps on a partial sample", async () => {
@@ -453,7 +454,9 @@ it("compares explicit Square timing pairs by source and shows attribution gaps o
     orders: [
       order("delivery", "DOORDASH", "COMPLETED",
         fulfillment({ type: "DELIVERY", handoffAt: "2026-11-14T17:52:00Z" }),
-        fulfillment({ type: "DELIVERY", readyAt: "2026-11-14T17:45:00Z", completedAt: "2026-11-14T17:48:00Z" }),
+        fulfillment({ type: "DELIVERY", scheduleType: "ASAP", placedAt: "2026-11-14T17:31:00Z",
+          acceptedAt: "2026-11-14T17:35:00Z", courierPickupAt: "2026-11-14T17:44:00Z",
+          readyAt: "2026-11-14T17:45:00Z", completedAt: "2026-11-14T17:48:00Z" }),
         fulfillment({ status: "FAILED", rejectedAt: "2026-11-14T17:36:00Z" })),
       order("pickup", "SQUARE_ONLINE", "OPEN", fulfillment({ handoffAt: exactTarget })),
       order("draft", "UNKNOWN", "DRAFT"),
@@ -480,6 +483,12 @@ it("compares explicit Square timing pairs by source and shows attribution gaps o
   expect(region.getByText(/4 orders in this manual sample.*may have more orders/i)).toBeTruthy();
   expect(region.getByText(/start of their respective Square windows/i)).toBeTruthy();
   expect(region.queryByText("$100.00")).toBeNull();
+  const kitchen = within(screen.getByRole("region", { name: "Kitchen readiness from Square" }));
+  const delivery = within(kitchen.getByRole("row", { name: /DoorDash.*Delivery/ }));
+  expect(delivery.getByText("1 of 1")).toBeTruthy();
+  expect(delivery.getByText("0 of 1")).toBeTruthy();
+  expect(delivery.getAllByText("—")).toHaveLength(2);
+  expect(kitchen.getByText(/median needs 5.*90th percentile needs 10/i)).toBeTruthy();
 });
 
 it("shows bounded completed sandwich units and each coverage gap in the shared order check", async () => {

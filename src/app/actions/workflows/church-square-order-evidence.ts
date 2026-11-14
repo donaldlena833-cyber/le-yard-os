@@ -123,8 +123,12 @@ async function readOrderEvidence(context: WorkflowContext, verified: VerifiedOrd
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
       version: order.version,
-      fulfillments: order.fulfillments.map(({ type, status, promisedAt, readyAt, handoffAt, completedAt, canceledAt, rejectedAt }) =>
-        ({ type, status, promisedAt, readyAt, handoffAt, completedAt, canceledAt, rejectedAt })),
+      fulfillments: order.fulfillments.map(({ type, status, promisedAt, readyAt, handoffAt, completedAt, canceledAt, rejectedAt,
+        placedAt, acceptedAt, scheduleType, courierPickupAt }) =>
+        ({ type, status, promisedAt, readyAt, handoffAt, completedAt, canceledAt, rejectedAt,
+          ...(placedAt ? { placedAt } : {}), ...(acceptedAt ? { acceptedAt } : {}),
+          ...(scheduleType && scheduleType !== "UNKNOWN" ? { scheduleType } : {}),
+          ...(courierPickupAt ? { courierPickupAt } : {}) })),
     },
     operations,
     marketplace,
