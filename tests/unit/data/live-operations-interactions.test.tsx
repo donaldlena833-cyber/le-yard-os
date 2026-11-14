@@ -228,6 +228,10 @@ describe("connected Operations review interactions", () => {
     expect(body.value).toContain("Le Bleu · 111 g filling");
     expect(body.value).toContain("Danish blue cheese 38 g, apple 42 g, arugula 10 g, honey 8 g, pistachios 13 g");
     expect(body.value).toContain("ALLERGEN REVIEW");
+    expect(body.value).toContain("Kitchen → Supplier label evidence");
+    expect(body.value).toContain("Kitchen → Chef signoff for sandwich recipes");
+    expect(body.value).toContain("Use Save register check");
+    expect(body.value).toContain("In Checklists → Church Street first-shift Square rehearsal");
     fireEvent.change(body, { target: { value: `${body.value}\nChef review scheduled` } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Create draft" }));
     await waitFor(() => expect(createSopDraftAction).toHaveBeenCalledWith(expect.objectContaining({

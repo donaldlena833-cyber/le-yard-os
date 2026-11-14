@@ -5,7 +5,7 @@ import { saveChurchSandwichFormulaAction } from "@/app/actions/workflows/church-
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
-import { churchSandwichBenchRecipes, churchSandwichBread, type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
+import { churchSandwichBenchRecipes, churchSandwichBread, sandwichFillingGrams, type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
 import type { ChurchSandwichFormula } from "@/lib/kitchen/church-sandwich-formula";
 import { matchesChurchSandwichFormulaEvidence } from "@/lib/kitchen/church-sandwich-formula-evidence";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
@@ -168,6 +168,7 @@ function RecipeApprovalRow({ recipe, formula, evidence, canManage, onSave }: {
   const current = matchesChurchSandwichFormulaEvidence(formula, evidence);
   const status = signoffStatus[current ? "current" : formula ? "outdated" : "pending"];
   const formKey = [formula?.revision ?? 0, ...ingredients.map(({ evidence }) => `${evidence?.status ?? "pending"}:${evidence?.revision ?? 0}`)].join(";");
+  const tastingPortion = recipe.portions.find(({ ingredient }) => ingredient === recipe.tasting?.ingredient);
 
   return (
     <details className="py-2">
@@ -176,6 +177,14 @@ function RecipeApprovalRow({ recipe, formula, evidence, canManage, onSave }: {
           {recipe.name}<StatusPill tone={status.tone} size="sm">{status.label}</StatusPill>
         </span>
       </summary>
+      <div className="mt-3 space-y-1 rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--ink-soft)]">
+        <h3 className="text-sm font-semibold text-[var(--ink)]">Bench build · {sandwichFillingGrams(recipe)} g filling</h3>
+        <p className="font-medium">{recipe.accent}.</p>
+        <p>{recipe.build}</p>
+        {recipe.tasting && tastingPortion && (
+          <p><strong>Tasting:</strong> Compare {tastingPortion.grams} g and {recipe.tasting.alternateGrams} g of {tastingPortion.ingredient}. {recipe.tasting.compare}</p>
+        )}
+      </div>
       {savedRevision && <p role="status" className="my-2 text-xs text-[var(--positive)]">Recipe revision {savedRevision} signed.</p>}
       {formula && (
         <div className="my-2 space-y-1 break-words text-xs text-[var(--ink-soft)]">
@@ -221,7 +230,7 @@ export function ChurchSandwichRecipeApprovalPanel({ formulas, evidence, canManag
   return (
     <section aria-labelledby="sandwich-approval-title" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
       <h2 id="sandwich-approval-title" className="text-lg font-semibold">Chef signoff for sandwich recipes</h2>
-      <p className="mt-2 text-sm text-[var(--ink-soft)]">Signed recipes support Kitchen planning. Review the actual product, lot and discard rules in Supplier label evidence. Square setup is separate.</p>
+      <p className="mt-2 text-sm text-[var(--ink-soft)]">Use the bench builds for tasting. Kitchen planning uses the signed measurements. Review the actual product, lot and discard rules in Supplier label evidence before signoff.</p>
       {!canManage && <p className="mt-2 text-xs text-[var(--ink-soft)]">Recipe management access is required to sign a measured recipe.</p>}
       <div className="mt-3 divide-y divide-[var(--line)] border-t border-[var(--line)]">
         {churchSandwichBenchRecipes.map((recipe) => (

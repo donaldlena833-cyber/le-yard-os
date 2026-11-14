@@ -7,6 +7,7 @@ export type ChurchSandwichBenchRecipe = {
   portions: readonly { ingredient: string; grams: number }[];
   accent: string;
   build: string;
+  tasting?: { ingredient: string; alternateGrams: number; compare: string };
   seconds: number;
 };
 
@@ -22,6 +23,7 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     ],
     accent: "Classic jambon-beurre with full New York deli-style folds",
     build: "Spread butter across the crumb, then lay thin slices of ham in loose folds from end to end.",
+    tasting: { ingredient: "French-style ham", alternateGrams: 80, compare: "Use the same 16 g of butter, bread and wrapping. Compare the balance and whether the ham pulls away cleanly." },
     seconds: 60,
   },
   {
@@ -48,6 +50,7 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     ],
     accent: "Bistro Brie with the snap of lengthwise deli pickles",
     build: "Spread Dijon, layer Brie and well-drained peppers, then lay drained cornichons cut lengthwise along the baguette.",
+    tasting: { ingredient: "cornichons", alternateGrams: 22, compare: "Weigh after draining and keep the rest of the build the same. Compare pickle crunch and whether the wrapped bread stays firm." },
     seconds: 90,
   },
   {
@@ -76,6 +79,7 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     ],
     accent: "Loose folds of deli-cut coppa and a sharper pickle bite",
     build: "Spread Dijon, lay thin coppa in loose folds, add well-drained peppers and lengthwise cornichons from end to end, then tuck in the arugula.",
+    tasting: { ingredient: "cornichons", alternateGrams: 22, compare: "Weigh after draining and keep the rest of the build the same. Compare pickle crunch and whether the wrapped bread stays firm." },
     seconds: 90,
   },
   {
