@@ -41,7 +41,7 @@ export async function GET(request: Request, context: { params: Promise<{ resourc
     if (!evidence) return new Response(null, { status: 403, headers });
     if (!evidence.ok) return new Response(null, { status: 503, headers });
 
-    const file = await readFile(join(process.cwd(), "docs", "church-street-kitchen", filename));
+    const file = await readFile(join(process.cwd(), "src", "lib", "kitchen", "church-staff-documents", filename));
     return new Response(new Uint8Array(file), {
       headers: {
         ...headers,
