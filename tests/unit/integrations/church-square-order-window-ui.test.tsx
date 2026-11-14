@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   lookupChurchSquareOrderEvidenceAction,
   recoverChurchSquareOrderEvidenceAction,
+  saveChurchSquareMarketplaceLinkAction,
 } from "@/app/actions/workflows/church-square-order-evidence";
 import { ChurchSquareOrderWindow } from "@/components/today/church-square-order-window";
 import {
@@ -19,6 +20,7 @@ vi.mock("@/app/actions/workflows/church-square-catering", () => ({
 vi.mock("@/app/actions/workflows/church-square-order-evidence", () => ({
   lookupChurchSquareOrderEvidenceAction: vi.fn(),
   recoverChurchSquareOrderEvidenceAction: vi.fn(),
+  saveChurchSquareMarketplaceLinkAction: vi.fn(),
 }));
 
 const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
@@ -42,7 +44,7 @@ it("checks a completed order independently and copies evidence without the full 
   const id = "private-order-id-0123456789";
   vi.mocked(lookupChurchSquareOrderEvidenceAction).mockResolvedValue({
     ok: true, mode: "live", persisted: false, data: {
-      reference: id.slice(-10), checkedAt, canRecover: true,
+      reference: id.slice(-10), checkedAt, canRecover: true, canLinkMarketplace: false, marketplace: { status: "unavailable" },
       square: {
         source: "DOORDASH", status: "COMPLETED", createdAt: checkedAt, updatedAt: checkedAt, version: 3,
         fulfillments: [{
@@ -91,7 +93,7 @@ it("reports first signed order and linked payment receipts even before an Operat
   const paymentReceived = "2026-11-14T18:00:20Z";
   const paymentProcessed = "2026-11-14T18:00:29Z";
   const snapshot: Evidence = {
-    reference: "0123456789", checkedAt, canRecover: true,
+    reference: "0123456789", checkedAt, canRecover: true, canLinkMarketplace: false, marketplace: { status: "unlinked" },
     square: { source: "DOORDASH", status: "OPEN", createdAt: orderEvent, updatedAt: orderEvent, version: 3, fulfillments: [] },
     operations: { status: "not_observed" },
     receipts: {
@@ -151,7 +153,7 @@ it("recovers the checked Square order revision and copies the manual recovery ti
   const recoveredAt = "2026-11-14T18:01:00Z";
   const id = "private-order-id-0123456789";
   const snapshot = {
-    reference: id.slice(-10), checkedAt, canRecover: true,
+    reference: id.slice(-10), checkedAt, canRecover: true, canLinkMarketplace: false, marketplace: { status: "unavailable" as const },
     square: { source: "SQUARE_POS" as const, status: "COMPLETED" as const, createdAt: checkedAt, updatedAt: checkedAt, version: 3, fulfillments: [] },
   };
   writeText.mockResolvedValueOnce(undefined);
@@ -193,7 +195,7 @@ it("recovers the checked Square order revision and copies the manual recovery ti
 it("withholds recovery without access or an available comparison and drops stale evidence", async () => {
   const checkedAt = "2026-11-14T18:00:00Z";
   const data = {
-    reference: "ORDER-123", checkedAt, canRecover: false,
+    reference: "ORDER-123", checkedAt, canRecover: false, canLinkMarketplace: false, marketplace: { status: "unlinked" as const },
     square: { source: "UNKNOWN" as const, status: "OPEN" as const, createdAt: checkedAt, updatedAt: checkedAt, version: null, fulfillments: [] },
     operations: { status: "not_observed" as const },
   };
@@ -218,6 +220,8 @@ it("withholds recovery without access or an available comparison and drops stale
   }
   await check();
   expect(await lookup.findByText("Operations has no record for this order.")).toBeTruthy();
+  expect(lookup.getByText("No marketplace link recorded.")).toBeTruthy();
+  expect(lookup.queryByText("Record a marketplace order link")).toBeNull();
   expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
   await check();
   expect(await lookup.findByText("The Operations order record could not be checked.")).toBeTruthy();
@@ -229,6 +233,81 @@ it("withholds recovery without access or an available comparison and drops stale
   expect(await lookup.findByText("Square updated this order. Check it again before recovering.")).toBeTruthy();
   expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
   expect(lookup.queryByRole("button", { name: "Copy order evidence" })).toBeNull();
+});
+
+it("links an exact Square order to a marketplace order and promotes the same link with statement evidence", async () => {
+  type Evidence = Extract<Awaited<ReturnType<typeof lookupChurchSquareOrderEvidenceAction>>, { mode: "live" }>["data"];
+  const checkedAt = "2026-11-14T18:00:00Z";
+  const orderId = "private-order-id-0123456789";
+  const externalStoreId = "marketplace-store-9812543276";
+  const externalOrderId = "1df0588a-711d-4fb6-8899-a49882e8822d";
+  const snapshot: Evidence = {
+    reference: orderId.slice(-10), checkedAt, canRecover: true, canLinkMarketplace: true,
+    square: { source: "UNKNOWN", status: "COMPLETED", createdAt: checkedAt, updatedAt: checkedAt, version: 4, fulfillments: [] },
+    operations: { status: "observed", matches: true, updatedAt: checkedAt, source: "webhook", savedAt: checkedAt, recoveredAt: null },
+    marketplace: { status: "unlinked" },
+  };
+  const link = {
+    channel: "DOORDASH" as const, storeReference: externalStoreId.slice(-10), orderReference: externalOrderId.slice(-10), recordedAt: checkedAt,
+  };
+  vi.mocked(lookupChurchSquareOrderEvidenceAction).mockResolvedValue({ ok: true, mode: "live", persisted: false, data: snapshot });
+  const save = vi.mocked(saveChurchSquareMarketplaceLinkAction)
+    .mockResolvedValueOnce({ ok: true, mode: "live", persisted: true, data: {
+      ...snapshot, marketplace: { status: "linked", link: { ...link, evidence: "merchant_order" } },
+    } })
+    .mockResolvedValueOnce({ ok: true, mode: "live", persisted: true, data: {
+      ...snapshot, marketplace: { status: "linked", link: { ...link, evidence: "payout_statement" } },
+    } });
+
+  render(<ChurchSquareOrderWindow />);
+  fireEvent.click(screen.getByText("Check an exact Square order"));
+  const exact = screen.getByLabelText("Exact Square order ID");
+  fireEvent.change(exact, { target: { value: orderId } });
+  fireEvent.click(screen.getByRole("button", { name: "Check order" }));
+  fireEvent.click(await screen.findByText("Record a marketplace order link"));
+  const form = within(screen.getByRole("form", { name: "Record a marketplace order link" }));
+  const submit = form.getByRole("button", { name: "Save marketplace link" });
+  await waitFor(() => expect(submit.matches(":disabled")).toBe(false));
+  fireEvent.change(form.getByLabelText("Marketplace", { exact: true }), { target: { value: "DOORDASH" } });
+  fireEvent.change(form.getByLabelText("Matched against"), { target: { value: "merchant_order" } });
+  fireEvent.change(form.getByLabelText("Marketplace store ID"), { target: { value: ` ${externalStoreId} ` } });
+  fireEvent.change(form.getByLabelText("Marketplace order ID"), { target: { value: "short" } });
+  fireEvent.click(submit);
+  expect(form.getByText(/full marketplace order ID of 12 to 100 characters/)).toBeTruthy();
+  expect(save).not.toHaveBeenCalled();
+  fireEvent.change(form.getByLabelText("Marketplace order ID"), { target: { value: externalOrderId } });
+  fireEvent.click(submit);
+  expect(await screen.findByText("DoorDash · Staff matched the merchant order")).toBeTruthy();
+  const payload = { orderId, checkedRevision: checkedAt, checkedVersion: 4, channel: "DOORDASH", externalStoreId, externalOrderId };
+  expect(save).toHaveBeenNthCalledWith(1, { ...payload, evidence: "merchant_order" });
+  expect(screen.getByText(link.orderReference)).toBeTruthy();
+  expect(screen.queryByText(externalOrderId)).toBeNull();
+  expect(screen.queryByRole("form", { name: "Record a marketplace order link" })).toBeNull();
+
+  fireEvent.click(screen.getByText("Record a payout statement match"));
+  const promotion = within(screen.getByRole("form", { name: "Record a payout statement match" }));
+  const promote = promotion.getByRole("button", { name: "Save statement match" });
+  await waitFor(() => expect(promote.matches(":disabled")).toBe(false));
+  expect((promotion.getByLabelText("Marketplace order ID") as HTMLInputElement).value).toBe("");
+  fireEvent.change(promotion.getByLabelText("Marketplace store ID"), { target: { value: externalStoreId } });
+  fireEvent.change(promotion.getByLabelText("Marketplace order ID"), { target: { value: externalOrderId } });
+  fireEvent.click(promote);
+  expect(await screen.findByText("DoorDash · Staff matched the order on the payout statement")).toBeTruthy();
+  expect(save).toHaveBeenNthCalledWith(2, { ...payload, evidence: "payout_statement" });
+  expect(screen.queryByRole("form", { name: "Record a payout statement match" })).toBeNull();
+
+  const copy = screen.getByRole<HTMLButtonElement>("button", { name: "Copy order evidence" });
+  await waitFor(() => expect(copy.disabled).toBe(false));
+  fireEvent.click(copy);
+  const evidence = await screen.findByRole<HTMLTextAreaElement>("textbox", { name: "Order evidence" });
+  expect(evidence.value).toContain("DoorDash · Staff matched the order on the payout statement");
+  for (const privateId of [externalOrderId, externalStoreId, orderId, link.orderReference, link.storeReference]) {
+    expect(evidence.value).not.toContain(privateId);
+  }
+
+  fireEvent.change(exact, { target: { value: "different-order" } });
+  expect(screen.queryByText("Marketplace order evidence")).toBeNull();
+  expect(screen.queryByRole("textbox", { name: "Order evidence" })).toBeNull();
 });
 
 it("shows several fulfillments and labels only the Square milestones that are present", async () => {

@@ -14,6 +14,23 @@ const recoveryInput = lookupInput.extend({
   checkedRevision: z.iso.datetime({ offset: true }),
   checkedVersion: z.number().int().nonnegative().safe().nullable(),
 });
+const marketplaceChannel = z.enum(["DOORDASH", "UBER_EATS", "GRUBHUB"]);
+const marketplaceEvidence = z.enum(["merchant_order", "payout_statement"]);
+const marketplaceInput = recoveryInput.extend({
+  channel: marketplaceChannel,
+  externalStoreId: z.string().trim().regex(/^[A-Za-z0-9_:-]{1,100}$/),
+  externalOrderId: z.string().trim().regex(/^[A-Za-z0-9_:-]{12,100}$/),
+  evidence: marketplaceEvidence,
+});
+const marketplaceLink = z.strictObject({
+  channel: marketplaceChannel,
+  storeReference: z.string().regex(/^[A-Za-z0-9_:-]{1,10}$/),
+  orderReference: z.string().regex(/^[A-Za-z0-9_:-]{10}$/),
+  recordedAt: z.iso.datetime({ offset: true }),
+  evidence: marketplaceEvidence,
+});
+type MarketplaceObservation = { status: "linked"; link: z.infer<typeof marketplaceLink> }
+  | { status: "unlinked" | "unavailable" };
 const storedObservation = z.strictObject({
   updatedAt: z.iso.datetime({ offset: true }), matches: z.boolean(),
   recoveredAt: z.iso.datetime({ offset: true }).nullish().transform(value => value ?? null),
@@ -31,13 +48,17 @@ const signedReceipts = z.strictObject({
 type Observation = { status: "observed" } & z.infer<typeof storedObservation>
   | { status: "not_observed" | "unavailable" };
 
-async function loadVerifiedOrder(context: WorkflowContext, orderId: string, requireRecoveryAccess = false) {
+async function loadVerifiedOrder(context: WorkflowContext, orderId: string, write?: "recover" | "link") {
   const session = await resolveWorkspaceSession();
   assertCondition(session.status === "ready" && session.context.identity.userId === context.actor.userId
     && await verifyChurchSquareOrderWindowScope(session.context),
   "forbidden", "Church Street financial reports access is required.");
   const canRecover = session.context.capabilities.includes("manager_log.manage");
-  assertCondition(!requireRecoveryAccess || canRecover, "forbidden", "Church Street Manager Log access is required to recover an order.");
+  if (write) {
+    assertCondition(canRecover, "forbidden", write === "link"
+      ? "Church Street Manager Log access is required to record a marketplace reference."
+      : "Church Street Manager Log access is required to recover an order.");
+  }
   const config = churchSquareOrderConfiguration();
   assertCondition(config, "conflict", "The Church Street Square connection is awaiting setup.");
 
@@ -59,13 +80,14 @@ function squareOrderScope({ locationId, config, order }: VerifiedOrder) {
 async function readOrderEvidence(context: WorkflowContext, verified: VerifiedOrder) {
   const { order, checkedAt, canRecover } = verified;
   const scope = squareOrderScope(verified);
-  const [stored, receiptRead] = await Promise.allSettled([
+  const [stored, receiptRead, marketplaceRead] = await Promise.allSettled([
     context.supabase.rpc("get_church_square_order_evidence", {
       ...scope, p_square_updated_at: order.updatedAt, p_square_version: order.version,
     }).abortSignal(AbortSignal.timeout(6_000)),
     context.supabase.rpc("get_church_square_order_receipt_evidence", scope).abortSignal(AbortSignal.timeout(6_000)),
+    context.supabase.rpc("get_church_square_marketplace_link", scope).abortSignal(AbortSignal.timeout(6_000)),
   ]);
-  if ([stored, receiptRead].some(result => result.status === "fulfilled" && result.value.error?.code === "42501")) {
+  if ([stored, receiptRead, marketplaceRead].some(result => result.status === "fulfilled" && result.value.error?.code === "42501")) {
     throw new WorkflowError("forbidden", "Church Street financial reports access is required.");
   }
   let operations: Observation = { status: "unavailable" };
@@ -80,6 +102,16 @@ async function readOrderEvidence(context: WorkflowContext, verified: VerifiedOrd
   }
   const receipts = signedReceipts.safeParse(receiptRead.status === "fulfilled" && !receiptRead.value.error
     ? receiptRead.value.data : undefined);
+  let marketplace: MarketplaceObservation = { status: "unavailable" };
+  if (marketplaceRead.status === "fulfilled" && !marketplaceRead.value.error) {
+    const data = marketplaceRead.value.data;
+    if (data === null) {
+      marketplace = { status: "unlinked" };
+    } else {
+      const link = marketplaceLink.safeParse(data);
+      if (link.success) marketplace = { status: "linked", link: link.data };
+    }
+  }
 
   return {
     reference: order.id.slice(-10),
@@ -95,6 +127,9 @@ async function readOrderEvidence(context: WorkflowContext, verified: VerifiedOrd
         ({ type, status, promisedAt, readyAt, handoffAt, completedAt, canceledAt, rejectedAt })),
     },
     operations,
+    marketplace,
+    canLinkMarketplace: canRecover && operations.status === "observed" && operations.matches
+      && marketplace.status !== "unavailable",
     ...(receipts.success ? { receipts: receipts.data } : {}),
   };
 }
@@ -115,7 +150,7 @@ export async function recoverChurchSquareOrderEvidenceAction(input: unknown) {
     schema: recoveryInput,
     input,
     run: async (context, { orderId, checkedRevision, checkedVersion }) => {
-      const verified = await loadVerifiedOrder(context, orderId, true);
+      const verified = await loadVerifiedOrder(context, orderId, "recover");
       const order: ChurchSquareOrder = verified.order;
       assertCondition(order.updatedAt === checkedRevision && order.version === checkedVersion,
         "stale", "Square updated this order. Check it again before recovering it.");
@@ -131,6 +166,41 @@ export async function recoverChurchSquareOrderEvidenceAction(input: unknown) {
         throw new WorkflowError("stale", "Operations has a different version of this order. Check it again.");
       }
       assertCondition(result.operations.status === "observed", "database", "The recovered order could not be read back. Check the order again.");
+      return result;
+    },
+  });
+}
+
+export async function saveChurchSquareMarketplaceLinkAction(input: unknown) {
+  return executeWorkflowAction({
+    operation: "church-square.order-evidence.marketplace",
+    schema: marketplaceInput,
+    input,
+    run: async (context, value) => {
+      const verified = await loadVerifiedOrder(context, value.orderId, "link");
+      const { order } = verified;
+      assertCondition(order.updatedAt === value.checkedRevision && order.version === value.checkedVersion,
+        "stale", "Square updated this order. Check it again before saving a marketplace reference.");
+
+      const { data, error } = await createAdminClient().rpc("service_save_church_square_marketplace_link", {
+        ...squareOrderScope(verified),
+        p_actor_id: context.actor.userId,
+        p_square_updated_at: order.updatedAt,
+        p_square_version: order.version,
+        p_channel: value.channel,
+        p_external_store_id: value.externalStoreId,
+        p_external_order_id: value.externalOrderId,
+        p_evidence: value.evidence,
+      }).abortSignal(AbortSignal.timeout(6_000));
+      if (error?.code === "23505") {
+        throw new WorkflowError("conflict", "One of these orders already has a different marketplace link.");
+      }
+      if (error) throwDatabaseError(error, "The marketplace reference could not be saved. Check the order before retrying.");
+      const link = marketplaceLink.safeParse(data);
+      assertCondition(link.success, "database", "The marketplace reference could not be confirmed. Check the order before retrying.");
+      const result = await readOrderEvidence(context, verified);
+      assertCondition(result.marketplace.status === "linked", "database",
+        "The marketplace reference could not be read back. Check the order before retrying.");
       return result;
     },
   });

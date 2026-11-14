@@ -5,7 +5,9 @@ import { type FormEvent, useRef, useState, useTransition } from "react";
 import {
   lookupChurchSquareOrderEvidenceAction,
   recoverChurchSquareOrderEvidenceAction,
+  saveChurchSquareMarketplaceLinkAction,
 } from "@/app/actions/workflows/church-square-order-evidence";
+import { ChurchSquareMarketplaceLinkForm, marketplaceChannels, marketplaceEvidenceLabels, type MarketplaceLinkInput } from "./church-square-marketplace-link";
 import { Button } from "@/components/ui/button";
 
 type Evidence = Extract<Awaited<ReturnType<typeof lookupChurchSquareOrderEvidenceAction>>, { mode: "live" }>["data"];
@@ -90,6 +92,11 @@ function needsRecovery({ canRecover, operations }: Evidence) {
   return canRecover && (operations.status === "not_observed" || (operations.status === "observed" && !operations.matches));
 }
 
+function canSaveMarketplaceLink({ canLinkMarketplace, marketplace, operations }: Evidence) {
+  return canLinkMarketplace && operations.status === "observed" && operations.matches
+    && (marketplace?.status === "unlinked" || (marketplace?.status === "linked" && marketplace.link?.evidence === "merchant_order"));
+}
+
 function milestones(fulfillment: Evidence["square"]["fulfillments"][number]) {
   return [
     ["Promised", fulfillment.promisedAt],
@@ -101,7 +108,7 @@ function milestones(fulfillment: Evidence["square"]["fulfillments"][number]) {
   ] as const;
 }
 
-function checklistEvidence({ reference, checkedAt, square, operations, receipts }: Evidence) {
+function checklistEvidence({ reference, checkedAt, square, operations, receipts, marketplace }: Evidence) {
   const summary = [
     `Church Street Square order ending ${reference}. Checked ${checkedAt}.`,
     `Square order ${label(square.status).toLowerCase()}. Source hint ${sourceLabels.get(square.source) ?? "Unknown"}. Updated ${square.updatedAt}.`,
@@ -127,9 +134,13 @@ function checklistEvidence({ reference, checkedAt, square, operations, receipts 
   } else {
     summary.push("Signed receipt evidence unavailable.");
   }
+  if (marketplace?.status === "linked" && marketplace.link) {
+    const link = marketplace.link;
+    summary.push(`${marketplaceChannels[link.channel]} · ${marketplaceEvidenceLabels[link.evidence]} · first recorded ${link.recordedAt}.`);
+  }
   if (square.fulfillments.length === 0) summary.push("Square returned no fulfillment details.");
   // Leave space for the staff observation in a checklist's 2,000-character notes field.
-  const copiedFulfillments = receipts ? 2 : 4;
+  const copiedFulfillments = receipts ? 2 : marketplace?.status === "linked" ? 3 : 4;
   for (const fulfillment of square.fulfillments.slice(0, copiedFulfillments)) {
     const times = milestones(fulfillment).flatMap(([name, value]) => value ? [`${name} ${value}`] : []);
     summary.push([`${label(fulfillment.type)} · ${label(fulfillment.status)}`, ...times].join(" · "));
@@ -144,13 +155,13 @@ export function ChurchSquareOrderEvidence() {
   const [message, setMessage] = useState("");
   const [copyState, setCopyState] = useState<{ result: Evidence; status: "copied" | "manual" }>();
   const [pending, startTransition] = useTransition();
-  const recoverableOrder = useRef<{ id: string; evidence: Evidence } | null>(null);
+  const checkedOrder = useRef<{ id: string; evidence: Evidence } | null>(null);
 
   function lookup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
     const id = orderId.trim();
-    recoverableOrder.current = null;
+    checkedOrder.current = null;
     setResult(undefined);
     setCopyState(undefined);
     setMessage("Checking Square and Operations…");
@@ -158,7 +169,7 @@ export function ChurchSquareOrderEvidence() {
       try {
         const response = await lookupChurchSquareOrderEvidenceAction({ orderId: id });
         if (response.ok && response.mode === "live") {
-          if (needsRecovery(response.data)) recoverableOrder.current = { id, evidence: response.data };
+          checkedOrder.current = { id, evidence: response.data };
           setResult(response.data);
           setOrderId("");
           setMessage("Verified this order belongs to Church Street.");
@@ -172,7 +183,7 @@ export function ChurchSquareOrderEvidence() {
   }
 
   function recover() {
-    const order = recoverableOrder.current;
+    const order = checkedOrder.current;
     if (pending || !result || order?.evidence !== result || !needsRecovery(result)) return;
     setCopyState(undefined);
     setMessage("Checking Square again and recovering the order…");
@@ -185,7 +196,7 @@ export function ChurchSquareOrderEvidence() {
         });
         if (response.ok && response.mode === "live") {
           const recovered = response.data;
-          recoverableOrder.current = needsRecovery(recovered) ? { id: order.id, evidence: recovered } : null;
+          checkedOrder.current = { id: order.id, evidence: recovered };
           setResult(recovered);
           const operations = recovered.operations;
           setMessage(operations.status === "observed" && operations.matches
@@ -193,13 +204,44 @@ export function ChurchSquareOrderEvidence() {
             : "Recovery could not confirm a matching order record. Check the order again.");
         } else {
           if (!response.ok && (response.code === "stale" || response.code === "forbidden")) {
-            recoverableOrder.current = null;
+            checkedOrder.current = null;
             setResult(undefined);
           }
           setMessage("message" in response ? response.message : "The Square order could not be recovered.");
         }
       } catch {
         setMessage("The Square order could not be recovered. Try again.");
+      }
+    });
+  }
+
+  function saveMarketplaceLink(input: MarketplaceLinkInput) {
+    const order = checkedOrder.current;
+    if (pending || !result || order?.evidence !== result || !canSaveMarketplaceLink(result)) return;
+    setCopyState(undefined);
+    setMessage("Checking the Square order and recording the marketplace link…");
+    startTransition(async () => {
+      try {
+        const response = await saveChurchSquareMarketplaceLinkAction({
+          ...input,
+          orderId: order.id,
+          checkedRevision: result.square.updatedAt,
+          checkedVersion: result.square.version,
+        });
+        if (response.ok && response.mode === "live" && response.persisted) {
+          checkedOrder.current = { id: order.id, evidence: response.data };
+          setResult(response.data);
+          setMessage(response.data.marketplace?.status === "linked" ? "Marketplace link recorded."
+            : "Marketplace link could not be read back. Check the exact Square order again.");
+        } else {
+          if (!response.ok && (response.code === "stale" || response.code === "forbidden")) {
+            checkedOrder.current = null;
+            setResult(undefined);
+          }
+          setMessage("message" in response ? response.message : "The marketplace link could not be recorded.");
+        }
+      } catch {
+        setMessage("The marketplace link could not be confirmed. Try again.");
       }
     });
   }
@@ -215,6 +257,7 @@ export function ChurchSquareOrderEvidence() {
   }
 
   const copyStatus = copyState?.result === result ? copyState?.status : undefined;
+  const marketplaceLink = result?.marketplace?.status === "linked" ? result.marketplace.link : undefined;
 
   return (
     <details className="mt-5 rounded-2xl border border-[var(--line)] p-4">
@@ -226,7 +269,7 @@ export function ChurchSquareOrderEvidence() {
           <input required disabled={pending} value={orderId} maxLength={192} spellCheck={false} autoComplete="off"
             className="focus-ring rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2 font-mono"
             onChange={(event) => {
-              recoverableOrder.current = null;
+              checkedOrder.current = null;
               setOrderId(event.target.value);
               setResult(undefined);
               setMessage("");
@@ -264,6 +307,24 @@ export function ChurchSquareOrderEvidence() {
               <p className="text-[var(--ink-soft)]">Record when the order first appears on Today separately during the rehearsal.</p>
             </section>
           ) : <p className="text-xs text-[var(--ink-soft)]">Signed receipt evidence unavailable.</p>}
+          {result.marketplace && (
+            <section className="space-y-2 border-l border-[var(--line)] pl-3 text-xs">
+              <h5 className="font-semibold">Marketplace order evidence</h5>
+              {marketplaceLink ? (
+                <div className="space-y-1">
+                  <p>{marketplaceChannels[marketplaceLink.channel]} · {marketplaceEvidenceLabels[marketplaceLink.evidence]}</p>
+                  <p>Store ending <span className="font-mono">{marketplaceLink.storeReference.slice(-10)}</span> · Order ending{" "}
+                    <span className="font-mono">{marketplaceLink.orderReference.slice(-10)}</span></p>
+                  <p>First recorded <Time value={marketplaceLink.recordedAt} />.</p>
+                </div>
+              ) : <p>{result.marketplace.status === "unlinked" ? "No marketplace link recorded."
+                : "Marketplace link could not be checked."}</p>}
+              {canSaveMarketplaceLink(result) && (
+                <ChurchSquareMarketplaceLinkForm key={marketplaceLink ? marketplaceLink.evidence : "unlinked"}
+                  statementChannel={marketplaceLink?.channel} onSave={saveMarketplaceLink} disabled={pending} />
+              )}
+            </section>
+          )}
           {result.square.fulfillments.length ? (
             <ul className="space-y-2 border-l border-[var(--line)] pl-3 text-xs">
               {result.square.fulfillments.map((fulfillment, index) => (

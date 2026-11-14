@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(), scope: vi.fn(), configuration: vi.fn(), get: vi.fn(), rpc: vi.fn(), query: vi.fn(), receiptQuery: vi.fn(),
-  serviceRpc: vi.fn(), serviceResult: vi.fn(),
+  marketplaceQuery: vi.fn(), serviceRpc: vi.fn(), serviceResult: vi.fn(),
 }));
 vi.mock("@/lib/env", () => ({ isDemoMode: false }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rpc: mocks.rpc }) }));
@@ -17,7 +17,9 @@ vi.mock("@/lib/integrations/church-square-orders.server", () => ({
   ChurchSquareOrderClient: class { get = mocks.get; },
 }));
 
-import { lookupChurchSquareOrderEvidenceAction, recoverChurchSquareOrderEvidenceAction } from "@/app/actions/workflows/church-square-order-evidence";
+import {
+  lookupChurchSquareOrderEvidenceAction, recoverChurchSquareOrderEvidenceAction, saveChurchSquareMarketplaceLinkAction,
+} from "@/app/actions/workflows/church-square-order-evidence";
 
 const orderId = "production-order-ABC0123456";
 const createdAt = "2026-11-14T14:00:00Z";
@@ -28,6 +30,15 @@ const workspace = {
 const fulfillment = {
   type: "PICKUP", status: "COMPLETED", promisedAt: "2026-11-14T14:20:00Z",
   readyAt: "2026-11-14T14:12:00Z", handoffAt: null, completedAt: updatedAt, canceledAt: null, rejectedAt: null,
+};
+const marketplaceInput = {
+  orderId, checkedRevision: updatedAt, checkedVersion: 7, channel: "DOORDASH",
+  externalStoreId: "known-church-store", externalOrderId: "7a17b9ac-fe6c-424f-96cb-1c610bb932de",
+  evidence: "payout_statement",
+};
+const maskedLink = {
+  channel: "DOORDASH", storeReference: "urch-store", orderReference: "610bb932de",
+  evidence: "payout_statement", recordedAt: updatedAt,
 };
 
 beforeEach(() => {
@@ -40,11 +51,15 @@ beforeEach(() => {
     lineItems: [{ note: "private-item-note" }],
     fulfillments: [{ ...fulfillment, id: "private-fulfillment", note: "private-ticket-note" }],
   });
-  mocks.rpc.mockImplementation((name) => ({
-    abortSignal: name === "get_church_square_order_receipt_evidence" ? mocks.receiptQuery : mocks.query,
-  }));
+  const reads = {
+    get_church_square_order_evidence: mocks.query,
+    get_church_square_order_receipt_evidence: mocks.receiptQuery,
+    get_church_square_marketplace_link: mocks.marketplaceQuery,
+  };
+  mocks.rpc.mockImplementation((name: keyof typeof reads) => ({ abortSignal: reads[name] }));
   mocks.query.mockResolvedValue({ error: null, data: { updatedAt, matches: true } });
   mocks.receiptQuery.mockResolvedValue({ error: null, data: { order: null, payment: null } });
+  mocks.marketplaceQuery.mockResolvedValue({ error: null, data: null });
   mocks.serviceRpc.mockReturnValue({ abortSignal: mocks.serviceResult });
   mocks.serviceResult.mockResolvedValue({ error: null, data: true });
 });
@@ -54,10 +69,11 @@ it("compares the exact completed order and returns only checklist evidence", asy
   expect(result).toEqual({
     ok: true, mode: "live", persisted: false,
     data: {
-      reference: "ABC0123456", checkedAt: expect.any(String), canRecover: true,
+      reference: "ABC0123456", checkedAt: expect.any(String), canRecover: true, canLinkMarketplace: true,
       square: { status: "COMPLETED", source: "SQUARE_ONLINE", createdAt, updatedAt, version: 7, fulfillments: [fulfillment] },
       operations: { status: "observed", updatedAt, matches: true, recoveredAt: null, source: null, savedAt: null },
       receipts: { order: null, payment: null },
+      marketplace: { status: "unlinked" },
     },
   });
   expect(mocks.get).toHaveBeenCalledExactlyOnceWith("order", orderId);
@@ -132,4 +148,42 @@ it("rejects an outdated provider version and a user without Manager Log access b
   expect(mocks.get).not.toHaveBeenCalled();
   expect(await recoverChurchSquareOrderEvidenceAction({ ...input, checkedVersion: 6 })).toMatchObject({ ok: false, code: "stale" });
   expect(mocks.serviceRpc).not.toHaveBeenCalled();
+});
+
+it("saves an exact current link and returns only masked references after readback", async () => {
+  mocks.serviceResult.mockResolvedValue({ error: null, data: maskedLink });
+  mocks.marketplaceQuery.mockResolvedValue({ error: null, data: maskedLink });
+  const result = await saveChurchSquareMarketplaceLinkAction(marketplaceInput);
+  expect(result).toMatchObject({ ok: true, persisted: true, data: { marketplace: { status: "linked", link: maskedLink } } });
+  expect(mocks.get).toHaveBeenCalledExactlyOnceWith("order", orderId);
+  expect(mocks.serviceRpc).toHaveBeenCalledExactlyOnceWith("service_save_church_square_marketplace_link", {
+    p_actor_id: "church-staff", p_location_id: "church-location", p_merchant_id: "approved-merchant",
+    p_square_location_id: "square-location", p_order_id: orderId, p_square_updated_at: updatedAt, p_square_version: 7,
+    p_channel: "DOORDASH", p_external_store_id: marketplaceInput.externalStoreId,
+    p_external_order_id: marketplaceInput.externalOrderId, p_evidence: "payout_statement",
+  });
+  expect(JSON.stringify(result)).not.toContain(marketplaceInput.externalOrderId);
+  expect(JSON.stringify(result)).not.toContain(marketplaceInput.externalStoreId);
+});
+
+it("rejects short references, access loss, stale revisions, and collisions", async () => {
+  expect(await saveChurchSquareMarketplaceLinkAction({ ...marketplaceInput, externalOrderId: "bb932de" })).toMatchObject({ ok: false });
+  mocks.session.mockResolvedValueOnce({ status: "ready", context: { ...workspace, capabilities: [] } });
+  expect(await saveChurchSquareMarketplaceLinkAction(marketplaceInput)).toMatchObject({ ok: false, code: "forbidden" });
+  expect(mocks.get).not.toHaveBeenCalled();
+  expect(await saveChurchSquareMarketplaceLinkAction({ ...marketplaceInput, checkedVersion: 8 })).toMatchObject({ ok: false, code: "stale" });
+  expect(mocks.serviceRpc).not.toHaveBeenCalled();
+  mocks.serviceResult.mockResolvedValueOnce({ error: { code: "23505", message: "record already taken" } });
+  expect(await saveChurchSquareMarketplaceLinkAction(marketplaceInput)).toMatchObject({
+    ok: false, code: "conflict", message: "One of these orders already has a different marketplace link.",
+  });
+});
+
+it("leaves unavailable link evidence distinct from a missing link or a denied lookup", async () => {
+  mocks.marketplaceQuery.mockResolvedValueOnce({ error: null, data: { ...maskedLink, externalOrderId: "private" } });
+  expect(await lookupChurchSquareOrderEvidenceAction({ orderId })).toMatchObject({
+    ok: true, data: { canLinkMarketplace: false, marketplace: { status: "unavailable" } },
+  });
+  mocks.marketplaceQuery.mockResolvedValueOnce({ error: { code: "42501" }, data: null });
+  expect(await lookupChurchSquareOrderEvidenceAction({ orderId })).toMatchObject({ ok: false, code: "forbidden" });
 });
