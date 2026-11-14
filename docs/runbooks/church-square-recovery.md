@@ -1,0 +1,11 @@
+# Church Street Square event recovery
+
+Square's production notification receiver acknowledges an accepted event after it is stored. The event kicks a bounded recovery worker. A manager can also retry by loading the reconciliation view. The scheduled job makes another attempt when the café is quiet.
+
+The Supabase job `le-yard-church-square-retry` runs every five minutes. It calls Operations with a short-lived proof derived from the dedicated signing key stored in Vercel Production and Supabase Vault. The proof expires after 90 seconds. The key itself does not enter the outgoing request, logs, or application database tables. The endpoint accepts one bounded refresh and returns an empty 202. Receipt leases prevent concurrent processing of the same event, and durable state prevents an older Square version from overwriting a newer one.
+
+The platform setup is in [church-square-recovery-schedule.sql](sql/church-square-recovery-schedule.sql). Apply only to the production Operations database after verifying the linked project. The deployment needs `LE_YARD_CHURCH_SQUARE_RECOVERY_SECRET` in the Operations server's Production environment and the identical value in Vault under `le_yard_church_square_recovery_v1`. Keep the key out of the SQL file. The worker also uses the existing scoped Square order-read configuration.
+
+Check the cron job's run status and the corresponding HTTP status in net._http_response, without selecting request headers or payloads. A 202 confirms the route accepted the trigger. Check the quote-independent receipt queue or the manager's reconciliation panel to tell whether work succeeded. If the queue still grows, verify Square credentials, exact location, provider rate limits and review status. To suspend scheduled retries, set the named job inactive in Supabase Cron. Event-driven and manager retries continue.
+
+This job retries receipts already saved. An overlapping SearchOrders job and persisted checkpoint are separate work to cover provider events that never arrive. Square's event-specific reference describes API-driven fulfillment updates. Compare native POS, marketplace and Square pickup behavior before treating the feed as a courier or ticket authority.
