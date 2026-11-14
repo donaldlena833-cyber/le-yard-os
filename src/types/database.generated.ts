@@ -10583,6 +10583,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_sandwich_timing_runs": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_square_count_items": {
         Args: {
           "p_location_id": string | null
@@ -10859,6 +10865,23 @@ export type Database = {
           "p_handled_as": string | null
           "p_handled_at": string | null
           "p_discard_at": string | null
+        }
+        Returns: Json
+      };
+      "record_church_sandwich_timing_run": {
+        Args: {
+          "p_location_id": string | null
+          "p_request_id": string | null
+          "p_recipe_key": string | null
+          "p_attempted": number | null
+          "p_accepted": number | null
+          "p_crew_size": number | null
+          "p_build_seconds": number | null
+          "p_reference": string | null
+          "p_formula_revision"?: number | null
+          "p_prep_seconds"?: number | null
+          "p_pack_seconds"?: number | null
+          "p_note"?: string | null
         }
         Returns: Json
       };
@@ -12898,6 +12921,7 @@ export const DatabaseObjectNames = {
       "list_church_ingredient_batches",
       "list_church_ingredient_evidence",
       "list_church_sandwich_formulas",
+      "list_church_sandwich_timing_runs",
       "list_church_square_count_items",
       "list_church_square_reconciliation",
       "list_church_square_stock_alerts",
@@ -12930,6 +12954,7 @@ export const DatabaseObjectNames = {
       "record_canonical_service_availability_event",
       "record_checklist_response",
       "record_church_ingredient_batch",
+      "record_church_sandwich_timing_run",
       "record_clock_in",
       "record_clock_out",
       "record_guest_consent",

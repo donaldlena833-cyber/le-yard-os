@@ -610,6 +610,50 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     expect(await readFormulas()).toEqual([updated]);
     expect(await saveFormula(0, measurements, formulaRequest)).toEqual({ ...formula, current: false });
 
+    const listTiming = async () => (await db.query(
+      "select public.list_church_sandwich_timing_runs($1::uuid) as result", [workspaceLocationId],
+    )).rows[0].result;
+    const recordTiming = async ({ request = randomUUID(), recipe = "parisien", revision = null, attempted = 6,
+      accepted = 5, crew = 1, prep = null, build = 387, pack = null, reference = "Trial sheet 014", note = null } = {}) =>
+      (await db.query(`
+        select public.record_church_sandwich_timing_run(
+          $1::uuid,$2::uuid,$3,$4::int,$5::int,$6::int,$7::int,$8,$9::int,$10::int,$11::int,$12
+        ) as result
+      `, [workspaceLocationId, request, recipe, attempted, accepted, crew, build, reference, revision, prep, pack, note])).rows[0].result;
+    const signedTimingRequest = randomUUID();
+    expect(await listTiming()).toEqual([]);
+    const bench = await recordTiming({ recipe: "bleu", prep: 0 });
+    expect(bench).toMatchObject({ recipeKey: "bleu", formulaRevision: null, prepSeconds: 0, packSeconds: null,
+      attempted: 6, accepted: 5, buildSeconds: 387, reference: "Trial sheet 014", note: null });
+    expect(await recordTiming({ recipe: "rustique", accepted: 0, build: 1 })).toMatchObject({ accepted: 0 });
+    await expect(recordTiming({ accepted: 7 })).rejects.toMatchObject({ code: "22023" });
+    await expect(recordTiming({ crew: 13 })).rejects.toMatchObject({ code: "22023" });
+    await expect(recordTiming({ build: 0 })).rejects.toMatchObject({ code: "22023" });
+    await expect(recordTiming({ pack: 43201 })).rejects.toMatchObject({ code: "22023" });
+    await expect(recordTiming({ prep: -1 })).rejects.toMatchObject({ code: "22023" });
+    await expect(recordTiming({ reference: " \t " })).rejects.toMatchObject({ code: "22023" });
+    await expect(recordTiming({ note: "x".repeat(501) })).rejects.toMatchObject({ code: "22023" });
+    await expect(recordTiming({ note: "Unexpected\nline break" })).rejects.toMatchObject({ code: "22023" });
+    await expect(recordTiming({ revision: 1 })).rejects.toMatchObject({ code: "PT409" });
+    await expect(recordTiming({ recipe: "figaro", revision: 1 })).rejects.toMatchObject({ code: "PT409" });
+    const measuredTiming = { request: signedTimingRequest, revision: 2, prep: 915, pack: 0, note: "Second build rewrapped" };
+    const signedTiming = await recordTiming(measuredTiming);
+    expect(signedTiming).toEqual({ id: signedTimingRequest, recipeKey: "parisien", formulaRevision: 2,
+      attempted: 6, accepted: 5, crewSize: 1, prepSeconds: 915, buildSeconds: 387, packSeconds: 0,
+      reference: "Trial sheet 014", note: "Second build rewrapped", recordedAt: expect.any(String), recordedByName: expect.any(String) });
+    expect(await recordTiming({ ...measuredTiming, reference: " Trial sheet 014 " })).toEqual(signedTiming);
+    await expect(recordTiming({ ...measuredTiming, prep: null })).rejects.toMatchObject({ code: "PT409" });
+    await asRole(db, "authenticated", prepUserId);
+    expect((await listTiming())[0]).toEqual(signedTiming);
+    await expect(recordTiming()).rejects.toMatchObject({ code: "42501" });
+    await expect(db.query("select * from private.church_sandwich_timing_runs")).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", otherTenantUser);
+    await expect(listTiming()).rejects.toMatchObject({ code: "42501" });
+    await expect(recordTiming()).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "service_role");
+    await expect(listTiming()).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", ownerId);
+
     await db.exec("reset role");
     const formulaHistory = await db.query(`
       select revision,reviewed_by::text,supplier_evidence->'French-style ham'->>'supplierSku' as sku
@@ -689,6 +733,8 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     await expect(resolveBatch(earlier.id, "used_up")).rejects.toMatchObject({ code: "PT409" });
     await expect(voidBatch(randomUUID(), "Wrong outcome", earlier.id)).rejects.toMatchObject({ code: "PT409" });
     await saveEvidence("French-style ham", 3, "hold");
+    await expect(recordTiming({ revision: 2 })).rejects.toMatchObject({ code: "PT409" });
+    expect(await recordTiming(measuredTiming)).toEqual(signedTiming);
     expect(await recordBatch({ request: batchRequest })).toEqual({ ...batch, evidenceCurrent: false });
     await expect(recordBatch({ code: "PREP-43" })).rejects.toMatchObject({ code: "PT409" });
     await expect(resolveBatch(opened.id, "used_up")).rejects.toMatchObject({ code: "PT409" });
@@ -761,6 +807,22 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     const recentAfterDiscard = await readBatches();
     expect(recentAfterDiscard).toHaveLength(50);
     expect(recentAfterDiscard[0]).toMatchObject({ id: overdueId, disposition: { outcome: "discarded" } });
+    await db.exec("reset role");
+    const timingAudit = await db.query("select recorded_by::text as actor from private.church_sandwich_timing_runs where id=$1", [signedTimingRequest]);
+    expect(timingAudit.rows).toEqual([{ actor: ownerId }]);
+    await expect(db.query("delete from private.church_sandwich_timing_runs")).rejects.toMatchObject({ code: "42501" });
+    await db.query(`
+      insert into private.church_sandwich_timing_runs (
+        organization_id,location_id,id,recipe_key,attempted,accepted,crew_size,build_seconds,reference,recorded_at,recorded_by,recorded_by_name
+      ) select organization_id,location_id,gen_random_uuid(),recipe_key,1,1,1,10,'older rehearsal '||position,
+        recorded_at - make_interval(mins => position),recorded_by,recorded_by_name
+      from private.church_sandwich_timing_runs cross join generate_series(1,32) fixture(position)
+      where id = $1
+    `, [signedTimingRequest]);
+    await asRole(db, "authenticated", ownerId);
+    const boundedTiming = await listTiming();
+    expect(boundedTiming).toHaveLength(30);
+    expect(boundedTiming[0]).toEqual(signedTiming);
     expect(await protectedCounts()).toEqual(before);
   } finally {
     vi.unstubAllEnvs();
