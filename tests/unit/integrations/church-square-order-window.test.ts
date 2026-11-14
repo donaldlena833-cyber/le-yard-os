@@ -35,7 +35,9 @@ function scopedRows(locationFound = true) {
   return { select, eq };
 }
 
-function stubProvider() {
+function stubProvider(
+  data?: (updatedAt: string) => { orders: unknown[]; cursor?: string },
+) {
   const provider = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
     if (path === "/v2/merchants/square-merchant") {
@@ -54,7 +56,7 @@ function stubProvider() {
     if (path !== "/v2/orders/search" || init?.method !== "POST") return new Response(null, { status: 500 });
     const { query } = JSON.parse(String(init.body));
     const updatedAt = query.filter.date_time_filter.updated_at.end_at;
-    return Response.json({
+    return Response.json(data?.(updatedAt) ?? {
       cursor: "square-cursor",
       orders: [{
         id: "full-order-id-9876543210", location_id: "square-location",
@@ -171,5 +173,39 @@ describe("Church Square order window", () => {
         },
       ],
     });
+  });
+
+  it("collapses the same full order ID before deciding coverage and preserves distinct suffix collisions", async () => {
+    scopedRows();
+    stubProvider((updatedAt) => {
+      const same = { id: "first-0123456789", location_id: "square-location", created_at: updatedAt, updated_at: updatedAt };
+      const collision = { ...same, id: "second-0123456789", state: "COMPLETED" };
+      return { orders: [
+        ...Array.from({ length: 50 }, () => ({ ...same, drop_from_projection: "internal" })),
+        collision,
+      ] };
+    });
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      hasMore: false,
+      orders: [
+        { reference: "0123456789", status: "UNKNOWN" },
+        { reference: "0123456789", status: "COMPLETED" },
+      ],
+    });
+  });
+
+  it.each(["conflicting duplicate", "foreign location"])("fails closed for a %s", async (variant) => {
+    scopedRows();
+    stubProvider((updatedAt) => {
+      const original = { id: "repeat-order", location_id: "square-location", created_at: updatedAt, updated_at: updatedAt };
+      return { orders: [original, variant === "foreign location"
+        ? { ...original, location_id: "outside-church" }
+        : { ...original, source: { name: "Uber Eats" } }] };
+    });
+    const response = await GET(request());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: "unavailable" });
   });
 });

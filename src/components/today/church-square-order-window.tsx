@@ -13,6 +13,7 @@ import {
   summarizeChurchSquareFulfillmentDemand,
   type ChurchSquareOrderWindowResponse,
 } from "@/lib/integrations/church-square-order-window";
+import { summarizeChurchSquareSources } from "@/lib/integrations/church-square-source-summary";
 
 type Order = ChurchSquareOrderWindowResponse["orders"][number];
 type Fulfillment = Order["fulfillments"][number];
@@ -115,6 +116,58 @@ function SquareFulfillmentDemand({ window }: { window: ChurchSquareOrderWindowRe
   );
 }
 
+function SourceTiming({ timing }: { timing: ReturnType<typeof summarizeChurchSquareSources>[number]["pickup"] }) {
+  return (
+    <>
+      <p className="font-medium tabular-nums">{timing.comparable ? `${timing.byTarget} of ${timing.comparable} by window start` : "No comparable times"}</p>
+      <p className="mt-0.5 text-[var(--ink-soft)]">{timing.fulfillmentCount} sampled</p>
+    </>
+  );
+}
+
+function SquareSourceActivity({ window }: { window: ChurchSquareOrderWindowResponse }) {
+  const rows = summarizeChurchSquareSources(window);
+  return (
+    <section aria-labelledby="church-square-sources-title" className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4">
+      <h4 id="church-square-sources-title" className="text-sm font-semibold">Order activity by Square source</h4>
+      <p id="church-square-sources-context" className="mt-1 text-xs leading-relaxed text-[var(--ink-soft)]">
+        {window.orders.length} {window.orders.length === 1 ? "order" : "orders"} in this manual sample. Square provides source hints. Orders without a recognized hint appear as Unknown source.
+        {window.hasMore && " Square may have more orders in this window."}
+      </p>
+      <p id="church-square-sources-timing" className="mt-1 text-xs leading-relaxed text-[var(--ink-soft)]">
+        Timing compares reported pickup and delivery with the start of their respective Square windows. Rejections can overlap order states.
+      </p>
+      <div className="mt-2 overflow-x-auto">
+        <table aria-labelledby="church-square-sources-title" aria-describedby="church-square-sources-context church-square-sources-timing church-square-orders-bounds church-square-orders-check" className="w-full text-left text-xs">
+          <thead className="border-b border-[var(--line)] text-[var(--ink-soft)]">
+            <tr>
+              <th scope="col" className="py-2 pr-2">Source hint</th>
+              <th scope="col" className="px-2 py-2">Orders</th>
+              <th scope="col" className="px-2 py-2">Pickup timing</th>
+              <th scope="col" className="py-2 pl-2">Delivery timing</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--line)]">
+            {rows.map((row) => (
+              <tr key={row.source} className="align-top">
+                <th scope="row" className="py-2 pr-2 font-medium">{row.source === "UNKNOWN" ? "Unknown source" : sources[row.source]}</th>
+                <td className="px-2 py-2">
+                  <p className="font-medium tabular-nums">{row.orderCount} {row.orderCount === 1 ? "order" : "orders"}</p>
+                  <p className="mt-0.5 text-[var(--ink-soft)]">{row.open} open · {row.completed} completed · {row.canceled} canceled</p>
+                  {(row.draft > 0 || row.unknownStatus > 0) && <p className="mt-0.5 text-[var(--ink-soft)]">{row.draft} draft · {row.unknownStatus} unknown status</p>}
+                  {row.rejectedOrders > 0 && <p className="mt-0.5 text-[var(--ink-soft)]">{row.rejectedOrders} with a rejection recorded</p>}
+                </td>
+                <td className="px-2 py-2"><SourceTiming timing={row.pickup} /></td>
+                <td className="py-2 pl-2"><SourceTiming timing={row.delivery} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function OrderFulfillmentSummary({ fulfillments }: { fulfillments: Order["fulfillments"] }) {
   if (!fulfillments.length) return <span className="text-[var(--ink-faint)]">Unavailable</span>;
 
@@ -199,6 +252,7 @@ export function ChurchSquareOrderWindow() {
         )}
       </div>
       {state.status === "ready" && <SquareFulfillmentDemand window={state.window} />}
+      {state.status === "ready" && state.window.orders.length > 0 && <SquareSourceActivity window={state.window} />}
       {state.status === "ready" && state.window.orders.length > 0 && (
         <div className="mt-3 overflow-x-auto rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
           <table className="w-full text-left text-xs">

@@ -2,6 +2,7 @@ import "server-only";
 
 import { appSurface } from "@/lib/app-surface";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
+import type { ChurchSquareOrder } from "@/lib/integrations/church-square-order-projection";
 import { ChurchSquareOrderClient, churchSquareOrderConfiguration } from "@/lib/integrations/church-square-orders.server";
 import {
   churchSquareOrderWindowHours,
@@ -11,6 +12,21 @@ import {
 import { createClient } from "@/lib/supabase/server";
 
 const managementRoles = new Set(["owner", "admin", "manager"]);
+
+function uniqueOrderSnapshots(orders: readonly ChurchSquareOrder[]): ChurchSquareOrder[] {
+  const seen = new Map<string, ChurchSquareOrder>();
+  for (const order of orders) {
+    const prior = seen.get(order.id);
+    if (!prior) {
+      seen.set(order.id, order);
+    } else if (JSON.stringify(prior) !== JSON.stringify(order)) {
+      // The provider client has already scoped and normalized each row. A
+      // conflicting duplicate makes this entire reporting window ambiguous.
+      throw new Error("Square returned inconsistent order snapshots.");
+    }
+  }
+  return [...seen.values()];
+}
 
 export function canRequestChurchSquareOrderWindow(
   workspace: Pick<WorkspaceContextValue, "mode" | "role" | "capabilities" | "serviceSettings">,
@@ -55,11 +71,14 @@ export async function loadChurchSquareOrderWindow(): Promise<ChurchSquareOrderWi
     to: checkedAt,
     direction: "DESC",
   });
+  // Suffixes are display-only and can collide across distinct provider orders.
+  const orders = uniqueOrderSnapshots(result.orders);
   return {
     checkedAt,
-    hasMore: Boolean(result.nextCursor) || result.orders.length > churchSquareOrderWindowLimit,
-    orders: result.orders.slice(0, churchSquareOrderWindowLimit).map(order => ({
+    hasMore: Boolean(result.nextCursor) || orders.length > churchSquareOrderWindowLimit,
+    orders: orders.slice(0, churchSquareOrderWindowLimit).map(order => ({
       reference: order.id.slice(-10),
+      // Square's OrderSource is a display name, often the originating app.
       source: order.sourceHint,
       status: order.status,
       updatedAt: order.updatedAt,

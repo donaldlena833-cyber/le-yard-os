@@ -141,3 +141,50 @@ it("counts active pickup and delivery fulfillments at the last manual check", as
   expect(screen.queryByText(/partial results/i)).toBeNull();
   expect(screen.getByText(/no orders in this read/i)).toBeTruthy();
 });
+
+it("compares explicit Square timing pairs by source and shows attribution gaps on a partial sample", async () => {
+  const checkedAt = "2026-11-14T18:00:00Z";
+  const exactTarget = "2026-11-14T17:50:00Z";
+  type Order = ChurchSquareOrderWindowResponse["orders"][number];
+  type Fulfillment = Order["fulfillments"][number];
+  const fulfillment = (overrides: Partial<Fulfillment>): Fulfillment => ({
+    type: "PICKUP", status: "COMPLETED", promisedAt: exactTarget,
+    readyAt: null, handoffAt: null, completedAt: null, canceledAt: null, rejectedAt: null,
+    ...overrides,
+  });
+  const order = (reference: string, source: Order["source"], status: Order["status"], ...fulfillments: Fulfillment[]): Order => ({
+    reference, source, status, updatedAt: checkedAt, totalCents: 10000, fulfillments,
+  });
+  const snapshot: ChurchSquareOrderWindowResponse = {
+    checkedAt, hasMore: true,
+    orders: [
+      order("delivery", "DOORDASH", "COMPLETED",
+        fulfillment({ type: "DELIVERY", handoffAt: "2026-11-14T17:52:00Z" }),
+        fulfillment({ type: "DELIVERY", readyAt: "2026-11-14T17:45:00Z", completedAt: "2026-11-14T17:48:00Z" }),
+        fulfillment({ status: "FAILED", rejectedAt: "2026-11-14T17:36:00Z" })),
+      order("pickup", "SQUARE_ONLINE", "OPEN", fulfillment({ handoffAt: exactTarget })),
+      order("draft", "UNKNOWN", "DRAFT"),
+      order("unknown", "UNKNOWN", "UNKNOWN"),
+    ],
+  };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot }));
+  render(<ChurchSquareOrderWindow />);
+  expect(screen.queryByRole("table", { name: "Order activity by Square source" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Load orders" }));
+
+  const table = within(await screen.findByRole("table", { name: "Order activity by Square source" }));
+  const region = within(screen.getByRole("region", { name: "Order activity by Square source" }));
+  const doorDash = within(table.getByRole("row", { name: /DoorDash/ }));
+  const squareOnline = within(table.getByRole("row", { name: /Square Online/ }));
+  expect(doorDash.getByText("0 of 1 by window start")).toBeTruthy();
+  expect(doorDash.getByText("2 sampled")).toBeTruthy();
+  expect(doorDash.getByText("1 with a rejection recorded")).toBeTruthy();
+  expect(squareOnline.getByText("1 of 1 by window start")).toBeTruthy();
+  const unknown = within(table.getByRole("row", { name: /Unknown source/ }));
+  expect(unknown.getByText("2 orders")).toBeTruthy();
+  expect(unknown.getByText("1 draft · 1 unknown status")).toBeTruthy();
+  expect(unknown.getAllByText("No comparable times")).toHaveLength(2);
+  expect(region.getByText(/4 orders in this manual sample.*may have more orders/i)).toBeTruthy();
+  expect(region.getByText(/start of their respective Square windows/i)).toBeTruthy();
+  expect(region.queryByText("$100.00")).toBeNull();
+});
