@@ -34,7 +34,7 @@ function mockSquare(
   reply: () => Response | Promise<Response> = () => Response.json({ payouts: [payout] }),
   location = church,
 ) {
-  return vi.fn(async (resource: RequestInfo | URL, _init?: RequestInit) => {
+  return vi.fn<typeof fetch>(async (resource) => {
     switch (new URL(String(resource)).pathname) {
       case `/v2/merchants/${config.merchantId}`:
         return Response.json({ merchant: { id: config.merchantId, country: "US", currency: "USD", status: "ACTIVE" } });
