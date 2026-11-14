@@ -13,7 +13,9 @@ const alertSchema = z.object({
   quantity: z.string().max(32).refine(isSquareStockLow),
   calculatedAt: z.iso.datetime({ offset: true }),
   episode: z.uuid(),
-});
+  acknowledgedAt: z.iso.datetime({ offset: true }).nullable().default(null),
+  acknowledgedByName: z.string().min(1).refine((name) => Array.from(name).length <= 120).nullable().default(null),
+}).refine((alert) => Boolean(alert.acknowledgedAt) === Boolean(alert.acknowledgedByName));
 
 export type ChurchSquareStockAlert = z.infer<typeof alertSchema>;
 

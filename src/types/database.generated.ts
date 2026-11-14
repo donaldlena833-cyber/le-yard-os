@@ -9406,6 +9406,14 @@ export type Database = {
         }
         Returns: boolean
       };
+      "acknowledge_church_square_stock_alert": {
+        Args: {
+          "p_location_id": string | null
+          "p_item_id": string | null
+          "p_episode_id": string | null
+        }
+        Returns: Json
+      };
       "acknowledge_preshift": {
         Args: {
           "p_request_id": string | null
@@ -12702,6 +12710,7 @@ export const DatabaseObjectNames = {
     ],
     Functions: [
       "accept_my_invitation",
+      "acknowledge_church_square_stock_alert",
       "acknowledge_preshift",
       "acknowledge_sop",
       "add_guest_note",

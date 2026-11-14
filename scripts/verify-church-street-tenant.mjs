@@ -151,6 +151,8 @@ async function verifyChurchSquareCountLedger(db, churchId, locationId) {
 async function verifyChurchSquareWebhookProjection(db, locationId) {
   const read = async (sql, args = []) => (await db.query(sql, args)).rows[0]?.result;
   const list = () => read("select public.list_church_square_stock_alerts($1::uuid) as result", [locationId]);
+  const acknowledgment = (id, episode, location = locationId) =>
+    `select public.acknowledge_church_square_stock_alert('${location}','${id}','${episode}') as result`;
   const record = (id, quantity, instant, merchant = "M_TEST", variation = "V_TEST") => read(`
     select public.service_record_church_square_webhook(
       $1, 'L_TEST', $2, 'inventory.count.updated', $3::timestamptz,
@@ -174,6 +176,8 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   const [initial] = await list();
   assert.equal(initial.quantity, "5");
   assert.equal(initial.label, "Fixture Sandwich");
+  assert.equal(initial.acknowledgedAt, null);
+  assert.equal(initial.acknowledgedByName, null);
   assert.equal(JSON.stringify(initial).includes("V_TEST"), false);
   assert.match(initial.episode, /^[a-f0-9-]{36}$/);
   const revision = () => read("select revision::int as result from public.church_square_stock_invalidation_signals where location_id = $1::uuid", [locationId]);
@@ -186,6 +190,18 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   await claims(db, churchEmployeeId);
   assert.deepEqual(await list(), [initial]);
   assert.equal(await revision(), 1);
+  await expectDenial(db, acknowledgment(initial.id, randomUUID()), "PT409", "Current episode must match");
+  await expectDenial(db, acknowledgment(initial.id, initial.episode, restaurantLocationId), "42501", "Acknowledgment is Church Street only");
+  assert.equal(await revision(), 1);
+  const acknowledged = await read(acknowledgment(initial.id, initial.episode));
+  assert.ok(Number.isFinite(Date.parse(acknowledged.acknowledgedAt)));
+  assert.ok(acknowledged.acknowledgedByName.length > 0);
+  assert.deepEqual(Object.keys(acknowledged).sort(), ["acknowledgedAt", "acknowledgedByName"]);
+  assert.deepEqual(await list(), [{ ...initial, ...acknowledged }]);
+  assert.equal(await revision(), 2);
+  await claims(db, ownerId);
+  assert.deepEqual(await read(acknowledgment(initial.id, initial.episode)), acknowledged, "First action persists across operators");
+  assert.equal(await revision(), 2, "Replay does not fire another refresh");
 
   await claims(db, undefined, "service_role");
   assert.equal(await record("square-event-3", "4", times[3]), true);
@@ -193,20 +209,25 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   const [stillLow] = await list();
   assert.equal(stillLow.quantity, "4");
   assert.equal(stillLow.episode, initial.episode);
-  assert.equal(await revision(), 2);
+  assert.equal(stillLow.acknowledgedAt, acknowledged.acknowledgedAt);
+  assert.equal(await revision(), 3);
 
   await claims(db, undefined, "service_role");
   assert.equal(await record("square-event-4", "12", times[4]), true);
   await claims(db, churchEmployeeId);
   assert.deepEqual(await list(), []);
-  assert.equal(await revision(), 3);
+  await expectDenial(db, acknowledgment(initial.id, initial.episode), "PT409", "Closed episodes reject a retry");
+  assert.equal(await revision(), 4);
   await claims(db, undefined, "service_role");
   assert.equal(await record("square-event-5", "0", times[5]), true);
   await claims(db, churchEmployeeId);
   const [again] = await list();
   assert.equal(again.quantity, "0");
   assert.notEqual(again.episode, initial.episode);
-  assert.equal(await revision(), 4);
+  assert.equal(again.acknowledgedAt, null);
+  assert.equal(again.acknowledgedByName, null);
+  await expectDenial(db, acknowledgment(again.id, initial.episode), "PT409", "Stale action cannot acknowledge a new episode");
+  assert.equal(await revision(), 5);
   await expectDenial(db, `select public.list_church_square_webhook_receipts('${locationId}')`, "42501",
     "Resource receipt history requires Church Street management");
   await claims(db, ownerId);
@@ -218,7 +239,13 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   assert.equal(await revision(), undefined);
   await expectDenial(db, `select public.list_church_square_stock_alerts('${locationId}')`, "42501",
     "Other tenants cannot read the Church Street alert queue");
-  process.stdout.write("PASS Church Street webhook replay, stale exclusion, and low-stock alert rearming\n");
+  await expectDenial(db, acknowledgment(again.id, again.episode), "42501", "Other tenants cannot acknowledge Church Street alerts");
+  await db.exec("reset role");
+  const audit = await db.query("select acknowledged_by::text, episode_id::text from private.church_square_stock_acknowledgments where item_id = $1", [initial.id]);
+  assert.deepEqual(audit.rows, [{ acknowledged_by: churchEmployeeId, episode_id: initial.episode }]);
+  await expectDenial(db, `update private.church_square_stock_acknowledgments set acknowledged_by_name = 'Changed' where item_id = '${initial.id}'`,
+    "42501", "Acknowledgment audit is append-only");
+  process.stdout.write("PASS Church Street webhook replay, stale exclusion, low-stock alert rearming, and shared acknowledgment\n");
 }
 
 async function verifyChurchSquareReceiptProcessing(db, locationId) {

@@ -10,17 +10,20 @@ import type { ChurchSquareStockAlert } from "@/data/read-models/church-square-st
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import { formatSquareStockQuantity } from "@/lib/integrations/square-stock-alerts";
 import { ChurchSquareMenuDiagnostic } from "./church-square-menu-diagnostic";
+import { AcknowledgeStockAlertButton, StockAcknowledgmentReceipt, stockAcknowledgment, stockAcknowledgmentScope, useStockAcknowledgments } from "./church-square-stock-acknowledgment";
 
 type LocationScope = { organizationId: string; locationId: string };
 
-function CountItem({ item, scope, enabled, alert }: {
-  item: ChurchSquareCountItem; scope: LocationScope; enabled: boolean; alert?: ChurchSquareStockAlert;
+function CountItem({ item, scope, enabled, alert, alertScope }: {
+  item: ChurchSquareCountItem; scope: LocationScope; enabled: boolean; alert?: ChurchSquareStockAlert; alertScope?: string;
 }) {
   const router = useRouter();
   const { requestIdFor, rotateRequestId } = useStableRequestIds();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [unconfirmed, setUnconfirmed] = useState<{ requestId: string; quantity: string; reason: string }>();
+  const acknowledgments = useStockAcknowledgments(alertScope);
+  const receipt = alert ? stockAcknowledgment(alert, acknowledgments) : undefined;
 
   const pending = item.pendingRequestId && item.pendingReason && item.pendingQuantity != null
     ? { requestId: item.pendingRequestId, quantity: String(item.pendingQuantity), reason: item.pendingReason }
@@ -73,6 +76,9 @@ function CountItem({ item, scope, enabled, alert }: {
           </StatusPill>
         ) : null}
       </div>
+      {alert && (receipt ? <StockAcknowledgmentReceipt receipt={receipt} /> : alertScope ? (
+        <div className="mt-2"><AcknowledgeStockAlertButton alert={alert} scopeKey={alertScope} key={alert.episode} /></div>
+      ) : null)}
       {item.lastConfirmedQuantity != null ? (
         <p className="mt-1 text-xs text-[var(--ink-faint)]">Last confirmed physical count: {item.lastConfirmedQuantity}</p>
       ) : null}
@@ -100,15 +106,17 @@ function CountItem({ item, scope, enabled, alert }: {
   );
 }
 
-export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, alerts }: {
+export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, alerts, alertUserId }: {
   items: ChurchSquareCountItem[]; scope: LocationScope; enabled: boolean; canConfigure: boolean;
   alerts?: readonly ChurchSquareStockAlert[] | null;
+  alertUserId?: string;
 }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [variations, setVariations] = useState<{ id: string; label: string }[]>();
   const alertsByItem = new Map(alerts?.map((alert) => [alert.id, alert]));
+  const alertScope = alertUserId ? stockAcknowledgmentScope(scope.organizationId, scope.locationId, alertUserId) : undefined;
 
   async function loadVariations() {
     if (saving || !enabled || !canConfigure) return;
@@ -155,7 +163,7 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
         <p className="mt-1 text-sm text-[var(--ink-faint)]">Count sellable units now. A confirmed zero can mark a tracked item sold out. For temporary holds or modifiers, use Square’s availability controls.</p>
         {!enabled ? <p className="mt-2 text-sm">Waiting for the Church Street Square connection.</p> : null}
         {items.length ? <ul className="mt-2 divide-y divide-[var(--line)]">
-          {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} alert={alertsByItem.get(item.id)} />)}
+          {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} alert={alertsByItem.get(item.id)} alertScope={alertScope} />)}
         </ul> : <p className="mt-2 text-sm">No items are set up for Square counts yet.</p>}
         {canConfigure && enabled && <ChurchSquareMenuDiagnostic key={scope.locationId} />}
         {canConfigure && enabled ? (

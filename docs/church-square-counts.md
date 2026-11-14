@@ -18,6 +18,8 @@ In the Square production developer application, create a webhook subscription wi
 
 Verify using the dedicated `LY-OPS-STOCK-TEST` fixture. Change its count from above five to five and confirm the receipt, alert, and quantity in Operations. Repeat with four, restock above five, then lower it again to confirm rearming. Restore the agreed test quantity at the end. Check the webhook delivery log for 2xx acknowledgments and confirm there are no repeat alert popups while a single alert stays active. Square retries unsuccessful deliveries for up to 24 hours.
 
+On a low-stock alert, choose **Acknowledge** to record who saw that alert for the team. The item stays flagged in Inventory with its latest Square quantity until stock goes above five. The popup's close button hides it in the current browser tab. Check acknowledgment from a second signed-in Church Street screen, then restock and lower the test item again to verify the new alert. Acknowledgment does not submit a new stock count or change order availability.
+
 [Square webhook signatures](https://developer.squareup.com/docs/webhooks/step3validate) · [Square webhook retries](https://developer.squareup.com/docs/webhooks/overview) · [Square POS order event coverage](https://developer.squareup.com/reference/square/orders-api/webhooks/order.created)
 
 For a production rehearsal, Operations can optionally display the stock-only Square item whose exact variation ID is configured in `SQUARE_CHURCH_TEST_VARIATION_ID`. The item must have SKU `LY-OPS-STOCK-TEST`, be tracked at the café, and be explicitly non-sellable. The café's dedicated test item is excluded from customer menus. Leave this setting empty on deployments that don't need a rehearsal.

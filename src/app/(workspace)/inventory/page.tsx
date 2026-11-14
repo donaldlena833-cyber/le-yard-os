@@ -36,6 +36,7 @@ export default async function InventoryPage() {
       {squareItems ? <ChurchSquareStockCounts key={context.activeLocation.id}
         items={squareItems} enabled={Boolean(churchSquareCountConfiguration())}
         alerts={squareAlerts}
+        alertUserId={alertsEnabled ? context.identity.userId : undefined}
         scope={{ organizationId: context.organization.id, locationId: context.activeLocation.id }}
         canConfigure={context.role === "owner" || context.role === "admin"} /> : null}
       {canSeeSquareActivity ? <ChurchSquareActivity locationId={context.activeLocation.id} configured={alertsEnabled} /> : null}

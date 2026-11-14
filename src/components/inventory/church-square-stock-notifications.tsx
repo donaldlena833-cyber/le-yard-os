@@ -12,6 +12,7 @@ import {
   readSquareStockAlertDismissals,
 } from "@/lib/integrations/square-stock-alerts";
 import { useRealtimeInvalidation, type RealtimeInvalidationBinding } from "@/lib/realtime/use-realtime-invalidation";
+import { AcknowledgeStockAlertButton, stockAcknowledgment, stockAcknowledgmentScope, useStockAcknowledgments } from "./church-square-stock-acknowledgment";
 
 const invalidationBindings: readonly RealtimeInvalidationBinding[] = [
   { table: "church_square_stock_invalidation_signals", scope: "location" },
@@ -62,7 +63,8 @@ export function ChurchSquareStockNotifications({
   userId: string;
 }) {
   const { refresh } = useRouter();
-  const scopeKey = `${organizationId}:${locationId}:${userId}`;
+  const scopeKey = stockAcknowledgmentScope(organizationId, locationId, userId);
+  const receipts = useStockAcknowledgments(scopeKey);
   const activeRequest = useRef<AbortController | null>(null);
   const renderedAlerts = useRef<readonly ChurchSquareStockAlert[] | null>(alerts);
   const [snapshot, setSnapshot] = useState<{ scopeKey: string; alerts: ChurchSquareStockAlert[] }>();
@@ -137,7 +139,8 @@ export function ChurchSquareStockNotifications({
   const getDismissals = useCallback(() => readDismissals(dismissKey), [dismissKey]);
   const dismissalSnapshot = useSyncExternalStore(subscribeToDismissals, getDismissals, () => null);
   const dismissed = dismissalSnapshot === null ? [] : readSquareStockAlertDismissals(dismissalSnapshot);
-  const pending = dismissalSnapshot === null ? [] : pendingSquareStockAlerts(currentAlerts ?? [], dismissed);
+  const unacknowledged = (currentAlerts ?? []).filter((alert) => !stockAcknowledgment(alert, receipts));
+  const pending = dismissalSnapshot === null ? [] : pendingSquareStockAlerts(unacknowledged, dismissed);
   const sample = pending.slice(0, 3);
   return (
     <>
@@ -152,18 +155,21 @@ export function ChurchSquareStockNotifications({
                 <PackageX aria-hidden="true" className="size-4 shrink-0 text-[var(--warning)]" />
                 Square stock is low
               </div>
-              <ul className="mt-1 space-y-0.5 text-xs text-[var(--ink-soft)]">
-                {sample.map((alert) => (
-                  <li key={alert.episode}>{alert.label} · {formatSquareStockQuantity(alert.quantity)} in stock</li>
-                ))}
-              </ul>
-              {pending.length > sample.length ? <p className="mt-1 text-xs text-[var(--ink-faint)]">+{pending.length - sample.length} more</p> : null}
             </div>
-            <Button aria-label="Dismiss stock notification" size="icon" variant="quiet" className="size-11 shrink-0"
+            <Button aria-label="Hide stock notification in this tab" title="Hide in this tab" size="icon" variant="quiet" className="size-11 shrink-0"
               onClick={() => persistDismissals(dismissKey, [...dismissed, ...pending.map((alert) => alert.episode)])}>
               <X aria-hidden="true" className="size-4" />
             </Button>
           </div>
+          <ul className="mt-1 space-y-1 text-xs text-[var(--ink-soft)]">
+            {sample.map((alert) => (
+              <li className="flex items-center justify-between gap-2" key={alert.episode}>
+                <span className="min-w-0 break-words">{alert.label} · {formatSquareStockQuantity(alert.quantity)} in stock</span>
+                <AcknowledgeStockAlertButton alert={alert} scopeKey={scopeKey} />
+              </li>
+            ))}
+          </ul>
+          {pending.length > sample.length ? <p className="mt-1 text-xs text-[var(--ink-faint)]">+{pending.length - sample.length} more</p> : null}
           <Link className="focus-ring mt-2 inline-flex rounded-sm text-xs font-semibold text-[var(--accent-strong)] underline"
             href="/inventory#church-square-stock-heading">
             View Square stock

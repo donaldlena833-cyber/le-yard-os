@@ -14,6 +14,7 @@ const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
 
 const approvedAuthenticatedFunctions = new Set([
   "accept_my_invitation",
+  "acknowledge_church_square_stock_alert",
   "acknowledge_preshift",
   "acknowledge_sop",
   "approve_le_yard_reservation_draft",
