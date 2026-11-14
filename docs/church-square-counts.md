@@ -31,3 +31,9 @@ If an import stalls, select **Check pending count**. Operations keeps the same r
 [Square batch inventory changes](https://developer.squareup.com/reference/square/inventory-api/batch-change-inventory) · [Physical counts](https://developer.squareup.com/reference/square/objects/InventoryPhysicalCount) · [Square availability controls](https://squareup.com/help/us/en/article/8495-beta-item-availability)
 
 Square distinguishes physical stock on hand from stock available after commitments. Storefront status and current Square inventory should be checked separately at handoff. [Enable tracking and enter the first count](https://squareup.com/help/us/en/article/8331-set-up-inventory-tracking)
+
+## Check Square payouts
+
+In the Church Street workspace, authorized managers with financial reporting access can open **Today → Square payouts** and request the latest seven days of Square transfers. The live read uses the same Church Street connection as orders. If that connection uses OAuth, the credential needs the separate `PAYOUTS_READ` scope. An access error leaves the result unavailable.
+
+Record the Square payout reference, signed amount, and provider status. Compare it to the corresponding entry on the bank statement. Square can update a paid payout to failed if a rejection arrives later. Use the separate DoorDash, Uber Eats, and Grubhub statements for their respective settlements, even when those orders appear in Square. [Square Payouts API](https://developer.squareup.com/docs/payouts-api/overview) · [List Payouts permissions](https://developer.squareup.com/reference/square/payouts-api/ListPayouts)

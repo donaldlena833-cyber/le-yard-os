@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChurchSquarePayouts } from "@/components/today/church-square-payouts";
 import { Button } from "@/components/ui/button";
 import {
   churchSquareReconciliationPath,
@@ -138,6 +139,7 @@ export function ChurchSquareReconciliation() {
           </table>
         </div>
       )}
+      <ChurchSquarePayouts />
     </section>
   );
 }
