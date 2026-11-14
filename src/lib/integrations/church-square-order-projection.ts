@@ -29,8 +29,8 @@ export const churchSquareInvoiceStates = [
 const fulfillmentTypes = ["PICKUP", "DELIVERY", "SHIPMENT"] as const;
 const fulfillmentStates = ["PROPOSED", "RESERVED", "PREPARED", "COMPLETED", "CANCELED", "FAILED"] as const;
 const tenderTypes = ["CARD", "CASH", "THIRD_PARTY_CARD", "SQUARE_GIFT_CARD", "NO_SALE", "OTHER"] as const;
-const paymentSources = [
-  "CARD", "BANK_ACCOUNT", "WALLET", "BUY_NOW_PAY_LATER", "SQUARE_ACCOUNT", "CASH", "EXTERNAL",
+export const churchSquarePaymentSources = [
+  "CARD", "CASH", "EXTERNAL", "BANK_ACCOUNT", "WALLET", "BUY_NOW_PAY_LATER", "SQUARE_ACCOUNT",
 ] as const;
 const feeTypes = ["INITIAL", "ADJUSTMENT"] as const;
 const requestTypes = ["DEPOSIT", "BALANCE", "INSTALLMENT"] as const;
@@ -240,7 +240,7 @@ function projectPayment(value: z.infer<typeof payment>) {
     ...base("payment", value),
     status: known(value.status, paymentStates),
     orderId: value.order_id ?? null,
-    source: known(value.source_type, paymentSources),
+    source: known(value.source_type, churchSquarePaymentSources),
     amountCents: cents(value.amount_money),
     totalCents: cents(value.total_money),
     tipCents: cents(value.tip_money),

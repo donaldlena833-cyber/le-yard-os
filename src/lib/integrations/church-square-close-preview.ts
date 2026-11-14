@@ -1,10 +1,18 @@
 import { z } from "zod";
+import { churchSquarePaymentSources } from "./church-square-order-projection";
 
 export const churchSquareClosePreviewPath = "/api/workspace/church-square-close-preview";
 export const churchSquareClosePreviewDateCount = 7;
 
 const count = z.number().int().nonnegative().safe();
 const coverage = z.enum(["complete", "partial", "unavailable"]);
+export const churchSquareCloseTenderSources = [...churchSquarePaymentSources, "UNKNOWN"] as const;
+const tender = z.object({
+  source: z.enum(churchSquareCloseTenderSources),
+  completed: count.positive(),
+  totalCents: count.nullable(),
+  tipCents: count.nullable(),
+});
 
 export const churchSquareClosePreviewResponse = z.object({
   date: z.iso.date(),
@@ -17,6 +25,8 @@ export const churchSquareClosePreviewResponse = z.object({
   payments: z.object({
     coverage, observed: count, completed: count, unresolved: count, offline: count,
     missingTotal: count, missingOrder: count, totalCents: count.nullable(), tipCents: count.nullable(),
+    tenders: z.array(tender).max(churchSquareCloseTenderSources.length)
+      .refine((rows) => new Set(rows.map(({ source }) => source)).size === rows.length),
   }),
   refunds: z.object({
     coverage, observed: count, completed: count, unresolved: count,

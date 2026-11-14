@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ChurchSquareClosePreview } from "@/components/closeout/church-square-close-preview";
 import { churchSquareClosePreviewPath, type ChurchSquareClosePreviewSnapshot } from "@/lib/integrations/church-square-close-preview";
@@ -10,7 +10,14 @@ const fixture: ChurchSquareClosePreviewSnapshot = {
   date: props.today,
   checkedAt: "2026-11-14T13:42:00Z",
   window: { from: "2026-11-14T05:00:00Z", to: "2026-11-14T13:42:00Z", dayEnded: false },
-  payments: { coverage: "complete", observed: 3, completed: 2, unresolved: 1, offline: 1, missingOrder: 1, missingTotal: 0, totalCents: 1475, tipCents: 275 },
+  payments: {
+    coverage: "complete", observed: 4, completed: 3, unresolved: 1, offline: 1, missingOrder: 1, missingTotal: 0, totalCents: 1475, tipCents: 275,
+    tenders: [
+      { source: "CARD", completed: 1, totalCents: 975, tipCents: 225 },
+      { source: "CASH", completed: 1, totalCents: 250, tipCents: 50 },
+      { source: "EXTERNAL", completed: 1, totalCents: 250, tipCents: 0 },
+    ],
+  },
   refunds: { coverage: "complete", observed: 2, completed: 2, unresolved: 0, withoutPaymentReference: 1, paymentOutsideRead: 1, amountCents: 300 },
   netActivityCents: 1175,
 };
@@ -36,6 +43,11 @@ it("loads the requested ET date on demand and labels close activity and referenc
   expect(screen.getByText(/missing square payment reference/i)).toBeTruthy();
   expect(screen.getByText(/payment outside this read/i)).toBeTruthy();
   expect(screen.getByText(/calendar day is still in progress/i)).toBeTruthy();
+  const tenders = screen.getByRole("region", { name: "Completed payments by tender" });
+  expect(within(tenders).getByRole("row", { name: /Card 1 \$9\.75 \$2\.25/ })).toBeTruthy();
+  expect(within(tenders).getByRole("row", { name: /Cash 1 \$2\.50 \$0\.50/ })).toBeTruthy();
+  expect(within(tenders).getByRole("row", { name: /External 1 \$2\.50 \$0\.00/ })).toBeTruthy();
+  expect(within(tenders).getByText(/split tender can produce multiple records/i)).toBeTruthy();
   expect(screen.getByRole("status").textContent).toMatch(/8:42 AM ET/);
   expect(fetchMock).toHaveBeenCalledExactlyOnceWith(`${churchSquareClosePreviewPath}?locationId=${props.locationId}&date=${props.today}`,
     expect.objectContaining({ cache: "no-store", credentials: "same-origin" }));
@@ -54,6 +66,9 @@ it("withholds partial totals, retains a known complete refund total, and replace
   expect(screen.getByText("$3.00")).toBeTruthy();
   expect(screen.queryByText("$14.75")).toBeNull();
   expect(screen.queryByText("$11.75")).toBeNull();
+  const tenders = screen.getByRole("region", { name: "Completed payments by tender" });
+  expect(within(tenders).getByText("Observed payments")).toBeTruthy();
+  expect(within(tenders).getByRole("row", { name: /Cash 1 Unavailable Unavailable/ })).toBeTruthy();
   fireEvent.click(check);
   expect(await screen.findByText(/could not be verified/i)).toBeTruthy();
   expect(screen.queryByText("$3.00")).toBeNull();

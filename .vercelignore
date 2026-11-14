@@ -32,9 +32,10 @@
 # TypeScript/PostCSS configuration remain included by omission.
 /tests/
 /docs/*
-# Runtime receptionist knowledge is required inside the voice function.
+# Runtime content served by the voice and Kitchen document routes.
 !/docs/le-yard-receptionist.md
 !/docs/le-yard-receptionist-live.md
+!/docs/church-street-kitchen/
 /workers/
 /scripts/
 /supabase/

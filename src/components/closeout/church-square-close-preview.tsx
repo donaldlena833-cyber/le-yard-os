@@ -17,6 +17,16 @@ type State =
 const timeZone = "America/New_York";
 const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const calendarDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
+const tenderLabels: Record<ChurchSquareClosePreviewSnapshot["payments"]["tenders"][number]["source"], string> = {
+  CARD: "Card",
+  CASH: "Cash",
+  EXTERNAL: "External",
+  BANK_ACCOUNT: "Bank account",
+  WALLET: "Wallet",
+  BUY_NOW_PAY_LATER: "Buy now, pay later",
+  SQUARE_ACCOUNT: "Square account",
+  UNKNOWN: "Unknown",
+};
 
 function money(cents: number | null) {
   return cents === null ? "Unavailable" : currency.format(cents / 100);
@@ -82,6 +92,37 @@ function PreviewResults({ result }: { result: ChurchSquareClosePreviewSnapshot }
           )}
         </div>
       </div>
+      {payments.tenders.length > 0 && (
+        <section aria-labelledby="church-square-close-tender-heading" className="mt-4 border-t border-[var(--line)] pt-3">
+          <h3 id="church-square-close-tender-heading" className="text-sm font-semibold">Completed payments by tender</h3>
+          <p className="mt-1 text-xs text-[var(--ink-soft)]">
+            Counts are Square payment records. A split tender can produce multiple records for one order. Refunds are shown separately.
+            {payments.tenders.some(({ source }) => source === "CARD") && " Square can report gift cards under Card."}
+          </p>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-[var(--line)] text-[var(--ink-soft)]">
+                  <th scope="col" className="pr-3 py-2">Tender</th>
+                  <th scope="col" className="pr-3 py-2 text-right">{payments.coverage === "complete" ? "Payments" : "Observed payments"}</th>
+                  <th scope="col" className="pr-3 py-2 text-right">Total incl. tips</th>
+                  <th scope="col" className="py-2 text-right">Tips</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line)]">
+                {payments.tenders.map((tender) => (
+                  <tr key={tender.source}>
+                    <th scope="row" className="pr-3 py-2 font-medium">{tenderLabels[tender.source]}</th>
+                    <td className="pr-3 py-2 text-right tabular-nums">{tender.completed}</td>
+                    <td className="pr-3 py-2 text-right tabular-nums">{money(payments.coverage === "complete" ? tender.totalCents : null)}</td>
+                    <td className="py-2 text-right tabular-nums">{money(payments.coverage === "complete" ? tender.tipCents : null)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       <dl className="mt-4 border-t border-[var(--line)] pt-3">
         <div className="flex justify-between gap-3 text-sm font-semibold">
           <dt>Net Square activity</dt><dd className="tabular-nums">{money(net)}</dd>

@@ -4,6 +4,7 @@ import { ChurchCateringPrep } from "@/components/kitchen/church-catering-prep";
 import { ChurchBatchLabelsPanel } from "@/components/kitchen/church-batch-labels-panel";
 import { ChurchSandwichAvailabilityPanel } from "@/components/kitchen/church-sandwich-availability-panel";
 import { ChurchSandwichRecipeApprovalPanel } from "@/components/kitchen/church-sandwich-recipe-approval-panel";
+import { ChurchSandwichStaffResources } from "@/components/kitchen/church-sandwich-staff-resources";
 import { ChurchSandwichTimingPanel } from "@/components/kitchen/church-sandwich-timing-panel";
 import { ChurchSquareAllergenPanel } from "@/components/kitchen/church-square-allergen-panel";
 import { ChurchSupplierEvidencePanel } from "@/components/kitchen/church-supplier-evidence-panel";
@@ -24,6 +25,11 @@ import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
 
 export const metadata: Metadata = { title: "Kitchen" };
+
+async function ChurchStaffResources({ evidence }: { evidence: ReturnType<typeof loadChurchIngredientEvidence> }) {
+  const access = await evidence;
+  return access?.ok ? <ChurchSandwichStaffResources /> : null;
+}
 
 async function ChurchSupplierEvidence({ workspace, data }: {
   workspace: WorkspaceContextValue;
@@ -113,6 +119,7 @@ export default async function KitchenPage() {
   return (
     <>
       <PageFrame width="full" className="max-w-[1400px] pb-0">
+        <Suspense fallback={null}><ChurchStaffResources evidence={ingredientEvidence} /></Suspense>
         <Suspense fallback={null}><ChurchCateringPrep data={cateringPrep} approvedRecipes={approvedRecipes} /></Suspense>
         <Suspense fallback={null}><ChurchSupplierEvidence workspace={resolution.context} data={ingredientEvidence} /></Suspense>
         <Suspense fallback={null}><ChurchBatchLabels workspace={resolution.context} evidence={ingredientEvidence} labels={batchLabels} queue={batchQueue} /></Suspense>

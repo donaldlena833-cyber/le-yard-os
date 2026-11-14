@@ -1,6 +1,8 @@
 import "server-only";
 import { addIsoDays, isIsoCalendarDate, localDateKey, zonedLocalToIso } from "@/data/read-models/local-time";
-import { churchSquareClosePreviewDateCount, type ChurchSquareClosePreviewSnapshot } from "@/lib/integrations/church-square-close-preview";
+import {
+  churchSquareClosePreviewDateCount, churchSquareCloseTenderSources, type ChurchSquareClosePreviewSnapshot,
+} from "@/lib/integrations/church-square-close-preview";
 import type { ChurchSquarePayment, ChurchSquareRefund } from "@/lib/integrations/church-square-order-projection";
 import type { ChurchSquareOrderClient, ChurchSquareOrderWindow } from "@/lib/integrations/church-square-orders.server";
 
@@ -66,6 +68,27 @@ function totalNonnegative(values: (number | null)[]) {
   return Number.isSafeInteger(result) ? result : null;
 }
 
+function totalPaymentTips(payments: ChurchSquarePayment[]) {
+  return totalNonnegative(payments.map(({ tipCents, amountCents, totalCents }) =>
+    tipCents ?? (amountCents !== null && totalCents !== null && amountCents === totalCents ? 0 : null)));
+}
+
+function summarizeTenders(
+  payments: ChurchSquarePayment[],
+  complete: boolean,
+): ChurchSquareClosePreviewSnapshot["payments"]["tenders"] {
+  return churchSquareCloseTenderSources.flatMap((source) => {
+    const matching = payments.filter((payment) => payment.source === source);
+    if (matching.length === 0) return [];
+    return [{
+      source,
+      completed: matching.length,
+      totalCents: complete ? totalNonnegative(matching.map(({ totalCents }) => totalCents)) : null,
+      tipCents: complete ? totalPaymentTips(matching) : null,
+    }];
+  });
+}
+
 export async function loadChurchSquareClosePreview(
   client: Pick<ChurchSquareOrderClient, "listPayments" | "listRefunds">,
   date: string,
@@ -88,8 +111,7 @@ export async function loadChurchSquareClosePreview(
   const completedRefunds = refunds.records.filter(({ status }) => status === "COMPLETED");
   const paymentIds = new Set(payments.records.map(({ id }) => id));
   const paymentTotal = payments.coverage === "complete" ? totalNonnegative(completedPayments.map(({ totalCents }) => totalCents)) : null;
-  const tips = payments.coverage === "complete" ? totalNonnegative(completedPayments.map(({ tipCents, amountCents, totalCents }) =>
-    tipCents ?? (amountCents !== null && totalCents !== null && amountCents === totalCents ? 0 : null))) : null;
+  const tips = payments.coverage === "complete" ? totalPaymentTips(completedPayments) : null;
   const refundTotal = refunds.coverage === "complete" ? totalNonnegative(completedRefunds.map(({ amountCents }) => amountCents)) : null;
 
   return {
@@ -103,6 +125,7 @@ export async function loadChurchSquareClosePreview(
       missingTotal: completedPayments.filter(({ totalCents }) => totalCents === null || totalCents < 0).length,
       missingOrder: completedPayments.filter(({ orderId }) => !orderId).length,
       totalCents: paymentTotal, tipCents: tips,
+      tenders: summarizeTenders(completedPayments, payments.coverage === "complete"),
     },
     refunds: {
       coverage: refunds.coverage, observed: refunds.records.length, completed: completedRefunds.length,

@@ -27,7 +27,7 @@ const context = { activeLocation: { id: locationId } };
 
 const payment = (id: string, extras: object = {}) => ({
   id, createdAt: stamp, updatedAt: stamp, status: "COMPLETED", totalCents: 1200,
-  tipCents: null, amountCents: 1200, orderId: "order-unique", isOffline: false, ...extras,
+  source: "CARD", tipCents: null, amountCents: 1200, orderId: "order-unique", isOffline: false, ...extras,
 });
 const refund = (id: string, extra: object = {}) => ({
   id, createdAt: stamp, updatedAt: now, status: "COMPLETED", amountCents: 300, paymentId: "tender-a", ...extra,
@@ -75,9 +75,12 @@ describe("Church Street Square daily close preview", () => {
 
   it("counts split tenders once per ID, handles updates, and subtracts each completed refund once", async () => {
     const tenderA = payment("tender-a", { refundedCents: 300, offlineCreatedAt: stamp, customer: "private" });
-    const tenderB = payment("tender-b", { totalCents: 500, amountCents: 450, tipCents: 50, version: null });
-    mocks.payments.mockResolvedValueOnce({ payments: [tenderA, payment("tender-b", { status: "APPROVED" })], nextCursor: "page-two" })
-      .mockResolvedValueOnce({ payments: [tenderA, { ...tenderB, updatedAt: now }], nextCursor: null });
+    const tenderB = payment("tender-b", { source: "CASH", totalCents: 500, amountCents: 450, tipCents: 50, version: null });
+    const external = payment("tender-external", { source: "EXTERNAL", totalCents: 200, amountCents: 200 });
+    const unknown = payment("tender-unknown", { source: "UNKNOWN", totalCents: 10, amountCents: 10 });
+    mocks.payments.mockResolvedValueOnce({
+      payments: [tenderA, payment("tender-b", { status: "APPROVED", source: "CASH" })], nextCursor: "page-two",
+    }).mockResolvedValueOnce({ payments: [tenderA, { ...tenderB, updatedAt: now }, external, unknown], nextCursor: null });
     const sameDayRefund = refund("refund-a");
     mocks.refunds.mockResolvedValueOnce({ refunds: [sameDayRefund], nextCursor: "refund-page-two" })
       .mockResolvedValueOnce({ refunds: [sameDayRefund, refund("refund-earlier", { paymentId: "prior-day", amountCents: 200 }),
@@ -86,9 +89,15 @@ describe("Church Street Square daily close preview", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("private, no-store");
     const body = await response.json();
-    expect(body.payments).toMatchObject({ coverage: "complete", observed: 2, completed: 2, offline: 1, totalCents: 1700, tipCents: 50 });
+    expect(body.payments).toMatchObject({ coverage: "complete", observed: 4, completed: 4, offline: 1, totalCents: 1910, tipCents: 50 });
+    expect(body.payments.tenders).toEqual([
+      { source: "CARD", completed: 1, totalCents: 1200, tipCents: 0 },
+      { source: "CASH", completed: 1, totalCents: 500, tipCents: 50 },
+      { source: "EXTERNAL", completed: 1, totalCents: 200, tipCents: 0 },
+      { source: "UNKNOWN", completed: 1, totalCents: 10, tipCents: 0 },
+    ]);
     expect(body.refunds).toMatchObject({ coverage: "complete", observed: 4, completed: 3, unresolved: 1, withoutPaymentReference: 1, paymentOutsideRead: 1, amountCents: 600 });
-    expect(body.netActivityCents).toBe(1100);
+    expect(body.netActivityCents).toBe(1310);
     expect(JSON.stringify(body)).not.toMatch(/private|tender-|refund-a|page-two/);
     expect(mocks.payments).toHaveBeenNthCalledWith(2, expect.objectContaining({ cursor: "page-two", from: "2026-11-13T05:00:00.000Z", to: "2026-11-14T05:00:00.000Z" }), expect.any(AbortSignal));
   });
@@ -98,13 +107,22 @@ describe("Church Street Square daily close preview", () => {
       .mockResolvedValueOnce({ payments: [], nextCursor: "two" })
       .mockResolvedValueOnce({ payments: [], nextCursor: "three" });
     expect(await (await GET(request())).json()).toMatchObject({
-      payments: { coverage: "partial", completed: 1, totalCents: null },
+      payments: { coverage: "partial", completed: 1, totalCents: null, tenders: [
+        { source: "CARD", completed: 1, totalCents: null, tipCents: null },
+      ] },
       refunds: { coverage: "complete", amountCents: 0 }, netActivityCents: null,
     });
     expect(mocks.payments).toHaveBeenCalledTimes(3);
-    mocks.payments.mockResolvedValueOnce({ payments: [payment("tender-missing", { totalCents: null, orderId: null })], nextCursor: null });
+    mocks.payments.mockResolvedValueOnce({
+      payments: [payment("tender-missing", { totalCents: null, orderId: null }), payment("tender-valid", { source: "CASH" }),
+        payment("not-completed", { source: "EXTERNAL", status: "PENDING" })],
+      nextCursor: null,
+    });
     expect(await (await GET(request())).json()).toMatchObject({
-      payments: { coverage: "complete", missingTotal: 1, missingOrder: 1, totalCents: null, tipCents: null }, netActivityCents: null,
+      payments: { coverage: "complete", missingTotal: 1, missingOrder: 1, totalCents: null, tipCents: null, tenders: [
+        { source: "CARD", completed: 1, totalCents: null, tipCents: null },
+        { source: "CASH", completed: 1, totalCents: 1200, tipCents: 0 },
+      ] }, netActivityCents: null,
     });
   });
 
@@ -112,7 +130,7 @@ describe("Church Street Square daily close preview", () => {
     mocks.payments.mockResolvedValueOnce({ payments: [payment("tender-a")], nextCursor: "one" })
       .mockResolvedValueOnce({ payments: [payment("tender-a", { totalCents: 100 })], nextCursor: null });
     expect(await (await GET(request())).json()).toMatchObject({
-      payments: { coverage: "unavailable", observed: 0, totalCents: null },
+      payments: { coverage: "unavailable", observed: 0, totalCents: null, tenders: [] },
       refunds: { coverage: "complete", amountCents: 0 }, netActivityCents: null,
     });
   });
