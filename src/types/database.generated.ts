@@ -10557,6 +10557,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_sandwich_formulas": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_square_count_items": {
         Args: {
           "p_location_id": string | null
@@ -11138,6 +11144,17 @@ export type Database = {
           "p_storage_rule": string | null
           "p_opened_rule": string | null
           "p_prepped_rule": string | null
+        }
+        Returns: Json
+      };
+      "save_church_sandwich_formula": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_recipe_key": string | null
+          "p_expected_revision": number | null
+          "p_measurements": Json | null
+          "p_review_reference": string | null
         }
         Returns: Json
       };
@@ -12810,6 +12827,7 @@ export const DatabaseObjectNames = {
       "list_church_catering_jobs",
       "list_church_catering_prep",
       "list_church_ingredient_evidence",
+      "list_church_sandwich_formulas",
       "list_church_square_count_items",
       "list_church_square_reconciliation",
       "list_church_square_stock_alerts",
@@ -12874,6 +12892,7 @@ export const DatabaseObjectNames = {
       "save_church_catering_job",
       "save_church_catering_prep",
       "save_church_ingredient_evidence",
+      "save_church_sandwich_formula",
       "save_employee_certification",
       "save_employee_emergency_contact",
       "save_expense_category",

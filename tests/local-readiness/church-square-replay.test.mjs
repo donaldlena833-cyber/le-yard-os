@@ -29,7 +29,7 @@ import { POST } from "@/app/api/integrations/square/webhook/route";
 import { churchSquareWebhookUrl } from "@/lib/integrations/church-square-webhook.server";
 import { churchSquareReconciliationResponse } from "@/lib/integrations/church-square-reconciliation";
 import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
-import { churchSandwichComponents } from "@/lib/kitchen/church-sandwich-bench";
+import { churchSandwichBenchRecipes, churchSandwichBread, churchSandwichComponents } from "@/lib/kitchen/church-sandwich-bench";
 
 const ownerId = "10000000-0000-4000-8000-000000000001";
 const otherTenantUser = "10000000-0000-4000-8000-000000000006";
@@ -553,6 +553,74 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     expect(evidenceHistory.rows).toHaveLength(2);
     expect(evidenceHistory.rows[0]).toEqual({ previous_facts: null, result: recorded });
     expect(evidenceHistory.rows[1]).toEqual({ previous_facts: { ...recorded, reviewedBy: ownerId }, result: hold });
+
+    for (const entry of churchSandwichBenchRecipes) {
+      const actual = await db.query("select private.church_sandwich_formula_ingredients($1) as ingredients", [entry.key]);
+      expect(actual.rows[0].ingredients).toEqual([churchSandwichBread, ...entry.portions.map(({ ingredient }) => ingredient)]);
+    }
+    const readFormulas = async () => (await db.query(
+      "select public.list_church_sandwich_formulas($1::uuid) as result", [workspaceLocationId],
+    )).rows[0].result;
+    const saveFormula = async (revision, measurements, request = randomUUID(), reference = "Chef bench sheet 01") => (await db.query(`
+      select public.save_church_sandwich_formula($1::uuid,$2::uuid,'parisien',$3::integer,$4::jsonb,$5) as result
+    `, [request, workspaceLocationId, revision, JSON.stringify(measurements), reference])).rows[0].result;
+    const whole = { quantity: 1, measuredInput: 10, measuredUsable: 9, evidenceRevision: 3, yieldBasis: "whole_each" };
+    const weighed = { quantity: 71.125, measuredInput: 900, measuredUsable: 740, evidenceRevision: 1, yieldBasis: "weighed_usable_grams" };
+    const measurements = {
+      [churchSandwichBread]: whole, "French-style ham": weighed, "cultured butter": { ...weighed, quantity: 16 },
+    };
+    await asRole(db, "authenticated", ownerId);
+    expect(await readFormulas()).toEqual([]);
+    await expect(saveFormula(0, measurements)).rejects.toMatchObject({ code: "PT409" });
+    await saveEvidence(churchSandwichBread, 2, "reviewed", review);
+    await saveEvidence("French-style ham", 0, "reviewed", { ...review, supplierSku: "HQ-HAM-01" });
+    await saveEvidence("cultured butter", 0, "reviewed", { ...review, supplierSku: "HQ-BUTTER-01" });
+
+    await expect(saveFormula(0, { ...measurements, mustard: weighed })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveFormula(0, { ...measurements, "French-style ham": { ...weighed, measuredUsable: 901 } })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveFormula(0, { ...measurements, "French-style ham": { ...weighed, measuredUsable: 70 } })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveFormula(0, { ...measurements, "French-style ham": { ...weighed, quantity: 71.1111 } })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveFormula(0, { ...measurements, [churchSandwichBread]: { ...whole, measuredUsable: 8.5 } })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveFormula(0, { ...measurements, [churchSandwichBread]: { ...whole, evidenceRevision: 1 } })).rejects.toMatchObject({ code: "PT409" });
+
+    const formulaRequest = randomUUID();
+    const formula = await saveFormula(0, measurements, formulaRequest);
+    expect(formula).toEqual({ recipeKey: "parisien", revision: 1, current: true, measurements,
+      reviewReference: "Chef bench sheet 01", reviewedAt: expect.any(String), reviewerName: expect.any(String) });
+    expect(await saveFormula(0, measurements, formulaRequest)).toEqual(formula);
+    await expect(saveFormula(0, measurements)).rejects.toMatchObject({ code: "PT409" });
+    await expect(saveFormula(0, measurements, formulaRequest, "Chef bench sheet 02")).rejects.toMatchObject({ code: "PT409" });
+    await asRole(db, "authenticated", prepUserId);
+    expect(await readFormulas()).toEqual([formula]);
+    await expect(saveFormula(1, measurements)).rejects.toMatchObject({ code: "42501" });
+    await expect(db.query("select * from private.church_sandwich_formula_revisions")).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", otherTenantUser);
+    await expect(readFormulas()).rejects.toMatchObject({ code: "42501" });
+    await expect(saveFormula(1, measurements)).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "service_role");
+    await expect(readFormulas()).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", ownerId);
+    await saveEvidence("French-style ham", 1, "hold");
+    expect(await readFormulas()).toEqual([{ ...formula, current: false }]);
+    expect(await saveFormula(0, measurements, formulaRequest)).toEqual({ ...formula, current: false });
+    await saveEvidence("French-style ham", 2, "reviewed", { ...review, supplierSku: "HQ-HAM-02" });
+    expect(await readFormulas()).toEqual([{ ...formula, current: false }]);
+    const updated = await saveFormula(1, { ...measurements, "French-style ham": { ...weighed, evidenceRevision: 3 } });
+    expect(updated).toMatchObject({ recipeKey: "parisien", revision: 2, current: true });
+    expect(await readFormulas()).toEqual([updated]);
+    expect(await saveFormula(0, measurements, formulaRequest)).toEqual({ ...formula, current: false });
+
+    await db.exec("reset role");
+    const formulaHistory = await db.query(`
+      select revision,reviewed_by::text,supplier_evidence->'French-style ham'->>'supplierSku' as sku
+      from private.church_sandwich_formula_revisions order by revision
+    `);
+    expect(formulaHistory.rows).toEqual([
+      { revision: 1, reviewed_by: ownerId, sku: "HQ-HAM-01" }, { revision: 2, reviewed_by: ownerId, sku: "HQ-HAM-02" },
+    ]);
+    await expect(db.query("update private.church_sandwich_formula_revisions set review_reference = 'A new value'"))
+      .rejects.toMatchObject({ code: "42501" });
+    expect(await protectedCounts()).toEqual(before);
   } finally {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();

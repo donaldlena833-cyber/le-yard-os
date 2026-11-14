@@ -4,6 +4,7 @@ import { readFailure, readSuccess } from "@/data/read-models/shared";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import type { ChurchCateringPrepDay } from "@/lib/kitchen/church-catering-prep";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
+import { churchSandwichFormula, saveChurchSandwichFormulaInput } from "@/lib/kitchen/church-sandwich-formula";
 
 const location = { id: "church", organizationId: "le-yard", name: "Church Street", isPrimary: true };
 const workspace: WorkspaceContextValue = {
@@ -32,6 +33,7 @@ it("uses the New York service day and keeps the approved recipe set empty pendin
   expect(buildChurchSandwichAvailability(workspace, {
     ingredientEvidenceResult: readSuccess([hold]),
     cateringPrepResult: { state: "ready", days: [today, { ...today, serviceDate: "2026-11-15" }] },
+    formulaResult: readSuccess([]),
   })).toEqual(readSuccess({
     evidence: { Dijon: "hold" }, approvedRecipes: [], catering: today, serviceDate: today.serviceDate,
   }));
@@ -39,14 +41,59 @@ it("uses the New York service day and keeps the approved recipe set empty pendin
 
 it("does not turn a failed or denied catering read into an empty plan", () => {
   const ingredientEvidenceResult = readSuccess([hold]);
-  expect(buildChurchSandwichAvailability(workspace, { ingredientEvidenceResult, cateringPrepResult: null })).toBeNull();
+  const formulaResult = readSuccess([]);
+  expect(buildChurchSandwichAvailability(workspace, { ingredientEvidenceResult, cateringPrepResult: null, formulaResult })).toBeNull();
   expect(buildChurchSandwichAvailability(workspace, {
-    ingredientEvidenceResult, cateringPrepResult: { state: "unavailable" },
+    ingredientEvidenceResult, cateringPrepResult: { state: "unavailable" }, formulaResult,
   })).toMatchObject({ ok: false });
   expect(buildChurchSandwichAvailability(workspace, {
-    ingredientEvidenceResult: readFailure(), cateringPrepResult: { state: "unavailable" },
+    ingredientEvidenceResult: readFailure(), cateringPrepResult: { state: "unavailable" }, formulaResult,
   })).toBeNull();
   expect(buildChurchSandwichAvailability({ ...workspace, capabilities: [] }, {
-    ingredientEvidenceResult, cateringPrepResult: { state: "ready", days: [today] },
+    ingredientEvidenceResult, cateringPrepResult: { state: "ready", days: [today] }, formulaResult,
   })).toBeNull();
+  expect(buildChurchSandwichAvailability(workspace, {
+    ingredientEvidenceResult, cateringPrepResult: { state: "ready", days: [today] }, formulaResult: readFailure(),
+  })).toMatchObject({ ok: false });
+});
+
+const measured = {
+  recipeKey: "parisien",
+  reviewReference: "Bench record 01",
+  measurements: {
+    "10-inch baguette": { quantity: 1, evidenceRevision: 2, yieldBasis: "whole_each", measuredInput: 6, measuredUsable: 6 },
+    "French-style ham": { quantity: 74.5, evidenceRevision: 2, yieldBasis: "weighed_usable_grams", measuredInput: 500, measuredUsable: 470 },
+    "cultured butter": { quantity: 16, evidenceRevision: 2, yieldBasis: "weighed_usable_grams", measuredInput: 120, measuredUsable: 112 },
+  },
+};
+
+it("projects signed measured edible grams only while each exact supplier evidence revision is reviewed", () => {
+  const formula = churchSandwichFormula.parse({
+    ...measured, revision: 3, reviewerName: "Chef", reviewedAt: hold.updatedAt, current: true,
+  });
+  const evidence = Object.keys(measured.measurements).map((ingredientKey): ChurchIngredientEvidence => ({
+    ...hold, ingredientKey, status: "reviewed", revision: 2, reviewedAt: hold.updatedAt, reviewerName: "Chef",
+  }));
+  const estimate = (rows: ChurchIngredientEvidence[], current = true) => buildChurchSandwichAvailability(workspace, {
+    ingredientEvidenceResult: readSuccess(rows), cateringPrepResult: { state: "ready", days: [] },
+    formulaResult: readSuccess([{ ...formula, current }]),
+  });
+  expect(estimate(evidence)).toMatchObject({ data: { approvedRecipes: [{
+    key: "parisien", ingredients: { "10-inch baguette": 1, "French-style ham": 74.5, "cultured butter": 16 },
+  }] } });
+  expect(estimate([{ ...evidence[0], revision: 3 }, ...evidence.slice(1)])).toMatchObject({ data: { approvedRecipes: [] } });
+  expect(estimate([{ ...evidence[0], status: "hold" }, ...evidence.slice(1)])).toMatchObject({ data: { approvedRecipes: [] } });
+  expect(estimate(evidence, false)).toMatchObject({ data: { approvedRecipes: [] } });
+});
+
+it("rejects invalid measured yield, fractional baguettes, or a mismatched ingredient set", () => {
+  const input = { ...measured, expectedRevision: 0, requestId: "deadbeef-5678-4789-9234-1234567890ab" };
+  expect(saveChurchSandwichFormulaInput.safeParse(input).success).toBe(true);
+  expect(saveChurchSandwichFormulaInput.safeParse({
+    ...input, measurements: { ...input.measurements, "French-style ham": { ...input.measurements["French-style ham"], measuredUsable: 501 } },
+  }).success).toBe(false);
+  expect(saveChurchSandwichFormulaInput.safeParse({
+    ...input, measurements: { ...input.measurements, "10-inch baguette": { ...input.measurements["10-inch baguette"], measuredUsable: 5.5 } },
+  }).success).toBe(false);
+  expect(saveChurchSandwichFormulaInput.safeParse({ ...input, recipeKey: "figaro" }).success).toBe(false);
 });
