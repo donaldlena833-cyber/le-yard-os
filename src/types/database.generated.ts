@@ -12261,6 +12261,17 @@ export type Database = {
         }
         Returns: { "id": string | null; "captured_at": string | null }[]
       };
+      "service_recover_church_square_order": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_order_id": string | null
+          "p_facts": Json | null
+        }
+        Returns: boolean
+      };
       "service_release_church_square_order_backfill": {
         Args: {
           "p_merchant_id": string | null
@@ -13192,6 +13203,7 @@ export const DatabaseObjectNames = {
       "service_reconcile_user_invitation_auth",
       "service_record_church_square_webhook",
       "service_record_guest_consent",
+      "service_recover_church_square_order",
       "service_release_church_square_order_backfill",
       "service_renew_integration_sync_job_lease",
       "service_reservation_delivery_health",

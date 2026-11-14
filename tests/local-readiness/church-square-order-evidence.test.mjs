@@ -64,8 +64,9 @@ async function verifyOrderEvidence(db) {
 
   await assumeRole(db, "authenticated", owner);
   const observed = await evidence({ updatedAt: sameTimeInNewYork });
-  assert.deepEqual(Object.keys(observed).sort(), ["matches", "updatedAt"]);
+  assert.deepEqual(Object.keys(observed).sort(), ["matches", "recoveredAt", "updatedAt"]);
   assert.equal(observed.matches, true);
+  assert.equal(observed.recoveredAt, null);
   assert.equal(Date.parse(observed.updatedAt), Date.parse(savedTime));
   assert.equal((await evidence({ updatedAt: laterTime })).matches, false);
   assert.equal((await evidence({ version: 9 })).matches, false);
@@ -98,9 +99,117 @@ async function verifyOrderEvidence(db) {
     await assumeRole(db, role, user);
     await assert.rejects(evidence(), { code: "42501" });
   }
+
+  await verifyExactOrderRecovery(db, { organization, location, evidence });
 }
 
-it("corroborates only an exact Church Street order update and limits who can read it", async () => {
+async function verifyExactOrderRecovery(db, { organization, location, evidence }) {
+  const id = "recovery-order-1234567890";
+  const scanStartedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const updatedAt = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+  const updatedLater = new Date(Date.parse(updatedAt) + 60_000).toISOString();
+  const facts = {
+    kind: "order", id, locationId: "L_TEST", currency: "USD", status: "COMPLETED",
+    createdAt: updatedAt, updatedAt, version: 1, sourceHint: "UNKNOWN",
+    fulfillments: [], lineItems: [], tenders: [], refundIds: [],
+  };
+  const one = async (sql, args = []) => (await db.query(sql, args)).rows[0].result;
+  const recover = ({
+    actor = owner, workspaceLocation = location, merchant = "M_TEST", squareLocation = "L_TEST",
+    requestedId = id, orderFacts = facts,
+  } = {}) => one(`
+    select public.service_recover_church_square_order($1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::jsonb) as result
+  `, [actor, workspaceLocation, merchant, squareLocation, requestedId, JSON.stringify(orderFacts)]);
+
+  await assert.rejects(recover(), { code: "42501" }); // Provider scope is not configured.
+  await db.exec("reset role");
+  await db.query(`
+    insert into private.church_square_order_backfill (
+      organization_id,location_id,merchant_id,square_location_id,scan_started_at,covered_through
+    ) values ($1,$2,'M_TEST','L_TEST',$3::timestamptz,$3::timestamptz)
+  `, [organization, location, scanStartedAt]);
+
+  for (const [role, user] of [["authenticated", owner], ["authenticated", manager], ["anon", undefined]]) {
+    await assumeRole(db, role, user);
+    await assert.rejects(recover(), { code: "42501" });
+  }
+  await assumeRole(db, "service_role");
+  for (const actor of [other, prep, null]) await assert.rejects(recover({ actor }), { code: "42501" });
+  await assert.rejects(recover({ workspaceLocation: otherLocation }), { code: "42501" });
+  await assert.rejects(recover({ merchant: "M_OTHER" }), { code: "42501" });
+  await assert.rejects(recover({ squareLocation: "L_OTHER", orderFacts: { ...facts, locationId: "L_OTHER" } }), { code: "42501" });
+  await assert.rejects(recover({ requestedId: "different-order-1234567890" }), { code: "22023" });
+  for (const orderFacts of [
+    { ...facts, kind: "payment" }, { ...facts, locationId: "L_OTHER" }, { ...facts, currency: "EUR" },
+    { ...facts, createdAt: "infinity" }, { ...facts, updatedAt: "infinity" }, { ...facts, version: -1 },
+  ]) {
+    await assert.rejects(recover({ orderFacts }), { code: "22023" });
+  }
+
+  await db.exec("reset role");
+  await db.query(`
+    insert into public.user_capability_overrides (
+      organization_id,user_id,capability_key,location_id,effect,reason,created_by,updated_by,effective_from
+    ) values ($1,$2,'manager_log.manage',$3,'deny','Recovery capability test',$4,$4,current_date - 1)
+  `, [organization, manager, location, owner]);
+  await assumeRole(db, "service_role");
+  await assert.rejects(recover({ actor: manager }), { code: "42501" });
+  await db.exec("reset role");
+  await db.query(`
+    update public.user_capability_overrides set effect = 'grant'
+    where user_id = $1 and location_id = $2 and capability_key = 'manager_log.manage'
+  `, [manager, location]);
+
+  await assumeRole(db, "authenticated", manager);
+  assert.equal(await evidence({ id, version: 1, updatedAt }), null);
+  await assumeRole(db, "service_role");
+  assert.equal(await recover({ actor: manager }), true);
+  assert.equal(await recover({ actor: manager }), false);
+  await assumeRole(db, "authenticated", manager);
+  const recovered = await evidence({ id, version: 1, updatedAt });
+  assert.deepEqual(Object.keys(recovered).sort(), ["matches", "recoveredAt", "updatedAt"]);
+  assert.equal(recovered.matches, true);
+  assert(Number.isFinite(Date.parse(recovered.recoveredAt)));
+  await assert.rejects(db.exec("select * from private.church_square_order_recoveries"), { code: "42501" });
+  const wrongVersion = await evidence({ id, version: 0, updatedAt });
+  assert.equal(wrongVersion.matches, false);
+
+  await assumeRole(db, "service_role");
+  assert.equal(await recover({ orderFacts: { ...facts, version: 0 } }), false);
+  const laterFacts = { ...facts, updatedAt: updatedLater, version: 2 };
+  assert.equal(await one(`
+    select public.service_record_church_square_webhook('M_TEST','L_TEST','recovery-test-update','order.updated',
+      $1::timestamptz,$2::text,'[]'::jsonb) as result
+  `, [updatedLater, id]), true);
+  const claims = await one("select public.service_claim_church_square_receipts('M_TEST','L_TEST') as result");
+  const claim = claims.find((receipt) => receipt.eventId === "recovery-test-update");
+  assert(claim);
+  assert.equal(await one(`
+    select public.service_complete_church_square_receipt('M_TEST','L_TEST','recovery-test-update',$1::uuid,$2::jsonb) as result
+  `, [claim.lease, JSON.stringify(laterFacts)]), true);
+  assert.equal(await recover({ actor: manager }), false);
+
+  await assumeRole(db, "authenticated", owner);
+  const synced = await evidence({ id, version: 2, updatedAt: updatedLater });
+  assert.equal(synced.matches, true);
+  assert.equal(synced.recoveredAt, null);
+  await db.exec("reset role");
+  assert.deepEqual(await one(`
+    select jsonb_build_object(
+      'ledgerRows', (select count(*) from private.church_square_order_recoveries where order_id = $1),
+      'recordedActor', (select recovered_by from private.church_square_order_recoveries where order_id = $1),
+      'providerReceipts', (select count(*) from private.church_square_webhook_receipts where resource_id = $1),
+      'orderStateRows', (select count(*) from private.church_square_resource_state where resource_kind = 'order'
+        and resource_id = $1 and merchant_id = 'M_TEST' and square_location_id = 'L_TEST')
+    ) as result
+  `, [id]), { ledgerRows: 1, recordedActor: manager, providerReceipts: 1, orderStateRows: 1 });
+  assert.equal(await one(`
+    select (covered_through = $1::timestamptz and scan_started_at = $1::timestamptz) as result
+    from private.church_square_order_backfill where location_id = $2
+  `, [scanStartedAt, location]), true);
+}
+
+it("corroborates and recovers exact Church Street order updates with current authority", async () => {
   const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
   try {
     await db.exec(bootstrap);
@@ -108,4 +217,4 @@ it("corroborates only an exact Church Street order update and limits who can rea
   } finally {
     await db.close();
   }
-}, 90_000);
+}, 120_000);

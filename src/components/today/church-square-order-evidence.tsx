@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { type FormEvent, useState, useTransition } from "react";
-import { lookupChurchSquareOrderEvidenceAction } from "@/app/actions/workflows/church-square-order-evidence";
+import { type FormEvent, useRef, useState, useTransition } from "react";
+import {
+  lookupChurchSquareOrderEvidenceAction,
+  recoverChurchSquareOrderEvidenceAction,
+} from "@/app/actions/workflows/church-square-order-evidence";
 import { Button } from "@/components/ui/button";
 
 type Evidence = Extract<Awaited<ReturnType<typeof lookupChurchSquareOrderEvidenceAction>>, { mode: "live" }>["data"];
@@ -39,6 +42,10 @@ function operationsStatus(operations: Evidence["operations"]) {
     : "The Operations order record could not be checked.";
 }
 
+function needsRecovery({ canRecover, operations }: Evidence) {
+  return canRecover && (operations.status === "not_observed" || (operations.status === "observed" && !operations.matches));
+}
+
 function milestones(fulfillment: Evidence["square"]["fulfillments"][number]) {
   return [
     ["Promised", fulfillment.promisedAt],
@@ -57,6 +64,9 @@ function checklistEvidence({ reference, checkedAt, square, operations }: Evidenc
     operationsStatus(operations),
     ...(operations.status === "observed" ? [`Operations record updated ${operations.updatedAt}.`] : []),
   ];
+  if (operations.status === "observed" && operations.recoveredAt) {
+    summary.push(`Operations record recovered manually ${operations.recoveredAt}.`);
+  }
   if (square.fulfillments.length === 0) summary.push("Square returned no fulfillment details.");
   // Leave space for the staff observation in a checklist's 2,000-character notes field.
   for (const fulfillment of square.fulfillments.slice(0, 4)) {
@@ -73,17 +83,21 @@ export function ChurchSquareOrderEvidence() {
   const [message, setMessage] = useState("");
   const [copyState, setCopyState] = useState<{ result: Evidence; status: "copied" | "manual" }>();
   const [pending, startTransition] = useTransition();
+  const recoverableOrder = useRef<{ id: string; evidence: Evidence } | null>(null);
 
   function lookup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
+    const id = orderId.trim();
+    recoverableOrder.current = null;
     setResult(undefined);
     setCopyState(undefined);
     setMessage("Checking Square and Operations…");
     startTransition(async () => {
       try {
-        const response = await lookupChurchSquareOrderEvidenceAction({ orderId: orderId.trim() });
+        const response = await lookupChurchSquareOrderEvidenceAction({ orderId: id });
         if (response.ok && response.mode === "live") {
+          if (needsRecovery(response.data)) recoverableOrder.current = { id, evidence: response.data };
           setResult(response.data);
           setOrderId("");
           setMessage("Verified this order belongs to Church Street.");
@@ -92,6 +106,39 @@ export function ChurchSquareOrderEvidence() {
         }
       } catch {
         setMessage("The Square order could not be checked. Try again.");
+      }
+    });
+  }
+
+  function recover() {
+    const order = recoverableOrder.current;
+    if (pending || !result || order?.evidence !== result || !needsRecovery(result)) return;
+    setCopyState(undefined);
+    setMessage("Checking Square again and recovering the order…");
+    startTransition(async () => {
+      try {
+        const response = await recoverChurchSquareOrderEvidenceAction({
+          orderId: order.id,
+          checkedRevision: result.square.updatedAt,
+          checkedVersion: result.square.version,
+        });
+        if (response.ok && response.mode === "live") {
+          const recovered = response.data;
+          recoverableOrder.current = needsRecovery(recovered) ? { id: order.id, evidence: recovered } : null;
+          setResult(recovered);
+          const operations = recovered.operations;
+          setMessage(operations.status === "observed" && operations.matches
+            ? operations.recoveredAt ? "Order recovered into Operations." : "Operations already has this order revision."
+            : "Recovery could not confirm a matching order record. Check the order again.");
+        } else {
+          if (!response.ok && (response.code === "stale" || response.code === "forbidden")) {
+            recoverableOrder.current = null;
+            setResult(undefined);
+          }
+          setMessage("message" in response ? response.message : "The Square order could not be recovered.");
+        }
+      } catch {
+        setMessage("The Square order could not be recovered. Try again.");
       }
     });
   }
@@ -118,6 +165,7 @@ export function ChurchSquareOrderEvidence() {
           <input required disabled={pending} value={orderId} maxLength={192} spellCheck={false} autoComplete="off"
             className="focus-ring rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2 font-mono"
             onChange={(event) => {
+              recoverableOrder.current = null;
               setOrderId(event.target.value);
               setResult(undefined);
               setMessage("");
@@ -135,6 +183,9 @@ export function ChurchSquareOrderEvidence() {
           <p>Square updated <Time value={result.square.updatedAt} /></p>
           <p>{operationsStatus(result.operations)}</p>
           {result.operations.status === "observed" && <p>Operations record updated <Time value={result.operations.updatedAt} />.</p>}
+          {result.operations.status === "observed" && result.operations.recoveredAt && (
+            <p>Operations record recovered manually <Time value={result.operations.recoveredAt} />.</p>
+          )}
           {result.square.fulfillments.length ? (
             <ul className="space-y-2 border-l border-[var(--line)] pl-3 text-xs">
               {result.square.fulfillments.map((fulfillment, index) => (
@@ -147,7 +198,10 @@ export function ChurchSquareOrderEvidence() {
           ) : <p className="text-xs">Square returned no fulfillment details.</p>}
           <p className="text-xs text-[var(--ink-soft)]">Checked <Time value={result.checkedAt} />. Confirm the channel in its own order view. Record what staff saw on the kitchen ticket, whether the mock allergy note arrived, and the actual pickup or courier handoff in the first-shift checklist.</p>
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="quiet" size="sm" onClick={() => void copy()}>Copy order evidence</Button>
+            {needsRecovery(result) && (
+              <Button type="button" variant="secondary" size="sm" disabled={pending} onClick={recover}>Recover order into Operations</Button>
+            )}
+            <Button type="button" variant="quiet" size="sm" disabled={pending} onClick={() => void copy()}>Copy order evidence</Button>
             <Link href="/tasks?tab=checklists" className="focus-ring rounded text-xs font-semibold underline">Open Checklists</Link>
           </div>
           <p role="status" className="text-xs text-[var(--ink-soft)]">

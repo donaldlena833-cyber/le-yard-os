@@ -17,6 +17,7 @@ type Props = {
 
 const time = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short" });
 const number = new Intl.NumberFormat("en-US");
+const averageSeconds = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 const field = "focus-ring mt-1 block w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm font-normal tabular-nums";
 const label = "block text-xs font-semibold";
 const countFields = [
@@ -40,6 +41,18 @@ function readWhole(form: FormData, key: string, minimum: number, maximum: number
 
 function timingText(value: number | null) {
   return value === null ? "Unmeasured" : `${number.format(value)} sec`;
+}
+
+function TrialTimingComparison({ run, targetSeconds }: { run: ChurchSandwichTimingRun; targetSeconds: number }) {
+  if (run.crewSize !== 1 || run.attempted !== run.accepted || run.packSeconds === null) return null;
+  const total = run.buildSeconds + run.packSeconds;
+  const within = total <= targetSeconds * run.attempted;
+  return (
+    <p className="tabular-nums">
+      Build and pack run average {averageSeconds.format(total / run.attempted)} sec per sandwich ·
+      {" "}{within ? "Within" : "Above"} {targetSeconds} sec trial target
+    </p>
+  );
 }
 
 function TimingRunForm({ formulas, onSaved }: { formulas: readonly ChurchSandwichFormula[]; onSaved: (run: ChurchSandwichTimingRun) => void }) {
@@ -158,7 +171,7 @@ export function ChurchSandwichTimingPanel({ formulas, runs, canRecord }: Props) 
   const byId = new Map(savedRuns.map((run) => [run.id, run]));
   for (const run of runs) byId.set(run.id, run);
   const history = [...byId.values()].sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt)).slice(0, 30);
-  const names = new Map(churchSandwichBenchRecipes.map(({ key, name }) => [key, name]));
+  const recipes = new Map(churchSandwichBenchRecipes.map((recipe) => [recipe.key, recipe]));
 
   return (
     <section aria-labelledby="church-sandwich-timing-heading" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
@@ -169,23 +182,27 @@ export function ChurchSandwichTimingPanel({ formulas, runs, canRecord }: Props) 
         <h3 className="text-sm font-semibold">Recent timing runs</h3>
         {history.length === 0 ? <p className="mt-1 text-xs text-[var(--ink-soft)]">No timing runs recorded.</p> : (
           <div className="mt-1 divide-y divide-[var(--line)]">
-            {history.map((run) => (
-              <details key={run.id} className="py-2">
-                <summary className="focus-ring cursor-pointer rounded-md text-sm">
-                  <span className="ml-1 inline-flex flex-wrap items-center gap-2 align-middle">
-                    <span className="font-semibold">{names.get(run.recipeKey)}</span>
-                    <StatusPill size="sm">{run.formulaRevision === null ? "Bench rehearsal" : `Signed recipe r${run.formulaRevision}`}</StatusPill>
-                    <span className="tabular-nums">{number.format(run.accepted)} of {number.format(run.attempted)} accepted</span>
-                  </span>
-                </summary>
-                <div className="mt-2 space-y-1 break-words pl-4 text-xs text-[var(--ink-soft)]">
-                  <p className="tabular-nums">Prep {timingText(run.prepSeconds)} · Build {timingText(run.buildSeconds)} · Pack {timingText(run.packSeconds)}</p>
-                  <p>Crew {number.format(run.crewSize)} · Recorded by {run.recordedByName} · <time dateTime={run.recordedAt}>{time.format(new Date(run.recordedAt))} ET</time></p>
-                  <p>Reference · {run.reference}</p>
-                  {run.note && <p>Run note · {run.note}</p>}
-                </div>
-              </details>
-            ))}
+            {history.map((run) => {
+              const recipe = recipes.get(run.recipeKey);
+              return (
+                <details key={run.id} className="py-2">
+                  <summary className="focus-ring cursor-pointer rounded-md text-sm">
+                    <span className="ml-1 inline-flex flex-wrap items-center gap-2 align-middle">
+                      <span className="font-semibold">{recipe?.name}</span>
+                      <StatusPill size="sm">{run.formulaRevision === null ? "Bench rehearsal" : `Signed recipe r${run.formulaRevision}`}</StatusPill>
+                      <span className="tabular-nums">{number.format(run.accepted)} of {number.format(run.attempted)} accepted</span>
+                    </span>
+                  </summary>
+                  <div className="mt-2 space-y-1 break-words pl-4 text-xs text-[var(--ink-soft)]">
+                    <p className="tabular-nums">Prep {timingText(run.prepSeconds)} · Build {timingText(run.buildSeconds)} · Pack {timingText(run.packSeconds)}</p>
+                    {recipe && <TrialTimingComparison run={run} targetSeconds={recipe.seconds} />}
+                    <p>Crew {number.format(run.crewSize)} · Recorded by {run.recordedByName} · <time dateTime={run.recordedAt}>{time.format(new Date(run.recordedAt))} ET</time></p>
+                    <p>Reference · {run.reference}</p>
+                    {run.note && <p>Run note · {run.note}</p>}
+                  </div>
+                </details>
+              );
+            })}
           </div>
         )}
       </div>

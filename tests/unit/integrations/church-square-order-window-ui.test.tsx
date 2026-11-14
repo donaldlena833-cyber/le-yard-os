@@ -2,7 +2,10 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { lookupChurchSquareOrderEvidenceAction } from "@/app/actions/workflows/church-square-order-evidence";
+import {
+  lookupChurchSquareOrderEvidenceAction,
+  recoverChurchSquareOrderEvidenceAction,
+} from "@/app/actions/workflows/church-square-order-evidence";
 import { ChurchSquareOrderWindow } from "@/components/today/church-square-order-window";
 import {
   churchSquareOrderWindowPath,
@@ -15,6 +18,7 @@ vi.mock("@/app/actions/workflows/church-square-catering", () => ({
 }));
 vi.mock("@/app/actions/workflows/church-square-order-evidence", () => ({
   lookupChurchSquareOrderEvidenceAction: vi.fn(),
+  recoverChurchSquareOrderEvidenceAction: vi.fn(),
 }));
 
 afterEach(() => {
@@ -28,15 +32,15 @@ it("checks a completed order independently and copies evidence without the full 
   const id = "private-order-id-0123456789";
   vi.mocked(lookupChurchSquareOrderEvidenceAction).mockResolvedValue({
     ok: true, mode: "live", persisted: false, data: {
-      reference: id.slice(-10), checkedAt,
+      reference: id.slice(-10), checkedAt, canRecover: true,
       square: {
-        source: "DOORDASH", status: "COMPLETED", createdAt: checkedAt, updatedAt: checkedAt,
+        source: "DOORDASH", status: "COMPLETED", createdAt: checkedAt, updatedAt: checkedAt, version: 3,
         fulfillments: [{
           type: "DELIVERY", status: "COMPLETED", promisedAt: checkedAt, handoffAt: checkedAt,
           readyAt: null, completedAt: checkedAt, canceledAt: null, rejectedAt: null,
         }],
       },
-      operations: { status: "observed", matches: false, updatedAt: "2026-11-14T17:50:00Z" },
+      operations: { status: "observed", matches: false, updatedAt: "2026-11-14T17:50:00Z", recoveredAt: null },
     },
   });
   render(<ChurchSquareOrderWindow />);
@@ -60,6 +64,84 @@ it("checks a completed order independently and copies evidence without the full 
   fireEvent.change(input, { target: { value: "different-order" } });
   expect(lookup.queryByText("Square source hint · DoorDash")).toBeNull();
   expect(lookup.queryByRole("textbox", { name: "Order evidence" })).toBeNull();
+  expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
+});
+
+it("recovers the checked Square order revision and copies the manual recovery timestamp", async () => {
+  const checkedAt = "2026-11-14T18:00:00Z";
+  const recoveredAt = "2026-11-14T18:01:00Z";
+  const id = "private-order-id-0123456789";
+  const snapshot = {
+    reference: id.slice(-10), checkedAt, canRecover: true,
+    square: { source: "SQUARE_POS" as const, status: "COMPLETED" as const, createdAt: checkedAt, updatedAt: checkedAt, version: 3, fulfillments: [] },
+  };
+  vi.mocked(lookupChurchSquareOrderEvidenceAction).mockResolvedValue({
+    ok: true, mode: "live", persisted: false, data: { ...snapshot, operations: { status: "not_observed" } },
+  });
+  vi.mocked(recoverChurchSquareOrderEvidenceAction).mockResolvedValue({
+    ok: true, mode: "live", persisted: true, data: {
+      ...snapshot, checkedAt: recoveredAt, operations: { status: "observed", matches: true, updatedAt: checkedAt, recoveredAt },
+    },
+  });
+  render(<ChurchSquareOrderWindow />);
+  const lookup = within(screen.getByText("Check an exact Square order").closest("details")!);
+  fireEvent.click(lookup.getByText("Check an exact Square order"));
+  const input = lookup.getByLabelText("Exact Square order ID") as HTMLInputElement;
+  fireEvent.change(input, { target: { value: ` ${id} ` } });
+  fireEvent.click(lookup.getByRole("button", { name: "Check order" }));
+  const recover = await lookup.findByRole("button", { name: "Recover order into Operations" });
+  expect(input.value).toBe("");
+  expect(recoverChurchSquareOrderEvidenceAction).not.toHaveBeenCalled();
+  fireEvent.click(recover);
+  expect(await lookup.findByText("Order recovered into Operations.")).toBeTruthy();
+  expect(recoverChurchSquareOrderEvidenceAction).toHaveBeenCalledExactlyOnceWith({
+    orderId: id, checkedRevision: checkedAt, checkedVersion: 3,
+  });
+  expect(lookup.getByText(/^Operations record recovered manually/).querySelector("time")?.dateTime).toBe(recoveredAt);
+  expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
+
+  const copy = lookup.getByRole("button", { name: "Copy order evidence" }) as HTMLButtonElement;
+  await waitFor(() => expect(copy.disabled).toBe(false));
+  fireEvent.click(copy);
+  const evidence = await lookup.findByRole("textbox", { name: "Order evidence" }) as HTMLTextAreaElement;
+  expect(evidence.value).toContain(`Operations record recovered manually ${recoveredAt}.`);
+  expect(evidence.value).not.toContain(id);
+});
+
+it("withholds recovery without access or an available comparison and drops stale evidence", async () => {
+  const checkedAt = "2026-11-14T18:00:00Z";
+  const data = {
+    reference: "ORDER-123", checkedAt, canRecover: false,
+    square: { source: "UNKNOWN" as const, status: "OPEN" as const, createdAt: checkedAt, updatedAt: checkedAt, version: null, fulfillments: [] },
+    operations: { status: "not_observed" as const },
+  };
+  vi.mocked(lookupChurchSquareOrderEvidenceAction)
+    .mockResolvedValueOnce({ ok: true, mode: "live", persisted: false, data })
+    .mockResolvedValueOnce({ ok: true, mode: "live", persisted: false, data: {
+      ...data, canRecover: true, operations: { status: "unavailable" },
+    } })
+    .mockResolvedValueOnce({ ok: true, mode: "live", persisted: false, data: { ...data, canRecover: true } });
+  vi.mocked(recoverChurchSquareOrderEvidenceAction).mockResolvedValue({
+    ok: false, persisted: false, code: "stale", message: "Square updated this order. Check it again before recovering.",
+  });
+  render(<ChurchSquareOrderWindow />);
+  const lookup = within(screen.getByText("Check an exact Square order").closest("details")!);
+  fireEvent.click(lookup.getByText("Check an exact Square order"));
+  function check() {
+    fireEvent.change(lookup.getByLabelText("Exact Square order ID"), { target: { value: "ORDER-123" } });
+    fireEvent.click(lookup.getByRole("button", { name: "Check order" }));
+  }
+  check();
+  expect(await lookup.findByText("Operations has no record for this order.")).toBeTruthy();
+  expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
+  check();
+  expect(await lookup.findByText("The Operations order record could not be checked.")).toBeTruthy();
+  expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
+  check();
+  fireEvent.click(await lookup.findByRole("button", { name: "Recover order into Operations" }));
+  expect(await lookup.findByText("Square updated this order. Check it again before recovering.")).toBeTruthy();
+  expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
+  expect(lookup.queryByRole("button", { name: "Copy order evidence" })).toBeNull();
 });
 
 it("shows several fulfillments and labels only the Square milestones that are present", async () => {

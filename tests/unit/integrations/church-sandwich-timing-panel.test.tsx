@@ -99,3 +99,20 @@ it("shows persisted history without a recording form for read-only staff", () =>
   expect(screen.getByText("Signed recipe r3")).toBeTruthy();
   expect(screen.getByText("2 of 3 accepted")).toBeTruthy();
 });
+
+it("compares a complete solo build and pack run with its recipe's trial target", () => {
+  const runs: ChurchSandwichTimingRun[] = [
+    { ...run, accepted: 3, buildSeconds: 150, packSeconds: 30 },
+    { ...run, id: "2", recipeKey: "verger", formulaRevision: null, accepted: 3, buildSeconds: 240, packSeconds: 31 },
+    { ...run, id: "3", accepted: 3, packSeconds: null },
+    { ...run, id: "4", accepted: 3, crewSize: 2 },
+    { ...run, id: "5" },
+  ];
+  render(<ChurchSandwichTimingPanel formulas={[formula]} runs={runs} canRecord={false} />);
+
+  const signed = within(screen.getAllByText("Signed recipe r3")[0].closest("details")!);
+  expect(signed.getByText("Build and pack run average 60 sec per sandwich · Within 60 sec trial target")).toBeTruthy();
+  const bench = within(screen.getByText("Bench rehearsal").closest("details")!);
+  expect(bench.getByText("Build and pack run average 90.33 sec per sandwich · Above 90 sec trial target")).toBeTruthy();
+  expect(screen.getAllByText(/Build and pack run average/)).toHaveLength(2);
+});
