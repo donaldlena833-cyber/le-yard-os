@@ -2,6 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import { churchSandwichBenchRecipes } from "../kitchen/church-sandwich-bench";
+import { squareCustomIngredient, squareStandardIngredient, type ChurchSquareCatalogAllergens } from "./church-square-allergen-diagnostic";
 import { SQUARE_API_VERSION } from "./square-source";
 
 const squareId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
@@ -81,7 +82,11 @@ const parentSchema = catalogLocationSchema.extend({
   }),
 });
 const exactParentSchema = parentSchema.extend({
-  item_data: parentSchema.shape.item_data.extend({ name: z.string().min(1).max(2048) }),
+  item_data: parentSchema.shape.item_data.extend({
+    name: z.string().min(1).max(2048),
+    product_type: z.unknown().optional(),
+    food_and_beverage_details: z.unknown().optional(),
+  }),
 });
 const exactVariationSchema = variationSchema.extend({
   item_variation_data: variationSchema.shape.item_variation_data.extend({
@@ -139,7 +144,7 @@ export interface SquareChurchSandwichCatalogVariation {
 }
 export type SquareChurchSandwichCatalogItem =
   | { name: string; status: "missing" | "ambiguous"; itemId: null; variations: [] }
-  | { name: string; status: "matched"; itemId: string; variations: SquareChurchSandwichCatalogVariation[] };
+  | { name: string; status: "matched"; itemId: string; variations: SquareChurchSandwichCatalogVariation[]; allergens?: ChurchSquareCatalogAllergens };
 export interface SquarePhysicalCountReceipt {
   status: "confirmed";
   variationId: string;
@@ -180,6 +185,30 @@ function presentAtLocation(catalogObject: z.infer<typeof catalogLocationSchema>,
 
 function itemPresentAtLocation(item: z.infer<typeof parentSchema>, locationId: string) {
   return !item.item_data.is_archived && presentAtLocation(item, locationId);
+}
+
+const squareIngredient = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("STANDARD"), standard_name: squareStandardIngredient, custom_name: z.null().optional() }),
+  z.object({ type: z.literal("CUSTOM"), custom_name: squareCustomIngredient, standard_name: z.null().optional() }),
+]);
+const squareFoodDetails = z.object({ ingredients: z.array(squareIngredient).max(50).nullish() });
+const nonFoodProductTypes = new Set([
+  "REGULAR", "GIFT_CARD", "APPOINTMENTS_SERVICE", "EVENT", "DIGITAL", "DONATION",
+  "LEGACY_SQUARE_ONLINE_SERVICE", "LEGACY_SQUARE_ONLINE_MEMBERSHIP",
+]);
+
+function squareAllergenTags(item: z.infer<typeof exactParentSchema>): ChurchSquareCatalogAllergens {
+  const { product_type: type, food_and_beverage_details: raw } = item.item_data;
+  if (type !== "FOOD_AND_BEV") {
+    return { status: raw == null && typeof type === "string" && nonFoodProductTypes.has(type) ? "unsupported" : "unavailable", standard: [], custom: [] };
+  }
+  if (raw == null) return { status: "empty", standard: [], custom: [] };
+  const parsed = squareFoodDetails.safeParse(raw);
+  if (!parsed.success) return { status: "unavailable", standard: [], custom: [] };
+  const ingredients = parsed.data.ingredients ?? [];
+  const standard = [...new Set(ingredients.flatMap((tag) => tag.type === "STANDARD" ? [tag.standard_name] : []))];
+  const custom = [...new Set(ingredients.flatMap((tag) => tag.type === "CUSTOM" ? [tag.custom_name] : []))];
+  return { status: standard.length || custom.length ? "configured" : "empty", standard, custom };
 }
 
 function canCountVariation(
@@ -343,7 +372,7 @@ export class SquareCountClient {
       || first.variationId.localeCompare(second.variationId));
   }
 
-  async verifyChurchSandwichCatalog(): Promise<SquareChurchSandwichCatalogItem[]> {
+  async verifyChurchSandwichCatalog({ includeAllergens = false }: { includeAllergens?: boolean } = {}): Promise<SquareChurchSandwichCatalogItem[]> {
     const deadline = AbortSignal.timeout(22_000);
     await this.verifyScope(deadline);
     const { locationId } = this.configuration;
@@ -388,6 +417,7 @@ export class SquareCountClient {
       items.set(name, previous.status === "missing" ? {
         name, status: "matched", itemId: item.id, variations: variations.sort((first, second) =>
           first.name.localeCompare(second.name, "en-US") || first.id.localeCompare(second.id)),
+        ...(includeAllergens ? { allergens: squareAllergenTags(item) } : {}),
       } : { name, status: "ambiguous", itemId: null, variations: [] });
     }
     return [...items.values()];

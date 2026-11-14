@@ -162,6 +162,48 @@ describe("Church sandwich catalog evidence", () => {
     expect(requestsTo(request, urls.catalog)).toHaveLength(0);
   });
 
+  it("reads only the Square parent item's native ingredient tags and distinguishes unavailable fields", async () => {
+    const item = (id: string, name: string, data: object, location?: object) => ({
+      type: "ITEM", id, ...location, item_data: { name, ...data },
+    });
+    const request = mockSquare({ catalog: () => respond({
+      objects: [
+        item("PARISIEN", "Le Parisien", {
+          product_type: "FOOD_AND_BEV",
+          food_and_beverage_details: {
+            dietary_preferences: [{ type: "STANDARD", standard_name: "VEGETARIAN" }],
+            ingredients: [
+              { type: "STANDARD", standard_name: "MUSTARD", custom_name: null },
+              { type: "CUSTOM", standard_name: null, custom_name: "Walnut" },
+              { type: "STANDARD", standard_name: "MUSTARD" },
+              { type: "STANDARD", standard_name: "FUTURE_LABEL" },
+            ],
+          },
+        }),
+        item("OUTSIDE_PARISIEN", "Le Parisien", { product_type: "FOOD_AND_BEV", food_and_beverage_details: {
+          ingredients: [{ type: "STANDARD", standard_name: "FISH" }],
+        } }, { absent_at_location_ids: [config.locationId] }),
+        item("VERGER", "Le Verger", { product_type: "FOOD_AND_BEV", food_and_beverage_details: { ingredients: [] } }),
+        item("BELLECOUR", "Le Bellecour", { product_type: "REGULAR" }),
+        item("BLEU", "Le Bleu", { product_type: "FOOD_AND_BEV", food_and_beverage_details: null }),
+        item("RUSTIQUE", "Le Rustique", { product_type: "FOOD_AND_BEV", food_and_beverage_details: {
+          ingredients: [{ type: "CUSTOM", custom_name: "unsafe\u202e" }],
+        } }),
+        item("FIGARO", "Le Figaro", {}),
+      ],
+    }) });
+    const result = await new SquareCountClient(config, request).verifyChurchSandwichCatalog({ includeAllergens: true });
+    expect(result.map((row) => "allergens" in row ? row.allergens : null)).toEqual([
+      { status: "configured", standard: ["MUSTARD", "FUTURE_LABEL"], custom: ["Walnut"] },
+      { status: "empty", standard: [], custom: [] },
+      { status: "unsupported", standard: [], custom: [] },
+      { status: "empty", standard: [], custom: [] },
+      { status: "unavailable", standard: [], custom: [] },
+      { status: "unavailable", standard: [], custom: [] },
+    ]);
+    expect(request.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
   it.each([
     ["mismatched parent", [child("V1", "Regular", { item_id: "OTHER_PARENT" })], "scope_mismatch"],
     ["repeated variation ID", [child("V1", "Regular"), child("V1", "Large")], "scope_mismatch"],

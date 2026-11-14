@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ChurchCateringPrep } from "@/components/kitchen/church-catering-prep";
 import { ChurchSandwichAvailabilityPanel } from "@/components/kitchen/church-sandwich-availability-panel";
 import { ChurchSandwichRecipeApprovalPanel } from "@/components/kitchen/church-sandwich-recipe-approval-panel";
+import { ChurchSquareAllergenPanel } from "@/components/kitchen/church-square-allergen-panel";
 import { ChurchSupplierEvidencePanel } from "@/components/kitchen/church-supplier-evidence-panel";
 import { KitchenWorkspace } from "@/components/kitchen/kitchen-workspace";
 import { LiveInventoryWorkspace } from "@/components/inventory/live-inventory-workspace";
@@ -40,11 +41,15 @@ async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas 
   const [ingredientEvidenceResult, cateringPrepResult, formulaResult] = await Promise.all([evidence, catering, formulas]);
   const availability = buildChurchSandwichAvailability(workspace, { ingredientEvidenceResult, cateringPrepResult, formulaResult });
   const location = workspace.activeLocation.id;
+  const canManage = workspace.capabilities.includes("recipe.manage");
   return (
     <>
       {formulaResult?.ok && ingredientEvidenceResult?.ok && (
         <ChurchSandwichRecipeApprovalPanel key={location} evidence={ingredientEvidenceResult.data}
-          formulas={formulaResult.data} canManage={workspace.capabilities.includes("recipe.manage")} />
+          formulas={formulaResult.data} canManage={canManage} />
+      )}
+      {canManage && formulaResult?.ok && ingredientEvidenceResult?.ok && (
+        <ChurchSquareAllergenPanel key={location} evidence={ingredientEvidenceResult.data} formulas={formulaResult.data} />
       )}
       {availability && (availability.ok ? (
         <ChurchSandwichAvailabilityPanel key={`${location}:${availability.data.serviceDate}`} {...availability.data} />
