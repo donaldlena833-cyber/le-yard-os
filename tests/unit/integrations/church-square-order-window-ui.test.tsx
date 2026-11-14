@@ -100,12 +100,20 @@ it("recovers the checked Square order revision and copies the manual recovery ti
   expect(lookup.getByText(/^Operations record recovered manually/).querySelector("time")?.dateTime).toBe(recoveredAt);
   expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
 
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   const copy = lookup.getByRole("button", { name: "Copy order evidence" }) as HTMLButtonElement;
-  await waitFor(() => expect(copy.disabled).toBe(false));
-  fireEvent.click(copy);
-  const evidence = await lookup.findByRole("textbox", { name: "Order evidence" }) as HTMLTextAreaElement;
-  expect(evidence.value).toContain(`Operations record recovered manually ${recoveredAt}.`);
-  expect(evidence.value).not.toContain(id);
+  try {
+    await waitFor(() => expect(copy.disabled).toBe(false));
+    fireEvent.click(copy);
+    expect(await lookup.findByText("Order evidence copied.")).toBeTruthy();
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(`Operations record recovered manually ${recoveredAt}.`));
+    expect(writeText.mock.calls[0][0]).not.toContain(id);
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+    else Reflect.deleteProperty(navigator, "clipboard");
+  }
 });
 
 it("withholds recovery without access or an available comparison and drops stale evidence", async () => {
