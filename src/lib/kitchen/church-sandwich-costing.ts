@@ -19,6 +19,8 @@ export const recordChurchSandwichPackCostInput = z.strictObject({ ...costInputs,
   .refine(wholeBread, { path: ["packQuantity"], message: "Use a whole count for baguettes." });
 export const churchSandwichPackCost = z.object({
   ...costInputs,
+  invoiceReference: z.string().min(1).refine(value => Array.from(value).length <= 160)
+    .transform(value => value.replace(/[\p{Cc}\p{Cf}]/gu, "").trim() || "Reference unavailable"),
   supplierSku: z.string().trim().min(1).max(120),
   recordedAt: z.iso.datetime({ offset: true }),
 }).refine(wholeBread, { path: ["packQuantity"] });
