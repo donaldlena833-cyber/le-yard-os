@@ -339,6 +339,97 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     } finally {
       log.mockRestore();
     }
+
+    await asRole(db, "authenticated", ownerId);
+    const serviceDate = "2026-12-05";
+    const saveJob = async (requestId, title, stage, job = null, revision = null, date = serviceDate) => (await db.query(
+      "select public.save_church_catering_job($1::uuid,$2::uuid,$3,$4::date,$5,$6::uuid,$7::integer) as result",
+      [requestId, workspaceLocationId, title, date, stage, job, revision],
+    )).rows[0].result;
+    const listJobs = async () => (await db.query(
+      "select public.list_church_catering_jobs($1::uuid) as result", [workspaceLocationId],
+    )).rows[0].result;
+    const requestId = randomUUID();
+    const job = await saveJob(requestId, "  Team lunch  ", "inquiry");
+    expect(job).toMatchObject({ title: "Team lunch", serviceDate, revision: 1, stage: "inquiry", invoice: null });
+    expect(await saveJob(requestId, "Team lunch", "inquiry")).toEqual(job);
+    await expect(saveJob(requestId, "Another lunch", "inquiry")).rejects.toMatchObject({ code: "PT409" });
+    const secondJob = await saveJob(randomUUID(), "Second team lunch", "inquiry");
+    await expect(saveJob(randomUUID(), job.title, "completed", job.id, 1)).rejects.toMatchObject({ code: "PT409" });
+    const confirmed = await saveJob(randomUUID(), job.title, "confirmed", job.id, 1);
+    await expect(saveJob(randomUUID(), "Stale revision", "quoted", job.id, 1)).rejects.toMatchObject({ code: "PT409" });
+
+    const attachmentArgs = {
+      requestId: randomUUID(), actor: ownerId, scope: merchantId,
+      target: job.id, revision: confirmed.revision, invoice: invoiceId, order: invoiceOrderId, date: serviceDate,
+    };
+    const attachJob = async (values = attachmentArgs) => (await db.query(`
+      select public.service_attach_church_catering_invoice($1::uuid,$2::uuid,$3::uuid,$4::uuid,$5::integer,
+        $6,$7,$8,$9,'PARTIALLY_PAID',$10::date,$11::timestamptz,'satisfied',400,400) as result
+    `, [values.actor, values.requestId, workspaceLocationId, values.target, values.revision,
+      values.scope, locationId, values.invoice, values.order, values.date, invoice.updated_at])).rows[0].result;
+    await asRole(db, "service_role");
+    await expect(attachJob({ ...attachmentArgs, actor: prepUserId })).rejects.toMatchObject({ code: "42501" });
+    await expect(attachJob({ ...attachmentArgs, scope: "OTHER" })).rejects.toMatchObject({ code: "42501" });
+    await expect(attachJob({ ...attachmentArgs, date: "2026-12-06" })).rejects.toMatchObject({ code: "PT409" });
+    const linked = await attachJob();
+    expect(linked).toMatchObject({ revision: 3, stage: "confirmed", invoice: {
+      invoiceReference: invoiceId.slice(-10), orderReference: invoiceOrderId.slice(-10),
+      deposit: { state: "satisfied", dueCents: 400, completedCents: 400 },
+    } });
+    expect(await attachJob()).toEqual(linked);
+    await expect(attachJob({ ...attachmentArgs, requestId: randomUUID(), target: secondJob.id, revision: 1 }))
+      .rejects.toMatchObject({ code: "PT409" });
+
+    await asRole(db, "authenticated", ownerId);
+    await expect(saveJob(randomUUID(), job.title, "confirmed", job.id, 3, "2026-12-07"))
+      .rejects.toMatchObject({ code: "PT409" });
+    expect(await listJobs()).toHaveLength(2);
+    expect(JSON.stringify(await listJobs())).not.toContain(invoiceId);
+    expect(JSON.stringify(await listJobs())).not.toContain(invoiceOrderId);
+    expect((await listJobs()).find((entry) => entry.id === job.id).invoice.serviceDateMismatch).toBe(true);
+    for (const denied of [prepUserId, otherTenantUser]) {
+      await asRole(db, "authenticated", denied);
+      await expect(listJobs()).rejects.toMatchObject({ code: "42501" });
+      await expect(saveJob(randomUUID(), "Denied", "inquiry")).rejects.toMatchObject({ code: "42501" });
+    }
+
+    // New verified facts can change payment status and date without editing the job.
+    const refundedAt = new Date().toISOString();
+    await db.exec("reset role");
+    await db.query(`
+      update private.church_square_resource_state
+      set source_updated_at = $2::timestamptz, facts = facts || $3::jsonb
+      where resource_kind = 'invoice' and resource_id = $1
+    `, [invoiceId, refundedAt, JSON.stringify({
+      status: "REFUNDED", serviceDate: "2026-12-07", updatedAt: refundedAt,
+      deposit: { state: "review_required", dueCents: 400, completedCents: 0 },
+    })]);
+    await asRole(db, "authenticated", ownerId);
+    expect((await listJobs()).find((entry) => entry.id === job.id)).toMatchObject({
+      revision: 3, invoice: { status: "REFUNDED", serviceDate: "2026-12-07", serviceDateMismatch: true, linkNeedsReview: false },
+    });
+    await db.exec("reset role");
+    await db.query(`
+      update private.church_square_resource_state set facts = facts || '{"orderId":"unexpected-order"}'::jsonb
+      where resource_kind = 'invoice' and resource_id = $1
+    `, [invoiceId]);
+    await asRole(db, "authenticated", ownerId);
+    expect((await listJobs()).find((entry) => entry.id === job.id)).toMatchObject({
+      revision: 3, invoice: { status: "PARTIALLY_PAID", serviceDate: serviceDate, serviceDateMismatch: false, linkNeedsReview: true },
+    });
+    const detachRequest = randomUUID();
+    const detach = async (reference = invoiceId.slice(-10)) => (await db.query(
+      "select public.detach_church_catering_invoice($1::uuid,$2::uuid,$3::uuid,3,$4) as result",
+      [detachRequest, workspaceLocationId, job.id, reference],
+    )).rows[0].result;
+    await expect(detach("wrong")).rejects.toMatchObject({ code: "PT409" });
+    const detached = await detach();
+    expect(detached).toMatchObject({ stage: "confirmed", revision: 4, invoice: null });
+    expect(await detach()).toEqual(detached);
+    expect(await protectedCounts()).toEqual(before);
+    const audit = await db.query("select previous_link from private.church_catering_job_changes where request_id=$1::uuid", [detachRequest]);
+    expect(audit.rows[0].previous_link).toMatchObject({ invoice: invoiceId, order: invoiceOrderId });
   } finally {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();

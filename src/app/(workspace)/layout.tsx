@@ -10,6 +10,7 @@ import { ChurchSquareStockNotifications } from "@/components/inventory/church-sq
 import { BrandMark } from "@/components/ui/brand-mark";
 import { Button } from "@/components/ui/button";
 import { canViewChurchSquareStockAlerts, loadChurchSquareStockAlerts } from "@/data/read-models/church-square-stock-alerts";
+import { verifyChurchSquareOrderWindowScope } from "@/data/read-models/church-square-order-window.server";
 import { churchSquareWebhookConfiguration } from "@/lib/integrations/church-square-webhook.server";
 import {
   resolveWorkspaceSession,
@@ -118,12 +119,15 @@ export default async function WorkspaceLayout({
 
   const { context } = resolution;
   const squareAlertsEnabled = canViewChurchSquareStockAlerts(context) && Boolean(churchSquareWebhookConfiguration());
-  const squareAlerts = squareAlertsEnabled ? await loadChurchSquareStockAlerts(context.activeLocation.id) : null;
+  const [squareAlerts, canOpenChurchCatering] = await Promise.all([
+    squareAlertsEnabled ? loadChurchSquareStockAlerts(context.activeLocation.id) : null,
+    verifyChurchSquareOrderWindowScope(context).catch(() => false),
+  ]);
 
   return (
     <WorkspaceProvider value={context}>
       <WorkspaceAccessGuard revision={context.mode === "live" ? workspaceAccessRevision(context) : null} userId={context.identity.userId} homePath={defaultWorkspacePath}>
-        {isPhoneSurface ? children : <AppShell>{children}</AppShell>}
+        {isPhoneSurface ? children : <AppShell canOpenChurchCatering={canOpenChurchCatering}>{children}</AppShell>}
         {squareAlertsEnabled ? (
           <ChurchSquareStockNotifications key={`${context.identity.userId}:${context.activeLocation.id}`}
             organizationId={context.organization.id} locationId={context.activeLocation.id}

@@ -10174,6 +10174,16 @@ export type Database = {
         }
         Returns: string
       };
+      "detach_church_catering_invoice": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_job_id": string | null
+          "p_expected_revision": number | null
+          "p_expected_invoice_reference": string | null
+        }
+        Returns: Json
+      };
       "effective_capabilities": {
         Args: {
           "p_organization_id": string | null
@@ -10528,6 +10538,12 @@ export type Database = {
       "jwt_aal": {
         Args: Record<PropertyKey, never>
         Returns: string
+      };
+      "list_church_catering_jobs": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
       };
       "list_church_square_count_items": {
         Args: {
@@ -11073,6 +11089,18 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["availability_rules"]["Row"]
       };
+      "save_church_catering_job": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_title": string | null
+          "p_service_date": string | null
+          "p_stage": string | null
+          "p_job_id"?: string | null
+          "p_expected_revision"?: number | null
+        }
+        Returns: Json
+      };
       "save_employee_certification": {
         Args: {
           "p_request_id": string | null
@@ -11381,6 +11409,26 @@ export type Database = {
           "p_is_sensitive"?: boolean | null
         }
         Returns: { "id": string | null; "created_at": string | null }[]
+      };
+      "service_attach_church_catering_invoice": {
+        Args: {
+          "p_actor_id": string | null
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_job_id": string | null
+          "p_expected_revision": number | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_invoice_id": string | null
+          "p_order_id": string | null
+          "p_invoice_status": string | null
+          "p_invoice_service_date": string | null
+          "p_invoice_updated_at": string | null
+          "p_deposit_state": string | null
+          "p_deposit_due_cents": number | null
+          "p_deposit_completed_cents": number | null
+        }
+        Returns: Json
       };
       "service_availability_subjects": {
         Args: {
@@ -12652,6 +12700,7 @@ export const DatabaseObjectNames = {
       "decide_shift_swap",
       "decide_time_off_request",
       "delete_availability_rule",
+      "detach_church_catering_invoice",
       "effective_capabilities",
       "employee_is_effectively_assigned",
       "end_employee_job_assignment",
@@ -12718,6 +12767,7 @@ export const DatabaseObjectNames = {
       "is_owner_pending_mfa",
       "is_self_employee",
       "jwt_aal",
+      "list_church_catering_jobs",
       "list_church_square_count_items",
       "list_church_square_reconciliation",
       "list_church_square_stock_alerts",
@@ -12779,6 +12829,7 @@ export const DatabaseObjectNames = {
       "revoke_service_shift_exception",
       "revoke_user_invitation",
       "save_availability_rule",
+      "save_church_catering_job",
       "save_employee_certification",
       "save_employee_emergency_contact",
       "save_expense_category",
@@ -12803,6 +12854,7 @@ export const DatabaseObjectNames = {
       "seat_waitlist_entry",
       "serialize_tip_labor_evidence",
       "service_add_guest_note",
+      "service_attach_church_catering_invoice",
       "service_availability_subjects",
       "service_begin_reservation_delivery_run",
       "service_begin_reservation_message_delivery",

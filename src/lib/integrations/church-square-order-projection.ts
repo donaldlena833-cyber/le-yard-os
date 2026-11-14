@@ -22,7 +22,7 @@ const moneyField = money.nullish();
 const orderStates = ["OPEN", "COMPLETED", "CANCELED", "DRAFT"] as const;
 const paymentStates = ["APPROVED", "PENDING", "COMPLETED", "CANCELED", "FAILED"] as const;
 const refundStates = ["PENDING", "COMPLETED", "REJECTED", "FAILED"] as const;
-const invoiceStates = [
+export const churchSquareInvoiceStates = [
   "DRAFT", "UNPAID", "SCHEDULED", "PARTIALLY_PAID", "PAID", "PARTIALLY_REFUNDED",
   "REFUNDED", "CANCELED", "FAILED", "PAYMENT_PENDING",
 ] as const;
@@ -278,7 +278,7 @@ function projectDeposit(requests: NonNullable<z.infer<typeof invoice>["payment_r
 function projectInvoice(value: z.infer<typeof invoice>) {
   return {
     ...base("invoice", value),
-    status: known(value.status, invoiceStates),
+    status: known(value.status, churchSquareInvoiceStates),
     orderId: value.order_id,
     serviceDate: value.sale_or_service_date ?? null,
     deposit: value.payment_requests == null
