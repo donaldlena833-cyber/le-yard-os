@@ -68,6 +68,7 @@ describe("connected Inventory UI", () => {
             date: "2026-08-01",
             timeZone: "America/New_York",
             currencyCode: "USD",
+            churchStreet: false,
             items: [],
             units: [],
             locations: [],
@@ -122,7 +123,7 @@ describe("connected Inventory UI", () => {
       <InventoryCatalogWorkspace
         workspace={chef}
         model={{
-          date: "2026-08-08", timeZone: "America/New_York", currencyCode: "USD",
+          date: "2026-08-08", timeZone: "America/New_York", currencyCode: "USD", churchStreet: false,
           items: [], units: [], locations: [chef.activeLocation], counts: [], vendors: [],
           orders: [], deliveries: [], waste: [], transfers: [], recipes: [],
           catalog: { units: [], conversions: [], categories: [], vendors: [], items: [], vendorItems: [], pars: [], recipes: [] },

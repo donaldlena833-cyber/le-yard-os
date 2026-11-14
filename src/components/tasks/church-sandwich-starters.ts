@@ -1,14 +1,7 @@
-const churchSandwichBenchRecipes = [
-  { name: "Le Parisien", grams: "French-style ham 72 g, cultured butter 16 g", filling: 88, accent: "Full deli-style loose ham folds", build: "Spread butter across the crumb and distribute the loose ham folds to both ends.", seconds: 60 },
-  { name: "Le Verger", grams: "Brie 45 g, apple 40 g, walnuts 14 g, honey 8 g", filling: 107, accent: "A little more walnut crunch and a lighter honey finish", build: "Lay Brie, overlap thin apple slices, distribute walnuts, then drizzle honey.", seconds: 90 },
-  { name: "Le Bellecour", grams: "Brie 45 g, roasted red peppers 38 g, cornichons 18 g, Dijon 10 g", filling: 111, accent: "Extra pickle snap with drier peppers", build: "Spread Dijon, layer Brie and drained peppers, then distribute drained cornichons.", seconds: 90 },
-  { name: "Le Bleu", grams: "Danish blue cheese 38 g, apple 42 g, arugula 10 g, honey 8 g, pistachios 13 g", filling: 111, accent: "Apple leads with a pistachio crunch", build: "Distribute blue cheese and apple, then add arugula, honey and pistachios.", seconds: 90 },
-  { name: "Le Rustique", grams: "Coppa 58 g, roasted red peppers 32 g, cornichons 18 g, Dijon 10 g, arugula 12 g", filling: 130, accent: "Fuller deli folds and a brighter pickle bite", build: "Spread Dijon, fold coppa along the crumb, then add drained peppers, cornichons and arugula.", seconds: 90 },
-  { name: "Le Figaro", grams: "Prosciutto 55 g, Brie 42 g, fig preserves 12 g, arugula 14 g", filling: 123, accent: "A peppery green finish with a modest fig spread", build: "Spread fig preserves, layer Brie and loose prosciutto folds, then tuck the arugula inside.", seconds: 90 },
-] as const;
+import { churchSandwichBenchRecipes, sandwichFillingGrams, sandwichGramsText } from "@/lib/kitchen/church-sandwich-bench";
 
-const benchRecipeText = churchSandwichBenchRecipes.map(({ name, grams, filling, accent, build }) =>
-  `${name} · ${filling} g filling\n${grams}.\n${accent}. ${build}`,
+const benchRecipeText = churchSandwichBenchRecipes.map((recipe) =>
+  `${recipe.name} · ${sandwichFillingGrams(recipe)} g filling\n${sandwichGramsText(recipe)}.\n${recipe.accent}. ${recipe.build}`,
 ).join("\n\n");
 
 const recipeRehearsalItems = churchSandwichBenchRecipes.map(({ name, seconds }) =>
@@ -29,6 +22,7 @@ ${benchRecipeText}
 
 CHEF TO COMPLETE · PRODUCT SPEC, TIMING AND HOLDING
 Weigh edible component portions before assembly. Start with the bench recipes above, record the measured batch yield, and test the paper-wrapped sandwich at the counter and in a mock delivery bag. Record any changes and approve the exact supplier product, portion and build order per item. Record the approved opening quantity, refill trigger and batch size after the rehearsal.
+In Kitchen → Recipes, save the editable bench draft and map the actual catalog items and units after supplier review. Once the recipe is approved and active, create a separate prep plan in Kitchen → Prep. A practice rehearsal stays in Checklists.
 For each prepared component, record the storage method, holding conditions, use-by/discard rule and reset steps for the next batch. Use the approved kitchen food-safety procedures to set these rules. Record the owner and approval date for each rule.
 
 BATCH LABEL · TEST WITH THE REAL CONTAINER

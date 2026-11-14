@@ -26,6 +26,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   type FormEvent,
@@ -57,6 +58,7 @@ import {
 import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/files";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
+import { isWorkspaceRouteAccessible } from "@/components/shell/navigation";
 import { churchSandwichRehearsal, churchSandwichSop } from "@/components/tasks/church-sandwich-starters";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
@@ -1279,12 +1281,14 @@ function ChecklistPanel({
 function SopPanel({
   model,
   canManage,
+  canOpenKitchen,
   busy,
   onDialog,
   onRun,
 }: {
   model: LiveOperationsModel;
   canManage: boolean;
+  canOpenKitchen: boolean;
   busy: boolean;
   onDialog: (dialog: DialogState) => void;
   onRun: RunAction;
@@ -1315,12 +1319,20 @@ function SopPanel({
             ) : undefined
           }
         />
-        {canManage && model.churchStreet && !model.sops.some((sop) => sop.title === churchSandwichSop.title) ? (
-          <div className="mb-4">
-            <Button variant="quiet" size="sm" disabled={busy}
-              onClick={() => onDialog({ kind: "sop-create", sandwichStarter: true })}>
-              Draft sandwich station playbook
-            </Button>
+        {model.churchStreet ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {canManage && !model.sops.some((sop) => sop.title === churchSandwichSop.title) ? (
+              <Button variant="quiet" size="sm" disabled={busy}
+                onClick={() => onDialog({ kind: "sop-create", sandwichStarter: true })}>
+                Draft sandwich station playbook
+              </Button>
+            ) : null}
+            {canOpenKitchen ? (
+              <Link className="focus-ring rounded text-xs font-semibold text-[var(--accent-strong)] underline"
+                href="/kitchen#kitchen-recipes">
+                Open Kitchen recipes
+              </Link>
+            ) : null}
           </div>
         ) : null}
         {model.sops.length ? (
@@ -3095,6 +3107,7 @@ export function LiveTasksWorkspace({
               <SopPanel
                 model={model}
                 canManage={canManage}
+                canOpenKitchen={isWorkspaceRouteAccessible("/kitchen", workspace)}
                 busy={busy}
                 onDialog={setDialog}
                 onRun={run}
