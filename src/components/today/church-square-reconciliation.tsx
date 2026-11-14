@@ -113,6 +113,12 @@ export function ChurchSquareReconciliation() {
                 <tr key={`${resource.kind}-${resource.reference}-${index}`}>
                   <th scope="row" className="whitespace-nowrap px-3 py-2 font-medium">
                     {resourceLabels[resource.kind]} <span className="font-mono">{resource.reference}</span>
+                    {resource.kind === "order" && resource.recoveredAt && (
+                      <div className="mt-1 font-normal text-[var(--ink-soft)]">
+                        Manually recovered{" "}
+                        <time dateTime={resource.recoveredAt}>{localTime.format(new Date(resource.recoveredAt))} ET</time>
+                      </div>
+                    )}
                   </th>
                   <td className="px-3 py-2 font-mono">{resource.orderReference ?? "—"}</td>
                   <td className="px-3 py-2 capitalize">{resource.status?.toLowerCase().replaceAll("_", " ") ?? "Unknown"}</td>

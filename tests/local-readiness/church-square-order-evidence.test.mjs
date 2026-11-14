@@ -111,7 +111,7 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
   const facts = {
     kind: "order", id, locationId: "L_TEST", currency: "USD", status: "COMPLETED",
     createdAt: updatedAt, updatedAt, version: 1, sourceHint: "UNKNOWN",
-    fulfillments: [], lineItems: [], tenders: [], refundIds: [],
+    totalCents: 100, fulfillments: [], lineItems: [], tenders: [], refundIds: [],
   };
   const one = async (sql, args = []) => (await db.query(sql, args)).rows[0].result;
   const recover = ({
@@ -120,6 +120,8 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
   } = {}) => one(`
     select public.service_recover_church_square_order($1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::jsonb) as result
   `, [actor, workspaceLocation, merchant, squareLocation, requestedId, JSON.stringify(orderFacts)]);
+  const reconcile = () => one("select public.list_church_square_reconciliation($1::uuid) as result", [location]);
+  const sameSuffix = (snapshot) => snapshot.resources.filter(({ reference }) => reference === id.slice(-10));
 
   await assert.rejects(recover(), { code: "42501" }); // Provider scope is not configured.
   await db.exec("reset role");
@@ -128,6 +130,19 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
       organization_id,location_id,merchant_id,square_location_id,scan_started_at,covered_through
     ) values ($1,$2,'M_TEST','L_TEST',$3::timestamptz,$3::timestamptz)
   `, [organization, location, scanStartedAt]);
+  for (const [kind, resourceId, amount] of [
+    ["order", "other-order-1234567890", 200],
+    ["payment", id, 300],
+    ["refund", id, 400],
+    ["invoice", id, 500],
+  ]) {
+    const projection = { kind, status: "COMPLETED", amountCents: amount, orderId: id, privateFixture: "PRIVATE-CUSTOMER" };
+    await db.query(`
+      insert into private.church_square_resource_state (
+        merchant_id,square_location_id,organization_id,location_id,resource_kind,resource_id,source_updated_at,source_version,facts
+      ) values ('M_TEST','L_TEST',$1,$2,$3,$4,$5::timestamptz,1,$6::jsonb)
+    `, [organization, location, kind, resourceId, updatedAt, JSON.stringify(projection)]);
+  }
 
   for (const [role, user] of [["authenticated", owner], ["authenticated", manager], ["anon", undefined]]) {
     await assumeRole(db, role, user);
@@ -173,6 +188,14 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
   await assert.rejects(db.exec("select * from private.church_square_order_recoveries"), { code: "42501" });
   const wrongVersion = await evidence({ id, version: 0, updatedAt });
   assert.equal(wrongVersion.matches, false);
+  const reconciled = await reconcile();
+  assert.deepEqual(sameSuffix(reconciled).map(({ kind, amountCents, recoveredAt }) => [kind, amountCents, recoveredAt])
+    .sort((left, right) => left[1] - right[1]), [
+    ["order", 100, recovered.recoveredAt], ["order", 200, null],
+    ["payment", 300, null], ["refund", 400, null], ["invoice", 500, null],
+  ]);
+  assert(!JSON.stringify(reconciled).includes(id));
+  assert(!JSON.stringify(reconciled).includes("PRIVATE-CUSTOMER"));
 
   await assumeRole(db, "service_role");
   assert.equal(await recover({ orderFacts: { ...facts, version: 0 } }), false);
@@ -193,6 +216,9 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
   const synced = await evidence({ id, version: 2, updatedAt: updatedLater });
   assert.equal(synced.matches, true);
   assert.equal(synced.recoveredAt, null);
+  const afterWebhook = sameSuffix(await reconcile());
+  assert.equal(afterWebhook.length, 5);
+  assert(afterWebhook.every(({ recoveredAt }) => recoveredAt === null));
   await db.exec("reset role");
   assert.deepEqual(await one(`
     select jsonb_build_object(

@@ -20,6 +20,7 @@ export const churchSquareReconciliationResponse = z.object({
     depositCompletedCents: amount,
     serviceDate: z.iso.date().nullable(),
     updatedAt: z.iso.datetime({ offset: true }),
+    recoveredAt: z.iso.datetime({ offset: true }).nullable().optional(),
   })).max(30),
 });
 
