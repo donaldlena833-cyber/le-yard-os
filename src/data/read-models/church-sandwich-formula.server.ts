@@ -5,6 +5,7 @@ import { readFailure, readSuccess, type LiveReadResult } from "@/data/read-model
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import type { ChurchAvailabilityRecipe } from "@/lib/kitchen/church-sandwich-availability";
 import { churchSandwichFormulaList, type ChurchSandwichFormula } from "@/lib/kitchen/church-sandwich-formula";
+import { matchesChurchSandwichFormulaEvidence } from "@/lib/kitchen/church-sandwich-formula-evidence";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
 import { createClient } from "@/lib/supabase/server";
 
@@ -12,18 +13,16 @@ export function currentChurchAvailabilityRecipes(
   formulas: readonly ChurchSandwichFormula[],
   evidence: readonly ChurchIngredientEvidence[],
 ): ChurchAvailabilityRecipe[] {
-  const reviewed = new Map(evidence
-    .filter(({ status }) => status === "reviewed")
-    .map(({ ingredientKey, revision }) => [ingredientKey, revision]));
-  return formulas.flatMap(({ recipeKey, current, measurements }) => {
-    if (!current) return [];
-    const ingredients: ChurchAvailabilityRecipe["ingredients"] = {};
+  const byIngredient = new Map(evidence.map((row) => [row.ingredientKey, row]));
+  return formulas.flatMap((formula) => {
     // The formula and supplier evidence are loaded independently, so verify both snapshots agree.
-    for (const [ingredient, measurement] of Object.entries(measurements)) {
-      if (!measurement || reviewed.get(ingredient) !== measurement.evidenceRevision) return [];
+    if (!matchesChurchSandwichFormulaEvidence(formula, byIngredient)) return [];
+    const ingredients: ChurchAvailabilityRecipe["ingredients"] = {};
+    for (const [ingredient, measurement] of Object.entries(formula.measurements)) {
+      if (!measurement) return [];
       ingredients[ingredient] = measurement.quantity;
     }
-    return [{ key: recipeKey, ingredients }];
+    return [{ key: formula.recipeKey, ingredients }];
   });
 }
 

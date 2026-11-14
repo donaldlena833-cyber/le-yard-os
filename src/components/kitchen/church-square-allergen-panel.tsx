@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import type { ChurchSquareAllergenDiagnostic, ChurchSquareAllergenDiagnosticItem } from "@/lib/integrations/church-square-allergen-diagnostic";
 import { churchSandwichBenchRecipes, churchSandwichBread } from "@/lib/kitchen/church-sandwich-bench";
 import type { ChurchSandwichFormula } from "@/lib/kitchen/church-sandwich-formula";
+import { matchesChurchSandwichFormulaEvidence } from "@/lib/kitchen/church-sandwich-formula-evidence";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
 
 type Props = {
@@ -96,9 +97,8 @@ export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
           const formula = byRecipe.get(key);
           const keys = [churchSandwichBread, ...portions.map(({ ingredient }) => ingredient)];
           const supplierRows = keys.map((ingredient) => byIngredient.get(ingredient));
-          const current = formula?.current === true && supplierRows.every((row) => row?.status === "reviewed" &&
-            formula.measurements[row.ingredientKey]?.evidenceRevision === row.revision &&
-            Boolean(row.allergenNotes?.trim()) && Boolean(row.crossContactNotes?.trim()));
+          const current = matchesChurchSandwichFormulaEvidence(formula, byIngredient) &&
+            supplierRows.every((row) => Boolean(row?.allergenNotes?.trim()) && Boolean(row?.crossContactNotes?.trim()));
           const item = items.get(key);
           const canRehearse = current && item?.status === "matched" && item.name === name && item.variationIds.length > 0 &&
             (item.allergens.status === "configured" || item.allergens.status === "empty");

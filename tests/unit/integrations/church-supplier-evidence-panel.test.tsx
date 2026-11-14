@@ -42,7 +42,7 @@ afterEach(() => {
 
 it("defaults the 16 component records to pending and captures an incomplete label as a draft", async () => {
   vi.mocked(saveChurchSandwichIngredientEvidenceAction).mockResolvedValue({ ok: true, mode: "live", persisted: true, data: pending });
-  render(<ChurchSupplierEvidencePanel initialRows={[]} canManage />);
+  render(<ChurchSupplierEvidencePanel formulas={[]} initialRows={[]} canManage />);
   const register = wholePanel().getByText("Sandwich components").closest("details")!;
   expect(within(register).getAllByText("Pending", { selector: "summary span" })).toHaveLength(16);
   const { form } = openBreadForm();
@@ -58,7 +58,7 @@ it("defaults the 16 component records to pending and captures an incomplete labe
 
 it("requires complete evidence for review and updates the recipe overview after save", async () => {
   vi.mocked(saveChurchSandwichIngredientEvidenceAction).mockResolvedValue({ ok: true, mode: "live", persisted: true, data: reviewed });
-  render(<ChurchSupplierEvidencePanel initialRows={[pending]} canManage />);
+  render(<ChurchSupplierEvidencePanel formulas={[]} initialRows={[pending]} canManage />);
   const { bread, form } = openBreadForm();
   fireEvent.change(form.getByLabelText("Review status"), { target: { value: "reviewed" } });
   fireEvent.click(form.getByRole("button", { name: "Save reviewed evidence" }));
@@ -88,15 +88,15 @@ it("requires complete evidence for review and updates the recipe overview after 
 });
 
 it("keeps read-only records visible and blocks saves against a changed revision", () => {
-  const ui = render(<ChurchSupplierEvidencePanel initialRows={[reviewed]} canManage={false} />);
+  const ui = render(<ChurchSupplierEvidencePanel formulas={[]} initialRows={[reviewed]} canManage={false} />);
   let register = wholePanel().getByText("Sandwich components").closest("details")!;
   expect(within(register).queryByRole("form", { hidden: true })).toBeNull();
   expect(within(register).getByText(reviewed.sourceReference!)).toBeTruthy();
 
-  ui.rerender(<ChurchSupplierEvidencePanel initialRows={[reviewed]} canManage />);
+  ui.rerender(<ChurchSupplierEvidencePanel formulas={[]} initialRows={[reviewed]} canManage />);
   const { form } = openBreadForm();
   fireEvent.change(form.getByLabelText("Supplier, brand and exact SKU"), { target: { value: "Older unsaved label" } });
-  ui.rerender(<ChurchSupplierEvidencePanel initialRows={[{ ...reviewed, revision: 3, supplierSku: "New lot B-062" }]} canManage />);
+  ui.rerender(<ChurchSupplierEvidencePanel formulas={[]} initialRows={[{ ...reviewed, revision: 3, supplierSku: "New lot B-062" }]} canManage />);
   expect(form.getByText(/saved evidence changed/)).toBeTruthy();
   fireEvent.click(form.getByRole("button", { name: "Save reviewed evidence" }));
   expect(saveChurchSandwichIngredientEvidenceAction).not.toHaveBeenCalled();

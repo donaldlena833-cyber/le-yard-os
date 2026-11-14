@@ -31,15 +31,18 @@ async function ChurchStaffResources({ evidence }: { evidence: ReturnType<typeof 
   return access?.ok ? <ChurchSandwichStaffResources /> : null;
 }
 
-async function ChurchSupplierEvidence({ workspace, data }: {
+async function ChurchSupplierEvidence({ workspace, data, formulas }: {
   workspace: WorkspaceContextValue;
   data: ReturnType<typeof loadChurchIngredientEvidence>;
+  formulas: ReturnType<typeof loadChurchSandwichFormulas>;
 }) {
   const result = await data;
   if (!result) return null;
   if (!result.ok) return <p className="my-4 text-sm text-[var(--ink-soft)]">Supplier evidence could not be loaded. Reload Kitchen to try again.</p>;
 
-  return <ChurchSupplierEvidencePanel key={workspace.activeLocation.id} initialRows={result.data} canManage={workspace.capabilities.includes("recipe.manage")} />;
+  const signedRecipes = await formulas;
+  return <ChurchSupplierEvidencePanel key={workspace.activeLocation.id} initialRows={result.data}
+    formulas={signedRecipes?.ok ? signedRecipes.data : null} canManage={workspace.capabilities.includes("recipe.manage")} />;
 }
 
 async function ChurchBatchLabels({ workspace, evidence, labels, queue }: {
@@ -121,7 +124,7 @@ export default async function KitchenPage() {
       <PageFrame width="full" className="max-w-[1400px] pb-0">
         <Suspense fallback={null}><ChurchStaffResources evidence={ingredientEvidence} /></Suspense>
         <Suspense fallback={null}><ChurchCateringPrep data={cateringPrep} approvedRecipes={approvedRecipes} /></Suspense>
-        <Suspense fallback={null}><ChurchSupplierEvidence workspace={resolution.context} data={ingredientEvidence} /></Suspense>
+        <Suspense fallback={null}><ChurchSupplierEvidence workspace={resolution.context} data={ingredientEvidence} formulas={sandwichFormulas} /></Suspense>
         <Suspense fallback={null}><ChurchBatchLabels workspace={resolution.context} evidence={ingredientEvidence} labels={batchLabels} queue={batchQueue} /></Suspense>
         <Suspense fallback={null}><ChurchSandwichPlanning workspace={resolution.context} evidence={ingredientEvidence} catering={cateringPrep} formulas={sandwichFormulas} /></Suspense>
         <Suspense fallback={null}><ChurchSandwichTiming workspace={resolution.context} formulas={sandwichFormulas} timing={sandwichTiming} /></Suspense>

@@ -7,7 +7,7 @@ const pdfs = [
   { slug: "batch-labels", label: "Printable batch labels" },
 ] as const;
 const kitchenLinks = [
-  { href: "#supplier-evidence-title", label: "Supplier label evidence" },
+  { href: "#church-sandwich-evidence-heading", label: "Sandwich evidence by recipe" },
   { href: "#church-batch-queue-heading", label: "Open batches by discard time" },
   { href: "#church-sandwich-timing-heading", label: "Sandwich timing runs" },
 ] as const;

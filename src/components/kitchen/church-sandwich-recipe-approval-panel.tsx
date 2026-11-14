@@ -7,6 +7,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import { churchSandwichBenchRecipes, churchSandwichBread, type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
 import type { ChurchSandwichFormula } from "@/lib/kitchen/church-sandwich-formula";
+import { matchesChurchSandwichFormulaEvidence } from "@/lib/kitchen/church-sandwich-formula-evidence";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
 
 type FormulaMeasurements = ChurchSandwichFormula["measurements"];
@@ -164,9 +165,7 @@ function RecipeApprovalRow({ recipe, formula, evidence, canManage, onSave }: {
   const ingredients = [
     { ingredient: churchSandwichBread, grams: 1 }, ...recipe.portions,
   ].map(({ ingredient, grams }) => ({ name: ingredient, benchQuantity: grams, evidence: evidence.get(ingredient) }));
-  const current = formula?.current && ingredients.every(({ name, evidence }) =>
-    evidence?.status === "reviewed" && evidence.revision === formula.measurements[name]?.evidenceRevision,
-  );
+  const current = matchesChurchSandwichFormulaEvidence(formula, evidence);
   const status = signoffStatus[current ? "current" : formula ? "outdated" : "pending"];
   const formKey = [formula?.revision ?? 0, ...ingredients.map(({ evidence }) => `${evidence?.status ?? "pending"}:${evidence?.revision ?? 0}`)].join(";");
 

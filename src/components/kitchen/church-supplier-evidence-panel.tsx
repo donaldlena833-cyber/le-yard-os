@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import { churchSandwichComponents } from "@/lib/kitchen/church-sandwich-bench";
+import type { ChurchSandwichFormula } from "@/lib/kitchen/church-sandwich-formula";
 import {
   churchIngredientEvidenceLimits,
   churchIngredientEvidenceStatuses,
@@ -166,8 +167,9 @@ function IngredientEvidenceRow({ ingredientKey, row, canManage, onSave }: {
   );
 }
 
-export function ChurchSupplierEvidencePanel({ initialRows, canManage }: {
+export function ChurchSupplierEvidencePanel({ initialRows, formulas, canManage }: {
   initialRows: readonly ChurchIngredientEvidence[] | null;
+  formulas: readonly ChurchSandwichFormula[] | null;
   canManage: boolean;
 }) {
   const [savedRows, setSavedRows] = useState<ChurchIngredientEvidence[]>([]);
@@ -193,8 +195,8 @@ export function ChurchSupplierEvidencePanel({ initialRows, canManage }: {
         <>
           <p className="my-2 text-sm text-[var(--ink-soft)]">Record evidence for the exact product used. Review applies to the recorded SKU and source. Manage customer-facing allergen information separately.</p>
           {canManage && <p className="mt-1 text-xs text-[var(--ink-soft)]">Add the label or supplier document revision. If a field does not apply, record why. When a product changes, reopen the evidence for review.</p>}
-          <ChurchSandwichEvidenceOverview rows={rows} />
-          <details className="mt-3 border-t border-[var(--line)] pt-3">
+          <ChurchSandwichEvidenceOverview rows={rows} formulas={formulas} canManage={canManage} />
+          <details id="church-sandwich-components" className="mt-3 scroll-mt-24 border-t border-[var(--line)] pt-3">
             <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">Sandwich components</summary>
             <div className="mt-1 divide-y divide-[var(--line)]">
               {churchSandwichComponents.map((ingredientKey) => (
