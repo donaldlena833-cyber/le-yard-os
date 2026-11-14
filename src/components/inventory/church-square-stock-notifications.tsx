@@ -3,7 +3,7 @@
 import { PackageX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import type { ChurchSquareStockAlert } from "@/data/read-models/church-square-stock-alerts";
 import {
@@ -19,6 +19,14 @@ const invalidationBindings: readonly RealtimeInvalidationBinding[] = [
 const dismissalEvent = "le-yard-square-stock-alert-dismissed";
 const sessionDismissals = new Map<string, string>();
 const maxDismissals = 300;
+const pollIntervalMs = 10_000;
+
+type AlertStatus = {
+  organizationId: string;
+  locationId: string;
+  userId: string;
+  alerts: ChurchSquareStockAlert[];
+};
 
 function subscribeToDismissals(notify: () => void) {
   window.addEventListener(dismissalEvent, notify);
@@ -53,36 +61,83 @@ export function ChurchSquareStockNotifications({
   locationId: string;
   userId: string;
 }) {
-  const router = useRouter();
-  const refreshedAfterSubscribe = useRef(false);
-  const { state } = useRealtimeInvalidation({
+  const { refresh } = useRouter();
+  const scopeKey = `${organizationId}:${locationId}:${userId}`;
+  const activeRequest = useRef<AbortController | null>(null);
+  const renderedAlerts = useRef<readonly ChurchSquareStockAlert[] | null>(alerts);
+  const [snapshot, setSnapshot] = useState<{ scopeKey: string; alerts: ChurchSquareStockAlert[] }>();
+  const currentAlerts = snapshot?.scopeKey === scopeKey ? snapshot.alerts : alerts;
+
+  useEffect(() => { renderedAlerts.current = currentAlerts; }, [currentAlerts]);
+
+  const checkStatus = useCallback(async () => {
+    if (activeRequest.current || document.hidden || !navigator.onLine) return;
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 8_000);
+    function applyAlerts(next: ChurchSquareStockAlert[]) {
+      if (JSON.stringify(next) === JSON.stringify(renderedAlerts.current)) return;
+      renderedAlerts.current = next;
+      setSnapshot({ scopeKey, alerts: next });
+      refresh();
+    }
+    try {
+      const response = await fetch("/api/integrations/square/stock-alerts", {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      if (response.status === 401 || response.status === 403) {
+        applyAlerts([]);
+        return;
+      }
+      if (!response.ok) return;
+      const result = await response.json() as AlertStatus;
+      if (controller.signal.aborted) return;
+      if (result.organizationId !== organizationId || result.locationId !== locationId || result.userId !== userId) {
+        applyAlerts([]);
+        return;
+      }
+      applyAlerts(result.alerts);
+    } catch {
+      // Keep the last confirmed state and retry on the next foreground check.
+    } finally {
+      window.clearTimeout(timeout);
+      if (activeRequest.current === controller) activeRequest.current = null;
+    }
+  }, [locationId, organizationId, refresh, scopeKey, userId]);
+
+  useRealtimeInvalidation({
     enabled: true,
     channelName: `church-square-stock-${locationId}`,
     bindings: invalidationBindings,
     organizationId,
     locationId,
+    onInvalidate: checkStatus,
   });
 
   useEffect(() => {
-    if (state === "live") {
-      // An event can land between the server's first read and subscription.
-      if (!refreshedAfterSubscribe.current) {
-        refreshedAfterSubscribe.current = true;
-        router.refresh();
-      }
-      return;
-    }
-    const timer = window.setInterval(() => {
-      if (!document.hidden && navigator.onLine) router.refresh();
-    }, 30_000);
-    return () => window.clearInterval(timer);
-  }, [router, state]);
+    void checkStatus();
+    const timer = window.setInterval(checkStatus, pollIntervalMs);
+    document.addEventListener("visibilitychange", checkStatus);
+    window.addEventListener("focus", checkStatus);
+    window.addEventListener("online", checkStatus);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", checkStatus);
+      window.removeEventListener("focus", checkStatus);
+      window.removeEventListener("online", checkStatus);
+      activeRequest.current?.abort();
+      activeRequest.current = null;
+    };
+  }, [checkStatus]);
 
   const dismissKey = `le-yard-square-stock-alerts:${userId}:${locationId}`;
   const getDismissals = useCallback(() => readDismissals(dismissKey), [dismissKey]);
   const dismissalSnapshot = useSyncExternalStore(subscribeToDismissals, getDismissals, () => null);
   const dismissed = dismissalSnapshot === null ? [] : readSquareStockAlertDismissals(dismissalSnapshot);
-  const pending = dismissalSnapshot === null ? [] : pendingSquareStockAlerts(alerts ?? [], dismissed);
+  const pending = dismissalSnapshot === null ? [] : pendingSquareStockAlerts(currentAlerts ?? [], dismissed);
   const sample = pending.slice(0, 3);
   return (
     <>

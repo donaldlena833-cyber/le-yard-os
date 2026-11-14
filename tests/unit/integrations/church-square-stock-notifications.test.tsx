@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChurchSquareStockCounts } from "@/components/inventory/church-square-stock-counts";
 import { ChurchSquareStockNotifications } from "@/components/inventory/church-square-stock-notifications";
@@ -20,6 +20,9 @@ vi.mock("@/app/actions/workflows/church-square-counts", () => ({
 afterEach(() => {
   cleanup();
   window.sessionStorage.clear();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  refresh.mockClear();
 });
 
 const scope = {
@@ -65,5 +68,34 @@ describe("Church Street Square low stock notification", () => {
       ...alert, episode: "30000000-0000-4000-8000-000000000006",
     }]} />);
     expect(screen.getByRole("complementary", { name: "Square low stock notification" })).toBeTruthy();
+  });
+
+  it("polls while a live socket is silent and drops alerts after an account switch", async () => {
+    vi.useFakeTimers();
+    const request = vi.fn();
+    const liveAlert = { ...alert, episode: "30000000-0000-4000-8000-000000000007" };
+    for (const data of [
+      { ...scope, userId, alerts: [] },
+      { ...scope, userId, alerts: [liveAlert] },
+      { ...scope, userId, alerts: [liveAlert] },
+      { ...scope, userId: "other-user", alerts: [liveAlert] },
+    ]) request.mockResolvedValueOnce({ ok: true, json: async () => data });
+    vi.stubGlobal("fetch", request);
+
+    render(<ChurchSquareStockNotifications {...scope} userId={userId} alerts={[]} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(request).toHaveBeenCalledTimes(2);
+    const popup = screen.getByRole("complementary", { name: "Square low stock notification" });
+    expect(within(popup).getByText(/Loaf sandwich.*5 in stock/)).toBeTruthy();
+    expect(refresh).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.queryByRole("complementary", { name: "Square low stock notification" })).toBeNull();
   });
 });

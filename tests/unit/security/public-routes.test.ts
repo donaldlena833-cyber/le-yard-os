@@ -38,6 +38,7 @@ describe("public route boundary", () => {
     "/api/communications/groups",
     "/api/communications/pilot",
     "/api/integrations/square/webhook/extra",
+    "/api/integrations/square/stock-alerts",
     "/api/internal/integrations/square-source",
     "/api/twilio/sms/owner-alert-status/extra",
     "/api/twilio/sms/owner-alert-status-admin",
