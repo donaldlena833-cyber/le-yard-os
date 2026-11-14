@@ -10634,6 +10634,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_sandwich_pack_costs": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_sandwich_register_checks": {
         Args: {
           "p_location_id": string | null
@@ -10950,6 +10956,19 @@ export type Database = {
           "p_expected_latest_id": string | null
           "p_quantity": number | null
           "p_observed_at": string | null
+        }
+        Returns: Json
+      };
+      "record_church_sandwich_pack_cost": {
+        Args: {
+          "p_location_id": string | null
+          "p_request_id": string | null
+          "p_ingredient_key": string | null
+          "p_evidence_revision": number | null
+          "p_pack_quantity": number | null
+          "p_pack_cost_cents": number | null
+          "p_invoice_date": string | null
+          "p_invoice_reference": string | null
         }
         Returns: Json
       };
@@ -13063,6 +13082,7 @@ export const DatabaseObjectNames = {
       "list_church_ingredient_batches",
       "list_church_ingredient_evidence",
       "list_church_sandwich_formulas",
+      "list_church_sandwich_pack_costs",
       "list_church_sandwich_register_checks",
       "list_church_sandwich_timing_runs",
       "list_church_square_count_items",
@@ -13100,6 +13120,7 @@ export const DatabaseObjectNames = {
       "record_church_ingredient_batch",
       "record_church_ingredient_batch_from_source",
       "record_church_ingredient_batch_measurement",
+      "record_church_sandwich_pack_cost",
       "record_church_sandwich_register_check",
       "record_church_sandwich_timing_run",
       "record_clock_in",

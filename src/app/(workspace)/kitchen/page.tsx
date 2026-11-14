@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { ChurchCateringPrep } from "@/components/kitchen/church-catering-prep";
 import { ChurchBatchLabelsPanel } from "@/components/kitchen/church-batch-labels-panel";
 import { ChurchSandwichAvailabilityPanel } from "@/components/kitchen/church-sandwich-availability-panel";
+import { ChurchSandwichCostingPanel } from "@/components/kitchen/church-sandwich-costing-panel";
 import { ChurchSandwichRecipeApprovalPanel } from "@/components/kitchen/church-sandwich-recipe-approval-panel";
 import { ChurchSandwichStaffResources } from "@/components/kitchen/church-sandwich-staff-resources";
 import { ChurchSandwichTimingPanel } from "@/components/kitchen/church-sandwich-timing-panel";
@@ -17,6 +18,7 @@ import { loadChurchIngredientEvidence } from "@/data/read-models/church-ingredie
 import { canRecordChurchBatchLabels, loadChurchBatchLabels, loadChurchBatchQueue } from "@/data/read-models/church-ingredient-batches.server";
 import { loadChurchCateringPrep } from "@/data/read-models/church-catering-prep.server";
 import { buildChurchSandwichAvailability } from "@/data/read-models/church-sandwich-availability.server";
+import { loadChurchSandwichPackCosts } from "@/data/read-models/church-sandwich-costing.server";
 import { currentChurchAvailabilityRecipes, loadChurchSandwichFormulas } from "@/data/read-models/church-sandwich-formula.server";
 import { loadChurchSandwichRegisterChecks } from "@/data/read-models/church-sandwich-register-check.server";
 import { canRecordChurchSandwichTiming, loadChurchSandwichTimingRuns } from "@/data/read-models/church-sandwich-timing.server";
@@ -62,14 +64,16 @@ async function ChurchBatchLabels({ workspace, evidence, labels, queue }: {
     asOf={new Date().toISOString()} canRecord={canRecordChurchBatchLabels(workspace)} />;
 }
 
-async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas, registerChecks }: {
+async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas, registerChecks, packCosts }: {
   workspace: WorkspaceContextValue;
   evidence: ReturnType<typeof loadChurchIngredientEvidence>;
   catering: ReturnType<typeof loadChurchCateringPrep>;
   formulas: ReturnType<typeof loadChurchSandwichFormulas>;
   registerChecks: ReturnType<typeof loadChurchSandwichRegisterChecks>;
+  packCosts: ReturnType<typeof loadChurchSandwichPackCosts>;
 }) {
-  const [ingredientEvidenceResult, cateringPrepResult, formulaResult, registerResult] = await Promise.all([evidence, catering, formulas, registerChecks]);
+  const [ingredientEvidenceResult, cateringPrepResult, formulaResult, registerResult, packCostResult] =
+    await Promise.all([evidence, catering, formulas, registerChecks, packCosts]);
   const availability = buildChurchSandwichAvailability(workspace, { ingredientEvidenceResult, cateringPrepResult, formulaResult });
   const location = workspace.activeLocation.id;
   const canManage = workspace.capabilities.includes("recipe.manage");
@@ -79,6 +83,10 @@ async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas,
         <ChurchSandwichRecipeApprovalPanel key={location} evidence={ingredientEvidenceResult.data}
           formulas={formulaResult.data} canManage={canManage} />
       )}
+      {packCostResult && (formulaResult?.ok && ingredientEvidenceResult?.ok ? (
+        <ChurchSandwichCostingPanel key={location} formulas={formulaResult.data} evidence={ingredientEvidenceResult.data}
+          costs={packCostResult.ok ? packCostResult.data : null} canRecord={packCostResult.ok} />
+      ) : <p className="my-4 text-sm text-[var(--ink-soft)]">Signed recipes and supplier labels could not be loaded for costing.</p>)}
       {canManage && formulaResult?.ok && ingredientEvidenceResult?.ok && (
         <ChurchSquareAllergenPanel key={location} evidence={ingredientEvidenceResult.data} formulas={formulaResult.data}
           registerChecks={registerResult?.ok ? registerResult.data : null} />
@@ -112,6 +120,7 @@ export default async function KitchenPage() {
   const ingredientEvidence = loadChurchIngredientEvidence(resolution.context);
   const cateringPrep = loadChurchCateringPrep(resolution.context);
   const sandwichFormulas = loadChurchSandwichFormulas(resolution.context);
+  const sandwichPackCosts = loadChurchSandwichPackCosts(resolution.context);
   const sandwichTiming = loadChurchSandwichTimingRuns(resolution.context);
   const sandwichRegisterChecks = loadChurchSandwichRegisterChecks(resolution.context);
   const batchLabels = loadChurchBatchLabels(resolution.context);
@@ -130,7 +139,7 @@ export default async function KitchenPage() {
         <Suspense fallback={null}><ChurchCateringPrep data={cateringPrep} approvedRecipes={approvedRecipes} /></Suspense>
         <Suspense fallback={null}><ChurchSupplierEvidence workspace={resolution.context} data={ingredientEvidence} formulas={sandwichFormulas} /></Suspense>
         <Suspense fallback={null}><ChurchBatchLabels workspace={resolution.context} evidence={ingredientEvidence} labels={batchLabels} queue={batchQueue} /></Suspense>
-        <Suspense fallback={null}><ChurchSandwichPlanning workspace={resolution.context} evidence={ingredientEvidence} catering={cateringPrep} formulas={sandwichFormulas} registerChecks={sandwichRegisterChecks} /></Suspense>
+        <Suspense fallback={null}><ChurchSandwichPlanning workspace={resolution.context} evidence={ingredientEvidence} catering={cateringPrep} formulas={sandwichFormulas} registerChecks={sandwichRegisterChecks} packCosts={sandwichPackCosts} /></Suspense>
         <Suspense fallback={null}><ChurchSandwichTiming workspace={resolution.context} formulas={sandwichFormulas} timing={sandwichTiming} /></Suspense>
         <LivePrepWorkspace
           key={`prep-${resolution.context.activeLocation.id}`}
