@@ -78,6 +78,7 @@ async function verifyChurchSquareCountLedger(db, churchId, locationId) {
   assert.deepEqual(await read(list()), [{
     id: itemId, label: "Fixture Sandwich", pendingRequestId: null, pendingQuantity: null,
     pendingReason: null, pendingObservedAt: null, lastConfirmedQuantity: null, lastConfirmedObservedAt: null,
+    squareInStockQuantity: null, squareInStockCalculatedAt: null,
   }]);
   assert.equal(await read(`select has_function_privilege(
     current_user, 'public.service_claim_church_square_count(uuid,uuid,uuid,uuid,text,text)', 'EXECUTE'
@@ -283,6 +284,7 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
 async function verifyChurchSquareStockRecovery(db, locationId) {
   const read = async (sql, args = []) => (await db.query(sql, args)).rows[0]?.result;
   const list = () => read("select public.list_church_square_stock_alerts($1::uuid) as result", [locationId]);
+  const listCounts = () => read("select public.list_church_square_count_items($1::uuid) as result", [locationId]);
   const mappings = (merchant = "M_TEST", squareLocation = "L_TEST") => read(
     "select public.service_list_church_square_stock_mappings($1,$2) as result", [merchant, squareLocation],
   );
@@ -303,6 +305,9 @@ async function verifyChurchSquareStockRecovery(db, locationId) {
   await claims(db, churchEmployeeId);
   const [initial] = await list();
   assert.equal(initial.quantity, "0");
+  const [initialCount] = await listCounts();
+  assert.equal(initialCount.squareInStockQuantity, "0");
+  assert.equal(new Date(initialCount.squareInStockCalculatedAt).toISOString(), "2026-11-14T12:00:10.000Z");
   assert.equal(await read(`select has_function_privilege(current_user,
     'public.service_reconcile_church_square_stock(text,text,jsonb)','EXECUTE') as result`), false);
   assert.equal(await read(`select has_function_privilege(current_user,
@@ -339,6 +344,11 @@ async function verifyChurchSquareStockRecovery(db, locationId) {
   assert.deepEqual(await reconcile([observation("1", "21")]), { applied: 0, ignored: 1 });
   await claims(db, churchEmployeeId);
   assert.deepEqual(await list(), []);
+  const [replenished] = await listCounts();
+  assert.equal(replenished.squareInStockQuantity, "100");
+  assert.equal(new Date(replenished.squareInStockCalculatedAt).toISOString(), "2026-11-14T12:00:21.000Z");
+  assert.equal(replenished.lastConfirmedQuantity, initialCount.lastConfirmedQuantity);
+  assert.equal(replenished.lastConfirmedObservedAt, initialCount.lastConfirmedObservedAt);
   await asService();
   assert.deepEqual(await reconcile([observation("0", "22")]), { applied: 1, ignored: 0 });
   await claims(db, churchEmployeeId);

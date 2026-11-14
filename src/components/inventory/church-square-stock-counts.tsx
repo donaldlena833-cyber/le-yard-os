@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { configureChurchSquareCountItemAction, listTrackedChurchSquareVariationsAction, sendChurchSquareCountAction } from "@/app/actions/workflows/church-square-counts";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { StatusPill } from "@/components/ui/status-pill";
 import type { ChurchSquareCountItem } from "@/data/read-models/church-square-counts";
 import type { ChurchSquareStockAlert } from "@/data/read-models/church-square-stock-alerts";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
-import { formatSquareStockQuantity } from "@/lib/integrations/square-stock-alerts";
+import { formatSquareStockQuantity, isSquareStockLow } from "@/lib/integrations/square-stock-alerts";
 import { ChurchSquareMenuDiagnostic } from "./church-square-menu-diagnostic";
 import { AcknowledgeStockAlertButton, StockAcknowledgmentReceipt, stockAcknowledgment, stockAcknowledgmentScope, useStockAcknowledgments } from "./church-square-stock-acknowledgment";
 import { useLiveChurchSquareStockAlerts } from "./church-square-stock-notifications";
@@ -34,7 +34,16 @@ function CountItem({ item, scope, enabled, alert, alertScope }: {
   const [message, setMessage] = useState("");
   const [unconfirmed, setUnconfirmed] = useState<{ requestId: string; quantity: string; reason: string }>();
   const acknowledgments = useStockAcknowledgments(alertScope);
-  const receipt = alert ? stockAcknowledgment(alert, acknowledgments) : undefined;
+  const savedStock = item.squareInStockQuantity != null && item.squareInStockCalculatedAt
+    ? { quantity: item.squareInStockQuantity, calculatedAt: item.squareInStockCalculatedAt }
+    : null;
+  const squareStock = alert && (!savedStock || Date.parse(alert.calculatedAt) > Date.parse(savedStock.calculatedAt))
+    ? alert
+    : savedStock;
+  const stockIsLow = squareStock ? isSquareStockLow(squareStock.quantity) : false;
+  const visibleAlert = alert && squareStock && stockIsLow
+    && Date.parse(alert.calculatedAt) === Date.parse(squareStock.calculatedAt) ? alert : undefined;
+  const receipt = visibleAlert ? stockAcknowledgment(visibleAlert, acknowledgments) : undefined;
 
   const pending = item.pendingRequestId && item.pendingReason && item.pendingQuantity != null
     ? { requestId: item.pendingRequestId, quantity: String(item.pendingQuantity), reason: item.pendingReason }
@@ -55,7 +64,7 @@ function CountItem({ item, scope, enabled, alert, alertScope }: {
         setMessage(result.message);
       } else if (result.data.status === "confirmed") {
         setMessage(result.data.currentQuantity == null ? "Square confirmed this count."
-          : `Square confirmed this count. Current stock at confirmation was ${result.data.currentQuantity}.`);
+          : `Square confirmed this count. Square in-stock quantity at confirmation was ${formatSquareStockQuantity(String(result.data.currentQuantity))}.`);
         setUnconfirmed(undefined);
         rotateRequestId(item.id);
         form.reset();
@@ -81,16 +90,20 @@ function CountItem({ item, scope, enabled, alert, alertScope }: {
     <li className="py-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">{item.label}</h3>
-        {alert ? (
+        {stockIsLow && squareStock ? (
           <StatusPill size="sm" tone="warning">
-            Low stock · {formatSquareStockQuantity(alert.quantity)} in stock
+            Low stock · {formatSquareStockQuantity(squareStock.quantity)} in stock
           </StatusPill>
         ) : null}
       </div>
-      {alert && <p className="mt-1 text-xs text-[var(--ink-soft)]">Square calculated this count <StockTime value={alert.calculatedAt} />.</p>}
-      {alert && (receipt ? <StockAcknowledgmentReceipt receipt={receipt} /> : alertScope ? (
-        <div className="mt-2"><AcknowledgeStockAlertButton alert={alert} scopeKey={alertScope} key={alert.episode} /></div>
+      {visibleAlert && (receipt ? <StockAcknowledgmentReceipt receipt={receipt} /> : alertScope ? (
+        <div className="mt-2"><AcknowledgeStockAlertButton alert={visibleAlert} scopeKey={alertScope} key={visibleAlert.episode} /></div>
       ) : null)}
+      <p className="mt-1 text-xs text-[var(--ink-soft)]">
+        {squareStock
+          ? <>Latest Square in-stock quantity · {formatSquareStockQuantity(squareStock.quantity)} · calculated <StockTime value={squareStock.calculatedAt} /></>
+          : "No Square in-stock observation yet."}
+      </p>
       {item.lastConfirmedQuantity != null ? (
         <p className="mt-1 text-xs text-[var(--ink-soft)]">
           Last confirmed physical count · {item.lastConfirmedQuantity}
@@ -129,6 +142,7 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
   alertUserId?: string;
 }) {
   const router = useRouter();
+  const [refreshingStock, startStockRefresh] = useTransition();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [variations, setVariations] = useState<{ id: string; label: string }[]>();
@@ -178,8 +192,21 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
   return (
     <section className="mx-auto mt-6 max-w-[1520px] px-4 sm:px-6 lg:px-8" aria-labelledby="church-square-stock-heading">
       <div className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-        <h2 id="church-square-stock-heading" className="text-lg font-medium">Square stock counts</h2>
-        <p className="mt-1 text-sm text-[var(--ink-faint)]">Count sellable units now. A confirmed zero can mark a tracked item sold out. For temporary holds or modifiers, use Square’s availability controls.</p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 id="church-square-stock-heading" className="text-lg font-medium">Square stock counts</h2>
+            <p className="mt-1 text-sm text-[var(--ink-faint)]">Count sellable units now. A confirmed zero can mark a tracked item sold out. For temporary holds or modifiers, use Square’s availability controls.</p>
+          </div>
+          {items.length > 0 && (
+            <Button type="button" size="sm" variant="quiet" disabled={refreshingStock} aria-busy={refreshingStock}
+              aria-describedby="church-square-stock-refresh-detail" onClick={() => startStockRefresh(() => router.refresh())}>
+              {refreshingStock ? "Refreshing stock…" : "Refresh Square stock"}
+            </Button>
+          )}
+        </div>
+        {items.length > 0 && <p id="church-square-stock-refresh-detail" className="mt-2 text-xs text-[var(--ink-soft)]">
+          Refresh loads the latest Square observations synced to Operations.
+        </p>}
         {liveAlerts && (
           <div className="mt-2 space-y-1 text-xs text-[var(--ink-soft)]">
             {liveAlerts.state === "denied" && <p>Operations stock alert access is unavailable.</p>}

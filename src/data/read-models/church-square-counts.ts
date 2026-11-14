@@ -13,6 +13,8 @@ const countItemSchema = z.object({
   pendingObservedAt: z.string().nullish(),
   lastConfirmedQuantity: quantity.nullish(),
   lastConfirmedObservedAt: z.string().nullish(),
+  squareInStockQuantity: z.string().nullish(),
+  squareInStockCalculatedAt: z.iso.datetime({ offset: true }).nullish(),
 });
 export type ChurchSquareCountItem = z.infer<typeof countItemSchema>;
 

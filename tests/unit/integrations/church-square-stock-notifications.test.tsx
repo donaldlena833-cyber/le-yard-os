@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { sendChurchSquareCountAction } from "@/app/actions/workflows/church-square-counts";
 import { acknowledgeChurchSquareStockAlertAction } from "@/app/actions/workflows/church-square-stock-alerts";
 import { ChurchSquareStockCounts } from "@/components/inventory/church-square-stock-counts";
 import { ChurchSquareStockNotifications } from "@/components/inventory/church-square-stock-notifications";
@@ -26,6 +27,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   refresh.mockClear();
   vi.mocked(acknowledgeChurchSquareStockAlertAction).mockReset();
+  vi.mocked(sendChurchSquareCountAction).mockReset();
 });
 
 const scope = {
@@ -210,7 +212,7 @@ describe("Church Street Square low stock notification", () => {
     const inventory = within(screen.getByRole("region", { name: "Square stock counts" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(inventory.getByText(/Last Operations alert check/).querySelector("time")?.dateTime).toBe(readAt);
-    expect(inventory.getByText(/Square calculated this count/).querySelector("time")?.dateTime).toBe(alert.calculatedAt);
+    expect(inventory.getByText(/Latest Square in-stock quantity/).querySelector("time")?.dateTime).toBe(alert.calculatedAt);
     expect(inventory.getByText(/Last confirmed physical count · 0/).querySelector("time")?.dateTime).toBe(observedAt);
 
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
@@ -220,12 +222,56 @@ describe("Church Street Square low stock notification", () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(inventory.queryByText(/Could not refresh/)).toBeNull();
-    expect(inventory.queryByText(/Square calculated this count/)).toBeNull();
+    expect(inventory.queryByText(/Latest Square in-stock quantity/)).toBeNull();
     expect(inventory.getByText(/Last Operations alert check/).querySelector("time")?.dateTime).toBe("2026-11-14T13:05:20.000Z");
 
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(inventory.getByText(/Operations stock alert access is unavailable/)).toBeTruthy();
     expect(inventory.queryByText(/Last Operations alert check/)).toBeNull();
     expect(inventory.getByText(/Last confirmed physical count · 0/)).toBeTruthy();
+  });
+
+  it("shows the synced Square in-stock quantity to count staff even above the alert threshold", () => {
+    const observedAt = "2026-11-14T10:50:00Z";
+    const calculatedAt = "2026-11-14T10:55:00Z";
+    const item = { id: alert.id, label: alert.label, lastConfirmedQuantity: 10, lastConfirmedObservedAt: observedAt };
+    const view = (quantity: string | null, timestamp: string | null, alerts: typeof alert[] = []) =>
+      <ChurchSquareStockCounts scope={scope} items={[{ ...item, squareInStockQuantity: quantity, squareInStockCalculatedAt: timestamp }]}
+        alerts={alerts} enabled canConfigure={false} />;
+    const { rerender } = render(view("9.00000", calculatedAt, [{ ...alert, calculatedAt: observedAt }]));
+    expect(screen.getByText(/Latest Square in-stock quantity · 9 · calculated/).querySelector("time")?.dateTime).toBe(calculatedAt);
+    expect(screen.getByText(/Last confirmed physical count · 10/).querySelector("time")?.dateTime).toBe(observedAt);
+    expect(screen.queryByText(/Low stock ·/)).toBeNull();
+
+    rerender(view("9", calculatedAt, [{ ...alert, quantity: "0.00000" }]));
+    expect(screen.getByText(/Latest Square in-stock quantity · 0 · calculated/).querySelector("time")?.dateTime).toBe(alert.calculatedAt);
+    rerender(view("0.00000", calculatedAt));
+    expect(screen.getByText(/Latest Square in-stock quantity · 0 · calculated/)).toBeTruthy();
+    rerender(view(null, null));
+    expect(screen.getByText("No Square in-stock observation yet.")).toBeTruthy();
+    expect(screen.queryByText(/Latest Square in-stock quantity/)).toBeNull();
+    expect(screen.getByText(/Last confirmed physical count · 10/)).toBeTruthy();
+    const reload = screen.getByRole("button", { name: "Refresh Square stock" });
+    expect(reload.getAttribute("aria-describedby")).toBe(
+      screen.getByText("Refresh loads the latest Square observations synced to Operations.").id,
+    );
+    fireEvent.click(reload);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    rerender(<ChurchSquareStockCounts scope={scope} items={[]} enabled canConfigure={false} />);
+    expect(screen.queryByRole("button", { name: "Refresh Square stock" })).toBeNull();
+  });
+
+  it("labels the Square in-stock quantity independently of the submitted physical count", async () => {
+    vi.mocked(sendChurchSquareCountAction).mockResolvedValue({
+      ok: true, mode: "live", persisted: true, data: { status: "confirmed", currentQuantity: "0.00000" },
+    });
+    render(<ChurchSquareStockCounts scope={scope} items={[{ id: alert.id, label: alert.label }]} enabled canConfigure={false} />);
+    fireEvent.change(screen.getByLabelText("Units on hand"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("Reason for count"), { target: { value: "Counted before service" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send count to Square" }));
+    expect(await screen.findByText("Square confirmed this count. Square in-stock quantity at confirmation was 0.")).toBeTruthy();
+    expect(sendChurchSquareCountAction).toHaveBeenCalledExactlyOnceWith({
+      ...scope, itemId: alert.id, quantity: "3", reason: "Counted before service", requestId: expect.any(String),
+    });
   });
 });
