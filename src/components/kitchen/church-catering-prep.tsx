@@ -1,12 +1,11 @@
-import { type WorkspaceContextValue } from "@/lib/auth/workspace-context";
-import { loadChurchCateringPrep } from "@/data/read-models/church-catering-prep.server";
+import type { loadChurchCateringPrep } from "@/data/read-models/church-catering-prep.server";
 import { calculateChurchCateringPrep } from "@/lib/kitchen/church-catering-prep";
 
 const serviceDate = new Intl.DateTimeFormat("en-US", { dateStyle: "full", timeZone: "UTC" });
 const units = new Intl.NumberFormat("en-US");
 
-export async function ChurchCateringPrep({ workspace }: { workspace: WorkspaceContextValue }) {
-  const result = await loadChurchCateringPrep(workspace);
+export async function ChurchCateringPrep({ data }: { data: ReturnType<typeof loadChurchCateringPrep> }) {
+  const result = await data;
   if (!result) return null;
 
   return (
