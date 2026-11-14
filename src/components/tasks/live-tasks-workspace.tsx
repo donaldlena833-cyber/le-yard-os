@@ -60,6 +60,7 @@ import { ObjectActionBar } from "@/components/actions/object-action-bar";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { isWorkspaceRouteAccessible } from "@/components/shell/navigation";
 import {
+  churchSandwichIndividualTraining,
   churchSandwichRehearsal,
   churchSandwichSop,
   churchSandwichSupplierReview,
@@ -110,6 +111,7 @@ type RunAction = (
 ) => void;
 const churchChecklistStarters = {
   rehearsal: { ...churchSandwichRehearsal, actionLabel: "Draft sandwich rehearsal checklist" },
+  individualTraining: churchSandwichIndividualTraining,
   supplierReview: { ...churchSandwichSupplierReview, actionLabel: "Draft supplier label and allergen checklist" },
   firstShiftSquare: churchSquareFirstShiftRehearsal,
 };
@@ -2220,7 +2222,7 @@ function OperationDialog({
   }
 
   if (dialog.kind === "checklist-author") {
-    const starter = model.churchStreet && dialog.starter ? churchChecklistStarters[dialog.starter] : undefined;
+    const starter = canManage && model.churchStreet && dialog.starter ? churchChecklistStarters[dialog.starter] : undefined;
     return (
       <ModalFrame
         title="Author checklist version"
@@ -2900,12 +2902,14 @@ function OperationDialog({
 export function LiveTasksWorkspace({
   workspace,
   result,
+  initialTab = "tasks",
 }: {
   workspace: WorkspaceContextValue;
   result: LiveReadResult<LiveOperationsModel>;
+  initialTab?: Tab;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("tasks");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, startTransition] = useTransition();

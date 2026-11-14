@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const resourcePath = "/api/workspace/church-sandwich-staff-resources";
 const pdfs = [
   { slug: "training", label: "Sandwich station training guide" },
@@ -28,6 +30,7 @@ export function ChurchSandwichStaffResources() {
       <nav aria-label="Kitchen evidence" className="mt-3 border-t border-[var(--line)] pt-3">
         <ul className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
           {kitchenLinks.map(({ href, label }) => <li key={href}><a href={href} className={linkStyle}>{label}</a></li>)}
+          <li><Link href="/tasks?tab=checklists" className={linkStyle}>Staff training checklists</Link></li>
         </ul>
       </nav>
     </section>

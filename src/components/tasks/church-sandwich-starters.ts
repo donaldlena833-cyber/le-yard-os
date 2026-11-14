@@ -65,6 +65,17 @@ Slowest step and changes | text | required | Record the bottleneck, one change f
 Chef and manager review | text | required | Record accepted timing and portions or pending retest, allergen matrix revision or pending checks, reviewers and date.`,
 };
 
+export const churchSandwichIndividualTraining = {
+  name: "Church Street individual sandwich training",
+  checklistType: "custom",
+  actionLabel: "Draft individual sandwich training",
+  items: `Trainee, coach and guide | text | required | Assign this run to one trainee. Record the trainee name and station role, coach and rehearsal date (ET). Use Kitchen’s Sandwich station training guide v0.16 and record the version actually used.
+Coached builds and pack-out | text | required | Record each sandwich practiced, attempts, builds accepted, corrections and worksheet or Kitchen timing-run reference. Observe portion, build order, wrap and ticket match. Mark any untested build pending.
+Mock allergy drill | text | required | Record the simulated allergy, whether the trainee stopped before assembly and who they called. Record which supplier evidence and cross-contact instructions the lead checked, the mock guest response, and pass or repeat. Use a mock ticket and leave out guest details.
+Station readiness | text | required | Have the coach or shift lead record their name, date and a decision for the observed station duties. Use READY FOR OBSERVED DUTIES, SUPERVISED PRACTICE or HOLD. List any limits. Use current chef-signed recipes and reviewed supplier labels for service.
+Follow-up and repeat date | text | required | Record what to repeat, the owner and next check date, or record no repeat needed for the observed duties. Have the lead review the evidence before completing the run.`,
+};
+
 const supplierReviewItems = churchSandwichComponents.map((ingredient) =>
   `Supplier label · ${ingredient} | text | required | Record supplier and brand; exact SKU; ingredient and allergen label or spec reference and revision; pack lot and printed date/type; storage condition; opened/prepped use-by rule (UNSET until the PIC approves from verified evidence); PIC disposition and date (PENDING, HOLD, or APPROVED FOR SERVICE). Record each SKU separately in this response.`,
 ).join("\n");

@@ -321,6 +321,30 @@ describe("connected Operations review interactions", () => {
     expect(payload.items.find((item) => item.label === "Genuine catering handoff")?.instructions).toMatch(/existing genuine.*PENDING.*Do not create a live invoice/);
   });
 
+  it("opens Checklists from the training link and drafts one trainee's rehearsal evidence", async () => {
+    render(<LiveTasksWorkspace workspace={managementWorkspace("manager")} initialTab="checklists"
+      result={{ ok: true, data: { ...managementModel, churchStreet: true } }} />);
+    expect(screen.getByRole("tab", { name: /Checklists/, selected: true })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Draft individual sandwich training" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Author checklist version" }));
+    expect(dialog.getByText(/complete inactive version/i)).toBeTruthy();
+    expect(createChecklistTemplateVersionAction).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole("button", { name: "Create draft version" }));
+
+    await waitFor(() => expect(createChecklistTemplateVersionAction).toHaveBeenCalledOnce());
+    expect(createChecklistTemplateVersionAction).toHaveBeenCalledWith(expect.objectContaining({
+      locationId: workspace.activeLocation.id, name: "Church Street individual sandwich training", checklistType: "custom",
+      items: [
+        expect.objectContaining({ label: "Trainee, coach and guide", required: true, instructions: expect.stringMatching(/Assign this run to one trainee.*v0\.16/) }),
+        expect.objectContaining({ label: "Coached builds and pack-out", required: true, instructions: expect.stringMatching(/builds accepted.*Kitchen timing-run reference/) }),
+        expect.objectContaining({ label: "Mock allergy drill", required: true, instructions: expect.stringMatching(/stopped before assembly.*Use a mock ticket/) }),
+        expect.objectContaining({ label: "Station readiness", required: true, instructions: expect.stringMatching(/SUPERVISED PRACTICE or HOLD.*chef-signed recipes/) }),
+        expect.objectContaining({ label: "Follow-up and repeat date", required: true, instructions: expect.stringMatching(/owner and next check date/) }),
+      ],
+    }));
+    expect(startChecklistRunAction).not.toHaveBeenCalled();
+  });
+
   it.each([
     { role: "manager", churchStreet: false },
     { role: "employee", churchStreet: true },
@@ -335,6 +359,7 @@ describe("connected Operations review interactions", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Checklists/ }));
     await screen.findByRole("heading", { name: "Checklist runs" });
     expect(screen.queryByRole("button", { name: "Draft first-shift Square rehearsal" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Draft individual sandwich training" })).toBeNull();
   });
 
   it("reveals task evidence on demand and opens the selected named transition", async () => {
