@@ -43,6 +43,16 @@ export const recordChurchIngredientBatchInput = z.strictObject({
   path: ["discardAt"], message: "Discard time must follow the opened or prepped time.",
 });
 
+export const recordChurchIngredientBatchFromSourceInput = z.strictObject({
+  requestId: z.uuid(),
+  sourceBatchId: z.uuid(),
+  batchCode: identifier,
+  handledAt: instant,
+  discardAt: instant,
+}).refine(({ handledAt, discardAt }) => Date.parse(discardAt) > Date.parse(handledAt), {
+  path: ["discardAt"], message: "Discard time must follow the prep time.",
+});
+
 export const voidChurchIngredientBatchInput = z.strictObject({
   requestId: z.uuid(),
   batchId: z.uuid(),
@@ -72,14 +82,19 @@ export const churchBatchLabel = z.object({
   evidenceCurrent: z.boolean(),
   voidedAt: instant.nullable(),
   voidReason: postgresText(240).nullable(),
+  sourceBatch: z.object({ id: z.uuid(), batchCode: postgresText(120), discardAt: instant }).nullish(),
+  sourceNeedsReview: z.boolean().optional(),
   latestMeasurement: churchBatchMeasurement.nullish(),
   disposition: z.object({
     outcome: dispositionOutcome,
     resolvedAt: instant,
     resolvedByName: postgresText(120),
   }).nullish(),
-}).refine(({ id, ingredientKey, voidedAt, voidReason, disposition, latestMeasurement }) =>
+}).refine(({ id, ingredientKey, voidedAt, voidReason, disposition, latestMeasurement, sourceBatch, sourceNeedsReview, handledAs, discardAt }) =>
   Boolean(voidedAt) === Boolean(voidReason) && !(voidedAt && disposition)
+  && (sourceBatch
+    ? typeof sourceNeedsReview === "boolean" && sourceBatch.id !== id && handledAs === "prepped" && Date.parse(discardAt) <= Date.parse(sourceBatch.discardAt)
+    : sourceNeedsReview !== true)
   && (!latestMeasurement || (latestMeasurement.batchId === id && validChurchAvailabilityStock(ingredientKey, latestMeasurement.quantity))));
 
 export const churchBatchLabelList = z.array(churchBatchLabel).max(50)

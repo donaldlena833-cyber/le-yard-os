@@ -6,7 +6,7 @@ import { executeWorkflowAction, type WorkflowContext } from "@/data/execute";
 import { canRecordChurchBatchLabels } from "@/data/read-models/church-ingredient-batches.server";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import {
-  churchBatchLabel, churchBatchMeasurement, measureChurchIngredientBatchInput, recordChurchIngredientBatchInput,
+  churchBatchLabel, churchBatchMeasurement, measureChurchIngredientBatchInput, recordChurchIngredientBatchFromSourceInput, recordChurchIngredientBatchInput,
   resolveChurchIngredientBatchInput, voidChurchIngredientBatchInput,
 } from "@/lib/kitchen/church-ingredient-batches";
 
@@ -44,6 +44,33 @@ export async function recordChurchIngredientBatchAction(input: unknown) {
       }).abortSignal(AbortSignal.timeout(6_000));
       if (error) throwDatabaseError(error, "The Church Street batch label could not be recorded.");
       return parseBatchLabel(data);
+    },
+  });
+  if (result.ok && result.persisted) revalidatePath("/kitchen");
+  return result;
+}
+
+export async function recordChurchIngredientBatchFromSourceAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "church.kitchen.batch-label.record-from-source",
+    schema: recordChurchIngredientBatchFromSourceInput,
+    input,
+    run: async (context, batch) => {
+      const location = await batchLocation(context);
+      const { data, error } = await context.supabase.rpc("record_church_ingredient_batch_from_source", {
+        p_location_id: location,
+        p_request_id: batch.requestId,
+        p_source_batch_id: batch.sourceBatchId,
+        p_batch_code: batch.batchCode,
+        p_handled_at: batch.handledAt,
+        p_discard_at: batch.discardAt,
+      }).abortSignal(AbortSignal.timeout(6_000));
+      if (error) throwDatabaseError(error, "The Church Street prep label could not be recorded.");
+      const label = parseBatchLabel(data);
+      assertCondition(label.id === batch.requestId && label.sourceBatch?.id === batch.sourceBatchId
+        && typeof label.sourceNeedsReview === "boolean",
+      "database", "The prep label and its source could not be confirmed.");
+      return label;
     },
   });
   if (result.ok && result.persisted) revalidatePath("/kitchen");

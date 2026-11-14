@@ -2,13 +2,17 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { measureChurchIngredientBatchAction, recordChurchIngredientBatchAction, resolveChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
+import {
+  measureChurchIngredientBatchAction, recordChurchIngredientBatchAction, recordChurchIngredientBatchFromSourceAction,
+  resolveChurchIngredientBatchAction, voidChurchIngredientBatchAction,
+} from "@/app/actions/workflows/church-ingredient-batches";
 import { ChurchBatchLabelsPanel } from "@/components/kitchen/church-batch-labels-panel";
 import type { ChurchBatchLabel, ChurchBatchMeasurement } from "@/lib/kitchen/church-ingredient-batches";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
 
 vi.mock("@/app/actions/workflows/church-ingredient-batches", () => ({
   measureChurchIngredientBatchAction: vi.fn(), recordChurchIngredientBatchAction: vi.fn(),
+  recordChurchIngredientBatchFromSourceAction: vi.fn(),
   resolveChurchIngredientBatchAction: vi.fn(), voidChurchIngredientBatchAction: vi.fn(),
 }));
 
@@ -91,6 +95,52 @@ it("retains source audit details in read-only view and fails closed for expired 
   expect(screen.getByText("Discard time reached")).toBeTruthy();
   expect(screen.queryByText("Record a batch label")).toBeNull();
   expect(row.queryByRole("button")).toBeNull();
+});
+
+it("records a linked prep label against an earlier approved Eastern deadline and holds its descendants when the source is discarded", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(asOf));
+  const child: ChurchBatchLabel = {
+    ...recorded, id: "77777777-7777-4777-8777-777777777777", batchCode: "HAM-08",
+    handledAt: "2026-11-14T15:45:00.000Z", discardAt: "2026-11-14T17:45:00.000Z",
+    sourceBatch: { id: recorded.id, batchCode: recorded.batchCode, discardAt: recorded.discardAt }, sourceNeedsReview: false,
+  };
+  const source = { ...recorded, handledAs: "opened" as const, handlingRule: evidence.openedRule! };
+  vi.mocked(recordChurchIngredientBatchFromSourceAction).mockResolvedValue({ ok: true, mode: "live", persisted: true, data: child });
+  vi.mocked(resolveChurchIngredientBatchAction).mockResolvedValue({
+    ok: true, mode: "live", persisted: true,
+    data: { ...source, disposition: { outcome: "discarded", resolvedByName: "Chef lead", resolvedAt: asOf } },
+  });
+  render(<ChurchBatchLabelsPanel evidence={[evidence]} records={[source]} queue={{ batches: [source], total: 1 }} asOf={asOf} canRecord />);
+  const sourceRow = openDetails("French-style ham · HAM-07");
+  fireEvent.click(sourceRow.getByRole("button", { name: "Prep from this batch" }));
+  const prep = within(sourceRow.getByRole("form", { name: "Prep from HAM-07" }));
+  change("New batch code", child.batchCode);
+  change("Prepped at (Eastern)", "2026-11-14T10:45");
+  change("Discard deadline", "earlier");
+  change("Earlier discard by (Eastern)", "2026-11-14T13:15");
+  fireEvent.click(prep.getByRole("checkbox"));
+  fireEvent.click(prep.getByRole("button", { name: "Record prep batch" }));
+  expect(sourceRow.getByText(/future discard time no later than the source deadline/)).toBeTruthy();
+  expect(recordChurchIngredientBatchFromSourceAction).not.toHaveBeenCalled();
+
+  change("Earlier discard by (Eastern)", "2026-11-14T12:45");
+  fireEvent.click(prep.getByRole("button", { name: "Record prep batch" }));
+  expect(await sourceRow.findByText(/Prep batch HAM-08 recorded/)).toBeTruthy();
+  expect(recordChurchIngredientBatchFromSourceAction).toHaveBeenCalledExactlyOnceWith({
+    requestId: expect.any(String), sourceBatchId: recorded.id, batchCode: child.batchCode,
+    handledAt: child.handledAt, discardAt: child.discardAt,
+  });
+  const childRow = openDetails("French-style ham · HAM-08");
+  expect(childRow.getByText(/Prepped from batch HAM-07/).querySelector("time")?.dateTime).toBe(source.discardAt);
+  expect(childRow.getByRole("button", { name: "Measure remaining" })).toBeTruthy();
+  fireEvent.click(sourceRow.getByRole("button", { name: "Record discard" }));
+  fireEvent.click(sourceRow.getByRole("button", { name: "Confirm discard" }));
+  expect(await childRow.findByText("Source batch needs review")).toBeTruthy();
+  for (const name of ["Measure remaining", "Prep from this batch", "Record used up"]) {
+    expect(childRow.queryByRole("button", { name })).toBeNull();
+  }
+  expect(childRow.getByRole("button", { name: "Record discard" })).toBeTruthy();
+  expect(childRow.getByRole("button", { name: "Void label" })).toBeTruthy();
 });
 
 it("requires physical-label removal to void and preserves newer server void evidence over a late local reply", async () => {
