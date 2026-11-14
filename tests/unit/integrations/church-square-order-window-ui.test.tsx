@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   lookupChurchSquareOrderEvidenceAction,
   recoverChurchSquareOrderEvidenceAction,
@@ -21,8 +21,18 @@ vi.mock("@/app/actions/workflows/church-square-order-evidence", () => ({
   recoverChurchSquareOrderEvidenceAction: vi.fn(),
 }));
 
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+const writeText = vi.fn<(text: string) => Promise<void>>();
+
+beforeEach(() => {
+  writeText.mockRejectedValue(new Error("Clipboard unavailable"));
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+});
+
 afterEach(() => {
   cleanup();
+  if (originalClipboard) Object.defineProperty(navigator, "clipboard", originalClipboard);
+  else Reflect.deleteProperty(navigator, "clipboard");
   vi.resetAllMocks();
   vi.unstubAllGlobals();
 });
@@ -30,7 +40,6 @@ afterEach(() => {
 it("checks a completed order independently and copies evidence without the full Square ID", async () => {
   const checkedAt = "2026-11-14T18:00:00Z";
   const id = "private-order-id-0123456789";
-  vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("Clipboard unavailable")) } });
   vi.mocked(lookupChurchSquareOrderEvidenceAction).mockResolvedValue({
     ok: true, mode: "live", persisted: false, data: {
       reference: id.slice(-10), checkedAt, canRecover: true,
@@ -75,7 +84,6 @@ it("checks a completed order independently and copies evidence without the full 
 
 it("reports first signed order and linked payment receipts even before an Operations record exists", async () => {
   type Evidence = Extract<Awaited<ReturnType<typeof lookupChurchSquareOrderEvidenceAction>>, { mode: "live" }>["data"];
-  vi.stubGlobal("navigator", { clipboard: { writeText: vi.fn().mockRejectedValue(new Error("Clipboard unavailable")) } });
   const checkedAt = "2026-11-14T18:00:45Z";
   const orderEvent = "2026-11-14T18:00:00Z";
   const orderReceived = "2026-11-14T18:00:05Z";
@@ -146,6 +154,7 @@ it("recovers the checked Square order revision and copies the manual recovery ti
     reference: id.slice(-10), checkedAt, canRecover: true,
     square: { source: "SQUARE_POS" as const, status: "COMPLETED" as const, createdAt: checkedAt, updatedAt: checkedAt, version: 3, fulfillments: [] },
   };
+  writeText.mockResolvedValueOnce(undefined);
   vi.mocked(lookupChurchSquareOrderEvidenceAction).mockResolvedValue({
     ok: true, mode: "live", persisted: false, data: { ...snapshot, operations: { status: "not_observed" } },
   });
@@ -161,7 +170,8 @@ it("recovers the checked Square order revision and copies the manual recovery ti
   const input = lookup.getByLabelText("Exact Square order ID") as HTMLInputElement;
   fireEvent.change(input, { target: { value: ` ${id} ` } });
   fireEvent.click(lookup.getByRole("button", { name: "Check order" }));
-  const recover = await lookup.findByRole("button", { name: "Recover order into Operations" });
+  const recover = await lookup.findByRole("button", { name: "Recover order into Operations" }) as HTMLButtonElement;
+  await waitFor(() => expect(recover.disabled).toBe(false));
   expect(input.value).toBe("");
   expect(recoverChurchSquareOrderEvidenceAction).not.toHaveBeenCalled();
   fireEvent.click(recover);
@@ -172,20 +182,12 @@ it("recovers the checked Square order revision and copies the manual recovery ti
   expect(lookup.getByText(/^Operations record recovered manually/).querySelector("time")?.dateTime).toBe(recoveredAt);
   expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
 
-  const writeText = vi.fn().mockResolvedValue(undefined);
-  const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
-  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   const copy = lookup.getByRole("button", { name: "Copy order evidence" }) as HTMLButtonElement;
-  try {
-    await waitFor(() => expect(copy.disabled).toBe(false));
-    fireEvent.click(copy);
-    expect(await lookup.findByText("Order evidence copied.")).toBeTruthy();
-    expect(writeText).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(`Operations record recovered manually ${recoveredAt}.`));
-    expect(writeText.mock.calls[0][0]).not.toContain(id);
-  } finally {
-    if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
-    else Reflect.deleteProperty(navigator, "clipboard");
-  }
+  await waitFor(() => expect(copy.disabled).toBe(false));
+  fireEvent.click(copy);
+  expect(await lookup.findByText("Order evidence copied.")).toBeTruthy();
+  expect(writeText).toHaveBeenCalledExactlyOnceWith(expect.stringContaining(`Operations record recovered manually ${recoveredAt}.`));
+  expect(writeText.mock.calls[0][0]).not.toContain(id);
 });
 
 it("withholds recovery without access or an available comparison and drops stale evidence", async () => {
@@ -448,7 +450,7 @@ it("distinguishes an unavailable mix from a successful empty ordered sample", as
 
   fireEvent.click(screen.getByRole("button", { name: "Refresh orders" }));
   panel = within(await screen.findByRole("region", { name: "Sandwich units by Square source" }));
-  expect(panel.getByText("No completed orders in this sample.")).toBeTruthy();
+  expect(await panel.findByText("No completed orders in this sample.")).toBeTruthy();
   expect(panel.queryByText(/could not be verified|partial sample/)).toBeNull();
   expect(panel.queryByRole("table")).toBeNull();
 });
