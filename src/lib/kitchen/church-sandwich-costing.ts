@@ -51,8 +51,8 @@ export function summarizeChurchSandwichCosts(
     if (!formula || !matchesChurchSandwichFormulaEvidence(formula, currentEvidence)) {
       return { key, name, status: "needs_recipe", missingIngredients, totalCents: null };
     }
-    let numerator = 0n;
-    let denominator = 1n;
+    let numerator = BigInt(0);
+    let denominator = BigInt(1);
     for (const ingredient of [churchSandwichBread, ...portions.map(({ ingredient }) => ingredient)]) {
       const measurement = formula.measurements[ingredient];
       const cost = costsByIngredient.get(ingredient);
@@ -67,7 +67,7 @@ export function summarizeChurchSandwichCosts(
       denominator *= ingredientDenominator;
     }
     if (missingIngredients.length) return { key, name, status: "needs_costs", missingIngredients, totalCents: null };
-    const roundedCents = (numerator * 2n + denominator) / (denominator * 2n);
+    const roundedCents = (numerator * BigInt(2) + denominator) / (denominator * BigInt(2));
     if (roundedCents > BigInt(Number.MAX_SAFE_INTEGER)) {
       return { key, name, status: "unavailable", missingIngredients, totalCents: null };
     }
