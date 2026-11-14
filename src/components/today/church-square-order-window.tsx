@@ -14,6 +14,7 @@ import {
   type ChurchSquareOrderWindowResponse,
 } from "@/lib/integrations/church-square-order-window";
 import { summarizeChurchSquareSources } from "@/lib/integrations/church-square-source-summary";
+import { churchSandwichBenchRecipes } from "@/lib/kitchen/church-sandwich-bench";
 
 type Order = ChurchSquareOrderWindowResponse["orders"][number];
 type Fulfillment = Order["fulfillments"][number];
@@ -71,6 +72,8 @@ const handoffLabels: Record<Fulfillment["type"], string> = {
 };
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const number = new Intl.NumberFormat("en-US");
+const sandwichNames = new Map(churchSandwichBenchRecipes.map(({ key, name }) => [key, name]));
 const localTime = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
@@ -168,6 +171,63 @@ function SquareSourceActivity({ window }: { window: ChurchSquareOrderWindowRespo
   );
 }
 
+function SquareSandwichMix({ window }: { window: ChurchSquareOrderWindowResponse }) {
+  const mix = window.itemMix;
+  if (!mix) return null;
+
+  return (
+    <section aria-labelledby="church-square-item-mix-title" className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4">
+      <h4 id="church-square-item-mix-title" className="text-sm font-semibold">Sandwich units by Square source</h4>
+      {mix.status === "unavailable" ? (
+        <p className="mt-1 text-xs text-[var(--ink-soft)]">The sandwich mix could not be verified for this check. Refresh orders to try again.</p>
+      ) : (
+        <>
+          <p id="church-square-item-mix-context" className="mt-1 text-xs leading-relaxed text-[var(--ink-soft)]">
+            Whole units of the six exact Regular sandwich variations on completed Square orders in this sample of recent order updates. Square supplies the source hints, which can reflect the app that modified the order. Use reconciliation to verify payments and refunds.
+            {window.hasMore && " This is a partial sample. Square may have more orders in the window."}
+          </p>
+          <p className="mt-2 text-xs text-[var(--ink-soft)]">
+            {number.format(mix.matchedOrders)} of {number.format(mix.evaluatedOrders)} completed orders had eligible sandwich units.
+            {mix.ordersWithoutLines > 0 && ` Orders with no item lines returned: ${number.format(mix.ordersWithoutLines)}.`}
+            {mix.ordersWithReturns > 0 && ` Orders excluded because Square reported returns: ${number.format(mix.ordersWithReturns)}.`}
+            {mix.excludedMatchedLines > 0 && ` Matching lines excluded: ${number.format(mix.excludedMatchedLines)}.`}
+          </p>
+          {mix.rows.length === 0 ? (
+            <p className="mt-2 text-xs text-[var(--ink-soft)]">{mix.evaluatedOrders === 0 ? "No completed orders in this sample." : "No eligible sandwich units in this sample."}</p>
+          ) : (
+            <details open={mix.rows.length <= 8} className="mt-2">
+              <summary className="focus-ring cursor-pointer rounded text-xs font-semibold">Sandwich and source breakdown · {number.format(mix.rows.length)} {mix.rows.length === 1 ? "row" : "rows"}</summary>
+              <div className="mt-2 overflow-x-auto">
+                <table aria-labelledby="church-square-item-mix-title" aria-describedby="church-square-item-mix-context church-square-orders-bounds church-square-orders-check" className="w-full text-left text-xs">
+                  <thead className="border-b border-[var(--line)] text-[var(--ink-soft)]">
+                    <tr>
+                      <th scope="col" className="py-2 pr-2">Sandwich</th>
+                      <th scope="col" className="px-2 py-2">Source hint</th>
+                      <th scope="col" className="px-2 py-2 text-right">Whole units</th>
+                      <th scope="col" className="py-2 pl-2 text-right">Distinct completed orders</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--line)] tabular-nums">
+                    {mix.rows.map((row) => (
+                      <tr key={`${row.recipeKey}:${row.source}`}>
+                        <th scope="row" className="py-2 pr-2 font-medium">{sandwichNames.get(row.recipeKey)}</th>
+                        <td className="px-2 py-2">{row.source === "UNKNOWN" ? "Unknown source" : sources[row.source]}</td>
+                        <td className="px-2 py-2 text-right">{number.format(row.units)}</td>
+                        <td className="py-2 pl-2 text-right">{number.format(row.orders)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-[var(--ink-soft)]">One order can appear in more than one sandwich row.</p>
+            </details>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 function OrderFulfillmentSummary({ fulfillments }: { fulfillments: Order["fulfillments"] }) {
   if (!fulfillments.length) return <span className="text-[var(--ink-faint)]">Unavailable</span>;
 
@@ -253,6 +313,7 @@ export function ChurchSquareOrderWindow() {
       </div>
       {state.status === "ready" && <SquareFulfillmentDemand window={state.window} />}
       {state.status === "ready" && state.window.orders.length > 0 && <SquareSourceActivity window={state.window} />}
+      {state.status === "ready" && <SquareSandwichMix window={state.window} />}
       {state.status === "ready" && state.window.orders.length > 0 && (
         <div className="mt-3 overflow-x-auto rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
           <table className="w-full text-left text-xs">

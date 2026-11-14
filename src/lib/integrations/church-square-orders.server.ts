@@ -128,6 +128,10 @@ export class ChurchSquareOrderClient {
     return this.verifiedScope;
   }
 
+  verifySandwichCatalog() {
+    return this.scopeClient.verifyChurchSandwichCatalog();
+  }
+
   private async call(path: string, search?: object) {
     let response: Response;
     try {

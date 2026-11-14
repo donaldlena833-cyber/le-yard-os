@@ -4,11 +4,14 @@ import { appSurface } from "@/lib/app-surface";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import type { ChurchSquareOrder } from "@/lib/integrations/church-square-order-projection";
 import { ChurchSquareOrderClient, churchSquareOrderConfiguration } from "@/lib/integrations/church-square-orders.server";
+import { summarizeChurchSquareSandwichMix } from "@/lib/integrations/church-square-sandwich-mix.server";
 import {
   churchSquareOrderWindowHours,
   churchSquareOrderWindowLimit,
   type ChurchSquareOrderWindowResponse,
 } from "@/lib/integrations/church-square-order-window";
+import type { SquareChurchSandwichCatalogItem } from "@/lib/integrations/square-counts.server";
+import { churchSandwichBenchRecipes, type ChurchSandwichRecipeKey } from "@/lib/kitchen/church-sandwich-bench";
 import { createClient } from "@/lib/supabase/server";
 
 const managementRoles = new Set(["owner", "admin", "manager"]);
@@ -26,6 +29,29 @@ function uniqueOrderSnapshots(orders: readonly ChurchSquareOrder[]): ChurchSquar
     }
   }
   return [...seen.values()];
+}
+
+function regularSandwichVariationMap(catalog: readonly SquareChurchSandwichCatalogItem[]) {
+  const mapping = new Map<string, ChurchSandwichRecipeKey>();
+  for (const { key, name } of churchSandwichBenchRecipes) {
+    const item = catalog.find((entry) => entry.name === name);
+    const regular = item?.status === "matched" ? item.variations.filter((variation) => variation.name === "Regular") : [];
+    if (regular.length !== 1 || mapping.has(regular[0].id)) return null;
+    mapping.set(regular[0].id, key);
+  }
+  return mapping;
+}
+
+function sandwichMix(catalog: readonly SquareChurchSandwichCatalogItem[] | null, sample: readonly ChurchSquareOrder[]):
+  NonNullable<ChurchSquareOrderWindowResponse["itemMix"]> {
+  const variations = catalog ? regularSandwichVariationMap(catalog) : null;
+  if (!variations) return { status: "unavailable" };
+  try {
+    return summarizeChurchSquareSandwichMix(sample, variations);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+    return { status: "unavailable" };
+  }
 }
 
 export function canRequestChurchSquareOrderWindow(
@@ -66,17 +92,23 @@ export async function loadChurchSquareOrderWindow(): Promise<ChurchSquareOrderWi
   if (!config) return null;
   const now = Date.now();
   const checkedAt = new Date(now).toISOString();
-  const result = await new ChurchSquareOrderClient(config).searchOrders({
-    from: new Date(now - churchSquareOrderWindowHours * 60 * 60 * 1000).toISOString(),
-    to: checkedAt,
-    direction: "DESC",
-  });
+  const square = new ChurchSquareOrderClient(config);
+  const [result, catalog] = await Promise.all([
+    square.searchOrders({
+      from: new Date(now - churchSquareOrderWindowHours * 60 * 60 * 1000).toISOString(),
+      to: checkedAt,
+      direction: "DESC",
+    }),
+    square.verifySandwichCatalog().catch(() => null),
+  ]);
   // Suffixes are display-only and can collide across distinct provider orders.
   const orders = uniqueOrderSnapshots(result.orders);
+  const sample = orders.slice(0, churchSquareOrderWindowLimit);
   return {
     checkedAt,
     hasMore: Boolean(result.nextCursor) || orders.length > churchSquareOrderWindowLimit,
-    orders: orders.slice(0, churchSquareOrderWindowLimit).map(order => ({
+    itemMix: sandwichMix(catalog, sample),
+    orders: sample.map(order => ({
       reference: order.id.slice(-10),
       // Square's OrderSource is a display name, often the originating app.
       source: order.sourceHint,

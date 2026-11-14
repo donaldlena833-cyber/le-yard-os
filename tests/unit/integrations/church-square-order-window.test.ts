@@ -7,6 +7,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: moc
 import { GET } from "@/app/api/workspace/church-square-orders/route";
 import { isPublicRequestPath } from "@/lib/auth/public-paths";
 import { churchSquareOrderWindowPath } from "@/lib/integrations/church-square-order-window";
+import { churchSandwichBenchRecipes } from "@/lib/kitchen/church-sandwich-bench";
 
 const workspace = {
   mode: "live",
@@ -37,6 +38,7 @@ function scopedRows(locationFound = true) {
 
 function stubProvider(
   data?: (updatedAt: string) => { orders: unknown[]; cursor?: string },
+  catalog?: "verified" | "ambiguous",
 ) {
   const provider = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const path = new URL(String(input)).pathname;
@@ -52,6 +54,15 @@ function stubProvider(
         currency: "USD",
         address: { address_line_1: "140 Church St", postal_code: "10007", country: "US" },
       } });
+    }
+    if (path === "/v2/catalog/list" && catalog) {
+      return Response.json({ objects: churchSandwichBenchRecipes.map(({ key, name }) => {
+        const id = `item-${key}`;
+        const variation = { id: `regular-${key}`, type: "ITEM_VARIATION", item_variation_data: { item_id: id, name: "Regular" } };
+        return { id, type: "ITEM", item_data: {
+          name, variations: catalog === "ambiguous" && key === "parisien" ? [variation, { ...variation, id: "second-regular" }] : [variation],
+        } };
+      }) });
     }
     if (path !== "/v2/orders/search" || init?.method !== "POST") return new Response(null, { status: 500 });
     const { query } = JSON.parse(String(init.body));
@@ -140,8 +151,9 @@ describe("Church Square order window", () => {
       ["id", "workspace-org"], ["slug", "le-yard-church-street"], ["status", "active"],
       ["id", "workspace-location"], ["organization_id", "workspace-org"], ["code", "CHURCH"], ["is_active", true],
     ]);
-    expect(fetch).toHaveBeenCalledTimes(3);
-    const body = JSON.parse(String(fetch.mock.lastCall?.[1]?.body));
+    const ordersRequests = fetch.mock.calls.filter(([url]) => new URL(String(url)).pathname === "/v2/orders/search");
+    expect(ordersRequests).toHaveLength(1);
+    const body = JSON.parse(String(ordersRequests[0][1]?.body));
     const period = body.query.filter.date_time_filter.updated_at;
     expect(Date.parse(period.end_at) - Date.parse(period.start_at)).toBe(24 * 60 * 60 * 1000);
     expect(body).toEqual({
@@ -149,7 +161,7 @@ describe("Church Square order window", () => {
       query: { filter: { date_time_filter: { updated_at: period } }, sort: { sort_field: "UPDATED_AT", sort_order: "DESC" } },
     });
     expect(await response.json()).toEqual({
-      checkedAt: period.end_at, hasMore: true,
+      checkedAt: period.end_at, hasMore: true, itemMix: { status: "unavailable" },
       orders: [
         {
           reference: "9876543210", source: "GRUBHUB", status: "COMPLETED",
@@ -173,6 +185,34 @@ describe("Church Square order window", () => {
         },
       ],
     });
+  });
+
+  it.each(["verified", "ambiguous"] as const)("returns only exact catalog-based aggregate facts with a %s menu", async (catalog) => {
+    scopedRows();
+    stubProvider((updatedAt) => {
+      const order = { id: "private-full-order-id", location_id: "square-location", created_at: updatedAt, updated_at: updatedAt,
+        state: "COMPLETED", source: { name: "DoorDash" } };
+      return { orders: [{ ...order, line_items: [
+        { name: "Private text", uid: "line-private", catalog_object_id: "regular-parisien", quantity: "2.00", item_type: "ITEM" },
+        { name: "Le Parisien", quantity: "17" },
+        { catalog_object_id: "regular-parisien", quantity: "1", quantity_unit: { measurement_unit: { type: "TYPE_WEIGHT" } } },
+      ] }, { ...order, id: "other-order", source: { name: "New partner" }, line_items: [
+        { catalog_object_id: "regular-figaro", quantity: "1" },
+      ] }] };
+    }, catalog);
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.orders).toHaveLength(2);
+    expect(payload.itemMix).toEqual(catalog === "verified" ? {
+      status: "ready", evaluatedOrders: 2, matchedOrders: 2, ordersWithoutLines: 0, ordersWithReturns: 0,
+      excludedMatchedLines: 1,
+      rows: [
+        { recipeKey: "parisien", source: "DOORDASH", units: 2, orders: 1 },
+        { recipeKey: "figaro", source: "UNKNOWN", units: 1, orders: 1 },
+      ],
+    } : { status: "unavailable" });
+    expect(JSON.stringify(payload)).not.toMatch(/regular-parisien|line-private|Private text|private-full-order-id|New partner/);
   });
 
   it("collapses the same full order ID before deciding coverage and preserves distinct suffix collisions", async () => {

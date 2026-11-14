@@ -197,6 +197,41 @@ describe("Square Church Street canonical order reads", () => {
     await expect(client.get("refund", "refund_id")).rejects.toMatchObject({ code: "invalid_resource" });
   });
 
+  it("keeps only line classification and return presence from item and exchange details", () => {
+    const scope = { locationId: "church" };
+    const rawLine = order.line_items[0];
+    const itemized = projectChurchSquareResource("order", {
+      ...order,
+      line_items: [
+        { ...rawLine, item_type: "ITEM", quantity_unit: { measurement_unit: { custom_unit: { name: "PRIVATE_MEASURE" } } } },
+        { ...rawLine, item_type: "FUTURE_TYPE", quantity_unit: null },
+        { ...rawLine, item_type: null },
+      ],
+      returns: [{ source_order_id: "PRIVATE_EXCHANGE", return_line_items: [{ uid: "PRIVATE_RETURN" }] }],
+    }, scope);
+    expect(itemized).toMatchObject({
+      lineItemsReported: true,
+      hasReturns: true,
+      lineItems: [
+        { variationId: "variation", quantity: "2.5", itemType: "ITEM", hasQuantityUnit: true },
+        { itemType: "FUTURE_TYPE", hasQuantityUnit: false },
+        { itemType: null, hasQuantityUnit: false },
+      ],
+    });
+    expect(JSON.stringify(itemized)).not.toMatch(/PRIVATE|quantity_unit|return_line_items|measurement_unit/);
+
+    for (const [line_items, reported] of [[[], true], [null, false], [undefined, false]] as const) {
+      expect(projectChurchSquareResource("order", { ...order, line_items, returns: [] }, scope))
+        .toMatchObject({ lineItemsReported: reported, hasReturns: false, lineItems: [] });
+    }
+    expect(() => projectChurchSquareResource("order", {
+      ...order, line_items: [{ ...rawLine, item_type: "arbitrary text" }],
+    }, scope)).toThrow();
+    expect(() => projectChurchSquareResource("order", {
+      ...order, returns: Array.from({ length: 1001 }, () => ({})),
+    }, scope)).toThrow();
+  });
+
   it("distinguishes partial, unpaid and terminal invoice deposits", () => {
     const scope = { locationId: "church" };
     const deposit = invoice.payment_requests[0];

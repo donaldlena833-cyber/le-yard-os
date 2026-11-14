@@ -54,6 +54,7 @@ it("shows several fulfillments and labels only the Square milestones that are pr
   expect(request).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Load orders" }));
   const mixed = await screen.findByRole("row", { name: /mixed/ });
+  expect(screen.queryByRole("region", { name: "Sandwich units by Square source" })).toBeNull();
   expect(request).toHaveBeenCalledWith(churchSquareOrderWindowPath, expect.objectContaining({ cache: "no-store" }));
   expect(within(mixed).getByText("Delivery · Ready")).toBeTruthy();
   expect(within(mixed).getByText("Scheduled delivery").querySelector("time")?.dateTime).toBe("2026-11-14T18:30:00Z");
@@ -187,4 +188,56 @@ it("compares explicit Square timing pairs by source and shows attribution gaps o
   expect(region.getByText(/4 orders in this manual sample.*may have more orders/i)).toBeTruthy();
   expect(region.getByText(/start of their respective Square windows/i)).toBeTruthy();
   expect(region.queryByText("$100.00")).toBeNull();
+});
+
+it("shows bounded completed sandwich units and each coverage gap in the shared order check", async () => {
+  const checkedAt = "2026-11-14T18:00:00Z";
+  const completed: ChurchSquareOrderWindowResponse["orders"] = [
+    { reference: "complete", source: "UNKNOWN", status: "COMPLETED", updatedAt: checkedAt, totalCents: 2200, fulfillments: [] },
+    { reference: "other", source: "DOORDASH", status: "COMPLETED", updatedAt: checkedAt, totalCents: 1300, fulfillments: [] },
+    { reference: "third", source: "DOORDASH", status: "COMPLETED", updatedAt: checkedAt, totalCents: 1300, fulfillments: [] },
+  ];
+  const snapshot: ChurchSquareOrderWindowResponse = {
+    checkedAt, hasMore: true, orders: completed, itemMix: {
+      status: "ready", evaluatedOrders: 3, matchedOrders: 1, ordersWithoutLines: 1, ordersWithReturns: 1, excludedMatchedLines: 1,
+      rows: [{ recipeKey: "parisien", source: "UNKNOWN", units: 2, orders: 1 }],
+    },
+  };
+  const request = vi.fn().mockResolvedValue({ ok: true, json: async () => snapshot });
+  vi.stubGlobal("fetch", request);
+  render(<ChurchSquareOrderWindow />);
+  fireEvent.click(screen.getByRole("button", { name: "Load orders" }));
+  const panel = within(await screen.findByRole("region", { name: "Sandwich units by Square source" }));
+  const table = within(panel.getByRole("table", { name: "Sandwich units by Square source" }));
+  expect(table.getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual(["Sandwich", "Source hint", "Whole units", "Distinct completed orders"]);
+  const row = within(table.getByRole("row", { name: /Le Parisien/ }));
+  expect(row.getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["Unknown source", "2", "1"]);
+  expect(panel.getByText(/six exact Regular sandwich variations.*partial sample/)).toBeTruthy();
+  expect(panel.getByText(/1 of 3 completed orders.*no item lines returned: 1.*reported returns: 1.*Matching lines excluded: 1/)).toBeTruthy();
+  expect(panel.queryByText(/\$22\.00/)).toBeNull();
+  expect(request).toHaveBeenCalledExactlyOnceWith(churchSquareOrderWindowPath, expect.objectContaining({ cache: "no-store" }));
+});
+
+it("distinguishes an unavailable mix from a successful empty ordered sample", async () => {
+  const checkedAt = "2026-11-14T18:00:00Z";
+  const base = { checkedAt, hasMore: false, orders: [] } satisfies ChurchSquareOrderWindowResponse;
+  const empty: ChurchSquareOrderWindowResponse = { ...base, itemMix: {
+    status: "ready", evaluatedOrders: 0, matchedOrders: 0, ordersWithoutLines: 0, ordersWithReturns: 0, excludedMatchedLines: 0, rows: [],
+  } };
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ ...base, itemMix: { status: "unavailable" } }) })
+    .mockResolvedValueOnce({ ok: true, json: async () => empty }));
+  render(<ChurchSquareOrderWindow />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Load orders" }));
+  let panel = within(await screen.findByRole("region", { name: "Sandwich units by Square source" }));
+  expect(panel.getByText(/sandwich mix could not be verified/)).toBeTruthy();
+  expect(panel.queryByText(/No completed orders/)).toBeNull();
+  expect(screen.getByText(/no orders in this read/i)).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Refresh orders" }));
+  panel = within(await screen.findByRole("region", { name: "Sandwich units by Square source" }));
+  expect(panel.getByText("No completed orders in this sample.")).toBeTruthy();
+  expect(panel.queryByText(/could not be verified|partial sample/)).toBeNull();
+  expect(panel.queryByRole("table")).toBeNull();
 });
