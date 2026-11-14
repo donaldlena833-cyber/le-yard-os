@@ -65,7 +65,7 @@ async function verifyMarketplaceLinks(db) {
     ) values ('M_TEST','L_TEST',$1,$2,$3,$4,$5::timestamptz,$6::bigint,$7::jsonb)
   `, [organization, location, kind, id, savedTime, version, JSON.stringify({ kind, id, sourceHint: "UNKNOWN" })]);
 
-  await assert.rejects(save(), { code: "40001" });
+  await assert.rejects(save(), { code: "PT409" });
   await db.exec("reset role");
   await seed(orderId);
   await seed(siblingOrder);
@@ -94,7 +94,7 @@ async function verifyMarketplaceLinks(db) {
   for (const input of [
     { id: "payment-with-identical-id" }, { merchant: "M_OTHER" }, { sellerSite: "L_OTHER" },
     { id: orderId.slice(-10) }, { time: latest }, { version: 2 }, { version: null },
-  ]) await assert.rejects(save(input), { code: "40001" });
+  ]) await assert.rejects(save(input), { code: "PT409" });
   for (const input of [
     { channel: "SQUARE_POS" }, { evidence: "source_hint" }, { externalStore: "with spaces" },
     { externalStore: "a".repeat(101) }, { externalOrder: "12345" }, { externalOrder: "1234567890" },
@@ -140,7 +140,7 @@ async function verifyMarketplaceLinks(db) {
   await db.query(`update private.church_square_resource_state
     set source_version = 2, source_updated_at=$1::timestamptz where resource_kind='order' and resource_id=$2`, [latest, orderId]);
   await asRole(db, "service_role");
-  await assert.rejects(save({ actor: manager, evidence: "payout_statement" }), { code: "40001" });
+  await assert.rejects(save({ actor: manager, evidence: "payout_statement" }), { code: "PT409" });
   const upgraded = await save({ actor: manager, version: 2, time: latest, evidence: "payout_statement" });
   assert.deepEqual(upgraded, { ...original, evidence: "payout_statement" });
   assert.deepEqual(await save({ actor: owner, version: 2, time: latest, evidence: "merchant_order" }), upgraded);
