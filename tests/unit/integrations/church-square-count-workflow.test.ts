@@ -17,9 +17,9 @@ vi.mock("@/lib/integrations/square-counts.server", () => ({
 
 const id = (suffix: number) => `a1200000-0000-4000-8000-00000000000${suffix}`;
 const input = { organizationId: id(1), locationId: id(2), itemId: id(3), requestId: id(4), quantity: "0", reason: "Sold final portion" };
-const context = { actor: { userId: id(5), aal: "aal2", memberships: [
+const context: WorkflowContext = { supabase: {} as WorkflowContext["supabase"], actor: { userId: id(5), aal: "aal2", memberships: [
   { organizationId: id(1), role: "manager", locationIds: [id(2)], organizationWide: false },
-] } } as WorkflowContext;
+] } };
 const claim = {
   status: "pending", requestId: id(4), attemptId: id(6), observedAt: "2026-11-14T12:00:00.000Z",
   quantity: "0", merchantId: "merchant", squareLocationId: "church", variationId: "sandwich", wasDispatched: false,
