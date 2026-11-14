@@ -127,6 +127,7 @@ export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue
   if (!isTenantRouteEnabled(workspace, item.href)) return false;
   if (item.personas && (!workspace.persona || !item.personas.includes(workspace.persona))) return false;
   if (item.hiddenPersonas?.includes(workspace.persona as "chef")) return false;
+  if (item.href === "/inventory" && workspace.serviceSettings?.serviceModel === "counter" && workspace.role === "manager") return true;
   if (!item.roles && !item.anyCapabilities) return true;
   return Boolean(
     item.roles?.includes(workspace.role)

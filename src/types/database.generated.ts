@@ -10491,6 +10491,12 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       };
+      "list_church_square_count_items": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "manage_location_release_control": {
         Args: {
           "p_request_id": string | null
@@ -11426,6 +11432,17 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_claim_church_square_count": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_item_id": string | null
+          "p_request_id": string | null
+          "p_quantity": string | null
+          "p_reason": string | null
+        }
+        Returns: Json
+      };
       "service_claim_identity_delivery": {
         Args: {
           "p_worker_id": string | null
@@ -11534,6 +11551,19 @@ export type Database = {
           "p_provider_status_code": number | null
           "p_block_subscription": boolean | null
           "p_now": string | null
+        }
+        Returns: Json
+      };
+      "service_configure_church_square_count_item": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_item_id": string | null
+          "p_label": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_variation_id": string | null
+          "p_enabled": boolean | null
         }
         Returns: Json
       };
@@ -11668,6 +11698,15 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_finish_church_square_count": {
+        Args: {
+          "p_request_id": string | null
+          "p_attempt_id": string | null
+          "p_status": string | null
+          "p_provider_count_id"?: string | null
+        }
+        Returns: Json
+      };
       "service_get_managed_reservation": {
         Args: {
           "p_organization_id": string | null
@@ -11748,6 +11787,13 @@ export type Database = {
           "p_snapshots": Json | null
         }
         Returns: Json
+      };
+      "service_mark_church_square_count_dispatched": {
+        Args: {
+          "p_request_id": string | null
+          "p_attempt_id": string | null
+        }
+        Returns: boolean
       };
       "service_merge_guests": {
         Args: {
@@ -12558,6 +12604,7 @@ export const DatabaseObjectNames = {
       "is_owner_pending_mfa",
       "is_self_employee",
       "jwt_aal",
+      "list_church_square_count_items",
       "manage_location_release_control",
       "manual_import_headers_are_valid",
       "mark_channel_read",
@@ -12648,6 +12695,7 @@ export const DatabaseObjectNames = {
       "service_cancel_public_reservation",
       "service_capture_guest_interest",
       "service_claim_booking_rate_limit",
+      "service_claim_church_square_count",
       "service_claim_identity_delivery",
       "service_claim_integration_sync_job",
       "service_claim_owner_sms_alert",
@@ -12659,6 +12707,7 @@ export const DatabaseObjectNames = {
       "service_complete_reservation_delivery_run",
       "service_complete_reservation_message_outbox",
       "service_complete_reservation_push_delivery",
+      "service_configure_church_square_count_item",
       "service_confirm_public_reservation",
       "service_connected_acceptance_marker",
       "service_create_public_reservation",
@@ -12672,6 +12721,7 @@ export const DatabaseObjectNames = {
       "service_fence_integration_sync_job",
       "service_finalize_employee_document",
       "service_finalize_guest_interest",
+      "service_finish_church_square_count",
       "service_get_managed_reservation",
       "service_guest_profiles",
       "service_guest_sensitive_metrics",
@@ -12680,6 +12730,7 @@ export const DatabaseObjectNames = {
       "service_ingest_pos_time_entry",
       "service_ingest_square_production_source_window",
       "service_ingest_square_source_window",
+      "service_mark_church_square_count_dispatched",
       "service_merge_guests",
       "service_modify_public_reservation",
       "service_provision_church_street",

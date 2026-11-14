@@ -101,6 +101,7 @@ const approvedAuthenticatedFunctions = new Set([
   "is_owner_pending_mfa",
   "is_self_employee",
   "jwt_aal",
+  "list_church_square_count_items",
   "mark_channel_read",
   "manage_location_release_control",
   "modify_reservation",
@@ -214,6 +215,10 @@ const approvedAuthenticatedFunctions = new Set([
 ]);
 
 const requiredServiceFunctions = new Set([
+  "service_claim_church_square_count",
+  "service_configure_church_square_count_item",
+  "service_finish_church_square_count",
+  "service_mark_church_square_count_dispatched",
   "service_ingest_square_source_window",
   "service_ingest_square_production_source_window",
   "service_provision_church_street",

@@ -1,0 +1,172 @@
+"use client";
+
+import { type FormEvent, useState } from "react";
+import { useRouter } from "next/navigation";
+import { configureChurchSquareCountItemAction, listTrackedChurchSquareVariationsAction, sendChurchSquareCountAction } from "@/app/actions/workflows/church-square-counts";
+import { Button } from "@/components/ui/button";
+import type { ChurchSquareCountItem } from "@/data/read-models/church-square-counts";
+import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+
+type LocationScope = { organizationId: string; locationId: string };
+
+function CountItem({ item, scope, enabled }: { item: ChurchSquareCountItem; scope: LocationScope; enabled: boolean }) {
+  const router = useRouter();
+  const { requestIdFor, rotateRequestId } = useStableRequestIds();
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [unconfirmed, setUnconfirmed] = useState<{ requestId: string; quantity: string; reason: string }>();
+
+  const pending = item.pendingRequestId && item.pendingReason && item.pendingQuantity != null
+    ? { requestId: item.pendingRequestId, quantity: String(item.pendingQuantity), reason: item.pendingReason }
+    : unconfirmed;
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || !enabled) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const payload = { quantity: String(data.get("quantity") ?? ""), reason: String(data.get("reason") ?? "").trim() };
+    const count = pending ?? { ...payload, requestId: requestIdFor(item.id, payload) };
+    setSaving(true);
+    setMessage("");
+    try {
+      const result = await sendChurchSquareCountAction({ ...scope, itemId: item.id, ...count });
+      if (!result.ok || result.mode !== "live") {
+        setMessage(result.message);
+      } else if (result.data.status === "confirmed") {
+        setMessage(result.data.currentQuantity == null ? "Square confirmed this count."
+          : `Square confirmed this count. Current stock at confirmation was ${result.data.currentQuantity}.`);
+        setUnconfirmed(undefined);
+        rotateRequestId(item.id);
+        form.reset();
+      } else if (result.data.status === "rejected") {
+        setMessage("This count was never sent. Confirm that tracking is on in Square, then take a fresh count.");
+        setUnconfirmed(undefined);
+        rotateRequestId(item.id);
+      } else {
+        setUnconfirmed(count);
+        setMessage(result.data.status === "recovery_required" ? "Square confirmation is still pending. Ask a manager to check inventory history."
+          : "Square confirmation is pending. Check this same count again.");
+      }
+    } catch {
+      setUnconfirmed(count);
+      setMessage("The connection dropped before Square confirmation. Check this same count again.");
+    } finally {
+      setSaving(false);
+      router.refresh();
+    }
+  }
+
+  return (
+    <li className="py-4">
+      <h3 className="text-sm font-semibold">{item.label}</h3>
+      {item.lastConfirmedQuantity != null ? (
+        <p className="mt-1 text-xs text-[var(--ink-faint)]">Last confirmed physical count: {item.lastConfirmedQuantity}</p>
+      ) : null}
+      <form onSubmit={(event) => void submit(event)} className="mt-3 grid gap-2 sm:grid-cols-[8rem_1fr_auto] sm:items-end">
+        {pending ? (
+          <p className="text-sm sm:col-span-2">Pending Square confirmation for {pending.quantity} units</p>
+        ) : (
+          <>
+            <label className="grid gap-1 text-xs font-semibold">Units on hand
+              <input className="focus-ring rounded-md border border-[var(--line)] px-2 py-2" name="quantity" inputMode="numeric"
+                pattern="0|[1-9][0-9]{0,5}" maxLength={6} required disabled={!enabled || saving} />
+            </label>
+            <label className="grid gap-1 text-xs font-semibold">Reason for count
+              <input className="focus-ring rounded-md border border-[var(--line)] px-2 py-2" name="reason"
+                placeholder="Restocked, counted before service, or ran out" maxLength={160} required disabled={!enabled || saving} />
+            </label>
+          </>
+        )}
+        <Button type="submit" disabled={!enabled || saving} variant="accent">
+          {saving ? "Checking Square…" : pending ? "Check pending count" : "Send count to Square"}
+        </Button>
+      </form>
+      <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{message}</p>
+    </li>
+  );
+}
+
+export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure }: {
+  items: ChurchSquareCountItem[]; scope: LocationScope; enabled: boolean; canConfigure: boolean;
+}) {
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [variations, setVariations] = useState<{ id: string; label: string }[]>();
+
+  async function loadVariations() {
+    if (saving || !enabled || !canConfigure) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const result = await listTrackedChurchSquareVariationsAction(scope);
+      if (result.ok && result.mode === "live") {
+        setVariations(result.data);
+      } else setMessage(result.message);
+    } catch {
+      setMessage("Could not fetch tracked items from Square. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function configure(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving || !enabled || !canConfigure) return;
+    const form = event.currentTarget;
+    const variationId = String(new FormData(form).get("variationId") ?? "").trim();
+    setSaving(true);
+    setMessage("");
+    try {
+      const result = await configureChurchSquareCountItemAction({ ...scope, variationId });
+      if (result.ok && result.mode === "live") {
+        setMessage(`${result.data.label} is ready for physical counts.`);
+        setVariations((previous) => previous?.filter((variation) => variation.id !== variationId));
+        form.reset();
+        router.refresh();
+      } else setMessage(result.message);
+    } catch {
+      setMessage("Could not confirm the Square item was added. Refresh the list before trying again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="mx-auto mt-6 max-w-[1520px] px-4 sm:px-6 lg:px-8" aria-labelledby="church-square-stock-heading">
+      <div className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
+        <h2 id="church-square-stock-heading" className="text-lg font-medium">Square stock counts</h2>
+        <p className="mt-1 text-sm text-[var(--ink-faint)]">Count sellable units now. A confirmed zero can mark a tracked item sold out. For temporary holds or modifiers, use Square’s availability controls.</p>
+        {!enabled ? <p className="mt-2 text-sm">Waiting for the Church Street Square connection.</p> : null}
+        {items.length ? <ul className="mt-2 divide-y divide-[var(--line)]">
+          {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} />)}
+        </ul> : <p className="mt-2 text-sm">No items are set up for Square counts yet.</p>}
+        {canConfigure && enabled ? (
+          <details className="mt-4 border-t border-[var(--line)] pt-3">
+            <summary className="cursor-pointer text-sm font-semibold">Set up a tracked Square item</summary>
+            {variations?.length ? (
+              <form onSubmit={(event) => void configure(event)} className="mt-3 flex flex-wrap items-end gap-2">
+                <label className="grid gap-1 text-xs font-semibold">Tracked item in Square
+                  <select name="variationId" defaultValue="" required className="focus-ring rounded-md border border-[var(--line)] px-2 py-2">
+                    <option value="" disabled>Select an item</option>
+                    {variations.map((variation) => <option key={variation.id} value={variation.id}>{variation.label}</option>)}
+                  </select>
+                </label>
+                <Button type="submit" variant="quiet" disabled={saving}>{saving ? "Verifying…" : "Add tracked item"}</Button>
+              </form>
+            ) : (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button type="button" variant="quiet" disabled={saving} onClick={() => void loadVariations()}>
+                  {saving ? "Checking Square…" : "Find tracked items in Square"}
+                </Button>
+                {variations ? <p className="text-sm">No new tracked items found. Enable stock tracking after taking a physical count in Square.</p> : null}
+              </div>
+            )}
+            <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{message}</p>
+          </details>
+        ) : null}
+      </div>
+    </section>
+  );
+}

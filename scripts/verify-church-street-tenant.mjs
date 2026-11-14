@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 
 const ownerId = "10000000-0000-4000-8000-000000000001";
 const restaurantEmployeeId = "10000000-0000-4000-8000-000000000005";
@@ -20,6 +21,125 @@ async function expectDenial(db, sql, code, label) {
 async function claims(db, userId, role = "authenticated") {
   const token = JSON.stringify({ sub: userId, role, aal: "aal1" });
   await db.exec(`reset role; set role ${role}; select set_config('request.jwt.claims', '${token}', false);`);
+}
+
+async function verifyChurchSquareCountLedger(db, churchId, locationId) {
+  const itemId = randomUUID();
+  const requestId = randomUUID();
+  const list = (location = locationId) => `select public.list_church_square_count_items('${location}') as result`;
+  const read = async (sql) => (await db.query(sql)).rows[0].result;
+  const configure = (actor = ownerId, item = itemId, merchant = "M_TEST", variation = "V_TEST", enabled = true) =>
+    `select public.service_configure_church_square_count_item(
+      '${actor}','${locationId}','${item}','Fixture Sandwich','${merchant}','L_TEST','${variation}',${enabled}
+    ) as result`;
+  const claim = (actor = churchEmployeeId, request = requestId, quantity = "0") =>
+    `select public.service_claim_church_square_count(
+      '${actor}','${locationId}','${itemId}','${request}','${quantity}','Counted at the counter'
+    ) as result`;
+  const dispatch = (request, attempt) =>
+    `select public.service_mark_church_square_count_dispatched('${request}','${attempt}') as result`;
+  const finish = (request, attempt, status, provider = null) =>
+    `select public.service_finish_church_square_count('${request}','${attempt}','${status}',${provider ? `'${provider}'` : "null"}) as result`;
+  const asService = () => claims(db, undefined, "service_role");
+  const expire = async (request, countAge = "5 minutes") => {
+    await db.exec("reset role");
+    await db.query(`
+      update private.church_square_count_requests
+      set observed_at = clock_timestamp() - $2::interval, attempt_expires_at = clock_timestamp() - interval '1 second'
+      where id = $1
+    `, [request, countAge]);
+    await asService();
+  };
+
+  await claims(db, ownerId);
+  assert.deepEqual(await read(list()), []);
+  await expectDenial(db, list(restaurantLocationId), "42501", "Square count listing is Church only");
+  await expectDenial(db, configure(), "42501", "Authenticated owner cannot call privileged mapping directly");
+  await claims(db, churchEmployeeId);
+  await expectDenial(db, list(), "42501", "Prep staff require a separate count capability");
+  await asService();
+  await expectDenial(db, configure(churchEmployeeId), "42501", "Only an owner or admin may allowlist a Square variation");
+  await expectDenial(db, claim(), "42501", "Service-role calls still authorize the represented actor");
+  assert.deepEqual(await read(configure()), { id: itemId, enabled: true });
+  await expectDenial(db, configure(ownerId, randomUUID(), "M_OTHER"), "PT409", "Church may use one exact merchant and location");
+  await expectDenial(db, configure(ownerId, itemId, "M_TEST", "V_OTHER"), "PT409", "Mapped item identity cannot change");
+
+  await db.exec("reset role");
+  await db.query(`
+    insert into public.user_capability_overrides (
+      organization_id,user_id,capability_key,location_id,effect,reason,created_by,updated_by,effective_from
+    ) values ($1,$2,'inventory.count.create',$3,'grant','Pilot test',$4,$4,current_date - 1)
+  `, [churchId, churchEmployeeId, locationId, ownerId]);
+  await claims(db, churchEmployeeId);
+  assert.deepEqual(await read(list()), [{
+    id: itemId, label: "Fixture Sandwich", pendingRequestId: null, pendingQuantity: null,
+    pendingReason: null, pendingObservedAt: null, lastConfirmedQuantity: null, lastConfirmedObservedAt: null,
+  }]);
+  await expectDenial(db, claim(), "42501", "Authenticated staff cannot get provider scope from service claim");
+  await asService();
+  await expectDenial(db, claim(churchEmployeeId, requestId, "1.5"), "22023", "Only whole item counts are allowed");
+  const pending = await read(claim());
+  assert.equal(pending.status, "pending");
+  assert.equal(pending.wasDispatched, false);
+  assert.equal(pending.variationId, "V_TEST");
+  const precision = await db.query("select $1::timestamptz = date_trunc('milliseconds', $1::timestamptz) as exact", [pending.observedAt]);
+  assert.equal(precision.rows[0].exact, true);
+  await expectDenial(db, finish(requestId, pending.attemptId, "confirmed"), "PT409", "Unsent count cannot be reported confirmed");
+  await expectDenial(db, claim(churchEmployeeId, requestId, "2"), "PT409", "Same request ID cannot change the count");
+  await expectDenial(db, claim(churchEmployeeId, randomUUID()), "PT409", "Unresolved count blocks newer counts on the item");
+  await expectDenial(db, configure(ownerId, itemId, "M_TEST", "V_TEST", false), "PT409", "Pending item cannot be disabled to bypass conflict");
+  assert.equal((await read(claim(ownerId))).status, "in_progress");
+  await claims(db, churchEmployeeId);
+  const [withPending] = await read(list());
+  assert.equal(withPending.pendingRequestId, requestId);
+  assert.equal(withPending.pendingObservedAt, pending.observedAt);
+  assert.equal(withPending.pendingQuantity, "0");
+  assert.equal(withPending.pendingReason, "Counted at the counter");
+  assert.equal(JSON.stringify(withPending).includes("V_TEST"), false);
+
+  await asService();
+  assert.equal(await read(dispatch(requestId, pending.attemptId)), true);
+  await expectDenial(db, finish(requestId, pending.attemptId, "rejected"), "PT409", "Dispatch marker prevents declaring an ambiguous count rejected");
+  await expire(requestId, "25 hours");
+  const recovery = await read(claim(ownerId));
+  assert.equal(recovery.status, "recovery_required");
+  assert.equal(recovery.wasDispatched, true);
+  await expectDenial(db, finish(requestId, pending.attemptId, "confirmed", "PC_TEST"), "PT409", "A previous attempt cannot finalize the current lease");
+  await expectDenial(db, dispatch(requestId, recovery.attemptId), "PT409", "Expired physical counts are readback-only");
+  await expectDenial(db, finish(requestId, recovery.attemptId, "confirmed"), "PT409", "Late confirmation requires the exact provider receipt");
+  assert.equal((await read(finish(requestId, recovery.attemptId, "confirmed", "PC_TEST"))).status, "confirmed");
+  assert.equal((await read(claim())).status, "confirmed");
+
+  const revokedId = randomUUID();
+  const revoked = await read(claim(churchEmployeeId, revokedId, "6"));
+  await db.exec("reset role");
+  await db.query(`
+    update public.user_capability_overrides set is_active = false
+    where organization_id = $1 and user_id = $2 and capability_key = 'inventory.count.create'
+  `, [churchId, churchEmployeeId]);
+  await asService();
+  await expectDenial(db, dispatch(revokedId, revoked.attemptId), "PT409", "Revoked actor cannot dispatch a previously claimed write");
+  assert.equal((await read(finish(revokedId, revoked.attemptId, "rejected"))).status, "rejected");
+  await db.exec("reset role");
+  await db.query(`
+    update public.user_capability_overrides set is_active = true
+    where organization_id = $1 and user_id = $2 and capability_key = 'inventory.count.create'
+  `, [churchId, churchEmployeeId]);
+  await asService();
+
+  const unsentId = randomUUID();
+  await read(claim(churchEmployeeId, unsentId, "4"));
+  await expire(unsentId, "25 hours");
+  const unsent = await read(claim(ownerId, unsentId, "4"));
+  assert.equal(unsent.status, "recovery_required");
+  assert.equal(unsent.wasDispatched, false);
+  assert.equal((await read(finish(unsentId, unsent.attemptId, "rejected"))).status, "rejected");
+  await claims(db, churchEmployeeId);
+  const [confirmed] = await read(list());
+  assert.equal(confirmed.pendingRequestId, null);
+  assert.equal(confirmed.lastConfirmedQuantity, "0");
+  assert.equal(JSON.stringify(confirmed).includes("PC_TEST"), false);
+  process.stdout.write("PASS Church Street Square count authorization, isolation, replay and expired recovery\n");
 }
 
 export async function verifyChurchStreetTenant(db) {
@@ -151,6 +271,8 @@ export async function verifyChurchStreetTenant(db) {
         public.has_capability('${churchId}', '${churchLocationId}', 'prep.complete') as prep,
         public.has_capability('${churchId}', '${churchLocationId}', 'prep.manage') as manages_prep
     `), { church: true, restaurant: false, prep: true, manages_prep: false });
+
+    await verifyChurchSquareCountLedger(db, churchId, churchLocationId);
 
     await claims(db, undefined, "service_role");
     assert.equal((await get(`select public.service_set_church_street_active('${churchId}', false) as result`)).result.status, "suspended");
