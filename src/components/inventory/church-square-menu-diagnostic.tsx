@@ -17,6 +17,13 @@ const sellabilityLabel: Record<Variation["presentation"]["sellability"], string>
   not_sellable: "No",
   unspecified: "Unspecified",
 };
+const soldOutLabel: Record<Variation["presentation"]["soldOut"]["status"], string> = {
+  sold_out: "Flagged sold out",
+  expiration_unverified: "Flagged sold out · Expiration unverified",
+  expired: "Flag expired",
+  clear: "No sold-out flag",
+  unverified: "Unverified",
+};
 const trackingLabel: Record<Variation["tracking"], string> = {
   tracked: "Tracked",
   untracked: "Tracking off",
@@ -72,7 +79,7 @@ export function ChurchSquareMenuDiagnostic() {
       {snapshot && (
         <>
           <p className="mt-2 text-xs text-[var(--ink-soft)]">
-            Last checked <time dateTime={snapshot.checkedAt}>{time.format(new Date(snapshot.checkedAt))} ET</time>. Photo counts are Square catalog references. Verify the actual photos and descriptions on the register and guest menu. Count history refers to Operations entries. Use the tracked item setup below to verify eligibility for physical counts.
+            Last checked <time dateTime={snapshot.checkedAt}>{time.format(new Date(snapshot.checkedAt))} ET</time>. Photo counts are Square catalog references. Verify the actual photos and descriptions on the register and guest menu. Check ordering availability in each channel. Count history refers to Operations entries. Use the tracked item setup below to verify eligibility for physical counts.
           </p>
           <ul className="mt-2 divide-y divide-[var(--line)]">
             {snapshot.items.map((item) => (
@@ -104,6 +111,15 @@ export function ChurchSquareMenuDiagnostic() {
                           <div><dt className="inline font-medium">SKU </dt><dd className="inline break-all font-mono">{variation.sku ?? "Not provided"}</dd></div>
                           <div><dt className="inline font-medium">Variation photos </dt><dd className="inline tabular-nums">{variation.presentation.photoCount ?? "Unverified"}</dd></div>
                           <div><dt className="inline font-medium">Square sellable flag </dt><dd className="inline">{sellabilityLabel[variation.presentation.sellability]}</dd></div>
+                          <div>
+                            <dt className="inline font-medium">Church Street sold-out flag </dt>
+                            <dd className={["sold_out", "expiration_unverified"].includes(variation.presentation.soldOut.status) ? "inline font-semibold text-[var(--warning)]" : "inline"}>
+                              {soldOutLabel[variation.presentation.soldOut.status]}
+                              {"validUntil" in variation.presentation.soldOut && variation.presentation.soldOut.validUntil && (
+                                <> · Expiration <time dateTime={variation.presentation.soldOut.validUntil}>{time.format(new Date(variation.presentation.soldOut.validUntil))} ET</time></>
+                              )}
+                            </dd>
+                          </div>
                         </dl>
                         <p className="mt-2">{trackingLabel[variation.tracking]} · {mappingLabel[variation.mapping]}</p>
                         <p className="mt-1 text-[var(--ink-soft)]">{physicalCountLabel[variation.openingCount]}</p>

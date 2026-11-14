@@ -36,7 +36,7 @@ const regularId = "SQUARE-PARISIEN-REGULAR";
 const date = "2026-11-14T16:00:00Z";
 const menu = churchSandwichBenchRecipes.map(({ name, key }) => key === "parisien"
   ? { name, itemId: "PARISIEN", status: "matched", presentation: { itemPhotoCount: 2, description: "present", html: "private-extras" }, variations: [
-    { id: regularId, name: "Regular", sku: "SKU-1", tracking: "tracked", presentation: { photoCount: 0, sellability: "sellable", urls: "private-extras" } },
+    { id: regularId, name: "Regular", sku: "SKU-1", tracking: "tracked", presentation: { photoCount: 0, sellability: "sellable", soldOut: { status: "sold_out", validUntil: date }, urls: "private-extras" } },
     { id: "SQUARE-PARISIEN-TEST", name: "Second portion", sku: null, tracking: "untracked" },
   ] }
   : { name, itemId: null, status: key === "bleu" ? "ambiguous" : "missing", variations: [] });
@@ -63,8 +63,8 @@ describe("Church Square sandwich menu diagnostic", () => {
       ok: true, persisted: false,
       data: { items: [
         { key: "parisien", status: "matched", itemId: "PARISIEN", presentation: { itemPhotoCount: 2, description: "present" }, variations: [
-          { id: regularId, name: "Regular", sku: "SKU-1", tracking: "tracked", mapping: "mapped", openingCount: "confirmed", presentation: { photoCount: 0, sellability: "sellable" } },
-          { id: "SQUARE-PARISIEN-TEST", tracking: "untracked", mapping: "unmapped", openingCount: "unrecorded", presentation: { photoCount: null, sellability: "unspecified" } },
+          { id: regularId, name: "Regular", sku: "SKU-1", tracking: "tracked", mapping: "mapped", openingCount: "confirmed", presentation: { photoCount: 0, sellability: "sellable", soldOut: { status: "sold_out", validUntil: date } } },
+          { id: "SQUARE-PARISIEN-TEST", tracking: "untracked", mapping: "unmapped", openingCount: "unrecorded", presentation: { photoCount: null, sellability: "unspecified", soldOut: { status: "unverified" } } },
         ] },
         { key: "verger", status: "missing", variations: [] },
         { key: "bellecour", status: "missing", variations: [] },

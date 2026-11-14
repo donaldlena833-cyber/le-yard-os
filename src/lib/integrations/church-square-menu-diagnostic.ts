@@ -8,7 +8,14 @@ export type ChurchSquareItemPresentation = {
 export type ChurchSquareVariationPresentation = {
   photoCount: number | null;
   sellability: "sellable" | "not_sellable" | "unspecified";
+  soldOut: ChurchSquareSoldOutFlag;
 };
+
+export type ChurchSquareSoldOutFlag =
+  | { status: "sold_out"; validUntil: string | null }
+  | { status: "expiration_unverified" }
+  | { status: "expired"; validUntil: string }
+  | { status: "clear" | "unverified" };
 
 export type ChurchSquareMenuDiagnosticVariation = {
   id: string;

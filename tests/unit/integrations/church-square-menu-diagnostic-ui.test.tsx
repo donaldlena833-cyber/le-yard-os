@@ -24,9 +24,9 @@ const facts: ChurchSquareMenuDiagnostic = {
       key: "parisien", name: "Le Parisien", status: "matched", itemId: "parent-parisien",
       presentation: { itemPhotoCount: 2, description: "present" }, variations: [
         { id: "variation-regular", name: "Regular", sku: "LY-PARISIEN", tracking: "tracked", mapping: "mapped", openingCount: "confirmed",
-          presentation: { photoCount: 1, sellability: "sellable" } },
+          presentation: { photoCount: 1, sellability: "sellable", soldOut: { status: "sold_out", validUntil: "2026-11-14T19:15:00Z" } } },
         { id: "variation-mini", name: "Mini", sku: null, tracking: "untracked", mapping: "unmapped", openingCount: "unrecorded",
-          presentation: { photoCount: 0, sellability: "not_sellable" } },
+          presentation: { photoCount: 0, sellability: "not_sellable", soldOut: { status: "clear" } } },
       ],
     },
     { key: "verger", name: "Le Verger", status: "missing", itemId: null, variations: [] },
@@ -37,7 +37,7 @@ const facts: ChurchSquareMenuDiagnostic = {
       key: "rustique", name: "Le Rustique", status: "matched", itemId: "parent-rustique",
       presentation: { itemPhotoCount: null, description: "unverified" }, variations: [
         { id: "variation-rustique", name: "Regular", sku: null, tracking: "default_off", mapping: "unknown", openingCount: "unknown",
-          presentation: { photoCount: null, sellability: "unspecified" } },
+          presentation: { photoCount: null, sellability: "unspecified", soldOut: { status: "unverified" } } },
       ],
     },
     { key: "figaro", name: "Le Figaro", status: "missing", itemId: null, variations: [] },
@@ -86,15 +86,20 @@ it("shows the exact parent and variation evidence and removes prior data when a 
   expect(diagnosticPanel.getAllByRole("heading")).toHaveLength(6);
   expect(diagnosticPanel.getByText(/photo counts are square catalog references/i)).toBeTruthy();
   expect(diagnosticPanel.getByText(/verify the actual photos and descriptions on the register and guest menu/i)).toBeTruthy();
+  expect(diagnosticPanel.getByText(/check ordering availability in each channel/i)).toBeTruthy();
   const parisien = within(parent.closest("li")!);
   expect(parisien.getByText("Item photos").nextElementSibling?.textContent).toBe("2");
   expect(parisien.getByText("Description").nextElementSibling?.textContent).toBe("Present");
   const regular = within(parisien.getByText("variation-regular").closest("li")!);
   expect(regular.getByText("Variation photos").nextElementSibling?.textContent).toBe("1");
   expect(regular.getByText("Square sellable flag").nextElementSibling?.textContent).toBe("Yes");
+  const regularSoldOut = regular.getByText("Church Street sold-out flag").nextElementSibling;
+  expect(regularSoldOut?.textContent).toMatch(/^Flagged sold out/);
+  expect(regularSoldOut?.querySelector("time")?.dateTime).toBe("2026-11-14T19:15:00Z");
   const mini = within(parisien.getByText("variation-mini").closest("li")!);
   expect(mini.getByText("Variation photos").nextElementSibling?.textContent).toBe("0");
   expect(mini.getByText("Square sellable flag").nextElementSibling?.textContent).toBe("No");
+  expect(mini.getByText("Church Street sold-out flag").nextElementSibling?.textContent).toBe("No sold-out flag");
   const bleu = within(diagnosticPanel.getByRole("heading", { name: "Le Bleu" }).closest("li")!);
   expect(bleu.getByText("Item photos").nextElementSibling?.textContent).toBe("0");
   expect(bleu.getByText("Description").nextElementSibling?.textContent).toBe("Missing");
@@ -103,6 +108,7 @@ it("shows the exact parent and variation evidence and removes prior data when a 
   expect(rustique.getByText("Description").nextElementSibling?.textContent).toBe("Unverified");
   expect(rustique.getByText("Variation photos").nextElementSibling?.textContent).toBe("Unverified");
   expect(rustique.getByText("Square sellable flag").nextElementSibling?.textContent).toBe("Unspecified");
+  expect(rustique.getByText("Church Street sold-out flag").nextElementSibling?.textContent).toBe("Unverified");
 
   fireEvent.click(diagnosticPanel.getByRole("button", { name: "Check again" }));
   await diagnosticPanel.findByText("Church Street owner access is required.");

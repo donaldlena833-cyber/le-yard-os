@@ -302,7 +302,8 @@ describe("Church sandwich catalog evidence", () => {
     const request = mockSquare({ catalog: () => respond({ objects: [
       item("PARISIEN", "Le Parisien", { image_ids: ["PARENT_PHOTO_A", "PARENT_PHOTO_B"], description_plaintext: "  Text  ",
         description_html: "<b>Text</b>", product_type: "FOOD_AND_BEV", food_and_beverage_details: { ingredients: [] } }, [
-        child("P_MAIN", "Regular", { image_ids: ["VARIATION_PHOTO"], sellable: true, track_inventory: true }),
+        child("P_MAIN", "Regular", { image_ids: ["VARIATION_PHOTO"], sellable: true, track_inventory: true,
+          location_overrides: [{ location_id: config.locationId, sold_out: true }] }),
         child("P_ALT", "Test", { image_ids: ["DUPLICATE", "DUPLICATE"], sellable: false }),
         child("P_OTHER", "Other location", { image_ids: ["OTHER_PHOTO"], sellable: true }, { absent_at_location_ids: [config.locationId] }),
         child("P_UNKNOWN", "Unknown", { sellable: "not boolean" }),
@@ -326,7 +327,7 @@ describe("Church sandwich catalog evidence", () => {
     expect(result[0]).toMatchObject({
       allergens: { status: "empty" },
       variations: [
-        { id: "P_MAIN", tracking: "tracked", presentation: { photoCount: 1, sellability: "sellable" } },
+        { id: "P_MAIN", tracking: "tracked", presentation: { photoCount: 1, sellability: "sellable", soldOut: { status: "sold_out", validUntil: null } } },
         { id: "P_ALT", presentation: { photoCount: null, sellability: "not_sellable" } },
         { id: "P_UNKNOWN", presentation: { photoCount: 0, sellability: "unspecified" } },
       ],
@@ -334,6 +335,30 @@ describe("Church sandwich catalog evidence", () => {
     expect(JSON.stringify(result)).not.toMatch(/PHOTO|Only HTML|Private description/);
     expect(request.mock.calls).toHaveLength(3);
     expect(request.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
+  it.each([
+    ["future timestamp", [{ sold_out: true, sold_out_valid_until: "2026-11-14T09:51:00-05:00" }], { status: "sold_out", validUntil: "2026-11-14T09:51:00-05:00" }],
+    ["matching timestamp", [{ sold_out: true, sold_out_valid_until: now }], { status: "sold_out", validUntil: now }],
+    ["expired timestamp", [{ sold_out: true, sold_out_valid_until: occurredAt }], { status: "expired", validUntil: occurredAt }],
+    ["explicit false", [{ sold_out: false }], { status: "clear" }],
+    ["missing flag", [{ track_inventory: true }], { status: "unverified" }],
+    ["malformed flag", [{ sold_out: "true" }], { status: "unverified" }],
+    ["malformed timestamp", [{ sold_out: true, sold_out_valid_until: "bad-timestamp" }], { status: "expiration_unverified" }],
+    ["timestamp without seconds", [{ sold_out: true, sold_out_valid_until: "2026-11-14T19:20Z" }], { status: "expiration_unverified" }],
+    ["different location only", [], { status: "unverified" }],
+  ])("projects the Church Street sold-out flag for %s", async (_case, overrides, soldOut) => {
+    const request = mockSquare({ catalog: () => respond({ objects: [{
+      id: "PARISIEN", type: "ITEM", item_data: { name: "Le Parisien", variations: [child("P_MAIN", "Regular", {
+        sellable: true,
+        location_overrides: [
+          { location_id: "OTHER_LOCATION", sold_out: true },
+          ...overrides.map((override) => ({ location_id: config.locationId, ...override })),
+        ],
+      })] },
+    }] }) });
+    const [parisien] = await new SquareCountClient(config, request).verifyChurchSandwichCatalog({ includePresentation: true });
+    expect(parisien).toMatchObject({ variations: [{ presentation: { sellability: "sellable", soldOut } }] });
   });
 
   it.each([

@@ -61,6 +61,7 @@ async function menuDiagnostic(context: WorkflowContext): Promise<ChurchSquareMen
             presentation: {
               photoCount: variation.presentation?.photoCount ?? null,
               sellability: variation.presentation?.sellability ?? "unspecified",
+              soldOut: variation.presentation?.soldOut ?? { status: "unverified" },
             },
             mapping: mappingById ? (mapping ? "mapped" : "unmapped") : "unknown",
             openingCount: mappingById ? (mapping?.lastConfirmedObservedAt ? "confirmed" : "unrecorded") : "unknown",

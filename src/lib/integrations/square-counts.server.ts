@@ -57,6 +57,13 @@ const catalogLocationSchema = z.object({
   absent_at_location_ids: z.array(squareId).optional(),
   present_at_location_ids: z.array(squareId).optional(),
 });
+const locationTrackingOverrideSchema = z.object({
+  location_id: squareId,
+  track_inventory: z.boolean().optional(),
+});
+function uniqueLocationOverrides(overrides: readonly { location_id: string }[] | undefined) {
+  return !overrides || new Set(overrides.map(({ location_id }) => location_id)).size === overrides.length;
+}
 const variationSchema = catalogLocationSchema.extend({
   type: z.literal("ITEM_VARIATION"),
   item_variation_data: z.object({
@@ -68,10 +75,7 @@ const variationSchema = catalogLocationSchema.extend({
     stockable: z.boolean().optional(),
     stockable_conversion: z.unknown().optional(),
     measurement_unit_id: squareId.optional(),
-    location_overrides: z.array(z.object({
-      location_id: squareId,
-      track_inventory: z.boolean().optional(),
-    })).optional(),
+    location_overrides: z.array(locationTrackingOverrideSchema).optional(),
   }),
 });
 const parentSchema = catalogLocationSchema.extend({
@@ -94,8 +98,7 @@ const exactVariationSchema = variationSchema.extend({
   item_variation_data: variationSchema.shape.item_variation_data.extend({
     name: z.string().min(1).max(2048).refine((name) => name.trim() && !/[\p{Cc}\p{Cf}]/u.test(name)),
     sku: z.string().max(255).regex(/^[^\p{Cc}\p{Cf}]*$/u).optional(),
-    location_overrides: variationSchema.shape.item_variation_data.shape.location_overrides.refine((overrides) =>
-      !overrides || new Set(overrides.map(({ location_id }) => location_id)).size === overrides.length),
+    location_overrides: variationSchema.shape.item_variation_data.shape.location_overrides.refine(uniqueLocationOverrides),
   }),
 });
 const parentPresentationSchema = exactParentSchema.extend({
@@ -110,6 +113,10 @@ const variationPresentationSchema = exactVariationSchema.extend({
   item_variation_data: exactVariationSchema.shape.item_variation_data.extend({
     image_ids: z.unknown().optional(),
     sellable: z.unknown().optional(),
+    location_overrides: z.array(locationTrackingOverrideSchema.extend({
+      sold_out: z.unknown().optional(),
+      sold_out_valid_until: z.unknown().optional(),
+    })).optional().refine(uniqueLocationOverrides),
   }),
 });
 const physicalCountSchema = z.object({
@@ -265,6 +272,25 @@ function itemPresentation({ image_ids, description_plaintext, description, descr
     itemPhotoCount: photoCount(image_ids),
     description: plain || legacy ? "present" : html === "" && !readable.includes(null) ? "missing" : "unverified",
   };
+}
+
+const soldOutExpiration = z.iso.datetime({ offset: true }).max(35)
+  .regex(/T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/);
+
+function squareSoldOutFlag(override: {
+  location_id: string;
+  sold_out?: unknown;
+  sold_out_valid_until?: unknown;
+} | undefined, now: number): ChurchSquareVariationPresentation["soldOut"] {
+  if (override?.sold_out === false) return { status: "clear" };
+  if (override?.sold_out !== true) return { status: "unverified" };
+  if (override.sold_out_valid_until === undefined) return { status: "sold_out", validUntil: null };
+
+  const validUntil = soldOutExpiration.safeParse(override.sold_out_valid_until);
+  if (!validUntil.success) return { status: "expiration_unverified" };
+  const expiresAt = Date.parse(validUntil.data);
+  if (!Number.isFinite(expiresAt)) return { status: "expiration_unverified" };
+  return { status: now > expiresAt ? "expired" : "sold_out", validUntil: validUntil.data };
 }
 
 function canCountVariation(
@@ -434,6 +460,7 @@ export class SquareCountClient {
   } = {}): Promise<SquareChurchSandwichCatalogItem[]> {
     const deadline = AbortSignal.timeout(22_000);
     await this.verifyScope(deadline);
+    const checkedAt = Date.now();
     const { locationId } = this.configuration;
     const items = new Map<string, SquareChurchSandwichCatalogItem>(churchSandwichBenchRecipes.map(({ name }) => [name, {
       name, status: "missing", itemId: null, variations: [],
@@ -473,6 +500,7 @@ export class SquareCountClient {
           ...(includePresentation ? { presentation: {
             photoCount: photoCount("image_ids" in data ? data.image_ids : undefined),
             sellability: data.sellable === true ? "sellable" : data.sellable === false ? "not_sellable" : "unspecified",
+            soldOut: squareSoldOutFlag(override, checkedAt),
           } } : {}),
         });
       }
