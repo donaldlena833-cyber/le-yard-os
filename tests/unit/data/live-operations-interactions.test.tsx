@@ -315,7 +315,7 @@ describe("connected Operations review interactions", () => {
       expect(payload.items.find((item) => item.label === label)?.instructions).toMatch(/launch status.*PENDING or HOLD.*next test/);
     }
     expect(payload.items.find((item) => item.label === "Direct Square pickup note")?.instructions).toMatch(/Order Manager.*ticket delivery PENDING.*live charge/);
-    expect(payload.items.find((item) => item.label === "Register and kitchen ticket")?.instructions).toMatch(/Square allergen check.*signed recipe and supplier label revisions.*register tile result/);
+    expect(payload.items.find((item) => item.label === "Register and kitchen ticket")?.instructions).toMatch(/Square allergen check.*signed recipe and reviewed supplier labels.*Save register check.*Separately record the ticket reference/);
     expect(payload.items.find((item) => item.label === "Physical count and alert")?.instructions).toMatch(/verified whole units.*isolated rehearsal item/);
     expect(payload.items.find((item) => item.label === "Square payout and bank")?.instructions).toMatch(/bank statement.*does not verify bank receipt/);
     expect(payload.items.find((item) => item.label === "Genuine catering handoff")?.instructions).toMatch(/existing genuine.*PENDING.*Do not create a live invoice/);
@@ -337,7 +337,7 @@ describe("connected Operations review interactions", () => {
       items: [
         expect.objectContaining({ label: "Trainee, coach and guide", required: true, instructions: expect.stringMatching(/Assign this run to one trainee.*current Sandwich station training guide.*record its version/) }),
         expect.objectContaining({ label: "Coached builds and pack-out", required: true, instructions: expect.stringMatching(/builds accepted.*Kitchen timing-run reference/) }),
-        expect.objectContaining({ label: "Mock allergy drill", required: true, instructions: expect.stringMatching(/stopped before assembly.*Use a mock ticket/) }),
+        expect.objectContaining({ label: "Mock allergy drill", required: true, instructions: expect.stringMatching(/stopped before assembly.*mustard allergy, no Dijon.*cornichon spec lists mustard seeds/) }),
         expect.objectContaining({ label: "Station readiness", required: true, instructions: expect.stringMatching(/SUPERVISED PRACTICE or HOLD.*chef-signed recipes/) }),
         expect.objectContaining({ label: "Follow-up and repeat date", required: true, instructions: expect.stringMatching(/owner and next check date/) }),
       ],
