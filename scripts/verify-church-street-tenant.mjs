@@ -169,7 +169,7 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   const times = Array.from({ length: 7 }, (_, index) => `2026-11-14T12:00:0${index}.0000002Z`);
 
   await claims(db, undefined, "service_role");
-  assert.equal(await record("square-event-1", "7", times[0]), true);
+  assert.equal(await record("square-event-1", "100", times[0]), true);
   assert.equal(await record("square-event-2", "5.00000", times[1]), true);
   await claims(db, churchEmployeeId);
   assert.equal(await assertRestricted(), false);
@@ -200,8 +200,17 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   assert.deepEqual(await list(), [{ ...initial, ...acknowledged }]);
   assert.equal(await revision(), 2);
   await claims(db, ownerId);
+  assert.deepEqual(await list(), [{ ...initial, ...acknowledged }], "A second operator sees the first actor's receipt");
   assert.deepEqual(await read(acknowledgment(initial.id, initial.episode)), acknowledged, "First action persists across operators");
   assert.equal(await revision(), 2, "Replay does not fire another refresh");
+
+  await db.exec("reset role");
+  const prepProfile = await db.query("select preferred_name from public.profiles where id = $1", [churchEmployeeId]);
+  assert.equal(prepProfile.rows.length, 1);
+  await db.query("update public.profiles set preferred_name = 'Renamed rehearsal prep actor' where id = $1", [churchEmployeeId]);
+  await claims(db, ownerId);
+  assert.notEqual(acknowledged.acknowledgedByName, "Renamed rehearsal prep actor");
+  assert.deepEqual(await list(), [{ ...initial, ...acknowledged }], "Renaming a user preserves the original receipt");
 
   await claims(db, undefined, "service_role");
   assert.equal(await record("square-event-3", "4", times[3]), true);
@@ -213,16 +222,16 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   assert.equal(await revision(), 3);
 
   await claims(db, undefined, "service_role");
-  assert.equal(await record("square-event-4", "12", times[4]), true);
+  assert.equal(await record("square-event-4", "100", times[4]), true);
   await claims(db, churchEmployeeId);
   assert.deepEqual(await list(), []);
   await expectDenial(db, acknowledgment(initial.id, initial.episode), "PT409", "Closed episodes reject a retry");
   assert.equal(await revision(), 4);
   await claims(db, undefined, "service_role");
-  assert.equal(await record("square-event-5", "0", times[5]), true);
+  assert.equal(await record("square-event-5", "5", times[5]), true);
   await claims(db, churchEmployeeId);
   const [again] = await list();
-  assert.equal(again.quantity, "0");
+  assert.equal(again.quantity, "5");
   assert.notEqual(again.episode, initial.episode);
   assert.equal(again.acknowledgedAt, null);
   assert.equal(again.acknowledgedByName, null);
@@ -234,18 +243,41 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   const recent = await read("select public.list_church_square_webhook_receipts($1::uuid) as result", [locationId]);
   assert.equal(recent.length, 7);
   assert.deepEqual(Object.keys(recent[0]).sort(), ["createdAt", "receivedAt", "type"]);
+  const acknowledgedAgain = await read(acknowledgment(again.id, again.episode));
+  assert.ok(Number.isFinite(Date.parse(acknowledgedAgain.acknowledgedAt)));
+  assert.notEqual(acknowledgedAgain.acknowledgedByName, acknowledged.acknowledgedByName);
+  assert.equal(await revision(), 6);
+  await claims(db, churchEmployeeId);
+  assert.deepEqual(await list(), [{ ...again, ...acknowledgedAgain }]);
+  assert.deepEqual(await read(acknowledgment(again.id, again.episode)), acknowledgedAgain, "The other actor can acknowledge first on a new episode");
+  assert.equal(await revision(), 6, "A second acknowledgment leaves the first actor and revision intact");
 
   await claims(db, restaurantEmployeeId);
   assert.equal(await revision(), undefined);
   await expectDenial(db, `select public.list_church_square_stock_alerts('${locationId}')`, "42501",
     "Other tenants cannot read the Church Street alert queue");
   await expectDenial(db, acknowledgment(again.id, again.episode), "42501", "Other tenants cannot acknowledge Church Street alerts");
+  await claims(db, undefined, "service_role");
+  assert.equal(await record("square-event-6", "100", times[6]), true);
+  await claims(db, ownerId);
+  assert.deepEqual(await list(), []);
+  await claims(db, churchEmployeeId);
+  assert.deepEqual(await list(), []);
+  await expectDenial(db, acknowledgment(again.id, again.episode), "PT409", "The second restock closes the second episode");
+
   await db.exec("reset role");
-  const audit = await db.query("select acknowledged_by::text, episode_id::text from private.church_square_stock_acknowledgments where item_id = $1", [initial.id]);
-  assert.deepEqual(audit.rows, [{ acknowledged_by: churchEmployeeId, episode_id: initial.episode }]);
+  await db.query("update public.profiles set preferred_name = $2 where id = $1", [churchEmployeeId, prepProfile.rows[0].preferred_name]);
+  const audit = await db.query(
+    "select acknowledged_by::text, episode_id::text, acknowledged_by_name from private.church_square_stock_acknowledgments where item_id = $1 order by acknowledged_by",
+    [initial.id],
+  );
+  assert.deepEqual(audit.rows, [
+    { acknowledged_by: ownerId, episode_id: again.episode, acknowledged_by_name: acknowledgedAgain.acknowledgedByName },
+    { acknowledged_by: churchEmployeeId, episode_id: initial.episode, acknowledged_by_name: acknowledged.acknowledgedByName },
+  ]);
   await expectDenial(db, `update private.church_square_stock_acknowledgments set acknowledged_by_name = 'Changed' where item_id = '${initial.id}'`,
     "42501", "Acknowledgment audit is append-only");
-  process.stdout.write("PASS Church Street webhook replay, stale exclusion, low-stock alert rearming, and shared acknowledgment\n");
+  process.stdout.write("PASS Church Street webhook replay, stale exclusion, low-stock alert rearming, and two-operator acknowledgment\n");
 }
 
 async function verifyChurchSquareStockRecovery(db, locationId) {
@@ -266,6 +298,8 @@ async function verifyChurchSquareStockRecovery(db, locationId) {
 
   await db.exec("reset role");
   const before = await countRows();
+  await asService();
+  assert.deepEqual(await reconcile([observation("0", "10")]), { applied: 1, ignored: 0 });
   await claims(db, churchEmployeeId);
   const [initial] = await list();
   assert.equal(initial.quantity, "0");
