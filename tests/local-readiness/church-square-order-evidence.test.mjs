@@ -64,9 +64,11 @@ async function verifyOrderEvidence(db) {
 
   await assumeRole(db, "authenticated", owner);
   const observed = await evidence({ updatedAt: sameTimeInNewYork });
-  assert.deepEqual(Object.keys(observed).sort(), ["matches", "recoveredAt", "updatedAt"]);
+  assert.deepEqual(Object.keys(observed).sort(), ["matches", "recoveredAt", "savedAt", "source", "updatedAt"]);
   assert.equal(observed.matches, true);
   assert.equal(observed.recoveredAt, null);
+  assert.equal(observed.source, null);
+  assert.equal(observed.savedAt, null);
   assert.equal(Date.parse(observed.updatedAt), Date.parse(savedTime));
   assert.equal((await evidence({ updatedAt: laterTime })).matches, false);
   assert.equal((await evidence({ version: 9 })).matches, false);
@@ -101,6 +103,7 @@ async function verifyOrderEvidence(db) {
   }
 
   await verifyExactOrderRecovery(db, { organization, location, evidence });
+  await verifyReceiptProvenance(db, { organization, location, evidence });
 }
 
 async function verifyExactOrderRecovery(db, { organization, location, evidence }) {
@@ -182,9 +185,11 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
   assert.equal(await recover({ actor: manager }), false);
   await assumeRole(db, "authenticated", manager);
   const recovered = await evidence({ id, version: 1, updatedAt });
-  assert.deepEqual(Object.keys(recovered).sort(), ["matches", "recoveredAt", "updatedAt"]);
+  assert.deepEqual(Object.keys(recovered).sort(), ["matches", "recoveredAt", "savedAt", "source", "updatedAt"]);
   assert.equal(recovered.matches, true);
   assert(Number.isFinite(Date.parse(recovered.recoveredAt)));
+  assert.equal(recovered.source, "manual");
+  assert(Date.parse(recovered.savedAt) <= Date.parse(recovered.recoveredAt));
   await assert.rejects(db.exec("select * from private.church_square_order_recoveries"), { code: "42501" });
   const wrongVersion = await evidence({ id, version: 0, updatedAt });
   assert.equal(wrongVersion.matches, false);
@@ -216,6 +221,8 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
   const synced = await evidence({ id, version: 2, updatedAt: updatedLater });
   assert.equal(synced.matches, true);
   assert.equal(synced.recoveredAt, null);
+  assert.equal(synced.source, "webhook");
+  assert(Date.parse(synced.savedAt) >= Date.parse(recovered.savedAt));
   const afterWebhook = sameSuffix(await reconcile());
   assert.equal(afterWebhook.length, 5);
   assert(afterWebhook.every(({ recoveredAt }) => recoveredAt === null));
@@ -233,6 +240,128 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
     select (covered_through = $1::timestamptz and scan_started_at = $1::timestamptz) as result
     from private.church_square_order_backfill where location_id = $2
   `, [scanStartedAt, location]), true);
+}
+
+
+async function verifyReceiptProvenance(db, { organization, location, evidence }) {
+  const order = "scheduled-first-order-0123456789";
+  const sibling = "different-order-0123456789";
+  const undatedOrder = "payment-only-order";
+  const conflictOrder = "conflicting-payment-order";
+  const paymentFallback = "unlinked-in-envelope-payment";
+  const paymentConflict = "conflicting-order-payment";
+  const scope = ["M_TEST", "L_TEST"];
+  const eventCreated = "2026-11-14T12:00:00Z";
+  const one = async (sql, args = []) => (await db.query(sql, args)).rows[0].result;
+  const receiptEvidence = ({ id = order, workspace = location, merchant = scope[0], squareLocation = scope[1] } = {}) => one(
+    "select public.get_church_square_order_receipt_evidence($1::uuid,$2,$3,$4) as result",
+    [workspace, merchant, squareLocation, id]);
+  const record = (eventId, eventType, resourceId, relatedOrder = null) => one(
+    "select public.service_record_church_square_webhook($1,$2,$3,$4,$5::timestamptz,$6,'[]'::jsonb,$7) as result",
+    [...scope, eventId, eventType, eventCreated, resourceId, relatedOrder]);
+  const claims = () => one("select public.service_claim_church_square_receipts($1,$2) as result", scope);
+  const complete = (claimed, facts = null, failure = null) => one(
+    "select public.service_complete_church_square_receipt($1,$2,$3,$4::uuid,$5::jsonb,$6) as result",
+    [...scope, claimed.eventId, claimed.lease, facts === null ? null : JSON.stringify(facts), failure]);
+
+  await assumeRole(db, "authenticated", owner);
+  assert.deepEqual(await receiptEvidence(), { order: null, payment: null });
+  await assert.rejects(receiptEvidence({ id: "invalid: order" }), { code: "22023" });
+  await assert.rejects(receiptEvidence({ workspace: otherLocation }), { code: "42501" });
+  await assert.rejects(db.exec("select * from private.church_square_webhook_receipts"), { code: "42501" });
+
+  for (const [role, user] of [
+    ["authenticated", prep], ["authenticated", other], ["authenticated", undefined], ["anon", undefined], ["service_role", undefined],
+  ]) {
+    await assumeRole(db, role, user);
+    await assert.rejects(receiptEvidence(), { code: "42501" });
+  }
+
+  // A scan first saves one revision. A signed order receipt initially has no saved facts.
+  const scan = await one("select public.service_claim_church_square_order_backfill($1,$2) as result", scope);
+  assert(scan);
+  const updatedAt = new Date((Date.parse(scan.from) + Date.parse(scan.to)) / 2).toISOString();
+  const projection = { id: order, kind: "order", locationId: scope[1], updatedAt, createdAt: updatedAt,
+    version: 7, currency: "USD", status: "OPEN" };
+  assert.equal(await one("select public.service_commit_church_square_order_backfill($1,$2,$3::uuid,$4::jsonb) as result",
+    [...scope, scan.lease, JSON.stringify([projection])]), true);
+  for (const [eventId, eventType, resourceId, relatedOrder] of [
+    ["first-direct-order", "order.created", order], ["later-direct-order", "order.updated", order],
+    ["sibling-order", "order.updated", sibling], ["same-id-invoice", "invoice.updated", undatedOrder, order],
+    ["first-pay-order", "payment.created", "direct-linked-payment", order],
+    ["unlinked-pay-order", "payment.created", paymentFallback],
+    ["conflict-pay-order", "payment.updated", paymentConflict, conflictOrder],
+  ]) {
+    assert.equal(await record(eventId, eventType, resourceId, relatedOrder), true);
+  }
+  assert.equal(await record("first-direct-order", "order.created", order), false);
+  await db.exec("reset role");
+  // Use explicit offsets to test earliest receipt ordering, independent of database clock precision.
+  await db.query(`
+    update private.church_square_webhook_receipts set received_at = statement_timestamp() - case event_id
+      when 'first-direct-order' then interval '40 seconds'
+      when 'later-direct-order' then interval '20 seconds'
+      else interval '10 seconds' end
+    where event_id in ('first-direct-order','later-direct-order','first-pay-order')
+  `);
+  await db.query(`
+    insert into private.church_square_webhook_receipts (
+      merchant_id,square_location_id,event_id,event_type,resource_id,related_order_id,organization_id,location_id,created_at,received_at
+    ) values ('M_TEST','L_OTHER','wrong-scoped-order','order.created',$1,null,$2,$3,$4::timestamptz,statement_timestamp() - interval '1 minute')
+  `, [order, organization, location, eventCreated]);
+
+  await assumeRole(db, "authenticated", manager);
+  const current = await evidence({ id: order, updatedAt, version: 7 });
+  assert.equal(current.source, "scheduled");
+  assert(Number.isFinite(Date.parse(current.savedAt)));
+  const initial = await receiptEvidence();
+  assert.deepEqual(Object.keys(initial.order).sort(), ["eventType", "processedAt", "receivedAt", "squareCreatedAt", "state"]);
+  assert.deepEqual(Object.keys(initial.payment).sort(), ["eventType", "processedAt", "receivedAt", "squareCreatedAt", "state"]);
+  assert.equal(initial.order.eventType, "order.created");
+  assert.equal(initial.order.state, "pending");
+  assert.equal(initial.order.processedAt, null);
+  assert.equal(new Date(initial.order.squareCreatedAt).toISOString(), new Date(eventCreated).toISOString());
+  assert.equal(initial.payment.eventType, "payment.created");
+  assert.equal(initial.payment.state, "pending");
+  assert.equal((await receiptEvidence({ id: sibling })).order.eventType, "order.updated");
+  assert.deepEqual(await receiptEvidence({ id: undatedOrder }), { order: null, payment: null });
+  assert.deepEqual(await receiptEvidence({ merchant: "M_OTHER" }), { order: null, payment: null });
+  assert.deepEqual(await receiptEvidence({ id: order.slice(-10) }), { order: null, payment: null });
+
+  // A same-revision webhook completion cannot rewrite the scan provenance, but its receipt is verified.
+  await db.exec("reset role");
+  await db.exec("delete from private.church_square_webhook_receipts where event_id = 'wrong-scoped-order'");
+  await assumeRole(db, "service_role");
+  const batch = [...await claims(), ...await claims()];
+  const claim = (eventId) => {
+    const claimed = batch.find((entry) => entry.eventId === eventId);
+    assert(claimed, `Expected a lease for ${eventId}`);
+    return claimed;
+  };
+  assert.equal(await complete(claim("first-direct-order"), projection), true);
+  assert.equal(await complete(claim("first-pay-order"), null, "invalid_resource"), true);
+  const paymentFacts = (id, orderId) => ({
+    id, kind: "payment", orderId, locationId: scope[1], currency: "USD",
+    createdAt: updatedAt, updatedAt, version: null, status: "COMPLETED",
+  });
+  assert.equal(await complete(claim("unlinked-pay-order"), paymentFacts(paymentFallback, undatedOrder)), true);
+  assert.equal(await complete(claim("conflict-pay-order"), paymentFacts(paymentConflict, sibling)), true);
+  assert.equal(await one("select public.service_recover_church_square_order($1::uuid,$2::uuid,$3,$4,$5,$6::jsonb) as result",
+    [owner, location, ...scope, order, JSON.stringify(projection)]), false);
+  await assumeRole(db, "authenticated", owner);
+  assert.deepEqual(await evidence({ id: order, updatedAt, version: 7 }), current);
+  const checked = await receiptEvidence();
+  assert.equal(checked.order.state, "verified");
+  assert.equal(checked.order.receivedAt, initial.order.receivedAt);
+  assert(Date.parse(checked.order.processedAt) >= Date.parse(checked.order.receivedAt));
+  assert.equal(checked.payment.state, "needs_review");
+  assert.equal(checked.payment.processedAt, null);
+  const paymentOnly = await receiptEvidence({ id: undatedOrder });
+  assert.equal(paymentOnly.order, null);
+  assert.equal(paymentOnly.payment.state, "verified");
+  assert.equal(await evidence({ id: undatedOrder }), null);
+  assert.equal((await receiptEvidence({ id: conflictOrder })).payment, null);
+  assert.equal((await receiptEvidence({ id: sibling })).payment, null);
 }
 
 it("corroborates and recovers exact Church Street order updates with current authority", async () => {

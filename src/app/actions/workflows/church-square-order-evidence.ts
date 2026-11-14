@@ -17,6 +17,16 @@ const recoveryInput = lookupInput.extend({
 const storedObservation = z.strictObject({
   updatedAt: z.iso.datetime({ offset: true }), matches: z.boolean(),
   recoveredAt: z.iso.datetime({ offset: true }).nullish().transform(value => value ?? null),
+  source: z.enum(["webhook", "scheduled", "manual"]).nullish().transform(value => value ?? null),
+  savedAt: z.iso.datetime({ offset: true }).nullish().transform(value => value ?? null),
+});
+const receiptFacts = z.object({
+  squareCreatedAt: z.iso.datetime({ offset: true }), receivedAt: z.iso.datetime({ offset: true }),
+  processedAt: z.iso.datetime({ offset: true }).nullable(), state: z.enum(["pending", "verified", "needs_review"]),
+});
+const signedReceipts = z.strictObject({
+  order: receiptFacts.extend({ eventType: z.enum(["order.created", "order.updated", "order.fulfillment.updated"]) }).nullable(),
+  payment: receiptFacts.extend({ eventType: z.enum(["payment.created", "payment.updated"]) }).nullable(),
 });
 type Observation = { status: "observed" } & z.infer<typeof storedObservation>
   | { status: "not_observed" | "unavailable" };
@@ -48,22 +58,28 @@ function squareOrderScope({ locationId, config, order }: VerifiedOrder) {
 
 async function readOrderEvidence(context: WorkflowContext, verified: VerifiedOrder) {
   const { order, checkedAt, canRecover } = verified;
+  const scope = squareOrderScope(verified);
+  const [stored, receiptRead] = await Promise.allSettled([
+    context.supabase.rpc("get_church_square_order_evidence", {
+      ...scope, p_square_updated_at: order.updatedAt, p_square_version: order.version,
+    }).abortSignal(AbortSignal.timeout(6_000)),
+    context.supabase.rpc("get_church_square_order_receipt_evidence", scope).abortSignal(AbortSignal.timeout(6_000)),
+  ]);
+  if ([stored, receiptRead].some(result => result.status === "fulfilled" && result.value.error?.code === "42501")) {
+    throw new WorkflowError("forbidden", "Church Street financial reports access is required.");
+  }
   let operations: Observation = { status: "unavailable" };
-  try {
-    const { data, error } = await context.supabase.rpc("get_church_square_order_evidence", {
-      ...squareOrderScope(verified),
-      p_square_updated_at: order.updatedAt,
-      p_square_version: order.version,
-    }).abortSignal(AbortSignal.timeout(6_000));
-    if (error?.code === "42501") throw new WorkflowError("forbidden", "Church Street financial reports access is required.");
-    if (!error && data === null) operations = { status: "not_observed" };
-    if (!error && data !== null) {
+  if (stored.status === "fulfilled" && !stored.value.error) {
+    const { data } = stored.value;
+    if (data === null) {
+      operations = { status: "not_observed" };
+    } else {
       const parsed = storedObservation.safeParse(data);
       if (parsed.success) operations = { status: "observed", ...parsed.data };
     }
-  } catch (error) {
-    if (error instanceof WorkflowError) throw error;
   }
+  const receipts = signedReceipts.safeParse(receiptRead.status === "fulfilled" && !receiptRead.value.error
+    ? receiptRead.value.data : undefined);
 
   return {
     reference: order.id.slice(-10),
@@ -79,6 +95,7 @@ async function readOrderEvidence(context: WorkflowContext, verified: VerifiedOrd
         ({ type, status, promisedAt, readyAt, handoffAt, completedAt, canceledAt, rejectedAt })),
     },
     operations,
+    ...(receipts.success ? { receipts: receipts.data } : {}),
   };
 }
 

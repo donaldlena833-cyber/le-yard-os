@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  session: vi.fn(), scope: vi.fn(), configuration: vi.fn(), get: vi.fn(), rpc: vi.fn(), query: vi.fn(),
+  session: vi.fn(), scope: vi.fn(), configuration: vi.fn(), get: vi.fn(), rpc: vi.fn(), query: vi.fn(), receiptQuery: vi.fn(),
   serviceRpc: vi.fn(), serviceResult: vi.fn(),
 }));
 vi.mock("@/lib/env", () => ({ isDemoMode: false }));
@@ -40,8 +40,11 @@ beforeEach(() => {
     lineItems: [{ note: "private-item-note" }],
     fulfillments: [{ ...fulfillment, id: "private-fulfillment", note: "private-ticket-note" }],
   });
-  mocks.rpc.mockReturnValue({ abortSignal: mocks.query });
+  mocks.rpc.mockImplementation((name) => ({
+    abortSignal: name === "get_church_square_order_receipt_evidence" ? mocks.receiptQuery : mocks.query,
+  }));
   mocks.query.mockResolvedValue({ error: null, data: { updatedAt, matches: true } });
+  mocks.receiptQuery.mockResolvedValue({ error: null, data: { order: null, payment: null } });
   mocks.serviceRpc.mockReturnValue({ abortSignal: mocks.serviceResult });
   mocks.serviceResult.mockResolvedValue({ error: null, data: true });
 });
@@ -53,14 +56,40 @@ it("compares the exact completed order and returns only checklist evidence", asy
     data: {
       reference: "ABC0123456", checkedAt: expect.any(String), canRecover: true,
       square: { status: "COMPLETED", source: "SQUARE_ONLINE", createdAt, updatedAt, version: 7, fulfillments: [fulfillment] },
-      operations: { status: "observed", updatedAt, matches: true, recoveredAt: null },
+      operations: { status: "observed", updatedAt, matches: true, recoveredAt: null, source: null, savedAt: null },
+      receipts: { order: null, payment: null },
     },
   });
   expect(mocks.get).toHaveBeenCalledExactlyOnceWith("order", orderId);
-  expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("get_church_square_order_evidence", {
+  expect(mocks.rpc).toHaveBeenCalledWith("get_church_square_order_evidence", {
     p_location_id: "church-location", p_merchant_id: "approved-merchant", p_square_location_id: "square-location",
     p_order_id: orderId, p_square_updated_at: updatedAt, p_square_version: 7,
   });
+  expect(mocks.rpc).toHaveBeenCalledWith("get_church_square_order_receipt_evidence", {
+    p_location_id: "church-location", p_merchant_id: "approved-merchant", p_square_location_id: "square-location",
+    p_order_id: orderId,
+  });
+});
+
+it("keeps first saves separate from signed receipts and withholds private webhook fields", async () => {
+  const receivedAt = "2026-11-14T14:00:09Z";
+  const savedAt = "2026-11-14T14:05:00Z";
+  const orderReceipt = { eventType: "order.updated", squareCreatedAt: createdAt, receivedAt, processedAt: null, state: "pending" };
+  const paymentReceipt = { eventType: "payment.created", squareCreatedAt: createdAt, receivedAt, processedAt: savedAt, state: "verified" };
+  mocks.query.mockResolvedValue({ error: null, data: { updatedAt, matches: true, source: "scheduled", savedAt } });
+  mocks.receiptQuery.mockResolvedValue({ error: null, data: {
+    order: { ...orderReceipt, eventId: "private-event-id" }, payment: { ...paymentReceipt, resourceId: "private-payment-id" },
+  } });
+  const result = await lookupChurchSquareOrderEvidenceAction({ orderId });
+  expect(result).toMatchObject({ ok: true, data: { operations: { source: "scheduled", savedAt }, receipts: {
+    order: orderReceipt, payment: paymentReceipt,
+  } } });
+  expect(JSON.stringify(result)).not.toContain("private-");
+
+  mocks.receiptQuery.mockRejectedValueOnce(new Error("Receipt lookup timed out"));
+  const unavailable = await lookupChurchSquareOrderEvidenceAction({ orderId });
+  expect(unavailable).toMatchObject({ ok: true, data: { operations: { source: "scheduled", savedAt } } });
+  if (unavailable.ok && unavailable.mode === "live") expect(unavailable.data).not.toHaveProperty("receipts");
 });
 
 it("distinguishes no stored order from an unavailable comparison", async () => {
@@ -79,6 +108,9 @@ it("checks scope and validation before provider access and withholds results aft
   expect(mocks.get).not.toHaveBeenCalled();
 
   mocks.query.mockResolvedValueOnce({ error: { code: "42501" }, data: null });
+  expect(await lookupChurchSquareOrderEvidenceAction({ orderId })).toMatchObject({ ok: false, code: "forbidden" });
+
+  mocks.receiptQuery.mockResolvedValueOnce({ error: { code: "42501" }, data: null });
   expect(await lookupChurchSquareOrderEvidenceAction({ orderId })).toMatchObject({ ok: false, code: "forbidden" });
 });
 

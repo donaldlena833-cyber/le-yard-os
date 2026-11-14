@@ -18,6 +18,25 @@ const sourceLabels = new Map([
   ["SQUARE_POS", "Square POS"],
   ["SQUARE_INVOICES", "Square Invoices"],
 ]);
+const captureLabels = {
+  webhook: "Signed Square webhook",
+  scheduled: "Scheduled Square scan",
+  manual: "Manual Square recovery",
+} as const;
+const receiptStates = {
+  pending: "Pending verification",
+  verified: "Verified",
+  needs_review: "Needs review",
+} as const;
+const receiptKinds = [
+  ["order", "Order"],
+  ["payment", "Linked payment"],
+] as const;
+const squareEventTypes = new Set([
+  "order.created", "order.updated", "order.fulfillment.updated",
+  "payment.created", "payment.updated",
+]);
+type Receipt = NonNullable<NonNullable<Evidence["receipts"]>[typeof receiptKinds[number][0]]>;
 const easternTime = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York", year: "numeric", month: "short", day: "numeric",
   hour: "numeric", minute: "2-digit", second: "2-digit",
@@ -42,6 +61,31 @@ function operationsStatus(operations: Evidence["operations"]) {
     : "The Operations order record could not be checked.";
 }
 
+function captureLabel(operations: Extract<Evidence["operations"], { status: "observed" }>) {
+  return operations.source ? captureLabels[operations.source]
+    : operations.recoveredAt ? captureLabels.manual : "Unknown";
+}
+
+function receiptEventLabel(eventType: string) {
+  return squareEventTypes.has(eventType) ? eventType : "Square event";
+}
+
+function SignedReceipt({ kind, receipt }: { kind: string; receipt: Receipt | null }) {
+  return (
+    <div>
+      <dt className="font-medium">{kind} webhook</dt>
+      {!receipt ? <dd>No signed receipt recorded.</dd> : (
+        <dd>
+          <p>{receiptEventLabel(receipt.eventType)} · {receiptStates[receipt.state]}</p>
+          <p>Square created <Time value={receipt.squareCreatedAt} /></p>
+          <p>Operations received <Time value={receipt.receivedAt} /></p>
+          {receipt.processedAt && <p>Operations processed <Time value={receipt.processedAt} /></p>}
+        </dd>
+      )}
+    </div>
+  );
+}
+
 function needsRecovery({ canRecover, operations }: Evidence) {
   return canRecover && (operations.status === "not_observed" || (operations.status === "observed" && !operations.matches));
 }
@@ -57,23 +101,40 @@ function milestones(fulfillment: Evidence["square"]["fulfillments"][number]) {
   ] as const;
 }
 
-function checklistEvidence({ reference, checkedAt, square, operations }: Evidence) {
+function checklistEvidence({ reference, checkedAt, square, operations, receipts }: Evidence) {
   const summary = [
     `Church Street Square order ending ${reference}. Checked ${checkedAt}.`,
     `Square order ${label(square.status).toLowerCase()}. Source hint ${sourceLabels.get(square.source) ?? "Unknown"}. Updated ${square.updatedAt}.`,
     operationsStatus(operations),
     ...(operations.status === "observed" ? [`Operations record updated ${operations.updatedAt}.`] : []),
   ];
-  if (operations.status === "observed" && operations.recoveredAt) {
-    summary.push(`Operations record recovered manually ${operations.recoveredAt}.`);
+  if (operations.status === "observed") {
+    const saved = operations.savedAt ? ` · saved ${operations.savedAt}` : "";
+    summary.push(`Operations revision source ${captureLabel(operations)}${saved}.`);
+    if (operations.recoveredAt) summary.push(`Operations record recovered manually ${operations.recoveredAt}.`);
+  }
+  if (receipts) {
+    for (const [key, kind] of receiptKinds) {
+      const receipt = receipts[key];
+      if (receipt) {
+        const processed = receipt.processedAt ? ` · processed ${receipt.processedAt}` : "";
+        summary.push(`${kind} webhook ${receiptEventLabel(receipt.eventType)} · ${receiptStates[receipt.state]}`
+          + ` · Square created ${receipt.squareCreatedAt} · received ${receipt.receivedAt}${processed}.`);
+      } else {
+        summary.push(`${kind} webhook has no signed receipt recorded.`);
+      }
+    }
+  } else {
+    summary.push("Signed receipt evidence unavailable.");
   }
   if (square.fulfillments.length === 0) summary.push("Square returned no fulfillment details.");
   // Leave space for the staff observation in a checklist's 2,000-character notes field.
-  for (const fulfillment of square.fulfillments.slice(0, 4)) {
+  const copiedFulfillments = receipts ? 2 : 4;
+  for (const fulfillment of square.fulfillments.slice(0, copiedFulfillments)) {
     const times = milestones(fulfillment).flatMap(([name, value]) => value ? [`${name} ${value}`] : []);
     summary.push([`${label(fulfillment.type)} · ${label(fulfillment.status)}`, ...times].join(" · "));
   }
-  if (square.fulfillments.length > 4) summary.push(`The order check shows all ${square.fulfillments.length} fulfillments.`);
+  if (square.fulfillments.length > copiedFulfillments) summary.push(`The order check shows all ${square.fulfillments.length} fulfillments.`);
   return summary.join("\n");
 }
 
@@ -182,10 +243,27 @@ export function ChurchSquareOrderEvidence() {
           {result.square.createdAt && <p>Square created <Time value={result.square.createdAt} /></p>}
           <p>Square updated <Time value={result.square.updatedAt} /></p>
           <p>{operationsStatus(result.operations)}</p>
-          {result.operations.status === "observed" && <p>Operations record updated <Time value={result.operations.updatedAt} />.</p>}
-          {result.operations.status === "observed" && result.operations.recoveredAt && (
-            <p>Operations record recovered manually <Time value={result.operations.recoveredAt} />.</p>
+          {result.operations.status === "observed" && (
+            <>
+              <p>Operations record updated <Time value={result.operations.updatedAt} />.</p>
+              <p>{result.operations.source || result.operations.recoveredAt
+                ? `Operations first saved this revision via ${captureLabel(result.operations)}`
+                : "Operations revision source unknown"}
+                {result.operations.savedAt && <> · <Time value={result.operations.savedAt} /></>}.
+              </p>
+              {result.operations.recoveredAt && <p>Operations record recovered manually <Time value={result.operations.recoveredAt} />.</p>}
+            </>
           )}
+          {result.receipts ? (
+            <section className="space-y-2 border-l border-[var(--line)] pl-3 text-xs">
+              <h5 className="font-semibold">First signed webhooks received</h5>
+              <dl className="grid gap-2 sm:grid-cols-2">
+                <SignedReceipt kind="Order" receipt={result.receipts.order} />
+                <SignedReceipt kind="Linked payment" receipt={result.receipts.payment} />
+              </dl>
+              <p className="text-[var(--ink-soft)]">Record when the order first appears on Today separately during the rehearsal.</p>
+            </section>
+          ) : <p className="text-xs text-[var(--ink-soft)]">Signed receipt evidence unavailable.</p>}
           {result.square.fulfillments.length ? (
             <ul className="space-y-2 border-l border-[var(--line)] pl-3 text-xs">
               {result.square.fulfillments.map((fulfillment, index) => (

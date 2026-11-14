@@ -118,6 +118,8 @@ export function prepareChurchSquareWebhook(
 
   const isOrder = event.type.startsWith("order.");
   const resourceId = isOrder ? resource.order_id : resource.id;
-  if (!resourceId || resourceId !== data.id) return "ignore";
+  // The signed payment.created example has a distinct envelope ID. The worker
+  // verifies the nested Payment ID and location against Square's Payments API.
+  if (!resourceId || (event.type !== "payment.created" && resourceId !== data.id)) return "ignore";
   return { ...receipt, resourceId, relatedOrderId: isOrder ? undefined : resource.order_id, inventory: [] };
 }

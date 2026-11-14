@@ -115,6 +115,18 @@ describe("signed Church Street Square webhooks", () => {
     expect(schedule).toHaveBeenCalledOnce();
   });
 
+  it("uses the nested Square payment ID when a signed creation event has a different envelope ID", async () => {
+    const payment = { id: "payment-1", location_id: location, order_id: "order-1", card_details: { last_4: "1234" } };
+    expect((await POST(request(event("payment.created", { payment }, "envelope-1")))).status).toBe(204);
+    expect(rpc).toHaveBeenCalledExactlyOnceWith("service_record_church_square_webhook", {
+      p_merchant_id: merchant, p_square_location_id: location, p_event_id: "event-1",
+      p_event_type: "payment.created", p_created_at: createdAt, p_resource_id: "payment-1",
+      p_related_order_id: "order-1", p_inventory: [],
+    });
+    expect((await POST(request(event("payment.created", { payment: { ...payment, location_id: "OTHER" } }, "envelope-1")))).status).toBe(204);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
   it("acknowledges a duplicate only after persistence and returns a retry status during failures", async () => {
     const body = event("order.updated", { order_updated: { order_id: "resource-1", location_id: location } });
     result.mockResolvedValueOnce({ error: null, data: false }).mockResolvedValueOnce({ error: { message: "private" } });

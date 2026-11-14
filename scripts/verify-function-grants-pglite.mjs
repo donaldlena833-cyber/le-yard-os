@@ -130,6 +130,7 @@ const approvedAuthenticatedFunctions = new Set([
   "list_church_square_reconciliation",
   "list_church_square_order_watch",
   "get_church_square_order_evidence",
+  "get_church_square_order_receipt_evidence",
   "list_church_square_stock_alerts",
   "list_church_square_webhook_receipts",
   "mark_channel_read",
