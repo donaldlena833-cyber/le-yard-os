@@ -11,6 +11,7 @@ import {
 } from "@/lib/integrations/church-square-order-window";
 
 type Order = ChurchSquareOrderWindowResponse["orders"][number];
+type Fulfillment = Order["fulfillments"][number];
 type State =
   | { status: "idle" | "loading" | "forbidden" | "setup_pending" | "unavailable" }
   | { status: "ready"; window: ChurchSquareOrderWindowResponse };
@@ -33,11 +34,73 @@ const statuses: Record<Order["status"], string> = {
   UNKNOWN: "Unknown",
 };
 
+const fulfillmentTypes: Record<Fulfillment["type"], string> = {
+  PICKUP: "Pickup",
+  DELIVERY: "Delivery",
+  SHIPMENT: "Shipment",
+  UNKNOWN: "Fulfillment",
+};
+
+const fulfillmentStatuses: Record<Fulfillment["status"], string> = {
+  PROPOSED: "Proposed",
+  RESERVED: "Reserved",
+  PREPARED: "Ready",
+  COMPLETED: "Completed",
+  CANCELED: "Canceled",
+  FAILED: "Failed",
+  UNKNOWN: "Status unavailable",
+};
+
+const scheduledLabels: Record<Fulfillment["type"], string> = {
+  PICKUP: "Pickup window",
+  DELIVERY: "Scheduled delivery",
+  SHIPMENT: "Scheduled shipment",
+  UNKNOWN: "Scheduled",
+};
+
+const handoffLabels: Record<Fulfillment["type"], string> = {
+  PICKUP: "Picked up",
+  DELIVERY: "Delivered",
+  SHIPMENT: "Shipped",
+  UNKNOWN: "Handoff",
+};
+
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const localTime = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
 });
+
+function OrderFulfillmentSummary({ fulfillments }: { fulfillments: Order["fulfillments"] }) {
+  if (!fulfillments.length) return <span className="text-[var(--ink-faint)]">Unavailable</span>;
+
+  return (
+    <ul className="min-w-40 space-y-2">
+      {fulfillments.map((fulfillment, index) => {
+        const milestones = [
+          [scheduledLabels[fulfillment.type], fulfillment.promisedAt],
+          ["Ready", fulfillment.readyAt],
+          [handoffLabels[fulfillment.type], fulfillment.handoffAt],
+          ["Completed", fulfillment.completedAt === fulfillment.handoffAt ? null : fulfillment.completedAt],
+          ["Canceled", fulfillment.canceledAt],
+          ["Rejected", fulfillment.rejectedAt],
+        ] as const;
+        return (
+          <li key={index}>
+            <div className="font-medium">
+              {fulfillmentTypes[fulfillment.type]} · {fulfillmentStatuses[fulfillment.status]}
+            </div>
+            {milestones.map(([label, at]) => at && (
+              <div key={label} className="mt-0.5 whitespace-nowrap text-[var(--ink-soft)]">
+                {label} <time dateTime={at}>{localTime.format(new Date(at))}</time>
+              </div>
+            ))}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 export function ChurchSquareOrderWindow() {
   const [state, setState] = useState<State>({ status: "idle" });
@@ -100,6 +163,7 @@ export function ChurchSquareOrderWindow() {
                 <th scope="col" className="px-3 py-2">Order ID suffix</th>
                 <th scope="col" className="px-3 py-2">Source hint</th>
                 <th scope="col" className="px-3 py-2">Order state</th>
+                <th scope="col" className="px-3 py-2">Fulfillment (ET)</th>
                 <th scope="col" className="px-3 py-2 text-right">Recorded total</th>
                 <th scope="col" className="px-3 py-2 text-right">Updated (ET)</th>
               </tr>
@@ -110,6 +174,7 @@ export function ChurchSquareOrderWindow() {
                   <th scope="row" className="whitespace-nowrap px-3 py-2 font-mono font-medium">{order.reference}</th>
                   <td className="px-3 py-2">{sources[order.source]}</td>
                   <td className="px-3 py-2">{statuses[order.status]}</td>
+                  <td className="px-3 py-2"><OrderFulfillmentSummary fulfillments={order.fulfillments} /></td>
                   <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
                     {order.totalCents === null ? "—" : money.format(order.totalCents / 100)}
                   </td>

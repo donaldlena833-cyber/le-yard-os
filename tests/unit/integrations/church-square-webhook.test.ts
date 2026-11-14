@@ -100,6 +100,21 @@ describe("signed Church Street Square webhooks", () => {
     expect(schedule).toHaveBeenCalledOnce();
   });
 
+  it("queues an exact-location fulfillment update for canonical order readback", async () => {
+    const fulfillment = { order_id: "order-1", location_id: location, fulfillment_update: [{ new_state: "PREPARED" }] };
+    const envelope = (scope: string, id = "order-1") => event("order.fulfillment.updated", {
+      order_fulfillment_updated: { ...fulfillment, location_id: scope },
+    }, id);
+    expect((await POST(request(envelope("OTHER_LOCATION")))).status).toBe(204);
+    expect((await POST(request(envelope(location, "other-order")))).status).toBe(204);
+    expect(rpc).not.toHaveBeenCalled();
+    expect((await POST(request(envelope(location)))).status).toBe(204);
+    expect(rpc).toHaveBeenCalledWith("service_record_church_square_webhook", expect.objectContaining({
+      p_event_type: "order.fulfillment.updated", p_resource_id: "order-1", p_inventory: [],
+    }));
+    expect(schedule).toHaveBeenCalledOnce();
+  });
+
   it("acknowledges a duplicate only after persistence and returns a retry status during failures", async () => {
     const body = event("order.updated", { order_updated: { order_id: "resource-1", location_id: location } });
     result.mockResolvedValueOnce({ error: null, data: false }).mockResolvedValueOnce({ error: { message: "private" } });

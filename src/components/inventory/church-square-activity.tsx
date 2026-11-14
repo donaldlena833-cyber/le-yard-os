@@ -11,6 +11,7 @@ const labels: Record<string, string> = {
   "inventory.count.updated": "Stock count updated",
   "order.created": "Order created",
   "order.updated": "Order updated",
+  "order.fulfillment.updated": "Order fulfillment updated",
   "payment.created": "Payment recorded",
   "payment.updated": "Payment updated",
   "refund.created": "Refund recorded",

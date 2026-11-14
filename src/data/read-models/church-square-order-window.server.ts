@@ -64,6 +64,16 @@ export async function loadChurchSquareOrderWindow(): Promise<ChurchSquareOrderWi
       status: order.status,
       updatedAt: order.updatedAt,
       totalCents: order.totalCents,
+      fulfillments: order.fulfillments.map(fulfillment => ({
+        type: fulfillment.type,
+        status: fulfillment.status,
+        promisedAt: fulfillment.promisedAt,
+        readyAt: fulfillment.readyAt,
+        handoffAt: fulfillment.handoffAt,
+        completedAt: fulfillment.completedAt,
+        canceledAt: fulfillment.canceledAt,
+        rejectedAt: fulfillment.rejectedAt,
+      })),
     })),
   };
 }

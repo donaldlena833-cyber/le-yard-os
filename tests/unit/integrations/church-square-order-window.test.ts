@@ -18,6 +18,12 @@ const workspace = {
 };
 
 const request = (query = "") => new Request("https://example.invalid" + churchSquareOrderWindowPath + query);
+const fulfillmentTimes = {
+  ready: "2026-11-13T17:02:00Z",
+  scheduled: "2026-11-13T17:20:00Z",
+  delivered: "2026-11-13T17:24:00Z",
+  canceled: "2026-11-13T17:05:00Z",
+};
 
 function scopedRows(locationFound = true) {
   const select = vi.fn().mockReturnThis();
@@ -57,6 +63,24 @@ function stubProvider() {
         total_money: { amount: 1799, currency: "USD" },
         line_items: [{ name: "PRIVATE content", quantity: "1" }],
         ticket_name: "PRIVATE customer",
+        fulfillments: [{
+          uid: "private-delivery-uid",
+          type: "DELIVERY",
+          state: "COMPLETED",
+          delivery_details: {
+            deliver_at: fulfillmentTimes.scheduled,
+            ready_at: fulfillmentTimes.ready,
+            delivered_at: fulfillmentTimes.delivered,
+            recipient: { display_name: "PRIVATE name", address: { address_line_1: "PRIVATE address" } },
+            note: "PRIVATE note",
+          },
+        }, {
+          type: "PICKUP",
+          state: "CANCELED",
+          pickup_details: { canceled_at: fulfillmentTimes.canceled },
+        }],
+      }, {
+        id: "other-order-id", location_id: "square-location", created_at: updatedAt, updated_at: updatedAt,
       }],
     });
   });
@@ -124,10 +148,28 @@ describe("Church Square order window", () => {
     });
     expect(await response.json()).toEqual({
       checkedAt: period.end_at, hasMore: true,
-      orders: [{
-        reference: "9876543210", source: "GRUBHUB", status: "COMPLETED",
-        updatedAt: period.end_at, totalCents: 1799,
-      }],
+      orders: [
+        {
+          reference: "9876543210", source: "GRUBHUB", status: "COMPLETED",
+          updatedAt: period.end_at, totalCents: 1799,
+          fulfillments: [
+            {
+              type: "DELIVERY", status: "COMPLETED",
+              promisedAt: fulfillmentTimes.scheduled, readyAt: fulfillmentTimes.ready,
+              handoffAt: fulfillmentTimes.delivered, completedAt: null, canceledAt: null, rejectedAt: null,
+            },
+            {
+              type: "PICKUP", status: "CANCELED",
+              promisedAt: null, readyAt: null, handoffAt: null, completedAt: null,
+              canceledAt: fulfillmentTimes.canceled, rejectedAt: null,
+            },
+          ],
+        },
+        {
+          reference: "r-order-id", source: "UNKNOWN", status: "UNKNOWN",
+          updatedAt: period.end_at, totalCents: null, fulfillments: [],
+        },
+      ],
     });
   });
 });

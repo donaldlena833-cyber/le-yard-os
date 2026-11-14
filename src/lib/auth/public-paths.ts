@@ -5,6 +5,7 @@ export const CONNECTED_ACCEPTANCE_ATTESTATION_PATH =
 // secret at the route boundary. Staff API routes require session authentication.
 const providerAuthenticatedPaths = new Set([
   "/api/integrations/square/webhook",
+  "/api/internal/integrations/church-square-recovery",
   "/api/twilio/readiness",
   "/api/twilio/voice/incoming",
   "/api/twilio/voice/ai/turn",

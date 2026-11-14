@@ -60,6 +60,7 @@ const scopedResource = z.object({
 const resourceObjects = {
   "order.created": "order_created",
   "order.updated": "order_updated",
+  "order.fulfillment.updated": "order_fulfillment_updated",
   "payment.created": "payment",
   "payment.updated": "payment",
   "refund.created": "refund",
@@ -115,7 +116,7 @@ export function prepareChurchSquareWebhook(
   const resource = scopedResource.parse(data.object[objectKey]);
   if (resource.location_id !== scope.squareLocationId) return "ignore";
 
-  const isOrder = objectKey === "order_created" || objectKey === "order_updated";
+  const isOrder = event.type.startsWith("order.");
   const resourceId = isOrder ? resource.order_id : resource.id;
   if (!resourceId || resourceId !== data.id) return "ignore";
   return { ...receipt, resourceId, relatedOrderId: isOrder ? undefined : resource.order_id, inventory: [] };

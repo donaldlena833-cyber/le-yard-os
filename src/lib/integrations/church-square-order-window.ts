@@ -4,6 +4,18 @@ export const churchSquareOrderWindowPath = "/api/workspace/church-square-orders"
 export const churchSquareOrderWindowHours = 24;
 export const churchSquareOrderWindowLimit = 50;
 
+const fulfillmentTime = z.iso.datetime({ offset: true }).nullable();
+const orderFulfillment = z.object({
+  type: z.enum(["PICKUP", "DELIVERY", "SHIPMENT", "UNKNOWN"]),
+  status: z.enum(["PROPOSED", "RESERVED", "PREPARED", "COMPLETED", "CANCELED", "FAILED", "UNKNOWN"]),
+  promisedAt: fulfillmentTime,
+  readyAt: fulfillmentTime,
+  handoffAt: fulfillmentTime,
+  completedAt: fulfillmentTime,
+  canceledAt: fulfillmentTime,
+  rejectedAt: fulfillmentTime,
+});
+
 export const churchSquareOrderWindowResponse = z.object({
   checkedAt: z.iso.datetime(),
   hasMore: z.boolean(),
@@ -13,6 +25,7 @@ export const churchSquareOrderWindowResponse = z.object({
     status: z.enum(["OPEN", "COMPLETED", "CANCELED", "DRAFT", "UNKNOWN"]),
     updatedAt: z.iso.datetime({ offset: true }),
     totalCents: z.number().int().safe().nullable(),
+    fulfillments: z.array(orderFulfillment).max(100),
   })).max(churchSquareOrderWindowLimit),
 });
 
