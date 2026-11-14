@@ -10551,6 +10551,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_ingredient_batches": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_ingredient_evidence": {
         Args: {
           "p_location_id": string | null
@@ -10827,6 +10833,20 @@ export type Database = {
           "p_notes"?: string | null
         }
         Returns: Database["public"]["Tables"]["checklist_responses"]["Row"]
+      };
+      "record_church_ingredient_batch": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_ingredient_key": string | null
+          "p_evidence_revision": number | null
+          "p_supplier_lot": string | null
+          "p_batch_code": string | null
+          "p_handled_as": string | null
+          "p_handled_at": string | null
+          "p_discard_at": string | null
+        }
+        Returns: Json
       };
       "record_clock_in": {
         Args: {
@@ -12446,6 +12466,15 @@ export type Database = {
       "validate_human_ai_decision": {
         Args: Record<PropertyKey, never>
         Returns: unknown
+      };
+      "void_church_ingredient_batch": {
+        Args: {
+          "p_location_id": string | null
+          "p_batch_id": string | null
+          "p_request_id": string | null
+          "p_reason": string | null
+        }
+        Returns: Json
       }
     }
     Enums: {
@@ -12826,6 +12855,7 @@ export const DatabaseObjectNames = {
       "jwt_aal",
       "list_church_catering_jobs",
       "list_church_catering_prep",
+      "list_church_ingredient_batches",
       "list_church_ingredient_evidence",
       "list_church_sandwich_formulas",
       "list_church_square_count_items",
@@ -12859,6 +12889,7 @@ export const DatabaseObjectNames = {
       "recipe_cost_snapshot",
       "record_canonical_service_availability_event",
       "record_checklist_response",
+      "record_church_ingredient_batch",
       "record_clock_in",
       "record_clock_out",
       "record_guest_consent",
@@ -13020,6 +13051,7 @@ export const DatabaseObjectNames = {
       "update_sop_draft",
       "validate_employee_job_assignment",
       "validate_human_ai_decision",
+      "void_church_ingredient_batch",
     ],
     Enums: [
       "ai_run_kind",

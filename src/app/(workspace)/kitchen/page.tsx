@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { ChurchCateringPrep } from "@/components/kitchen/church-catering-prep";
+import { ChurchBatchLabelsPanel } from "@/components/kitchen/church-batch-labels-panel";
 import { ChurchSandwichAvailabilityPanel } from "@/components/kitchen/church-sandwich-availability-panel";
 import { ChurchSandwichRecipeApprovalPanel } from "@/components/kitchen/church-sandwich-recipe-approval-panel";
 import { ChurchSquareAllergenPanel } from "@/components/kitchen/church-square-allergen-panel";
@@ -11,6 +12,7 @@ import { LivePrepWorkspace } from "@/components/prep/live-prep-workspace";
 import { PageFrame } from "@/components/ui/page-frame";
 import { loadLiveInventory } from "@/data/read-models/inventory";
 import { loadChurchIngredientEvidence } from "@/data/read-models/church-ingredient-evidence.server";
+import { canRecordChurchBatchLabels, loadChurchBatchLabels } from "@/data/read-models/church-ingredient-batches.server";
 import { loadChurchCateringPrep } from "@/data/read-models/church-catering-prep.server";
 import { buildChurchSandwichAvailability } from "@/data/read-models/church-sandwich-availability.server";
 import { currentChurchAvailabilityRecipes, loadChurchSandwichFormulas } from "@/data/read-models/church-sandwich-formula.server";
@@ -30,6 +32,20 @@ async function ChurchSupplierEvidence({ workspace, data }: {
   if (!result.ok) return <p className="my-4 text-sm text-[var(--ink-soft)]">Supplier evidence could not be loaded. Reload Kitchen to try again.</p>;
 
   return <ChurchSupplierEvidencePanel key={workspace.activeLocation.id} initialRows={result.data} canManage={workspace.capabilities.includes("recipe.manage")} />;
+}
+
+async function ChurchBatchLabels({ workspace, evidence, labels }: {
+  workspace: WorkspaceContextValue;
+  evidence: ReturnType<typeof loadChurchIngredientEvidence>;
+  labels: ReturnType<typeof loadChurchBatchLabels>;
+}) {
+  const [ingredientEvidence, batchLabels] = await Promise.all([evidence, labels]);
+  if (!ingredientEvidence || !batchLabels) return null;
+  if (!ingredientEvidence.ok || !batchLabels.ok) {
+    return <p className="my-4 text-sm text-[var(--ink-soft)]">Batch labels could not be loaded. Reload Kitchen to try again.</p>;
+  }
+  return <ChurchBatchLabelsPanel key={workspace.activeLocation.id} evidence={ingredientEvidence.data}
+    records={batchLabels.data} asOf={new Date().toISOString()} canRecord={canRecordChurchBatchLabels(workspace)} />;
 }
 
 async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas }: {
@@ -66,6 +82,7 @@ export default async function KitchenPage() {
   const ingredientEvidence = loadChurchIngredientEvidence(resolution.context);
   const cateringPrep = loadChurchCateringPrep(resolution.context);
   const sandwichFormulas = loadChurchSandwichFormulas(resolution.context);
+  const batchLabels = loadChurchBatchLabels(resolution.context);
   const approvedRecipes = Promise.all([sandwichFormulas, ingredientEvidence]).then(([formulas, evidence]) =>
     formulas?.ok && evidence?.ok ? currentChurchAvailabilityRecipes(formulas.data, evidence.data) : null,
   );
@@ -78,6 +95,7 @@ export default async function KitchenPage() {
       <PageFrame width="full" className="max-w-[1400px] pb-0">
         <Suspense fallback={null}><ChurchCateringPrep data={cateringPrep} approvedRecipes={approvedRecipes} /></Suspense>
         <Suspense fallback={null}><ChurchSupplierEvidence workspace={resolution.context} data={ingredientEvidence} /></Suspense>
+        <Suspense fallback={null}><ChurchBatchLabels workspace={resolution.context} evidence={ingredientEvidence} labels={batchLabels} /></Suspense>
         <Suspense fallback={null}><ChurchSandwichPlanning workspace={resolution.context} evidence={ingredientEvidence} catering={cateringPrep} formulas={sandwichFormulas} /></Suspense>
         <LivePrepWorkspace
           key={`prep-${resolution.context.activeLocation.id}`}

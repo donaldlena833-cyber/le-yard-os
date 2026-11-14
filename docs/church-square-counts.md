@@ -46,6 +46,12 @@ Use the stand-alone limits to look for a bottleneck and the combined mix to chec
 
 In **Kitchen → Chef signoff for sandwich recipes**, sign one recipe using the chef's recorded measurements and the current reviewed supplier evidence. Record as-received and usable amounts in the same unit, plus the usable quantity for one sandwich. Use whole units for bread and grams for fillings. Include the worksheet reference so staff can trace the measurements. The planner uses the latest signed recipe while every supplier revision still matches. When a supplier label changes, recheck and sign a new recipe revision. Use the supplier evidence record and lot label for actual discard times.
 
+## Record an opened or prepped batch
+
+In **Kitchen → Batch labels**, select the exact reviewed supplier product. Enter the lot from the pack, a unique batch code, the actual opened or prepped time, and the earliest discard time approved for that batch. Carry forward the earliest applicable limit from the pack, opening or prep rule, and any source batch. Transferring it to another container leaves its clock in place. Match the physical container label to the saved record.
+
+The log is separate from stock and prep completion. If a record is incorrect, void it with a reason and remove or correct the physical label. Record the corrected label with a fresh batch code. Review any active batch whose supplier evidence changes before serving from it. [NYC Health Code Article 81](https://www.nyc.gov/assets/doh/downloads/pdf/about/healthcode/health-code-article81.pdf)
+
 ## Check Square item allergen tags
 
 In **Kitchen → Square allergen check**, staff with recipe management access can read the native Square catalog tags for the six Church Street sandwiches. The supplier side displays the exact reviewed label and its cross-contact statement when all ingredient revisions match the signed recipe. An empty tag list gives no information about which allergens an item contains or shared prep risks.
