@@ -142,10 +142,13 @@ export async function sendChurchSquareCount(
         });
         if (dispatchError || allowed !== true) throw new Error("The Square count dispatch could not be recorded.");
         dispatchMarked = true;
-      });
+      }, { databaseClaimed: true });
   } catch (error) {
     if (!dispatchMarked && error instanceof SquareCountError
-      && ["invalid_input", "scope_mismatch", "variation_ineligible"].includes(error.code)) return rejectUndispatched();
+      && ["invalid_input", "scope_mismatch", "variation_ineligible"].includes(error.code)) {
+      console.warn("Church Street Square count rejected before dispatch.", { reason: error.code });
+      return rejectUndispatched();
+    }
     return { status: "pending" as const };
   }
   if (!receipt) return { status: "recovery_required" as const };

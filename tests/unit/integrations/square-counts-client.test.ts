@@ -562,6 +562,26 @@ describe("Square physical count client", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it("permits only bounded clock skew after an authoritative database claim and keeps the original time", async () => {
+    const observed = "2026-11-14T14:50:00.120+00:00";
+    const request = mockSquare({
+      write: () => respond({ changes: [change({ ...physicalCount, occurred_at: observed })] }),
+      current: () => respond({ counts: [{ ...currentCount, calculated_at: "2026-11-14T14:50:00.400Z" }] }),
+    });
+    const markDispatched = vi.fn();
+    const client = new SquareCountClient(config, request);
+    await expect(client.writePhysicalCount({ ...input, occurredAt: observed }, undefined, { databaseClaimed: true }))
+      .rejects.toMatchObject({ code: "invalid_input" });
+    await expect(client.writePhysicalCount({ ...input, occurredAt: "2026-11-14T14:50:02.001Z" }, markDispatched, { databaseClaimed: true }))
+      .rejects.toMatchObject({ code: "invalid_input" });
+    expect(request).not.toHaveBeenCalled();
+    await expect(client.writePhysicalCount({ ...input, occurredAt: observed }, markDispatched, { databaseClaimed: true }))
+      .resolves.toMatchObject({ occurredAt: observed, currentQuantity: "8" });
+    expect(markDispatched).toHaveBeenCalledOnce();
+    const argument = requestsTo(request, urls.write)[0][1];
+    expect(JSON.parse(String(argument?.body)).changes[0].physical_count.occurred_at).toBe(observed);
+  });
+
   it("reconciles a transport failure through the same reference and never dispatches a second write", async () => {
     const request = mockSquare({
       write: async () => { throw new Error(config.accessToken); },

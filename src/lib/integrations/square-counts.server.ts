@@ -153,6 +153,7 @@ const envelopeSchema = z.object({
 const changeSchema = z.object({ type: z.string(), physical_count: z.unknown().optional() });
 const hosts = { sandbox: "https://connect.squareupsandbox.com", production: "https://connect.squareup.com" } as const;
 const DAY_MS = 86_400_000;
+const CLAIM_CLOCK_SKEW_MS = 2_000;
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_PAGES = 10;
 const MAX_VARIATIONS = 150;
@@ -558,9 +559,9 @@ export class SquareCountClient {
     return parsed.data;
   }
 
-  private verifyObservationAge(occurredAt: string) {
+  private verifyObservationAge(occurredAt: string, allowedClockSkew: number) {
     const age = Date.now() - Date.parse(occurredAt);
-    if (age < 0 || age >= DAY_MS) {
+    if (age < -allowedClockSkew || age >= DAY_MS) {
       throw new SquareCountError("Square physical counts must have been observed within the past 24 hours.", "invalid_input");
     }
   }
@@ -738,11 +739,14 @@ export class SquareCountClient {
   async writePhysicalCount(
     input: SquarePhysicalCountInput,
     beforeWrite?: () => Promise<void>,
+    { databaseClaimed = false }: { databaseClaimed?: boolean } = {},
   ): Promise<SquarePhysicalCountReceipt> {
     const validated = this.parseInput(input);
-    this.verifyObservationAge(validated.occurredAt);
+    // The server can lag the clock that recorded the trusted database claim.
+    const allowedClockSkew = databaseClaimed && beforeWrite ? CLAIM_CLOCK_SKEW_MS : 0;
+    this.verifyObservationAge(validated.occurredAt, allowedClockSkew);
     await this.verifyTrackedVariation(validated.variationId);
-    this.verifyObservationAge(validated.occurredAt);
+    this.verifyObservationAge(validated.occurredAt, allowedClockSkew);
 
     const body = {
       idempotency_key: validated.requestId,
