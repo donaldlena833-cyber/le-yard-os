@@ -8,10 +8,16 @@ import { ChurchSquareStockCounts } from "@/components/inventory/church-square-st
 import { ChurchSquareStockNotifications } from "@/components/inventory/church-square-stock-notifications";
 import { isSquareStockLow } from "@/lib/integrations/square-stock-alerts";
 
-const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
+const { refresh, realtimeInvalidation } = vi.hoisted(() => ({
+  refresh: vi.fn(),
+  realtimeInvalidation: vi.fn<(options: { onInvalidate?: () => void }) => void>(),
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/lib/realtime/use-realtime-invalidation", () => ({
-  useRealtimeInvalidation: () => ({ state: "live", isRefreshing: false }),
+  useRealtimeInvalidation: (options: { onInvalidate?: () => void }) => {
+    realtimeInvalidation(options);
+    return { state: "live", isRefreshing: false };
+  },
 }));
 vi.mock("@/app/actions/workflows/church-square-counts", () => ({
   configureChurchSquareCountItemAction: vi.fn(),
@@ -24,8 +30,10 @@ afterEach(() => {
   cleanup();
   window.sessionStorage.clear();
   vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   refresh.mockClear();
+  realtimeInvalidation.mockClear();
   vi.mocked(acknowledgeChurchSquareStockAlertAction).mockReset();
   vi.mocked(sendChurchSquareCountAction).mockReset();
 });
@@ -140,6 +148,84 @@ describe("Church Street Square low stock notification", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
     expect(refresh).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.queryByRole("complementary", { name: "Square low stock notification" })).toBeNull();
+  });
+
+  it("coalesces foreground and Realtime invalidations into one trailing check", async () => {
+    const oldResponse = Promise.withResolvers<Response>();
+    const freshResponse = Promise.withResolvers<Response>();
+    const request = vi.fn().mockReturnValueOnce(oldResponse.promise).mockReturnValueOnce(freshResponse.promise);
+    vi.stubGlobal("fetch", request);
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    render(<ChurchSquareStockNotifications {...scope} userId={userId} alerts={[alert]} />);
+    expect(request).toHaveBeenCalledTimes(1);
+    const realtime = realtimeInvalidation.mock.lastCall?.[0].onInvalidate;
+    act(() => {
+      hidden.mockReturnValue(true);
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+      hidden.mockReturnValue(false);
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+      realtime?.();
+      window.dispatchEvent(new Event("online"));
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+
+    await act(async () => { oldResponse.resolve(Response.json({ ...scope, userId, alerts: [alert] })); });
+    expect(request).toHaveBeenCalledTimes(2);
+    await act(async () => { freshResponse.resolve(Response.json({ ...scope, userId, alerts: [] })); });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("complementary", { name: "Square low stock notification" })).toBeNull();
+  });
+
+  it("does not let an old response or queued refresh affect the new account scope", async () => {
+    const oldResponse = Promise.withResolvers<Response>();
+    const freshResponse = Promise.withResolvers<Response>();
+    const request = vi.fn().mockReturnValueOnce(oldResponse.promise).mockReturnValueOnce(freshResponse.promise);
+    vi.stubGlobal("fetch", request);
+    const { rerender } = render(<ChurchSquareStockNotifications {...scope} userId={userId} alerts={[]} />);
+    const oldInvalidate = realtimeInvalidation.mock.lastCall?.[0].onInvalidate;
+    act(() => { oldInvalidate?.(); });
+    const nextUser = "30000000-0000-4000-8000-000000000019";
+    rerender(<ChurchSquareStockNotifications {...scope} userId={nextUser} alerts={[]} />);
+    expect(request.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(request).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      oldInvalidate?.();
+      oldResponse.resolve(Response.json({ ...scope, userId, alerts: [alert] }));
+      freshResponse.resolve(Response.json({ ...scope, userId: nextUser, alerts: [] }));
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(screen.queryByRole("complementary", { name: "Square low stock notification" })).toBeNull();
+  });
+
+  it("releases a timed-out read for a trailing check and ignores its late response", async () => {
+    vi.useFakeTimers();
+    const readAt = "2026-11-14T13:05:00.000Z";
+    vi.setSystemTime(new Date(readAt));
+    const stuckResponse = Promise.withResolvers<Response>();
+    const freshResponse = Promise.withResolvers<Response>();
+    const liveAlert = { ...alert, episode: "30000000-0000-4000-8000-000000000025" };
+    const request = vi.fn().mockResolvedValueOnce(Response.json({ ...scope, userId, alerts: [liveAlert] }))
+      .mockReturnValueOnce(stuckResponse.promise).mockReturnValueOnce(freshResponse.promise);
+    vi.stubGlobal("fetch", request);
+    render(<ChurchSquareStockNotifications {...scope} userId={userId} alerts={[liveAlert]} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(8_000); });
+    expect(request.mock.calls[1][1].signal.aborted).toBe(true);
+    expect(request).toHaveBeenCalledTimes(3);
+    const popup = within(screen.getByRole("complementary", { name: "Square low stock notification" }));
+    expect(popup.getByText(/Stock alert check delayed/).querySelector("time")?.dateTime).toBe(readAt);
+
+    await act(async () => { freshResponse.resolve(Response.json({ ...scope, userId, alerts: [] })); });
+    await act(async () => { stuckResponse.resolve(Response.json({ ...scope, userId, alerts: [liveAlert] })); });
     expect(screen.queryByRole("complementary", { name: "Square low stock notification" })).toBeNull();
   });
 

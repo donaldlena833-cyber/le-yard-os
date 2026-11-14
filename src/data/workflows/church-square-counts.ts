@@ -20,6 +20,11 @@ const claimSchema = z.object({
   variationId: z.string().optional(),
   wasDispatched: z.boolean().optional(),
 });
+const squareStockReadback = z.object({
+  currentQuantity: z.string().regex(/^-?\d{1,12}(?:\.\d{1,5})?$/),
+  calculatedAt: z.iso.datetime({ offset: true }),
+});
+const stockReconciliation = z.object({ applied: z.number().int().nonnegative(), ignored: z.number().int().nonnegative() });
 
 function requireSquareCountAdministrator(context: WorkflowContext, input: { organizationId: string; locationId: string }) {
   const membership = requireLocationAccess(context.actor, input.organizationId, input.locationId);
@@ -152,5 +157,30 @@ export async function sendChurchSquareCount(
     p_provider_count_id: receipt.physicalCountId,
   });
   if (finishError) return { status: "pending" as const };
+
+  // The confirmed physical receipt and Square's current stock are separate facts.
+  // Feed only the latter through the same monotonic observation path as recovery.
+  try {
+    const stock = squareStockReadback.safeParse(receipt);
+    const calculatedAt = stock.success ? Date.parse(stock.data.calculatedAt) : NaN;
+    if (!stock.success || receipt.variationId !== claim.variationId || receipt.locationId !== configuration.locationId
+      || !(calculatedAt >= Date.parse(observation.occurredAt) && calculatedAt <= Date.now() + 60_000)) {
+      throw new Error("The confirmed Square stock observation is unavailable.");
+    }
+    const saved = await admin.rpc("service_reconcile_church_square_stock", {
+      p_merchant_id: configuration.merchantId,
+      p_square_location_id: configuration.locationId,
+      p_inventory: [{ variationId: claim.variationId, quantity: stock.data.currentQuantity, calculatedAt: stock.data.calculatedAt }],
+    }).abortSignal(AbortSignal.timeout(5_000));
+    const result = stockReconciliation.safeParse(saved.data);
+    if (saved.error || !result.success || result.data.applied + result.data.ignored !== 1) {
+      throw new Error("The confirmed Square stock observation could not be saved.");
+    }
+    const { applied, ignored } = result.data;
+    console.info("Church Street Square stock readback synced.", { applied, ignored });
+  } catch {
+    // A signed webhook or the scheduled read can still update the shared stock state.
+    console.error("Church Street Square stock readback sync incomplete.");
+  }
   return { status: "confirmed" as const, currentQuantity: receipt.currentQuantity };
 }

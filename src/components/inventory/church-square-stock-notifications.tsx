@@ -21,6 +21,9 @@ const dismissalEvent = "le-yard-square-stock-alert-dismissed";
 const sessionDismissals = new Map<string, string>();
 const maxDismissals = 300;
 const pollIntervalMs = 10_000;
+const easternTime = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short",
+});
 
 type AlertStatus = {
   organizationId: string;
@@ -80,7 +83,7 @@ export function ChurchSquareStockNotifications({
   const { refresh } = useRouter();
   const scopeKey = stockAcknowledgmentScope(organizationId, locationId, userId);
   const receipts = useStockAcknowledgments(scopeKey);
-  const activeRequest = useRef<AbortController | null>(null);
+  const foregroundCheck = useRef<{ scopeKey: string; invalidate: () => void } | null>(null);
   const renderedAlerts = useRef<readonly ChurchSquareStockAlert[] | null>(alerts);
   const [snapshot, setSnapshot] = useState<StockAlertSnapshot>();
   const currentSnapshot = snapshot?.scopeKey === scopeKey ? snapshot : undefined;
@@ -88,20 +91,23 @@ export function ChurchSquareStockNotifications({
 
   useEffect(() => { renderedAlerts.current = currentAlerts; }, [currentAlerts]);
 
-  const checkStatus = useCallback(async () => {
-    if (activeRequest.current || document.hidden || !navigator.onLine) return;
-    const controller = new AbortController();
-    activeRequest.current = controller;
+  const invalidate = useCallback(() => {
+    const current = foregroundCheck.current;
+    if (current?.scopeKey === scopeKey) current.invalidate();
+  }, [scopeKey]);
+
+  useEffect(() => {
+    let active = true;
+    let activeRequest: AbortController | null = null;
+    let trailingCheck = false;
+    let timeout: number | undefined;
+
     function unavailable() {
       setSnapshot((previous) => {
         if (previous?.scopeKey !== scopeKey) return { scopeKey, state: "unavailable" };
         return previous.state === "ready" ? { ...previous, state: "unavailable" } : previous;
       });
     }
-    const timeout = window.setTimeout(() => {
-      unavailable();
-      controller.abort();
-    }, 8_000);
     function applyAlerts(next: ChurchSquareStockAlert[], state: "ready" | "denied") {
       const nextKey = JSON.stringify(next);
       const changed = nextKey !== JSON.stringify(renderedAlerts.current);
@@ -110,39 +116,96 @@ export function ChurchSquareStockNotifications({
       setSnapshot({ scopeKey, alerts: next, state, lastCheckedAt });
       if (changed) refresh();
     }
-    try {
-      const response = await fetch("/api/integrations/square/stock-alerts", {
-        cache: "no-store",
-        credentials: "same-origin",
-        signal: controller.signal,
-      });
-      if (controller.signal.aborted) return;
-      if (response.status === 401 || response.status === 403) {
-        applyAlerts([], "denied");
-        return;
-      }
-      if (!response.ok) {
-        unavailable();
-        return;
-      }
-      const result = await response.json() as AlertStatus;
-      if (controller.signal.aborted) return;
-      if (result.organizationId !== organizationId || result.locationId !== locationId || result.userId !== userId) {
-        applyAlerts([], "denied");
-        return;
-      }
-      if (!Array.isArray(result.alerts)) {
-        unavailable();
-        return;
-      }
-      applyAlerts(result.alerts, "ready");
-    } catch {
-      // Keep the last confirmed state and retry on the next foreground check.
-      if (!controller.signal.aborted) unavailable();
-    } finally {
+    function finish(controller: AbortController) {
+      if (activeRequest !== controller) return;
+      activeRequest = null;
       window.clearTimeout(timeout);
-      if (activeRequest.current === controller) activeRequest.current = null;
+      if (trailingCheck) void checkStatus();
     }
+
+    async function checkStatus(immediate = false) {
+      if (!active || document.hidden || !navigator.onLine) return;
+      if (activeRequest) {
+        if (immediate) trailingCheck = true;
+        return;
+      }
+      trailingCheck = false;
+      const controller = new AbortController();
+      activeRequest = controller;
+      const isCurrent = () => active && activeRequest === controller && !controller.signal.aborted;
+      timeout = window.setTimeout(() => {
+        if (!isCurrent()) return;
+        unavailable();
+        controller.abort();
+        finish(controller);
+      }, 8_000);
+      try {
+        const response = await fetch("/api/integrations/square/stock-alerts", {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: controller.signal,
+        });
+        if (!isCurrent()) return;
+        if (response.status === 401 || response.status === 403) {
+          applyAlerts([], "denied");
+          return;
+        }
+        if (!response.ok) {
+          unavailable();
+          return;
+        }
+        const result = await response.json() as AlertStatus;
+        if (!isCurrent()) return;
+        if (result.organizationId !== organizationId || result.locationId !== locationId || result.userId !== userId) {
+          applyAlerts([], "denied");
+          return;
+        }
+        if (!Array.isArray(result.alerts)) {
+          unavailable();
+          return;
+        }
+        applyAlerts(result.alerts, "ready");
+      } catch {
+        // Keep the last confirmed state and retry on the next foreground check.
+        if (isCurrent()) unavailable();
+      } finally {
+        finish(controller);
+      }
+    }
+
+    const invalidate = () => { void checkStatus(true); };
+    const restored = (event: PageTransitionEvent) => {
+      if (event.persisted) invalidate();
+    };
+    const offline = () => {
+      trailingCheck = false;
+      unavailable();
+      if (activeRequest) {
+        activeRequest.abort();
+        finish(activeRequest);
+      }
+    };
+    foregroundCheck.current = { scopeKey, invalidate };
+    void checkStatus();
+    const timer = window.setInterval(() => { void checkStatus(); }, pollIntervalMs);
+    document.addEventListener("visibilitychange", invalidate);
+    window.addEventListener("focus", invalidate);
+    window.addEventListener("online", invalidate);
+    window.addEventListener("offline", offline);
+    window.addEventListener("pageshow", restored);
+    return () => {
+      active = false;
+      foregroundCheck.current = null;
+      window.clearInterval(timer);
+      window.clearTimeout(timeout);
+      document.removeEventListener("visibilitychange", invalidate);
+      window.removeEventListener("focus", invalidate);
+      window.removeEventListener("online", invalidate);
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("pageshow", restored);
+      activeRequest?.abort();
+      activeRequest = null;
+    };
   }, [locationId, organizationId, refresh, scopeKey, userId]);
 
   useRealtimeInvalidation({
@@ -151,24 +214,8 @@ export function ChurchSquareStockNotifications({
     bindings: invalidationBindings,
     organizationId,
     locationId,
-    onInvalidate: checkStatus,
+    onInvalidate: invalidate,
   });
-
-  useEffect(() => {
-    void checkStatus();
-    const timer = window.setInterval(checkStatus, pollIntervalMs);
-    document.addEventListener("visibilitychange", checkStatus);
-    window.addEventListener("focus", checkStatus);
-    window.addEventListener("online", checkStatus);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", checkStatus);
-      window.removeEventListener("focus", checkStatus);
-      window.removeEventListener("online", checkStatus);
-      activeRequest.current?.abort();
-      activeRequest.current = null;
-    };
-  }, [checkStatus]);
 
   const dismissKey = `le-yard-square-stock-alerts:${userId}:${locationId}`;
   const getDismissals = useCallback(() => readDismissals(dismissKey), [dismissKey]);
@@ -177,11 +224,12 @@ export function ChurchSquareStockNotifications({
   const unacknowledged = (currentAlerts ?? []).filter((alert) => !stockAcknowledgment(alert, receipts));
   const pending = dismissalSnapshot === null ? [] : pendingSquareStockAlerts(unacknowledged, dismissed);
   const sample = pending.slice(0, 3);
+  const delayed = currentSnapshot?.state === "unavailable";
   return (
     <StockAlertSnapshotContext.Provider value={currentSnapshot}>
       {children}
       <p role="status" aria-atomic="true" className="sr-only">
-        {pending.length ? `Square low stock. ${sample.map((alert) => `${alert.label} has ${formatSquareStockQuantity(alert.quantity)} in stock`).join(". ")}` : ""}
+        {pending.length ? `Square low stock. ${sample.map((alert) => `${alert.label} has ${formatSquareStockQuantity(alert.quantity)} in stock`).join(". ")}${delayed ? ". Stock alert check delayed." : ""}` : ""}
       </p>
       {pending.length ? (
         <aside aria-label="Square low stock notification" className="fixed inset-x-3 top-3 z-[70] mx-auto max-w-sm rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 shadow-[var(--shadow-card)] sm:left-auto sm:right-5 sm:top-5 sm:mx-0">
@@ -197,6 +245,10 @@ export function ChurchSquareStockNotifications({
               <X aria-hidden="true" className="size-4" />
             </Button>
           </div>
+          {delayed && <p className="mt-1 text-xs text-[var(--ink-soft)]">
+            Stock alert check delayed. Showing the last available alerts.
+            {currentSnapshot.lastCheckedAt && <> Checked <time dateTime={currentSnapshot.lastCheckedAt}>{easternTime.format(new Date(currentSnapshot.lastCheckedAt))} ET</time>.</>}
+          </p>}
           <ul className="mt-1 space-y-1 text-xs text-[var(--ink-soft)]">
             {sample.map((alert) => (
               <li className="flex items-center justify-between gap-2" key={alert.episode}>

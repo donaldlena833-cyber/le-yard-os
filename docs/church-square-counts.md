@@ -28,6 +28,8 @@ For a production rehearsal, Operations can optionally display the stock-only Squ
 
 ## During service
 
+After Operations confirms a physical count, it uses the separately verified current Square stock and its calculation time to check the shared alert. A signed Square event or the scheduled stock read can also update the alert. The latest Square observation takes precedence. Open or return to Operations to see the popup. If an alert says the check is delayed, verify stock in Square before acting on the quantity.
+
 Enter the whole number of units currently on hand and a short reason. Square applies a physical count in order of observation and may report a different current quantity if sales have occurred since the count. Operations shows a confirmed result after it finds the matching Square history entry and reads current in-stock quantity.
 
 In **Check the six sandwich variations**, select **Check Square availability** to read the current Church Street flag for each variation, including untracked items. Square can flag an item sold out while the stock count is positive. A time beside the flag is the expiration reported by Square. Check again after placing or clearing a hold in Square, then check the guest view for each active channel. [Square sold-out flags](https://developer.squareup.com/docs/inventory-api/monitor-sold-out-status-on-item-variation)
