@@ -634,6 +634,12 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     const voidBatch = async (request = randomUUID(), reason = "Incorrect physical label", id = batchRequest) => (await db.query(`
       select public.void_church_ingredient_batch($1::uuid,$2::uuid,$3::uuid,$4) as result
     `, [workspaceLocationId, id, request, reason])).rows[0].result;
+    const batchQueue = async () => (await db.query(
+      "select public.list_church_ingredient_batch_queue($1::uuid) as result", [workspaceLocationId],
+    )).rows[0].result;
+    const resolveBatch = async (id, outcome, request = randomUUID()) => (await db.query(`
+      select public.resolve_church_ingredient_batch($1::uuid,$2::uuid,$3::uuid,$4) as result
+    `, [workspaceLocationId, id, request, outcome])).rows[0].result;
 
     await asRole(db, "authenticated", ownerId);
     expect(await readBatches()).toEqual([]);
@@ -647,7 +653,7 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     expect(batch).toEqual({ id: batchRequest, ingredientKey: "French-style ham", evidenceRevision: 3, supplierSku: "HQ-HAM-02",
       supplierLot: "LOT-42", batchCode: "PREP-42", handledAs: "prepped", handledAt: expect.any(String), discardAt: expect.any(String),
       storageRule: review.storageRule, handlingRule: review.preppedRule, recordedAt: expect.any(String), recordedByName: expect.any(String),
-      evidenceCurrent: true, voidedAt: null, voidReason: null });
+      evidenceCurrent: true, voidedAt: null, voidReason: null, disposition: null });
     expect(Date.parse(batch.handledAt)).toBe(Date.parse(handledAt));
     expect(Date.parse(batch.discardAt)).toBe(Date.parse(discardAt));
     expect(await recordBatch({ request: batchRequest, lot: "  LOT-42  " })).toEqual(batch);
@@ -655,21 +661,41 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     await expect(recordBatch()).rejects.toMatchObject({ code: "PT409" });
     const opened = await recordBatch({ code: "OPEN-42", stage: "opened" });
     expect(opened).toMatchObject({ handledAs: "opened", handlingRule: review.openedRule });
+    const earlier = await recordBatch({ code: "EARLY-42", discard: new Date(Date.now() + 7 * 60_000).toISOString() });
+    const exactQueue = [earlier, ...[opened, batch].sort((first, second) => first.id.localeCompare(second.id))];
+    expect(await batchQueue()).toEqual({ batches: exactQueue, total: 3 });
 
     await asRole(db, "authenticated", prepUserId);
-    expect(await readBatches()).toEqual([opened, batch]);
+    expect(await readBatches()).toEqual([earlier, opened, batch]);
+    expect(await batchQueue()).toEqual({ batches: exactQueue, total: 3 });
     await expect(recordBatch()).rejects.toMatchObject({ code: "42501" });
     await expect(voidBatch()).rejects.toMatchObject({ code: "42501" });
+    await expect(resolveBatch(earlier.id, "discarded")).rejects.toMatchObject({ code: "42501" });
     await expect(db.query("select * from private.church_ingredient_batches")).rejects.toMatchObject({ code: "42501" });
     await asRole(db, "authenticated", otherTenantUser);
     await expect(readBatches()).rejects.toMatchObject({ code: "42501" });
+    await expect(batchQueue()).rejects.toMatchObject({ code: "42501" });
     await asRole(db, "service_role");
     await expect(readBatches()).rejects.toMatchObject({ code: "42501" });
 
     await asRole(db, "authenticated", ownerId);
+    const usedRequest = randomUUID();
+    await expect(resolveBatch(earlier.id, "expired")).rejects.toMatchObject({ code: "22023" });
+    const used = await resolveBatch(earlier.id, "used_up", usedRequest);
+    expect(used).toEqual({ ...earlier, disposition: { outcome: "used_up", resolvedAt: expect.any(String), resolvedByName: expect.any(String) } });
+    expect(Date.parse(used.disposition.resolvedAt)).toBeLessThan(Date.parse(used.discardAt));
+    expect(await resolveBatch(earlier.id, "used_up", usedRequest)).toEqual(used);
+    await expect(resolveBatch(earlier.id, "discarded", usedRequest)).rejects.toMatchObject({ code: "PT409" });
+    await expect(resolveBatch(earlier.id, "used_up")).rejects.toMatchObject({ code: "PT409" });
+    await expect(voidBatch(randomUUID(), "Wrong outcome", earlier.id)).rejects.toMatchObject({ code: "PT409" });
     await saveEvidence("French-style ham", 3, "hold");
     expect(await recordBatch({ request: batchRequest })).toEqual({ ...batch, evidenceCurrent: false });
     await expect(recordBatch({ code: "PREP-43" })).rejects.toMatchObject({ code: "PT409" });
+    await expect(resolveBatch(opened.id, "used_up")).rejects.toMatchObject({ code: "PT409" });
+    const discarded = await resolveBatch(opened.id, "discarded");
+    expect(discarded).toEqual({ ...opened, evidenceCurrent: false, disposition: {
+      outcome: "discarded", resolvedAt: expect.any(String), resolvedByName: expect.any(String),
+    } });
     const voidRequest = randomUUID();
     await expect(voidBatch(voidRequest, "x".repeat(241))).rejects.toMatchObject({ code: "22023" });
     const voided = await voidBatch(voidRequest);
@@ -679,13 +705,62 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     await expect(voidBatch(voidRequest, "Changed reason")).rejects.toMatchObject({ code: "PT409" });
     await expect(voidBatch(voidRequest, "Incorrect physical label", opened.id)).rejects.toMatchObject({ code: "PT409" });
     await expect(voidBatch()).rejects.toMatchObject({ code: "PT409" });
-    expect(await readBatches()).toEqual([{ ...opened, evidenceCurrent: false }, voided]);
+    await expect(resolveBatch(batchRequest, "discarded")).rejects.toMatchObject({ code: "PT409" });
+    expect(await batchQueue()).toEqual({ batches: [], total: 0 });
+    expect(await readBatches()).toEqual([voided, discarded, { ...used, evidenceCurrent: false }]);
     await db.exec("reset role");
     const voidAudit = await db.query("select voided_by::text as actor, reason from private.church_ingredient_batch_voids where batch_id=$1", [batchRequest]);
     expect(voidAudit.rows).toEqual([{ actor: ownerId, reason: "Incorrect physical label" }]);
     await expect(db.query("delete from private.church_ingredient_batch_voids")).rejects.toMatchObject({ code: "42501" });
     await expect(db.query("update private.church_ingredient_batches set supplier_lot = 'NEW'"))
       .rejects.toMatchObject({ code: "42501" });
+    const dispositionAudit = await db.query("select resolved_by::text as actor, outcome from private.church_ingredient_batch_dispositions where batch_id=$1", [earlier.id]);
+    expect(dispositionAudit.rows).toEqual([{ actor: ownerId, outcome: "used_up" }]);
+    await expect(db.query("delete from private.church_ingredient_batch_dispositions")).rejects.toMatchObject({ code: "42501" });
+
+    // Seed recorded historical/overflow examples without adding a wall-clock delay to the local harness.
+    const overflow = await db.query(`
+      insert into private.church_ingredient_batches (
+        organization_id,location_id,id,ingredient_key,evidence_revision,supplier_sku,supplier_lot,batch_code,
+        handled_as,handled_at,discard_at,storage_rule,handling_rule,recorded_at,recorded_by,recorded_by_name
+      ) select original.organization_id,original.location_id,gen_random_uuid(),original.ingredient_key,4,
+        original.supplier_sku,original.supplier_lot,'OVERFLOW-'||position,original.handled_as,
+        original.handled_at - interval '1 day',
+        clock_timestamp() + make_interval(mins => position - 2),original.storage_rule,original.handling_rule,
+        original.recorded_at - interval '1 day',original.recorded_by,original.recorded_by_name
+      from private.church_ingredient_batches original cross join generate_series(1,52) fixture(position)
+      where original.id=$1::uuid returning id,batch_code
+    `, [batchRequest]);
+    // Current supplier review r5 means the historical first batch below can be overdue
+    // while the first record verifies held evidence and the second exercises the time gate.
+    await asRole(db, "authenticated", ownerId);
+    await saveEvidence("French-style ham", 4, "reviewed", { ...review, supplierSku: "HQ-HAM-02" });
+    await db.exec("reset role");
+    const overdue = await db.query(`
+      insert into private.church_ingredient_batches (
+        organization_id,location_id,id,ingredient_key,evidence_revision,supplier_sku,supplier_lot,batch_code,
+        handled_as,handled_at,discard_at,storage_rule,handling_rule,recorded_at,recorded_by,recorded_by_name
+      ) select organization_id,location_id,gen_random_uuid(),ingredient_key,5,
+        supplier_sku,supplier_lot,'OVERDUE-CURRENT',handled_as,handled_at - interval '2 day',
+        clock_timestamp() - interval '2 minutes',storage_rule,handling_rule,
+        recorded_at - interval '2 day',recorded_by,recorded_by_name
+      from private.church_ingredient_batches where id=$1::uuid returning id
+    `, [batchRequest]);
+    await asRole(db, "authenticated", ownerId);
+    const boundedQueue = await batchQueue();
+    expect(boundedQueue.total).toBe(53);
+    expect(boundedQueue.batches).toHaveLength(50);
+    expect(boundedQueue.batches[0]).toMatchObject({ batchCode: "OVERDUE-CURRENT", evidenceCurrent: true });
+    expect(boundedQueue.batches[1].id).toBe(overflow.rows.find(({ batch_code }) => batch_code === "OVERFLOW-1").id);
+    expect(boundedQueue.batches.at(-1).batchCode).toBe("OVERFLOW-49");
+    const overdueId = overdue.rows[0].id;
+    expect((await readBatches()).some(({ id }) => id === overdueId)).toBe(false);
+    await expect(resolveBatch(overdueId, "used_up")).rejects.toMatchObject({ code: "PT409" });
+    expect(await resolveBatch(overdueId, "discarded")).toMatchObject({ disposition: { outcome: "discarded" } });
+    expect((await batchQueue()).total).toBe(52);
+    const recentAfterDiscard = await readBatches();
+    expect(recentAfterDiscard).toHaveLength(50);
+    expect(recentAfterDiscard[0]).toMatchObject({ id: overdueId, disposition: { outcome: "discarded" } });
     expect(await protectedCounts()).toEqual(before);
   } finally {
     vi.unstubAllEnvs();

@@ -10559,6 +10559,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_ingredient_batch_queue": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_ingredient_batches": {
         Args: {
           "p_location_id": string | null
@@ -11023,6 +11029,15 @@ export type Database = {
           "p_to": string | null
         }
         Returns: { "startsAt": string | null; "partySize": number | null; "kind": string | null }[]
+      };
+      "resolve_church_ingredient_batch": {
+        Args: {
+          "p_location_id": string | null
+          "p_batch_id": string | null
+          "p_request_id": string | null
+          "p_outcome": string | null
+        }
+        Returns: Json
       };
       "resolve_receipt_duplicate": {
         Args: {
@@ -12879,6 +12894,7 @@ export const DatabaseObjectNames = {
       "jwt_aal",
       "list_church_catering_jobs",
       "list_church_catering_prep",
+      "list_church_ingredient_batch_queue",
       "list_church_ingredient_batches",
       "list_church_ingredient_evidence",
       "list_church_sandwich_formulas",
@@ -12932,6 +12948,7 @@ export const DatabaseObjectNames = {
       "request_time_entry_correction",
       "required_report_capability",
       "reservation_capacity_snapshot",
+      "resolve_church_ingredient_batch",
       "resolve_receipt_duplicate",
       "retry_integration_sync_job",
       "retry_waitlist_delivery",

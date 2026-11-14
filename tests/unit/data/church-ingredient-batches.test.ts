@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { zonedLocalToIso } from "@/data/read-models/local-time";
-import { churchBatchLabelList, recordChurchIngredientBatchInput, voidChurchIngredientBatchInput } from "@/lib/kitchen/church-ingredient-batches";
+import { churchBatchLabelList, churchBatchQueue, recordChurchIngredientBatchInput, resolveChurchIngredientBatchInput, voidChurchIngredientBatchInput } from "@/lib/kitchen/church-ingredient-batches";
 
 const batchId = "12345678-1234-4234-9234-1234567890ab";
 const input = {
@@ -43,4 +43,14 @@ it("retains batch trace facts and rejects inconsistent or repeated void records"
   expect(churchBatchLabelList.safeParse([{ ...label, voidReason: null }]).success).toBe(false);
   expect(churchBatchLabelList.safeParse([label, label]).success).toBe(false);
   expect(voidChurchIngredientBatchInput.safeParse({ requestId: batchId, batchId, reason: " " }).success).toBe(false);
+
+  const open = { ...label, voidedAt: null, voidReason: null };
+  const disposition = { outcome: "discarded", resolvedAt: "2026-11-14T11:31:30Z", resolvedByName: "Fixture chef" };
+  expect(churchBatchQueue.safeParse({ total: 51, batches: [open] }).success).toBe(true);
+  expect(churchBatchQueue.safeParse({ total: 0, batches: [open] }).success).toBe(false);
+  expect(churchBatchQueue.safeParse({ total: 1, batches: [{ ...open, disposition }] }).success).toBe(false);
+  expect(churchBatchLabelList.safeParse([{ ...open, disposition }]).success).toBe(true);
+  expect(churchBatchLabelList.safeParse([{ ...label, disposition }]).success).toBe(false);
+  expect(resolveChurchIngredientBatchInput.safeParse({ requestId: batchId, batchId, outcome: "discarded" }).success).toBe(true);
+  expect(resolveChurchIngredientBatchInput.safeParse({ requestId: batchId, batchId, outcome: "discarded", resolvedAt: disposition.resolvedAt }).success).toBe(false);
 });

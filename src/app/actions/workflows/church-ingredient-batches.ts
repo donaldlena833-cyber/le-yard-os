@@ -6,7 +6,7 @@ import { executeWorkflowAction, type WorkflowContext } from "@/data/execute";
 import { canRecordChurchBatchLabels } from "@/data/read-models/church-ingredient-batches.server";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import {
-  churchBatchLabel, recordChurchIngredientBatchInput, voidChurchIngredientBatchInput,
+  churchBatchLabel, recordChurchIngredientBatchInput, resolveChurchIngredientBatchInput, voidChurchIngredientBatchInput,
 } from "@/lib/kitchen/church-ingredient-batches";
 
 async function batchLocation(context: WorkflowContext) {
@@ -64,6 +64,29 @@ export async function voidChurchIngredientBatchAction(input: unknown) {
       }).abortSignal(AbortSignal.timeout(6_000));
       if (error) throwDatabaseError(error, "The Church Street batch label could not be voided.");
       return parseBatchLabel(data);
+    },
+  });
+  if (result.ok && result.persisted) revalidatePath("/kitchen");
+  return result;
+}
+
+export async function resolveChurchIngredientBatchAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "church.kitchen.batch-label.resolve",
+    schema: resolveChurchIngredientBatchInput,
+    input,
+    run: async (context, resolution) => {
+      const location = await batchLocation(context);
+      const { data, error } = await context.supabase.rpc("resolve_church_ingredient_batch", {
+        p_location_id: location,
+        p_batch_id: resolution.batchId,
+        p_request_id: resolution.requestId,
+        p_outcome: resolution.outcome,
+      }).abortSignal(AbortSignal.timeout(6_000));
+      if (error) throwDatabaseError(error, "The Church Street batch outcome could not be saved.");
+      const saved = parseBatchLabel(data);
+      assertCondition(saved.disposition?.outcome === resolution.outcome, "database", "The saved batch outcome could not be confirmed.");
+      return saved;
     },
   });
   if (result.ok && result.persisted) revalidatePath("/kitchen");

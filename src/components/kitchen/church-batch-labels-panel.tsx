@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { recordChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
+import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { recordChurchIngredientBatchAction, resolveChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { zonedLocalToIso } from "@/data/read-models/local-time";
@@ -15,7 +16,10 @@ type Props = {
   records: readonly ChurchBatchLabel[];
   canRecord: boolean;
   asOf: string;
+  queue?: { batches: readonly ChurchBatchLabel[]; total: number } | null;
 };
+
+type Outcome = "used_up" | "discarded";
 
 const zone = "America/New_York";
 const easternTime = new Intl.DateTimeFormat("en-US", {
@@ -27,6 +31,8 @@ const appearance = {
   recheck: { label: "Supplier recheck needed", tone: "warning" },
   expired: { label: "Discard time reached", tone: "danger" },
   voided: { label: "Voided", tone: "danger" },
+  used_up: { label: "Used up", tone: "neutral" },
+  discarded: { label: "Discarded", tone: "neutral" },
 } as const;
 
 function easternInput(value: FormDataEntryValue | null) {
@@ -40,6 +46,18 @@ function localLabel(value: string) {
 
 function isCurrentEvidence(batch: ChurchBatchLabel, evidence?: ChurchIngredientEvidence) {
   return batch.evidenceCurrent && evidence?.status === "reviewed" && evidence.revision === batch.evidenceRevision;
+}
+
+function mergeBatch(existing: ChurchBatchLabel | undefined, local: ChurchBatchLabel): ChurchBatchLabel {
+  if (!existing) return local;
+  if (existing.voidedAt || existing.disposition) return existing;
+  if (local.voidedAt) return { ...existing, voidedAt: local.voidedAt, voidReason: local.voidReason };
+  if (local.disposition) return { ...existing, disposition: local.disposition };
+  return existing;
+}
+
+function activityTime(batch: ChurchBatchLabel) {
+  return Date.parse(batch.voidedAt ?? batch.disposition?.resolvedAt ?? batch.recordedAt);
 }
 
 function RecordBatchLabel({ evidence, onSave }: {
@@ -150,25 +168,27 @@ function RecordBatchLabel({ evidence, onSave }: {
   );
 }
 
-function BatchLabelRow({ record, evidence, now, canRecord, onSave }: {
+function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave }: {
   record: ChurchBatchLabel;
   evidence?: ChurchIngredientEvidence;
   now: number;
   canRecord: boolean;
+  canResolve: boolean;
   onSave: (record: ChurchBatchLabel) => void;
 }) {
-  const [voiding, setVoiding] = useState(false);
+  const [command, setCommand] = useState<"void" | Outcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const { requestIdFor } = useStableRequestIds();
   const current = isCurrentEvidence(record, evidence);
   const discard = Date.parse(record.discardAt);
   const expired = now >= discard;
-  const status = appearance[record.voidedAt ? "voided" : expired ? "expired" : current ? "current" : "recheck"];
+  const unresolved = !record.voidedAt && !record.disposition;
+  const status = appearance[record.voidedAt ? "voided" : record.disposition?.outcome ?? (expired ? "expired" : current ? "current" : "recheck")];
 
   async function voidRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!canRecord || record.voidedAt || busy) return;
+    if (!canRecord || !unresolved || busy) return;
     const form = new FormData(event.currentTarget);
     const reason = String(form.get("reason") ?? "").trim();
     if (!reason || reason.length > 240 || /[\p{Cc}\p{Cf}]/u.test(reason) || !form.has("confirmed")) {
@@ -182,13 +202,38 @@ function BatchLabelRow({ record, evidence, now, canRecord, onSave }: {
       const result = await voidChurchIngredientBatchAction({ ...payload, requestId: requestIdFor(record.id, payload) });
       if (result.ok && result.mode === "live" && result.persisted) {
         onSave(result.data);
-        setVoiding(false);
+        setCommand(null);
         setMessage("Batch label voided. Use a new batch code if you re-record this batch.");
       } else {
         setMessage("message" in result ? result.message : "The batch label could not be voided.");
       }
     } catch {
       setMessage("The batch label could not be voided. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resolveRecord(outcome: Outcome) {
+    if (!canResolve || !unresolved || busy) return;
+    if (outcome === "used_up" && (expired || Date.now() >= discard || !current)) {
+      setCommand(null);
+      setMessage("Used up is available only before the discard deadline with current supplier evidence.");
+      return;
+    }
+    const payload = { batchId: record.id, outcome };
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await resolveChurchIngredientBatchAction({ ...payload, requestId: requestIdFor(`resolve:${record.id}`, payload) });
+      if (result.ok && result.mode === "live" && result.persisted && result.data.disposition?.outcome === outcome) {
+        onSave(result.data);
+        setCommand(null);
+      } else {
+        setMessage("message" in result ? result.message : "The batch outcome could not be confirmed. Refresh Kitchen and try again.");
+      }
+    } catch {
+      setMessage("The batch outcome could not be confirmed. Try again.");
     } finally {
       setBusy(false);
     }
@@ -209,15 +254,36 @@ function BatchLabelRow({ record, evidence, now, canRecord, onSave }: {
         <p className="whitespace-pre-wrap">Storage · {record.storageRule}</p>
         <p className="whitespace-pre-wrap">Recorded rule · {record.handlingRule}</p>
         <p>Recorded by {record.recordedByName} · <time dateTime={record.recordedAt}>{localLabel(record.recordedAt)}</time>.</p>
-        {!current && <p>Recheck the current supplier label and the physical batch before use.</p>}
+        {!current && !record.disposition && <p>Recheck the current supplier label and the physical batch before use.</p>}
         {record.voidedAt && <p className="whitespace-pre-wrap">Voided <time dateTime={record.voidedAt}>{localLabel(record.voidedAt)}</time> · {record.voidReason}</p>}
-        {canRecord && !record.voidedAt && !voiding && <Button variant="quiet" size="sm" onClick={() => setVoiding(true)}>Void label</Button>}
-        {canRecord && !record.voidedAt && voiding && (
+        {record.disposition && <p>{appearance[record.disposition.outcome].label} recorded by {record.disposition.resolvedByName} · <time dateTime={record.disposition.resolvedAt}>{localLabel(record.disposition.resolvedAt)}</time>.</p>}
+        {unresolved && command === null && (canResolve || canRecord) && (
+          <div className="flex flex-wrap gap-2">
+            {canResolve && current && !expired && <Button variant="secondary" size="sm" onClick={() => setCommand("used_up")}>Record used up</Button>}
+            {canResolve && <Button variant="secondary" size="sm" onClick={() => setCommand("discarded")}>Record discard</Button>}
+            {canRecord && <Button variant="quiet" size="sm" onClick={() => setCommand("void")}>Void label</Button>}
+          </div>
+        )}
+        {canResolve && unresolved && (command === "used_up" || command === "discarded") && (
+          <div className="space-y-2">
+            <p>{command === "discarded" ? "Confirm after discarding this physical batch."
+              : expired || !current ? "Used up is available only before the discard deadline with current supplier evidence."
+              : "Confirm this batch was fully used before the discard time."}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant={command === "discarded" ? "danger" : "primary"} size="sm"
+                disabled={busy || (command === "used_up" && (expired || !current))} onClick={() => void resolveRecord(command)}>
+                {busy ? "Recording…" : command === "discarded" ? "Confirm discard" : "Confirm used up"}
+              </Button>
+              <Button variant="quiet" size="sm" disabled={busy} onClick={() => { setCommand(null); setMessage(""); }}>Cancel</Button>
+            </div>
+          </div>
+        )}
+        {canRecord && unresolved && command === "void" && (
           <form aria-label={`Void label ${record.batchCode}`} onSubmit={(event) => void voidRecord(event)} noValidate>
             <fieldset disabled={busy} className="space-y-2">
               <label className="block font-semibold">Reason for voiding<input className={field} name="reason" required maxLength={240} /></label>
               <label className="flex items-start gap-2 text-sm"><input className="mt-1" type="checkbox" name="confirmed" required /><span>I removed the previous physical label. I’ll use a new batch code for a replacement.</span></label>
-              <div className="flex flex-wrap gap-2"><Button variant="danger" size="sm" type="submit">{busy ? "Voiding…" : "Confirm void"}</Button><Button variant="quiet" size="sm" onClick={() => { setVoiding(false); setMessage(""); }}>Cancel</Button></div>
+              <div className="flex flex-wrap gap-2"><Button variant="danger" size="sm" type="submit">{busy ? "Voiding…" : "Confirm void"}</Button><Button variant="quiet" size="sm" onClick={() => { setCommand(null); setMessage(""); }}>Cancel</Button></div>
             </fieldset>
           </form>
         )}
@@ -227,29 +293,52 @@ function BatchLabelRow({ record, evidence, now, canRecord, onSave }: {
   );
 }
 
-export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf }: Props) {
+export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, queue }: Props) {
+  const { refresh } = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [clock, setClock] = useState(() => Date.parse(asOf));
   const [changes, setChanges] = useState<Record<string, ChurchBatchLabel>>({});
-  useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), 15_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const [resolutionMessage, setResolutionMessage] = useState("");
 
   const byIngredient = new Map(evidence.map((row) => [row.ingredientKey, row]));
   const byId = new Map(records.map((row) => [row.id, row]));
-  for (const row of Object.values(changes)) {
-    const existing = byId.get(row.id);
-    if (!existing) byId.set(row.id, row);
-    else if (row.voidedAt && !existing.voidedAt) {
-      byId.set(row.id, { ...existing, voidedAt: row.voidedAt, voidReason: row.voidReason });
-    }
-  }
-  const batches = [...byId.values()].sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt)).slice(0, 50);
+  for (const row of Object.values(changes)) byId.set(row.id, mergeBatch(byId.get(row.id), row));
+  const batches = [...byId.values()].sort((left, right) => activityTime(right) - activityTime(left));
+  const queueById = new Map(queue?.batches.map((row) => [row.id, mergeBatch(byId.get(row.id), row)]));
+  const closedInQueue = [...queueById.values()].filter((row) => row.voidedAt || row.disposition).length;
+  const additionalOpen = Object.values(changes).filter((row) => !queueById.has(row.id) && !row.voidedAt && !row.disposition
+    && !records.some((prior) => prior.id === row.id));
+  const unresolved = [...queueById.values(), ...additionalOpen].filter((row) => !row.voidedAt && !row.disposition)
+    .sort((left, right) => Date.parse(left.discardAt) - Date.parse(right.discardAt));
+  const visibleQueue = unresolved.slice(0, 50);
+  const visibleQueueIds = new Set(visibleQueue.map((row) => row.id));
+  const queueTotal = Math.max(unresolved.length, (queue?.total ?? 0) - closedInQueue + additionalOpen.length);
+  const now = Math.max(clock, Date.parse(asOf));
+  const activity = (queue ? batches.filter((row) => !visibleQueueIds.has(row.id)) : batches).slice(0, 50);
+  const nextDeadline = [...visibleQueue, ...activity].reduce((soonest, row) => {
+    const deadline = Date.parse(row.discardAt);
+    return !row.voidedAt && !row.disposition && deadline > now ? Math.min(soonest, deadline) : soonest;
+  }, Infinity);
+  useEffect(() => {
+    if (!Number.isFinite(nextDeadline)) return;
+    const updateClock = () => setClock(Date.now());
+    const timer = window.setTimeout(updateClock, Math.min(15_000, nextDeadline - now));
+    window.addEventListener("focus", updateClock);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", updateClock);
+    };
+  }, [nextDeadline, now]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setClock(Date.now()), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
   function saved(row: ChurchBatchLabel) {
     setChanges((previous) => {
-      if (previous[row.id]?.voidedAt && !row.voidedAt) return previous;
-      return { ...previous, [row.id]: row };
+      const current = previous[row.id];
+      return { ...previous, [row.id]: mergeBatch(current, row) };
     });
+    if (row.disposition) setResolutionMessage(`Batch ${row.batchCode} recorded as ${row.disposition.outcome === "discarded" ? "discarded" : "used up"}.`);
     setClock(Date.now());
   }
 
@@ -258,11 +347,32 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf }: P
       <h2 id="church-batch-labels-heading" className="text-lg font-semibold">Batch labels</h2>
       <p className="mt-2 text-sm text-[var(--ink-soft)]">Record the exact supplier lot, handling time and discard time for Church Street batches. Verify the reviewed supplier label and attach the label to the physical container.</p>
       {canRecord && <RecordBatchLabel evidence={evidence} onSave={saved} />}
-      {batches.length === 0 ? <p className="mt-3 text-xs text-[var(--ink-soft)]">No batch labels in this view.</p> : (
-        <div className="mt-3 divide-y divide-[var(--line)] border-t border-[var(--line)]">
-          {batches.map((record) => <BatchLabelRow key={record.id} record={record} evidence={byIngredient.get(record.ingredientKey)} now={Math.max(clock, Date.parse(asOf))} canRecord={canRecord} onSave={saved} />)}
-        </div>
+      {resolutionMessage && <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{resolutionMessage}</p>}
+      {queue !== undefined && (
+        <section className="mt-4 border-t border-[var(--line)] pt-3" aria-labelledby="church-batch-queue-heading">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="church-batch-queue-heading" className="text-sm font-semibold">Open batches by discard time</h3>
+            <Button variant="quiet" size="sm" disabled={refreshing} onClick={() => startRefresh(refresh)}>{refreshing ? "Refreshing…" : "Refresh list"}</Button>
+          </div>
+          {queue === null ? <p className="mt-2 text-xs text-[var(--ink-soft)]">The batch queue could not be loaded. Refresh Kitchen to try again.</p> : (
+            <>
+              <p className="mt-1 text-xs text-[var(--ink-soft)]">{queueTotal === 0 ? "No open batches." : `${queueTotal} open ${queueTotal === 1 ? "batch" : "batches"}. Earliest deadline first.`}</p>
+              {queueTotal > visibleQueue.length && <p className="mt-1 text-xs text-[var(--ink-soft)]">Showing {visibleQueue.length} of {queueTotal}. Refresh Kitchen to see more after recording outcomes.</p>}
+              <div className="mt-1 divide-y divide-[var(--line)]">
+                {visibleQueue.map((record) => <BatchLabelRow key={record.id} record={record} evidence={byIngredient.get(record.ingredientKey)} now={now} canRecord={canRecord} canResolve={canRecord} onSave={saved} />)}
+              </div>
+            </>
+          )}
+        </section>
       )}
+      <section className="mt-4 border-t border-[var(--line)] pt-3" aria-labelledby="church-batch-activity-heading">
+        <h3 id="church-batch-activity-heading" className="text-sm font-semibold">Recent batch label activity</h3>
+        {activity.length === 0 ? <p className="mt-2 text-xs text-[var(--ink-soft)]">No other recent batch labels.</p> : (
+          <div className="mt-1 divide-y divide-[var(--line)]">
+            {activity.map((record) => <BatchLabelRow key={record.id} record={record} evidence={byIngredient.get(record.ingredientKey)} now={now} canRecord={canRecord} canResolve={canRecord && queue !== undefined} onSave={saved} />)}
+          </div>
+        )}
+      </section>
     </section>
   );
 }

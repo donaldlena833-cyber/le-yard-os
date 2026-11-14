@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { recordChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
+import { recordChurchIngredientBatchAction, resolveChurchIngredientBatchAction, voidChurchIngredientBatchAction } from "@/app/actions/workflows/church-ingredient-batches";
 import { ChurchBatchLabelsPanel } from "@/components/kitchen/church-batch-labels-panel";
 import type { ChurchBatchLabel } from "@/lib/kitchen/church-ingredient-batches";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
 
 vi.mock("@/app/actions/workflows/church-ingredient-batches", () => ({
-  recordChurchIngredientBatchAction: vi.fn(), voidChurchIngredientBatchAction: vi.fn(),
+  recordChurchIngredientBatchAction: vi.fn(), resolveChurchIngredientBatchAction: vi.fn(), voidChurchIngredientBatchAction: vi.fn(),
 }));
 
 const asOf = "2026-11-14T16:00:00Z";
+const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 const evidence: ChurchIngredientEvidence = {
   ingredientKey: "French-style ham", status: "reviewed", supplierSku: "H-123", sourceReference: "Pack label revision B",
   allergenNotes: "Label retained", crossContactNotes: "See supplier statement", storageRule: "Follow reviewed storage sheet",
@@ -37,6 +39,7 @@ function change(label: string, value: string) {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.resetAllMocks();
 });
@@ -106,4 +109,72 @@ it("requires physical-label removal to void and preserves newer server void evid
   expect(row.getByText("Voided")).toBeTruthy();
   expect(row.getByText(/Recheck the current supplier label/)).toBeTruthy();
   expect(row.queryByText(/Old action reply/)).toBeNull();
+});
+
+it("sorts the queue by deadline, closes an exactly due batch after authenticated discard, and retains audit history", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(asOf));
+  const due = { ...recorded, id: "66666666-6666-4666-8666-666666666666", batchCode: "HAM-05", discardAt: asOf, recordedAt: "2026-11-14T15:30:00Z" };
+  const latest = Array.from({ length: 49 }, (_, index) => ({ ...recorded, id: `latest-${index}`, batchCode: `HAM-X${index}`, recordedAt: "2026-11-14T15:45:00Z", voidedAt: "2026-11-14T15:50:00Z", voidReason: "Fixture" }));
+  const discarded: ChurchBatchLabel = { ...due, disposition: { outcome: "discarded", resolvedByName: "Chef lead", resolvedAt: asOf } };
+  vi.mocked(resolveChurchIngredientBatchAction).mockResolvedValue({ ok: true, mode: "live", persisted: true, data: discarded });
+  render(<ChurchBatchLabelsPanel evidence={[evidence]} records={[recorded, ...latest]} queue={{ batches: [recorded, due], total: 4 }} asOf={asOf} canRecord />);
+  const queue = within(screen.getByRole("region", { name: "Open batches by discard time" }));
+  const history = within(screen.getByRole("region", { name: "Recent batch label activity" }));
+  expect(queue.getByText(/4 open batches/)).toBeTruthy();
+  expect(queue.getByText(/Showing 2 of 4/)).toBeTruthy();
+  const queueRows = queue.getAllByText(/French-style ham · HAM-/);
+  expect(queueRows.map((row) => row.textContent)).toEqual(["French-style ham · HAM-05", "French-style ham · HAM-07"]);
+  expect(history.queryByText("French-style ham · HAM-07")).toBeNull();
+
+  const row = openDetails("French-style ham · HAM-05");
+  expect(row.getByText("Discard time reached")).toBeTruthy();
+  expect(row.queryByRole("button", { name: "Record used up" })).toBeNull();
+  fireEvent.click(row.getByRole("button", { name: "Record discard" }));
+  expect(row.getByText("Confirm after discarding this physical batch.")).toBeTruthy();
+  expect(resolveChurchIngredientBatchAction).not.toHaveBeenCalled();
+  fireEvent.click(row.getByRole("button", { name: "Confirm discard" }));
+  await history.findByText("Discarded");
+  expect(resolveChurchIngredientBatchAction).toHaveBeenCalledExactlyOnceWith({ requestId: expect.any(String), batchId: due.id, outcome: "discarded" });
+  expect(queue.queryByText("French-style ham · HAM-05")).toBeNull();
+  expect(queue.getByText(/3 open batches/)).toBeTruthy();
+  const saved = openDetails("French-style ham · HAM-05");
+  expect(saved.getByText(/Discarded recorded by Chef lead/).querySelector("time")?.dateTime).toBe(asOf);
+  expect(saved.queryByRole("button")).toBeNull();
+});
+
+it("blocks used up after a deadline or evidence change, and communicates an unavailable queue", () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(asOf));
+  const props = { evidence: [evidence], records: [recorded], queue: { batches: [recorded], total: 1 }, canRecord: true };
+  const view = render(<ChurchBatchLabelsPanel {...props} asOf={asOf} />);
+  const row = openDetails("French-style ham · HAM-07");
+  fireEvent.click(row.getByRole("button", { name: "Record used up" }));
+  expect(row.getByText(/Confirm this batch was fully used/)).toBeTruthy();
+  view.rerender(<ChurchBatchLabelsPanel {...props} asOf={recorded.discardAt} />);
+  expect((row.getByRole("button", { name: "Confirm used up" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(resolveChurchIngredientBatchAction).not.toHaveBeenCalled();
+  fireEvent.click(row.getByRole("button", { name: "Cancel" }));
+  view.rerender(<ChurchBatchLabelsPanel {...props} evidence={[{ ...evidence, revision: 5 }]} asOf={asOf} />);
+  expect(row.getByText("Supplier recheck needed")).toBeTruthy();
+  expect(row.queryByRole("button", { name: "Record used up" })).toBeNull();
+
+  view.rerender(<ChurchBatchLabelsPanel {...props} queue={null} asOf={asOf} canRecord={false} />);
+  const queue = within(screen.getByRole("region", { name: "Open batches by discard time" }));
+  expect(queue.getByText(/batch queue could not be loaded/)).toBeTruthy();
+  expect(queue.queryByText("French-style ham · HAM-07")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Record discard" })).toBeNull();
+  fireEvent.click(queue.getByRole("button", { name: "Refresh list" }));
+  expect(refresh).toHaveBeenCalledOnce();
+});
+
+it("updates due status exactly at the next visible deadline", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(asOf));
+  const soon = { ...recorded, discardAt: "2026-11-14T16:00:02.000Z" };
+  render(<ChurchBatchLabelsPanel evidence={[evidence]} records={[soon]} queue={{ batches: [soon], total: 1 }} asOf={asOf} canRecord />);
+  const row = openDetails("French-style ham · HAM-07");
+  await act(async () => { await vi.advanceTimersByTimeAsync(1_999); });
+  expect(row.getByRole("button", { name: "Record used up" })).toBeTruthy();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(row.getByText("Discard time reached")).toBeTruthy();
+  expect(row.queryByRole("button", { name: "Record used up" })).toBeNull();
 });
