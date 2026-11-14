@@ -186,6 +186,74 @@ describe("Square Church Street canonical order reads", () => {
     await expect(client.searchOrders({ from: "2026-10-02T00:00:00Z", to: "2026-10-03T00:00:00Z" })).rejects.toMatchObject({ code: "invalid_response" });
   });
 
+  it("lists exact-location creation cohorts with an inclusive start and exclusive end", async () => {
+    const from = "2026-10-11T14:20:00Z";
+    const to = "2026-10-11T14:25:00.000000800Z";
+    const request = provider({
+      "/v2/payments": { payments: [payment, {
+        ...payment, id: "just-inside", created_at: "2026-10-11T10:25:00.000000799-04:00",
+      }, { ...payment, id: "excluded-at-end", created_at: "2026-10-11T10:25:00.000000800-04:00" }], cursor: "next+page=" },
+      "/v2/refunds": { refunds: [refund], cursor: "" },
+    });
+    const client = new ChurchSquareOrderClient(config, request);
+    const signal = new AbortController().signal;
+    const [paymentPage, refundPage] = await Promise.all([
+      client.listPayments({ from, to, cursor: "page+1=", direction: "DESC" }, signal),
+      client.listRefunds({ from, to }, signal),
+    ]);
+    expect(paymentPage.nextCursor).toBe("next+page=");
+    expect(paymentPage.payments.map(({ id }) => id)).toEqual(["payment-id", "just-inside"]);
+    expect(refundPage).toMatchObject({ nextCursor: null, refunds: [{ id: "refund_id", amountCents: 300 }] });
+    expect(JSON.stringify([paymentPage, refundPage])).not.toMatch(/PRIVATE|card_details|reason/);
+    expect(request).toHaveBeenCalledTimes(4);
+    const calls = request.mock.calls.map(([url, init]) => ({ url: new URL(String(url)), init }));
+    const listed = calls.find(({ url }) => url.pathname === "/v2/payments")!;
+    expect(Object.fromEntries(listed.url.searchParams)).toEqual({
+      location_id: "church", begin_time: from, end_time: to, cursor: "page+1=", limit: "100", sort_order: "DESC",
+    });
+    expect(listed.init).toMatchObject({ method: "GET", cache: "no-store", redirect: "error" });
+    expect(listed.init?.body).toBeUndefined();
+    expect(calls.find(({ url }) => url.pathname === "/v2/refunds")?.url.searchParams.get("sort_order")).toBe("ASC");
+  });
+
+  it("fails closed on location, bounds, duplicate IDs, and cursor faults", async () => {
+    const input = { from: "2026-10-11T00:00:00Z", to: "2026-10-12T00:00:00Z" };
+    const client = new ChurchSquareOrderClient(config, provider({
+      "/v2/payments": { payments: [payment, payment] },
+      "/v2/refunds": { refunds: [{ ...refund, location_id: "other-location" }] },
+    }));
+    await expect(client.listPayments(input)).rejects.toMatchObject({ code: "invalid_response" });
+    await expect(client.listRefunds(input)).rejects.toMatchObject({ code: "scope_mismatch" });
+    const malformed = new ChurchSquareOrderClient(config, provider({
+      "/v2/payments": { payments: [{ ...payment, created_at: "2026-10-10T23:59:59.999999999Z" }] },
+      "/v2/refunds": { refunds: [], cursor: "same" },
+    }));
+    await expect(malformed.listPayments(input)).rejects.toMatchObject({ code: "invalid_response" });
+    await expect(malformed.listRefunds({ ...input, cursor: "same" })).rejects.toMatchObject({ code: "invalid_response" });
+    const wrongResult = new ChurchSquareOrderClient(config, provider({ "/v2/refunds": { payments: [] } }));
+    await expect(wrongResult.listRefunds(input)).rejects.toMatchObject({ code: "invalid_response" });
+    await expect(wrongResult.listPayments({ ...input, from: "2026-10-04T00:00:00Z" })).rejects.toMatchObject({ code: "invalid_input" });
+  });
+
+  it("uses the caller budget for activity reads", async () => {
+    const mocked = provider();
+    const request = vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      if (new URL(String(input)).pathname === "/v2/payments") {
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+        });
+      }
+      return mocked(input, init);
+    });
+    const abort = new AbortController();
+    const client = new ChurchSquareOrderClient(config, request);
+    const result = client.listPayments({ from: "2026-10-11T00:00:00Z", to: "2026-10-12T00:00:00Z" }, abort.signal);
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(3));
+    abort.abort();
+    await expect(result).rejects.toMatchObject({ code: "provider_unavailable" });
+  });
+
   it("omits raw failure payloads and rejects unexpected currencies", async () => {
     const client = new ChurchSquareOrderClient(config, provider({
       "/v2/payments/payment-id": Response.json({ message: "sensitive response" }, { status: 403 }),

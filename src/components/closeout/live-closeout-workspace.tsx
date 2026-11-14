@@ -19,6 +19,7 @@ import { useRouter } from "next/navigation";
 import {
   createContext,
   type FormEvent,
+  type ReactNode,
   useContext,
   useRef,
   useState,
@@ -329,10 +330,12 @@ export function LiveCloseoutWorkspace({
   workspace,
   result,
   policyConfigurationResult,
+  squarePreview,
 }: {
   workspace: WorkspaceContextValue;
   result: LiveReadResult<LiveCloseoutModel>;
   policyConfigurationResult: LiveReadResult<TipPolicyConfigurationModel> | null;
+  squarePreview?: ReactNode;
 }) {
   const router = useRouter();
   const counterService = workspace.serviceSettings?.serviceModel === "counter";
@@ -680,6 +683,7 @@ export function LiveCloseoutWorkspace({
           </Button>
         </header>
         <RealtimeSyncStatus {...realtime} />
+        {squarePreview}
 
         <div className={cn("mt-7 grid gap-10", tipPoolingEnabled
           ? "xl:grid-cols-[260px_minmax(0,1fr)_minmax(340px,.8fr)]"

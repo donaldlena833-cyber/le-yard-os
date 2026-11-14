@@ -35,11 +35,19 @@ const searchSchema = z.object({
   orders: z.array(z.unknown()).max(100).optional(),
   cursor: z.string().max(4096).optional(),
 });
+const listCursor = z.string().max(4096).regex(/^[^\p{Cc}\p{Cf}]*$/u);
+const moneyActivityWindow = windowSchema.extend({ cursor: listCursor.min(1).optional() });
+const moneyActivityPage = z.object({
+  payments: z.array(z.unknown()).max(100).optional(),
+  refunds: z.array(z.unknown()).max(100).optional(),
+  cursor: listCursor.optional(),
+});
 
 const origins = { production: "https://connect.squareup.com", sandbox: "https://connect.squareupsandbox.com" } as const;
 const paths = { order: "orders", payment: "payments", refund: "refunds", invoice: "invoices" } as const;
 const maximumResponseBytes = 4 * 1024 * 1024;
 const maximumSearchWindowMs = 7 * 24 * 60 * 60 * 1000;
+const nanosecondsPerMillisecond = BigInt(1_000_000);
 const churchAddress = { street: "140 Church Street", postalCode: "10007", country: "US" } as const;
 
 type ClientConfig = z.infer<typeof configuration>;
@@ -52,6 +60,14 @@ export class ChurchSquareOrderReadError extends Error {
     super(message);
     this.name = "ChurchSquareOrderReadError";
   }
+}
+
+function activityInstant(value: string): bigint | null {
+  const milliseconds = Date.parse(value);
+  if (!Number.isFinite(milliseconds)) return null;
+  // Compare any precision below milliseconds without rounding it away at the window edge.
+  const fraction = value.match(/\.(\d{4,})(?:Z|[+-]\d{2}:\d{2})$/)?.[1];
+  return BigInt(milliseconds) * nanosecondsPerMillisecond + BigInt(fraction?.slice(3, 9).padEnd(6, "0") ?? "0");
 }
 
 export function churchSquareOrderConfiguration(): ChurchSquareOrderConfiguration | undefined {
@@ -114,8 +130,8 @@ export class ChurchSquareOrderClient {
     }, request);
   }
 
-  private verifyScope() {
-    this.verifiedScope ??= this.scopeClient.verifyScope().catch(error => {
+  private verifyScope(signal?: AbortSignal) {
+    this.verifiedScope ??= this.scopeClient.verifyScope(signal).catch(error => {
       this.verifiedScope = undefined;
       const scoped = error instanceof SquareCountError && error.code === "scope_mismatch";
       throw new ChurchSquareOrderReadError(
@@ -132,7 +148,8 @@ export class ChurchSquareOrderClient {
     return this.scopeClient.verifyChurchSandwichCatalog();
   }
 
-  private async call(path: string, search?: object) {
+  private async call(path: string, search?: object, signal?: AbortSignal) {
+    const timeout = AbortSignal.timeout(10_000);
     let response: Response;
     try {
       response = await this.request(origins[this.config.environment] + path, {
@@ -146,7 +163,7 @@ export class ChurchSquareOrderClient {
         ...(search ? { body: JSON.stringify(search) } : {}),
         cache: "no-store",
         redirect: "error",
-        signal: AbortSignal.timeout(10_000),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
     } catch {
       throw new ChurchSquareOrderReadError("Square did not respond to the read request.", "provider_unavailable");
@@ -174,6 +191,59 @@ export class ChurchSquareOrderClient {
     await this.verifyScope();
     const envelope = await this.call(`/v2/${paths[kind]}/${encodeURIComponent(id)}`);
     return projectChurchSquareResource(kind, envelope[kind], { locationId: this.config.locationId, id });
+  }
+
+  async listPayments(input: ChurchSquareOrderWindow, signal?: AbortSignal): Promise<{ payments: ChurchSquarePayment[]; nextCursor: string | null }> {
+    const { records, nextCursor } = await this.listMoneyActivity(input, "payment",
+      (raw) => projectChurchSquareResource("payment", raw, { locationId: this.config.locationId }), signal);
+    return { payments: records, nextCursor };
+  }
+
+  async listRefunds(input: ChurchSquareOrderWindow, signal?: AbortSignal): Promise<{ refunds: ChurchSquareRefund[]; nextCursor: string | null }> {
+    const { records, nextCursor } = await this.listMoneyActivity(input, "refund",
+      (raw) => projectChurchSquareResource("refund", raw, { locationId: this.config.locationId }), signal);
+    return { refunds: records, nextCursor };
+  }
+
+  /** One creation-time page. Preserve the exact request when following its cursor. */
+  private async listMoneyActivity<T extends ChurchSquarePayment | ChurchSquareRefund>(
+    input: ChurchSquareOrderWindow,
+    kind: "payment" | "refund",
+    project: (raw: unknown) => T,
+    signal?: AbortSignal,
+  ) {
+    const parsed = moneyActivityWindow.safeParse(input);
+    if (!parsed.success) throw new ChurchSquareOrderReadError("A Square activity window is required.", "invalid_input");
+    const { from, to, cursor, direction = "ASC" } = parsed.data;
+    const start = activityInstant(from);
+    const end = activityInstant(to);
+    if (start === null || end === null || end <= start || end - start > BigInt(maximumSearchWindowMs) * nanosecondsPerMillisecond
+      || end > BigInt(Date.now() + 60_000) * nanosecondsPerMillisecond) {
+      throw new ChurchSquareOrderReadError("Use an elapsed Square activity window of no more than seven days.", "invalid_input");
+    }
+    await this.verifyScope(signal);
+    const query = new URLSearchParams({
+      location_id: this.config.locationId, begin_time: from, end_time: to, sort_order: direction, limit: "100",
+      ...(cursor ? { cursor } : {}),
+    });
+    const path = paths[kind];
+    const page = moneyActivityPage.safeParse(await this.call(`/v2/${path}?${query}`, undefined, signal));
+    if (!page.success || (cursor && page.data.cursor === cursor) || page.data[kind === "payment" ? "refunds" : "payments"] !== undefined) {
+      throw new ChurchSquareOrderReadError("Square returned an invalid or repeated activity page.", "invalid_response");
+    }
+    const seen = new Set<string>();
+    const records: T[] = [];
+    for (const raw of page.data[path] ?? []) {
+      const record = project(raw);
+      const created = activityInstant(record.createdAt);
+      if (seen.has(record.id) || created === null || created < start || created > end) {
+        throw new ChurchSquareOrderReadError("Square returned a duplicate or out-of-window activity record.", "invalid_response");
+      }
+      seen.add(record.id);
+      // Square does not specify whether its end filter includes the exact boundary.
+      if (created < end) records.push(record);
+    }
+    return { records, nextCursor: page.data.cursor || null };
   }
 
   /** One reconciliation page. Keep the window and direction unchanged while following nextCursor. */
