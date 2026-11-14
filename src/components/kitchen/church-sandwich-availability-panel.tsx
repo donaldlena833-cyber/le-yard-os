@@ -24,8 +24,14 @@ type Blocker = Availability["rows"][number]["blockers"][number];
 type Props = {
   approvedRecipes: readonly ChurchAvailabilityRecipe[];
   evidence: ChurchAvailabilityEvidence;
+  recipeEvidenceBasis: string;
   catering: ChurchCateringPrepDay | null;
   serviceDate: string;
+};
+type PlannerDraft = {
+  basis: string;
+  stockFields: Partial<Record<ChurchAvailabilityIngredient, string>>;
+  mixFields: Partial<Record<ChurchSandwichRecipeKey, string>>;
 };
 
 const fieldClass = "focus-ring mt-1 block w-full rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm font-normal tabular-nums";
@@ -61,24 +67,21 @@ function blockersText(blockers: readonly Blocker[]) {
   return [...byReason].map(([reason, ingredients]) => `${blockerLabels[reason]}${ingredients.length ? ` · ${ingredients.join(", ")}` : ""}.`).join(" ");
 }
 
-export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, catering, serviceDate }: Props) {
+export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, recipeEvidenceBasis, catering, serviceDate }: Props) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
-  const todayCatering = catering?.serviceDate === serviceDate ? catering : null;
-  const stockBasis = JSON.stringify([serviceDate, todayCatering?.jobCount ?? 0, churchSandwichRecipeKeys.map((key) =>
-    [todayCatering?.portions[key] ?? 0, todayCatering?.packedPortions[key] ?? 0])]);
   const [selectedMode, setMode] = useState<"approved" | "bench" | null>(null);
-  const [stockEntry, setStockEntry] = useState<{
-    basis: string;
-    fields: Partial<Record<ChurchAvailabilityIngredient, string>>;
-  }>({ basis: stockBasis, fields: {} });
-  const [mixFields, setMixFields] = useState<Partial<Record<ChurchSandwichRecipeKey, string>>>({});
-  // Measurements can include ingredients used by a newly packed portion. Clear them before recalculating.
-  const sameStockBasis = stockEntry.basis === stockBasis;
-  if (!sameStockBasis) setStockEntry({ basis: stockBasis, fields: {} });
-  const stockFields = sameStockBasis ? stockEntry.fields : {};
   const mode = selectedMode ?? (approvedRecipes.length ? "approved" : "bench");
   const isRehearsal = mode === "bench";
+  const todayCatering = catering?.serviceDate === serviceDate ? catering : null;
+  const basis = JSON.stringify([mode, serviceDate, recipeEvidenceBasis, todayCatering?.jobCount ?? 0, churchSandwichRecipeKeys.map((key) =>
+    [todayCatering?.portions[key] ?? 0, todayCatering?.packedPortions[key] ?? 0])]);
+  const emptyDraft: PlannerDraft = { basis, stockFields: {}, mixFields: {} };
+  const [draft, setDraft] = useState<PlannerDraft>(emptyDraft);
+  const currentDraft = draft.basis === basis ? draft : emptyDraft;
+  // Clear draft rehearsal counts and measurements taken before newly packed portions or evidence changes.
+  if (currentDraft !== draft) setDraft(currentDraft);
+  const { stockFields, mixFields } = currentDraft;
   const stock: ChurchAvailabilityQuantities = {};
   const mix: ChurchAvailabilityMix = {};
   const invalidStock = new Set<ChurchAvailabilityIngredient>();
@@ -118,7 +121,7 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
           <p className="mt-2 text-sm text-[var(--ink-soft)]">Check Church Street portions against usable stock you measure. Counts are used only in this planning view.</p>
         </div>
         <Button variant="secondary" size="sm" disabled={refreshing} onClick={() => {
-          setStockEntry({ basis: stockBasis, fields: {} });
+          setDraft(emptyDraft);
           startRefresh(() => router.refresh());
         }}>
           {refreshing ? "Refreshing Kitchen…" : "Refresh Kitchen"}
@@ -145,7 +148,7 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
       <details className="mt-4 border-t border-[var(--line)] pt-3">
         <summary className="focus-ring cursor-pointer rounded-md text-sm font-semibold">Enter usable stock</summary>
         <div className="my-3">
-          <p className="text-sm text-[var(--ink-soft)]">Count whole baguettes and weigh ready-to-use fillings in grams. Include ingredients set aside for catering still to build. Leave unknown quantities blank and enter zero after confirming stock is empty. Refresh Kitchen and recount after packing or changing a plan. Updated catering totals clear entered stock.</p>
+          <p className="text-sm text-[var(--ink-soft)]">Count whole baguettes and weigh ready-to-use fillings in grams. Include ingredients set aside for catering still to build. Leave unknown quantities blank and enter zero after confirming stock is empty. Switching calculation basis, changing recipe or supplier evidence, or updating catering totals clears planner entries. Recount after packing or changing a plan.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {churchAvailabilityIngredients.map((ingredient, index) => {
               const isBread = ingredient === churchSandwichBread;
@@ -158,7 +161,7 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
                     <input
                       type="text" inputMode={isBread ? "numeric" : "decimal"} autoComplete="off" maxLength={14} disabled={refreshing}
                       value={stockFields[ingredient] ?? ""}
-                      onChange={(event) => setStockEntry({ basis: stockBasis, fields: { ...stockFields, [ingredient]: event.target.value } })}
+                      onChange={(event) => setDraft({ ...currentDraft, stockFields: { ...stockFields, [ingredient]: event.target.value } })}
                       aria-invalid={invalid || undefined} aria-describedby={invalid ? errorId : undefined} className={fieldClass}
                     />
                   </label>
@@ -235,7 +238,7 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
                     <input
                       type="text" inputMode="numeric" autoComplete="off" maxLength={8}
                       value={mixFields[key] ?? ""}
-                      onChange={(event) => setMixFields({ ...mixFields, [key]: event.target.value })}
+                      onChange={(event) => setDraft({ ...currentDraft, mixFields: { ...mixFields, [key]: event.target.value } })}
                       aria-invalid={invalid || undefined} aria-describedby={invalid ? errorId : undefined} className={fieldClass}
                     />
                   </label>

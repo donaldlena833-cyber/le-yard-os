@@ -49,14 +49,30 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-it("exposes the catalog check only to a configuration user with the active connection", () => {
+it("exposes availability to count operators, with mapping setup reserved for configuration users", () => {
   const view = render(<ChurchSquareStockCounts items={[]} scope={scope} enabled canConfigure={false} />);
-  expect(screen.queryByText("Check the six sandwich variations")).toBeNull();
+  expect(screen.getByText("Check the six sandwich variations")).toBeTruthy();
+  expect(screen.queryByText("Set up a tracked Square item")).toBeNull();
   view.rerender(<ChurchSquareStockCounts items={[]} scope={scope} enabled={false} canConfigure />);
   expect(screen.queryByText("Check the six sandwich variations")).toBeNull();
   view.rerender(<ChurchSquareStockCounts items={[]} scope={scope} enabled canConfigure />);
-  expect(screen.getByText("Check the six sandwich variations")).toBeTruthy();
+  expect(screen.getByText("Set up a tracked Square item")).toBeTruthy();
   expect(getChurchSquareMenuDiagnosticAction).not.toHaveBeenCalled();
+});
+
+it("shows a temporary Square hold for an operator without stock setup access", async () => {
+  vi.mocked(getChurchSquareMenuDiagnosticAction).mockResolvedValue({ ok: true, mode: "live", persisted: false, data: facts });
+  render(<ChurchSquareStockCounts items={[]} scope={scope} enabled canConfigure={false} />);
+  const summary = screen.getByText("Check the six sandwich variations");
+  fireEvent.click(summary);
+  const diagnostic = within(summary.closest("details")!);
+  fireEvent.click(diagnostic.getByRole("button", { name: "Check Square availability" }));
+  const flag = await diagnostic.findByText(/Flagged sold out/);
+  expect(flag.querySelector("time")?.dateTime).toBe("2026-11-14T19:15:00Z");
+  expect(diagnostic.getByText(/stock count is positive/i)).toBeTruthy();
+  expect(diagnostic.queryByText("Variation ID")).toBeNull();
+  expect(configureChurchSquareCountItemAction).not.toHaveBeenCalled();
+  expect(sendChurchSquareCountAction).not.toHaveBeenCalled();
 });
 
 it("shows the exact parent and variation evidence and removes prior data when a later check fails", async () => {
@@ -66,7 +82,7 @@ it("shows the exact parent and variation evidence and removes prior data when a 
   render(<ChurchSquareStockCounts items={[]} scope={scope} enabled canConfigure />);
   const diagnostic = screen.getByText("Check the six sandwich variations").closest("details")!;
   fireEvent.click(within(diagnostic).getByText("Check the six sandwich variations"));
-  fireEvent.click(within(diagnostic).getByRole("button", { name: "Check Square variations" }));
+  fireEvent.click(within(diagnostic).getByRole("button", { name: "Check Square availability" }));
   const diagnosticPanel = within(diagnostic);
   const parent = await diagnosticPanel.findByRole("link", { name: /Open Le Parisien parent item/ });
   expect(parent.getAttribute("href")).toBe("https://app.squareup.com/dashboard/items/library/parent-parisien");

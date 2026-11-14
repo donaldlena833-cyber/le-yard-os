@@ -7,7 +7,7 @@ import type { ChurchCateringPrepDay } from "@/lib/kitchen/church-catering-prep";
 import { churchAvailabilityBenchRecipes } from "@/lib/kitchen/church-sandwich-availability";
 
 const date = "2026-11-14";
-const fixture = { approvedRecipes: [], evidence: {}, catering: null, serviceDate: date };
+const fixture = { approvedRecipes: [], evidence: {}, recipeEvidenceBasis: "none", catering: null, serviceDate: date };
 const empty = { parisien: 0, verger: 0, bellecour: 0, bleu: 0, rustique: 0, figaro: 0 };
 const catering: ChurchCateringPrepDay = {
   serviceDate: date, jobCount: 1,
@@ -125,4 +125,44 @@ it("requires supplier review in approved mode and carries supplier holds into re
   fireEvent.click(screen.getByRole("radio", { name: "Bench rehearsal" }));
   expect(parisien.getByText(/Supplier evidence on hold · French-style ham/)).toBeTruthy();
   expect(parisien.queryByText(/Supplier evidence needs review/)).toBeNull();
+});
+
+it("clears both draft counts and extra portions when the calculation mode or evidence changes", () => {
+  const approved = { ...fixture, approvedRecipes: [churchAvailabilityBenchRecipes[0]], recipeEvidenceBasis: "signed-r1", evidence: {
+    "10-inch baguette": "reviewed", "French-style ham": "reviewed", "cultured butter": "reviewed",
+  } as const };
+  const view = render(<ChurchSandwichAvailabilityPanel {...fixture} />);
+  fireEvent.click(screen.getByText("Enter usable stock"));
+  fireEvent.click(screen.getByText("Check a combined sandwich mix"));
+  const baguettes = screen.getByRole<HTMLInputElement>("textbox", { name: /10-inch baguette/ });
+  const extras = within(screen.getByRole("group", { name: "Extra café portions" })).getByRole<HTMLInputElement>("textbox", { name: "Le Parisien" });
+  enterStock(/10-inch baguette/, "1");
+  enterExtras("Le Parisien", "2");
+
+  // The first signed recipe switches the default from bench to approved.
+  view.rerender(<ChurchSandwichAvailabilityPanel {...approved} />);
+  expect((screen.getByRole("radio", { name: "Approved recipes" }) as HTMLInputElement).checked).toBe(true);
+  expect(baguettes.value).toBe("");
+  expect(extras.value).toBe("");
+
+  enterStock(/10-inch baguette/, "0");
+  enterExtras("Le Parisien", "2");
+  view.rerender(<ChurchSandwichAvailabilityPanel {...approved} />);
+  expect(baguettes.value).toBe("0");
+  expect(extras.value).toBe("2");
+
+  fireEvent.click(screen.getByRole("radio", { name: "Bench rehearsal" }));
+  expect(baguettes.value).toBe("");
+  expect(extras.value).toBe("");
+  enterStock(/10-inch baguette/, "7");
+  enterExtras("Le Parisien", "3");
+  fireEvent.click(screen.getByRole("radio", { name: "Approved recipes" }));
+  expect(baguettes.value).toBe("");
+  expect(extras.value).toBe("");
+
+  enterStock(/10-inch baguette/, "8");
+  enterExtras("Le Parisien", "3");
+  view.rerender(<ChurchSandwichAvailabilityPanel {...approved} recipeEvidenceBasis="signed-r2" />);
+  expect(baguettes.value).toBe("");
+  expect(extras.value).toBe("");
 });

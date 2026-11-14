@@ -220,7 +220,7 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
         {items.length ? <ul className="mt-2 divide-y divide-[var(--line)]">
           {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} alert={alertsByItem.get(item.id)} alertScope={alertScope} />)}
         </ul> : <p className="mt-2 text-sm">No items are set up for Square counts yet.</p>}
-        {canConfigure && enabled && <ChurchSquareMenuDiagnostic key={scope.locationId} />}
+        {enabled && <ChurchSquareMenuDiagnostic key={scope.locationId} showCatalogDetails={canConfigure} />}
         {canConfigure && enabled ? (
           <details className="mt-4 border-t border-[var(--line)] pt-3">
             <summary className="cursor-pointer text-sm font-semibold">Set up a tracked Square item</summary>

@@ -23,9 +23,7 @@ async function menuDiagnostic(context: WorkflowContext): Promise<ChurchSquareMen
   const session = await resolveWorkspaceSession();
   assertCondition(session.status === "ready" && session.context.mode === "live"
     && session.context.identity.userId === context.actor.userId && session.context.serviceSettings?.serviceModel === "counter",
-  "forbidden", "Switch to the Church Street workspace to check Square tracking.");
-  assertCondition(session.context.role === "owner" || session.context.role === "admin",
-    "forbidden", "Church Street owner or admin access is required to check the Square catalog.");
+  "forbidden", "Switch to the Church Street workspace to check Square availability.");
 
   const locationId = session.context.activeLocation.id;
   // This authenticated procedure verifies the exact active Church tenant,

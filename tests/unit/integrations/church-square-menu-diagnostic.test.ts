@@ -78,8 +78,16 @@ describe("Church Square sandwich menu diagnostic", () => {
     expect(JSON.stringify(result)).not.toMatch(/7"|lastConfirmedQuantity|private-extras/);
   });
 
-  it("keeps the owner/admin and exact database authority ahead of the provider read", async () => {
+  it("lets a manager or chef with Church Street count authority read availability", async () => {
     mocks.session.mockResolvedValueOnce({ status: "ready", context: { ...workspace, role: "manager" } });
+    expect(await getChurchSquareMenuDiagnosticAction()).toMatchObject({ ok: true, persisted: false });
+    mocks.session.mockResolvedValueOnce({ status: "ready", context: { ...workspace, role: "staff" } });
+    expect(await getChurchSquareMenuDiagnosticAction()).toMatchObject({ ok: true, persisted: false });
+    expect(mocks.catalog).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks the active workspace and database authority ahead of any provider read", async () => {
+    mocks.session.mockResolvedValueOnce({ status: "ready", context: { ...workspace, serviceSettings: { serviceModel: "dining_room" } } });
     expect(await getChurchSquareMenuDiagnosticAction()).toMatchObject({ ok: false });
     expect(mocks.rpc).not.toHaveBeenCalled();
 

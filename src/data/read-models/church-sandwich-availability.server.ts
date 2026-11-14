@@ -9,6 +9,7 @@ import type { ChurchCateringPrepDay } from "@/lib/kitchen/church-catering-prep";
 import type { ChurchAvailabilityEvidence, ChurchAvailabilityRecipe } from "@/lib/kitchen/church-sandwich-availability";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
 import type { ChurchSandwichFormula } from "@/lib/kitchen/church-sandwich-formula";
+import { churchSandwichComponents, churchSandwichRecipeKeys } from "@/lib/kitchen/church-sandwich-bench";
 
 type AvailabilityInputs = {
   ingredientEvidenceResult: LiveReadResult<ChurchIngredientEvidence[]> | null;
@@ -19,6 +20,7 @@ type AvailabilityInputs = {
 export type ChurchSandwichAvailabilityData = {
   evidence: ChurchAvailabilityEvidence;
   approvedRecipes: ChurchAvailabilityRecipe[];
+  recipeEvidenceBasis: string;
   catering: ChurchCateringPrepDay | null;
   serviceDate: string;
 };
@@ -36,9 +38,21 @@ export function buildChurchSandwichAvailability(
   }
 
   const serviceDate = localDateKey(new Date(), "America/New_York");
+  const evidenceByIngredient = new Map(ingredientEvidenceResult.data.map((row) => [row.ingredientKey, row]));
+  const formulaByRecipe = new Map(formulaResult.data.map((row) => [row.recipeKey, row]));
   return readSuccess({
     evidence: Object.fromEntries(ingredientEvidenceResult.data.map(({ ingredientKey, status }) => [ingredientKey, status])),
     approvedRecipes: currentChurchAvailabilityRecipes(formulaResult.data, ingredientEvidenceResult.data),
+    recipeEvidenceBasis: JSON.stringify([
+      churchSandwichComponents.map((key) => {
+        const row = evidenceByIngredient.get(key);
+        return row ? [row.revision, row.status] : null;
+      }),
+      churchSandwichRecipeKeys.map((key) => {
+        const row = formulaByRecipe.get(key);
+        return row ? [row.revision, row.current] : null;
+      }),
+    ]),
     catering: cateringPrepResult.days.find((day) => day.serviceDate === serviceDate) ?? null,
     serviceDate,
   });

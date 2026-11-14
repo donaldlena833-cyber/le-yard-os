@@ -37,7 +37,7 @@ it("uses the New York service day and keeps the approved recipe set empty pendin
     ingredientEvidenceResult: readSuccess([hold]),
     cateringPrepResult: { state: "ready", days: [today, { ...today, serviceDate: "2026-11-15" }] },
     formulaResult: readSuccess([]),
-  })).toEqual(readSuccess({
+  })).toMatchObject(readSuccess({
     evidence: { Dijon: "hold" }, approvedRecipes: [], catering: today, serviceDate: today.serviceDate,
   }));
 });
@@ -77,9 +77,9 @@ it("projects signed measured edible grams only while each exact supplier evidenc
   const evidence = Object.keys(measured.measurements).map((ingredientKey): ChurchIngredientEvidence => ({
     ...hold, ingredientKey, status: "reviewed", revision: 2, reviewedAt: hold.updatedAt, reviewerName: "Chef",
   }));
-  const estimate = (rows: ChurchIngredientEvidence[], current = true) => buildChurchSandwichAvailability(workspace, {
+  const estimate = (rows: ChurchIngredientEvidence[], current = true, revision = 3) => buildChurchSandwichAvailability(workspace, {
     ingredientEvidenceResult: readSuccess(rows), cateringPrepResult: { state: "ready", days: [] },
-    formulaResult: readSuccess([{ ...formula, current }]),
+    formulaResult: readSuccess([{ ...formula, current, revision }]),
   });
   expect(estimate(evidence)).toMatchObject({ data: { approvedRecipes: [{
     key: "parisien", ingredients: { "10-inch baguette": 1, "French-style ham": 74.5, "cultured butter": 16 },
@@ -89,6 +89,13 @@ it("projects signed measured edible grams only while each exact supplier evidenc
   expect(estimate(evidence, false)).toMatchObject({ data: { approvedRecipes: [] } });
   expect(currentChurchAvailabilityRecipes([formula], evidence.slice(1))).toEqual([]);
   expect(currentChurchAvailabilityRecipes([formula], [{ ...evidence[0], revision: 1 }, ...evidence.slice(1)])).toEqual([]);
+
+  const basis = (result: ReturnType<typeof estimate>) => result?.ok ? result.data.recipeEvidenceBasis : null;
+  expect(basis(estimate(evidence))).toBe(basis(estimate([...evidence].reverse())));
+  expect(basis(estimate(evidence))).not.toBe(basis(estimate([{ ...evidence[0], revision: 3 }, ...evidence.slice(1)])));
+  expect(basis(estimate(evidence))).not.toBe(basis(estimate([{ ...evidence[0], status: "hold" }, ...evidence.slice(1)])));
+  expect(basis(estimate(evidence))).not.toBe(basis(estimate(evidence, false)));
+  expect(basis(estimate(evidence))).not.toBe(basis(estimate(evidence, true, 4)));
 });
 
 it("rejects invalid measured yield, fractional baguettes, or a mismatched ingredient set", () => {
