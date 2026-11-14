@@ -90,6 +90,7 @@ function PayoutEntryBreakdown({ detail }: { detail: ChurchSquarePayoutEntriesRes
               <tr>
                 <th scope="col" className="py-2 pr-2">Entry ID</th>
                 <th scope="col" className="px-2 py-2">Square activity</th>
+                <th scope="col" className="px-2 py-2">Square order</th>
                 <th scope="col" className="px-2 py-2">Balance affected (ET)</th>
                 <th scope="col" className="px-2 py-2 text-right">Gross</th>
                 <th scope="col" className="px-2 py-2 text-right">Fees</th>
@@ -101,6 +102,12 @@ function PayoutEntryBreakdown({ detail }: { detail: ChurchSquarePayoutEntriesRes
                 <tr key={entry.reference}>
                   <th scope="row" className="min-w-24 max-w-40 break-all py-2 pr-2 font-mono font-medium">{entry.reference}</th>
                   <td className="px-2 py-2 capitalize">{entry.type?.toLowerCase().replaceAll("_", " ") ?? "Unknown"}</td>
+                  <td className="px-2 py-2 text-[var(--ink-soft)]">
+                    {entry.orderEvidence?.status === "linked" ? (
+                      <>Ends in <span className="font-mono">{entry.orderEvidence.orderReference.slice(-10)}</span></>
+                    ) : entry.orderEvidence?.status === "unlinked" ? "No usable order link"
+                      : entry.orderEvidence?.status === "unavailable" ? "Order check unavailable" : "—"}
+                  </td>
                   <td className="whitespace-nowrap px-2 py-2">{entry.effectiveAt ? <time dateTime={entry.effectiveAt}>{localTime.format(new Date(entry.effectiveAt))}</time> : "Unavailable"}</td>
                   <td className="whitespace-nowrap px-2 py-2 text-right">{amount(entry.grossCents)}</td>
                   <td className="whitespace-nowrap px-2 py-2 text-right">{amount(entry.feeCents)}</td>

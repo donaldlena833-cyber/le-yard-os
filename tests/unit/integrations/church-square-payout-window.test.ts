@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  session: vi.fn(), configuration: vi.fn(), payouts: vi.fn(), entries: vi.fn(), from: vi.fn(),
+  session: vi.fn(), configuration: vi.fn(), payouts: vi.fn(), entries: vi.fn(), from: vi.fn(), getResource: vi.fn(),
 }));
 vi.mock("@/lib/auth/workspace-session", () => ({ resolveWorkspaceSession: mocks.session }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ from: mocks.from }) }));
+vi.mock("@/lib/integrations/church-square-orders.server", () => ({
+  ChurchSquareOrderClient: class { get = mocks.getResource; },
+}));
 vi.mock("@/lib/integrations/church-square-payouts.server", () => ({
   churchSquarePayoutConfiguration: mocks.configuration,
   ChurchSquarePayoutClient: class { listPayouts = mocks.payouts; getPayoutEntries = mocks.entries; },
@@ -93,9 +96,76 @@ describe("Church Street Square payout entries", () => {
     expect(mocks.entries).toHaveBeenCalledExactlyOnceWith(payout.id);
     expect(await response.json()).toEqual({
       reference: payout.id, checkedAt: expect.any(String), payoutType: "BATCH", amountCents: -752, hasMore: false,
-      entries: [{ reference: entry.reference, type: "REFUND", effectiveAt: entry.effectiveAt, grossCents: -800, feeCents: -48, netCents: -752 }],
+      entries: [{ reference: entry.reference, type: "REFUND", effectiveAt: entry.effectiveAt, grossCents: -800, feeCents: -48, netCents: -752,
+        orderEvidence: { status: "unlinked" } }],
       netTotalCents: -752, differenceCents: 0,
     });
+    expect(mocks.getResource).not.toHaveBeenCalled();
+  });
+
+  it("checks transaction and order IDs in Square and returns only the order suffix", async () => {
+    stubScope();
+    const paymentId = "private-payment-id";
+    const orderId = "private-verified-order-1234567890";
+    const charge = { ...entry, type: "CHARGE", netCents: 752, transaction: { kind: "charge", paymentId } };
+    const refund = { ...entry, reference: "refund-entry", transaction: { kind: "refund", refundId: "private-refund-id", paymentId } };
+    mocks.entries.mockResolvedValueOnce({ payout: { ...payout, payoutType: "BATCH", amountCents: 0 },
+      entries: [charge, { ...charge, reference: "additional-charge-entry" }, refund], hasMore: false });
+    mocks.getResource.mockImplementation(async (kind, id) => {
+      if (kind === "payment" && id === paymentId) return { kind, orderId };
+      if (kind === "refund" && id === "private-refund-id") return { kind, orderId, paymentId };
+      if (kind === "order" && id === orderId) return { id };
+      throw new Error("Unexpected Square request");
+    });
+    const response = await entryRequest();
+    const data = await response.json();
+    expect(data.entries.map((row: { orderEvidence: unknown }) => row.orderEvidence)).toEqual(
+      Array.from({ length: 3 }, () => ({ status: "linked", orderReference: "1234567890" })),
+    );
+    expect(JSON.stringify(data)).not.toContain("private-");
+    expect(mocks.getResource.mock.calls.map(([kind, id]) => [kind, id]).sort()).toEqual(
+      [["order", orderId], ["payment", paymentId], ["refund", "private-refund-id"]],
+    );
+  });
+
+  it("keeps verified amounts when Square cannot confirm a payment, refund, or order linkage", async () => {
+    stubScope();
+    const testEntries = [
+      { ...entry, reference: "wrong-payment", transaction: { kind: "refund", refundId: "conflict", paymentId: "expected" } },
+      { ...entry, reference: "no-order", type: "CHARGE", transaction: { kind: "charge", paymentId: "unlinked" } },
+      { ...entry, reference: "order-unavailable", type: "CHARGE", transaction: { kind: "charge", paymentId: "linked" } },
+      { ...entry, reference: "adjustment", type: "FREE_PROCESSING" },
+    ];
+    mocks.entries.mockResolvedValueOnce({ payout: { ...payout, payoutType: "BATCH" }, entries: testEntries, hasMore: false });
+    mocks.getResource.mockImplementation(async (kind, id) => {
+      if (id === "conflict") return { kind, paymentId: "wrong", orderId: "no-read" };
+      if (id === "unlinked") return { kind, orderId: null };
+      if (id === "linked") return { kind, orderId: "out-of-scope" };
+      throw new Error("Scoped Square order could not be verified");
+    });
+    expect(await (await entryRequest()).json()).toMatchObject({ netTotalCents: -3008, entries: [
+      { orderEvidence: { status: "unavailable" }, netCents: -752 },
+      { orderEvidence: { status: "unlinked" }, netCents: -752 },
+      { orderEvidence: { status: "unavailable" }, netCents: -752 },
+      { type: "FREE_PROCESSING", netCents: -752 },
+    ] });
+    expect(mocks.getResource).not.toHaveBeenCalledWith("order", "no-read", expect.anything());
+  });
+
+  it("caps transaction lookups while preserving amount coverage and repeating cached links", async () => {
+    stubScope();
+    const charges = Array.from({ length: 9 }, (_, index) => ({
+      ...entry, reference: `charge-${index}`, type: "CHARGE", transaction: { kind: "charge", paymentId: `payment-${index}` },
+    }));
+    mocks.entries.mockResolvedValueOnce({ payout: { ...payout, payoutType: "BATCH" },
+      entries: [...charges, { ...charges[0], reference: "repeat-charge" }], hasMore: false });
+    mocks.getResource.mockResolvedValue({ kind: "payment", orderId: null });
+    const data = await (await entryRequest()).json();
+    expect(data.entries.slice(8).map((row: { orderEvidence: unknown }) => row.orderEvidence)).toEqual([
+      { status: "unavailable" }, { status: "unlinked" },
+    ]);
+    expect(data.netTotalCents).toBe(-7520);
+    expect(mocks.getResource).toHaveBeenCalledTimes(8);
   });
 
   it.each([

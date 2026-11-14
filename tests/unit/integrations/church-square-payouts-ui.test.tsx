@@ -6,6 +6,7 @@ import { ChurchSquareReconciliation } from "@/components/today/church-square-rec
 import {
   churchSquarePayoutEntriesPath,
   churchSquarePayoutWindowPath,
+  type ChurchSquarePayoutEntriesResponse,
   type ChurchSquarePayoutWindowResponse,
 } from "@/lib/integrations/church-square-payout-window";
 
@@ -17,7 +18,7 @@ const detailWindow: ChurchSquarePayoutWindowResponse = { ...emptyWindow, payouts
   { reference: "other-payout", status: "PAID", amountCents: 2000, createdAt: checkedAt, updatedAt: checkedAt, arrivalDate: "2026-11-14" },
 ] };
 const transferEntries = {
-  reference: depositId, checkedAt, payoutType: "BATCH", amountCents: 1500, hasMore: false,
+  reference: depositId, checkedAt, payoutType: "BATCH" as const, amountCents: 1500, hasMore: false,
   entries: [{ reference: "entry-a", type: "CHARGE", effectiveAt: checkedAt, grossCents: 1520, feeCents: 20, netCents: 1500 }],
   netTotalCents: 1500, differenceCents: 0,
 };
@@ -131,6 +132,44 @@ it("reads entries for one selected transfer and confirms only a complete Square 
   expect(region.queryByText(/Square entries match transfer|Total net entry amount/)).toBeNull();
   fireEvent.click(region.getByRole("button", { name: "Close entries" }));
   expect(payouts.queryByRole("region", { name: "Payout entries" })).toBeNull();
+});
+
+it("shows Square order suffixes for linked charge and refund entries and distinguishes missing evidence", async () => {
+  const charge = transferEntries.entries[0];
+  const detail = {
+    ...transferEntries,
+    hasMore: true,
+    netTotalCents: null,
+    differenceCents: null,
+    entries: [
+      { ...charge, orderEvidence: { status: "linked", orderReference: "0123456789" } },
+      { ...charge, reference: "entry-refund", type: "REFUND", grossCents: -400, feeCents: 0, netCents: -400,
+        orderEvidence: { status: "linked", orderReference: "9876543210" } },
+      { ...charge, reference: "entry-no-link", orderEvidence: { status: "unlinked" } },
+      { ...charge, reference: "entry-unavailable", orderEvidence: { status: "unavailable" } },
+      { ...charge, reference: "entry-free-processing", type: "FREE_PROCESSING" },
+    ],
+  } satisfies ChurchSquarePayoutEntriesResponse;
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce(Response.json(detailWindow))
+    .mockResolvedValueOnce(Response.json(detail)));
+  const payouts = renderPayouts();
+  fireEvent.click(payouts.getByRole("button", { name: "Load payouts" }));
+  fireEvent.click(await payouts.findByRole("button", { name: `View payout entries for ${depositId}` }));
+  const table = within(await payouts.findByRole("table", { name: "Square payout entry amounts" }));
+  expect(table.getByRole("columnheader", { name: "Square order" })).toBeTruthy();
+
+  for (const [reference, orderEvidence] of [
+    ["entry-a", "Ends in 0123456789"],
+    ["entry-refund", "Ends in 9876543210"],
+    ["entry-no-link", "No usable order link"],
+    ["entry-unavailable", "Order check unavailable"],
+    ["entry-free-processing", "—"],
+  ]) {
+    const row = within(table.getByRole("row", { name: new RegExp(reference) }));
+    expect(row.getByRole("cell", { name: orderEvidence })).toBeTruthy();
+  }
+  expect(payouts.getByText("A complete entry list is required to compare totals.")).toBeTruthy();
 });
 
 it("cancels previous detail on transfer switch and list refresh, retaining a simple transfer's empty state", async () => {

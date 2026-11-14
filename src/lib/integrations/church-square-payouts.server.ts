@@ -48,7 +48,11 @@ const entrySchema = z.object({
   gross_amount_money: moneySchema.nullish(),
   fee_amount_money: moneySchema.nullish(),
   net_amount_money: moneySchema.nullish(),
+  type_charge_details: z.unknown().optional(),
+  type_refund_details: z.unknown().optional(),
 });
+const chargeDetails = z.object({ payment_id: churchSquareResourceId });
+const refundDetails = z.object({ refund_id: churchSquareResourceId, payment_id: churchSquareResourceId.nullish() });
 const entriesSchema = envelopeSchema.extend({
   payout_entries: z.array(entrySchema).max(churchSquarePayoutEntryLimit).optional(),
   cursor: cursor.optional(),
@@ -67,6 +71,8 @@ export type ChurchSquarePayout = {
   updatedAt: string | null;
   arrivalDate: string | null;
 };
+type PayoutTransaction = { kind: "charge"; paymentId: string }
+  | { kind: "refund"; refundId: string; paymentId: string | null };
 export type ChurchSquarePayoutEntries = {
   payout: ChurchSquarePayout & { payoutType: "BATCH" | "SIMPLE" | "UNKNOWN" };
   entries: {
@@ -76,6 +82,8 @@ export type ChurchSquarePayoutEntries = {
     grossCents: number | null;
     feeCents: number | null;
     netCents: number | null;
+    /** Exact provider IDs for server-side lookup. Keep these out of public response projections. */
+    transaction?: PayoutTransaction;
   }[];
   hasMore: boolean;
 };
@@ -133,6 +141,17 @@ function projectPayout(payout: z.infer<typeof payoutSchema>): ChurchSquarePayout
     updatedAt: payout.updated_at ?? null,
     arrivalDate: payout.arrival_date ?? null,
   };
+}
+
+function projectPayoutTransaction(entry: z.infer<typeof entrySchema>): PayoutTransaction | undefined {
+  if (entry.type === "CHARGE") {
+    const result = chargeDetails.safeParse(entry.type_charge_details);
+    if (result.success) return { kind: "charge", paymentId: result.data.payment_id };
+  }
+  if (entry.type === "REFUND") {
+    const result = refundDetails.safeParse(entry.type_refund_details);
+    if (result.success) return { kind: "refund", refundId: result.data.refund_id, paymentId: result.data.payment_id ?? null };
+  }
 }
 
 export class ChurchSquarePayoutClient {
@@ -267,6 +286,7 @@ export class ChurchSquarePayoutClient {
         throw new ChurchSquarePayoutReadError("Square returned duplicate or unrelated payout entries.", "scope_mismatch");
       }
       seen.add(entry.id);
+      const transaction = projectPayoutTransaction(entry);
       return {
         reference: entry.id,
         type: entry.type ?? null,
@@ -274,6 +294,7 @@ export class ChurchSquarePayoutClient {
         grossCents: entry.gross_amount_money?.amount ?? null,
         feeCents: entry.fee_amount_money?.amount ?? null,
         netCents: entry.net_amount_money?.amount ?? null,
+        ...(transaction === undefined ? {} : { transaction }),
       };
     });
     return { payout: detail, entries, hasMore: Boolean(page.cursor) };

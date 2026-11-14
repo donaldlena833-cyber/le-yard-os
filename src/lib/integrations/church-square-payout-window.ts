@@ -28,6 +28,11 @@ export const churchSquarePayoutWindowResponse = z.object({
 export type ChurchSquarePayoutWindowResponse = z.infer<typeof churchSquarePayoutWindowResponse>;
 
 const optionalCents = z.number().int().safe().nullable();
+export const churchSquarePayoutOrderEvidence = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("linked"), orderReference: churchSquareResourceId.max(10) }),
+  z.object({ status: z.enum(["unlinked", "unavailable"]) }),
+]);
+export type ChurchSquarePayoutOrderEvidence = z.infer<typeof churchSquarePayoutOrderEvidence>;
 export const churchSquarePayoutEntry = z.object({
   reference: churchSquareResourceId,
   type: z.string().regex(/^[A-Z][A-Z0-9_]{0,79}$/).nullable(),
@@ -35,6 +40,7 @@ export const churchSquarePayoutEntry = z.object({
   grossCents: optionalCents,
   feeCents: optionalCents,
   netCents: optionalCents,
+  orderEvidence: churchSquarePayoutOrderEvidence.optional(),
 });
 
 export const churchSquarePayoutEntriesResponse = z.object({

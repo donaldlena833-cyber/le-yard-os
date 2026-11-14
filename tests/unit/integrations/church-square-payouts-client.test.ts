@@ -77,7 +77,7 @@ describe("Church Street Square payout entries", () => {
     return request.mock.calls.map(([input]) => new URL(String(input)).pathname);
   }
 
-  it("verifies the seller and exact payout before returning only signed USD entry facts and a truncation flag", async () => {
+  it("verifies the seller and exact payout before projecting signed USD entry facts and exact transaction IDs", async () => {
     const request = mockSquare(undefined, undefined, { entries: () => Response.json({
       payout_entries: [refund, charge, {
         id: "poe_fee", payout_id: payout.id, type: "DEPOSIT_FEE",
@@ -88,8 +88,10 @@ describe("Church Street Square payout entries", () => {
       payout: { id: payout.id, payoutType: "BATCH", status: "PAID", amountCents: 10_273,
         createdAt: payout.created_at, updatedAt: payout.updated_at, arrivalDate: payout.arrival_date },
       entries: [
-        { reference: refund.id, type: "REFUND", effectiveAt: refund.effective_at, grossCents: -50, feeCents: -2, netCents: -48 },
-        { reference: charge.id, type: "CHARGE", effectiveAt: charge.effective_at, grossCents: 100, feeCents: 19, netCents: 81 },
+        { reference: refund.id, type: "REFUND", effectiveAt: refund.effective_at, grossCents: -50, feeCents: -2, netCents: -48,
+          transaction: { kind: "refund", refundId: "REFUND_SECRET_FOR_TESTS", paymentId: null } },
+        { reference: charge.id, type: "CHARGE", effectiveAt: charge.effective_at, grossCents: 100, feeCents: 19, netCents: 81,
+          transaction: { kind: "charge", paymentId: "PAYMENT_SECRET_FOR_TESTS" } },
         { reference: "poe_fee", type: "DEPOSIT_FEE", effectiveAt: null, grossCents: -5, feeCents: 0, netCents: null },
       ], hasMore: true,
     });
@@ -102,6 +104,33 @@ describe("Church Street Square payout entries", () => {
     expect(Object.fromEntries(new URL(String(entriesRequest[0])).searchParams)).toEqual({ sort_order: "DESC", limit: "50" });
     expect(entriesRequest[1]?.signal).toBe(payoutRequest[1]?.signal);
     expect(entriesRequest[1]).toMatchObject({ method: "GET", cache: "no-store", redirect: "error" });
+  });
+
+  it("reads a refund's exact payment link and keeps unrelated nested details out of the projection", async () => {
+    const request = mockSquare(undefined, undefined, { entries: () => Response.json({ payout_entries: [{
+      ...refund,
+      type_charge_details: charge.type_charge_details,
+      type_refund_details: { refund_id: "REFUND_A", payment_id: "PAYMENT_A", private_detail: "PRIVATE_NESTED" },
+    }] }) });
+    const detail = await new ChurchSquarePayoutClient(config, request).getPayoutEntries(payout.id);
+    expect(detail?.entries[0]?.transaction).toEqual({ kind: "refund", refundId: "REFUND_A", paymentId: "PAYMENT_A" });
+    expect(JSON.stringify(detail)).not.toMatch(/PRIVATE_NESTED|PAYMENT_SECRET_FOR_TESTS/);
+  });
+
+  it.each([
+    { ...charge, type_charge_details: { payment_id: "wrong/path" } },
+    { ...charge, type_charge_details: { payment_id: 123 } },
+    { ...charge, type_charge_details: null, type_refund_details: refund.type_refund_details },
+    { ...refund, type_refund_details: { payment_id: "PAYMENT_A" } },
+    { ...refund, type_refund_details: { refund_id: "REFUND_A", payment_id: "wrong/path" } },
+    { ...charge, type: "PROCESSING_FEE" },
+  ])("keeps amounts when exact transaction identity is missing, invalid, or the entry is an adjustment", async (entry) => {
+    const request = mockSquare(undefined, undefined, { entries: () => Response.json({ payout_entries: [entry] }) });
+    const detail = await new ChurchSquarePayoutClient(config, request).getPayoutEntries(payout.id);
+    expect(detail?.entries).toEqual([{
+      reference: entry.id, type: entry.type, effectiveAt: entry.effective_at,
+      grossCents: entry.gross_amount_money.amount, feeCents: entry.fee_amount_money.amount, netCents: entry.net_amount_money.amount,
+    }]);
   });
 
   it("returns an eligible negative SIMPLE withdrawal with no component request, as Square specifies", async () => {

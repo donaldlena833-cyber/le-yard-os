@@ -179,17 +179,17 @@ export class ChurchSquareOrderClient {
     return parsed.data;
   }
 
-  async get(kind: "order", id: string): Promise<ChurchSquareOrder>;
-  async get(kind: "payment", id: string): Promise<ChurchSquarePayment>;
-  async get(kind: "refund", id: string): Promise<ChurchSquareRefund>;
-  async get(kind: "invoice", id: string): Promise<ChurchSquareInvoice>;
-  async get(kind: ChurchSquareResourceKind, id: string): Promise<ChurchSquareResource>;
-  async get(kind: ChurchSquareResourceKind, id: string): Promise<ChurchSquareResource> {
+  async get(kind: "order", id: string, signal?: AbortSignal): Promise<ChurchSquareOrder>;
+  async get(kind: "payment", id: string, signal?: AbortSignal): Promise<ChurchSquarePayment>;
+  async get(kind: "refund", id: string, signal?: AbortSignal): Promise<ChurchSquareRefund>;
+  async get(kind: "invoice", id: string, signal?: AbortSignal): Promise<ChurchSquareInvoice>;
+  async get(kind: ChurchSquareResourceKind, id: string, signal?: AbortSignal): Promise<ChurchSquareResource>;
+  async get(kind: ChurchSquareResourceKind, id: string, signal?: AbortSignal): Promise<ChurchSquareResource> {
     if (!churchSquareResourceKind.safeParse(kind).success || !churchSquareResourceId.safeParse(id).success) {
       throw new ChurchSquareOrderReadError("A supported resource type and Square ID are required.", "invalid_input");
     }
-    await this.verifyScope();
-    const envelope = await this.call(`/v2/${paths[kind]}/${encodeURIComponent(id)}`);
+    await this.verifyScope(signal);
+    const envelope = await this.call(`/v2/${paths[kind]}/${encodeURIComponent(id)}`, undefined, signal);
     return projectChurchSquareResource(kind, envelope[kind], { locationId: this.config.locationId, id });
   }
 
