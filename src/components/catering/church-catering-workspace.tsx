@@ -7,6 +7,7 @@ import {
   createChurchSquareCateringJobAction,
   detachChurchSquareCateringInvoiceAction,
   listChurchSquareCateringJobsAction,
+  saveChurchSquareCateringPackedPortionsAction,
   saveChurchSquareCateringProductionPlanAction,
   updateChurchSquareCateringJobAction,
 } from "@/app/actions/workflows/church-square-catering-jobs";
@@ -18,8 +19,10 @@ import { localDateKey } from "@/data/read-models/local-time";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import {
   cateringJobStageTransitions,
+  cateringPackedPortionsReference,
   cateringPrepPortionMaximum,
   cateringPrepPortionsSchema,
+  emptyCateringPrepPortions,
   type CateringJob,
   type CateringJobStage,
   type CateringPrepPortions,
@@ -52,6 +55,11 @@ function portionTotal(portions: CateringPrepPortions) {
 
 function canPublishForDate(serviceDate: string) {
   return serviceDate >= localDateKey(new Date(), "America/New_York");
+}
+
+function canRecordPackedPortions(job: CateringJob) {
+  return job.stage === "confirmed" && Boolean(job.prepPublishedAt)
+    && job.serviceDate === localDateKey(new Date(), "America/New_York");
 }
 
 function CalendarDate({ value }: { value: string }) {
@@ -138,12 +146,13 @@ function NewCateringJob({ onSaved, disabled }: { onSaved: (job: CateringJob) => 
   );
 }
 
-function CateringPortionEditor({ job, active, blocked, saving, unsavedJob, message, onSave }: {
+function CateringPortionEditor({ job, active, blocked, saving, unsavedJob, packed, message, onSave }: {
   job: CateringJob;
   active: boolean;
   blocked: boolean;
   saving: boolean;
   unsavedJob: boolean;
+  packed: boolean;
   message: string;
   onSave: (portions: CateringPrepPortions, publish: boolean) => Promise<void>;
 }) {
@@ -164,7 +173,7 @@ function CateringPortionEditor({ job, active, blocked, saving, unsavedJob, messa
     event.preventDefault();
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const publish = submitter instanceof HTMLButtonElement && submitter.value === "publish";
-    if (blocked || !active || unsavedJob || !parsed.success || !(publish ? canPublish && (changed || !job.prepPublishedAt) : changed)) return;
+    if (blocked || !active || unsavedJob || packed || !parsed.success || !(publish ? canPublish && (changed || !job.prepPublishedAt) : changed)) return;
     void onSave(parsed.data, publish);
   }
 
@@ -172,14 +181,15 @@ function CateringPortionEditor({ job, active, blocked, saving, unsavedJob, messa
   return (
     <details className="mt-2 border-t border-[var(--line)] pt-2">
       <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">
-        Kitchen portions · {totalSaved === 0 ? "No plan" : `${totalSaved} ${job.prepPublishedAt ? "published" : "in draft"}`}
+        Kitchen portions · {totalSaved === 0 ? "No plan" : `${totalSaved} ${job.prepPublishedAt ? "published" : active ? "in draft" : "in closed plan"}`}
       </summary>
       <p id={descriptionId} className="mt-2 text-xs text-[var(--ink-soft)]">Plan whole sandwiches for kitchen prep. Published portions appear as the service date enters Kitchen’s seven-day view. Update invoices and stock counts separately.</p>
       {job.prepPublishedAt && (
         <p className="mt-2 text-xs font-semibold">Published to Kitchen <time dateTime={job.prepPublishedAt}>{time.format(new Date(job.prepPublishedAt))} ET</time></p>
       )}
+      {packed && <p className="mt-2 text-xs text-[var(--ink-soft)]">The Kitchen plan is locked while it has packed portions. Review the pack list before correcting the packed counts.</p>}
       <form onSubmit={submit} aria-describedby={descriptionId} className="mt-2 space-y-3">
-        <fieldset disabled={!active || blocked || unsavedJob} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <fieldset disabled={!active || blocked || unsavedJob || packed} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <legend className="sr-only">Sandwich portions</legend>
           {churchSandwichBenchRecipes.map(({ key, name }) => (
             <label key={key} className={labelClass}>
@@ -191,7 +201,7 @@ function CateringPortionEditor({ job, active, blocked, saving, unsavedJob, messa
             </label>
           ))}
         </fieldset>
-        {active && <>
+        {active && !packed && <>
           <p className="text-xs font-medium">{total === null ? `Enter a whole quantity from 0 to ${cateringPrepPortionMaximum} for each sandwich.` : `${total} ${total === 1 ? "sandwich" : "sandwiches"} in this plan.`}</p>
           {unsavedJob && <p className="text-xs text-[var(--ink-soft)]">Save your job changes before editing kitchen portions.</p>}
           {job.stage !== "confirmed" && <p className="text-xs text-[var(--ink-soft)]">Confirm the job before publishing to Kitchen.</p>}
@@ -208,17 +218,105 @@ function CateringPortionEditor({ job, active, blocked, saving, unsavedJob, messa
   );
 }
 
+function CateringPackedPortions({ job, blocked, saving, unsavedJob, message, onSave }: {
+  job: CateringJob;
+  blocked: boolean;
+  saving: boolean;
+  unsavedJob: boolean;
+  message: string;
+  onSave: (portions: CateringPrepPortions, reference: string) => Promise<void>;
+}) {
+  const canRecord = canRecordPackedPortions(job);
+  const published = portionTotal(job.portions);
+  const packed = job.packedPortions ?? emptyCateringPrepPortions;
+  const packedTotal = portionTotal(packed);
+  const [entry, setEntry] = useState<{ revision: number; draft: Partial<Record<keyof CateringPrepPortions, string>>; reference: string }>();
+  const { draft, reference } = entry?.revision === job.revision ? entry : { draft: {}, reference: "" };
+  const parsed = cateringPrepPortionsSchema.safeParse(Object.fromEntries(
+    churchSandwichRecipeKeys.map((key) => [key, draft[key] === undefined ? packed[key] : /^\d+$/.test(draft[key]) ? Number(draft[key]) : NaN]),
+  ));
+  const parsedReference = cateringPackedPortionsReference.safeParse(reference);
+  const counts = parsed.success ? parsed.data : null;
+  const validCounts = counts !== null && churchSandwichRecipeKeys.every((key) => counts[key] <= job.portions[key]);
+  const changed = counts !== null && churchSandwichRecipeKeys.some((key) => counts[key] !== packed[key]);
+  const canSave = canRecord && !blocked && !unsavedJob && validCounts && changed && parsedReference.success;
+  const descriptionId = `catering-packed-${job.id}`;
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canSave || !counts || !parsedReference.success) return;
+    void onSave(counts, parsedReference.data);
+  }
+
+  if (!canRecord && packedTotal === 0) return null;
+  return (
+    <details className="mt-2 border-t border-[var(--line)] pt-2">
+      <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">
+        {canRecord ? "Record packed portions" : "Packed portion record"} · {packedTotal} packed · {published - packedTotal} {canRecord ? "still to build" : "not packed"}
+      </summary>
+      <p id={descriptionId} className="mt-2 text-xs text-[var(--ink-soft)]">
+        {canRecord ? "Count sandwiches already assembled, packed, checked against the pack list and set aside for this job. Enter updated totals, including any corrections. Record pickup or delivery separately."
+          : "Packed counts were recorded against this plan. Packing can be recorded on the service date while the plan is published and the job is confirmed."}
+      </p>
+      <form onSubmit={submit} aria-describedby={descriptionId} className="mt-2 space-y-3">
+        <fieldset disabled={!canRecord || blocked || unsavedJob} className="min-w-0 space-y-3">
+          <legend className="sr-only">Packed portions</legend>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs tabular-nums">
+              <caption className="sr-only">Saved counts and packed portion entry</caption>
+              <thead className="border-b border-[var(--line)] text-[var(--ink-soft)]">
+                <tr>
+                  <th scope="col" className="py-2 pr-2">Sandwich</th>
+                  <th scope="col" className="py-2 pr-2">Planned</th>
+                  <th scope="col" className="py-2 pr-2">Packed</th>
+                  <th scope="col" className="py-2 pr-2">{canRecord ? "Still to build" : "Not packed"}</th>
+                  {canRecord && <th scope="col" className="py-2">New packed total</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line)]">
+                {churchSandwichBenchRecipes.filter(({ key }) => job.portions[key] > 0).map(({ key, name }) => (
+                  <tr key={key}>
+                    <th scope="row" className="py-2 pr-2 font-medium">{name}</th><td className="py-2 pr-2">{job.portions[key]}</td><td className="py-2 pr-2">{packed[key]}</td>
+                    <td className="py-2 pr-2">{job.portions[key] - packed[key]}</td>
+                    {canRecord && <td className="w-24 py-1"><input type="number" required min={0} max={job.portions[key]} step={1} inputMode="numeric"
+                      aria-label={`Packed total for ${name}`} value={draft[key] ?? String(packed[key])} className={fieldClass}
+                      onChange={(event) => setEntry({ revision: job.revision, reference, draft: { ...draft, [key]: event.target.value } })} /></td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {canRecord && <div className="max-w-sm space-y-1">
+            <label className={labelClass}>Pack-list reference
+              <input required maxLength={120} autoComplete="off" value={reference} className={fieldClass} aria-describedby={`${descriptionId}-reference`}
+                onChange={(event) => setEntry({ revision: job.revision, draft, reference: event.target.value })} />
+            </label>
+            <p id={`${descriptionId}-reference`} className="text-xs text-[var(--ink-soft)]">Use a short internal reference. Leave out guest names and contact details.</p>
+          </div>}
+        </fieldset>
+        {canRecord && <>
+          {!validCounts && <p className="text-xs text-[var(--ink-soft)]">Use whole quantities from zero through the planned count for each sandwich.</p>}
+          {unsavedJob && <p className="text-xs text-[var(--ink-soft)]">Save or undo the job edits before recording packed portions.</p>}
+          <Button type="submit" variant="primary" size="sm" disabled={!canSave}>{saving ? "Recording…" : "Save packed totals"}</Button>
+        </>}
+      </form>
+      <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{message}</p>
+    </details>
+  );
+}
+
 function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSaved: (job: CateringJob) => void; refreshing: boolean }) {
   const [title, setTitle] = useState(job.title);
   const [serviceDate, setServiceDate] = useState(job.serviceDate);
   const [stage, setStage] = useState(job.stage);
   const [invoiceId, setInvoiceId] = useState("");
   const [verified, setVerified] = useState<VerifiedInvoice>();
-  const [busy, setBusy] = useState<"save" | "verify" | "attach" | "detach" | "prep" | null>(null);
+  const [busy, setBusy] = useState<"save" | "verify" | "attach" | "detach" | "prep" | "packed" | null>(null);
   const [confirmDetach, setConfirmDetach] = useState(false);
   const [jobMessage, setJobMessage] = useState("");
   const [invoiceMessage, setInvoiceMessage] = useState("");
   const [prepMessage, setPrepMessage] = useState("");
+  const [packedMessage, setPackedMessage] = useState("");
   const { requestIdFor } = useStableRequestIds();
   const invoice = job.invoice;
   const active = job.stage !== "completed" && job.stage !== "canceled";
@@ -226,10 +324,12 @@ function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSav
   const matchingDate = verified?.serviceDate === job.serviceDate;
   const matchingLink = !invoice || (verified?.invoiceReference === invoice.invoiceReference && verified.orderReference === invoice.orderReference);
   const changes = title.trim() !== job.title || serviceDate !== job.serviceDate || stage !== job.stage;
+  const hasPackedPortions = portionTotal(job.packedPortions ?? emptyCateringPrepPortions) > 0;
+  const stageOptions = cateringJobStageTransitions[job.stage].filter((next) => !hasPackedPortions || next === job.stage || next === "completed" || next === "canceled");
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (blocked || !changes) return;
+    if (blocked || !changes || (hasPackedPortions && (serviceDate !== job.serviceDate || !stageOptions.includes(stage)))) return;
     const payload = { jobId: job.id, expectedRevision: job.revision, title: title.trim(), serviceDate, stage };
     setBusy("save");
     setJobMessage("");
@@ -322,7 +422,7 @@ function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSav
   }
 
   async function savePreparation(portions: CateringPrepPortions, publish: boolean) {
-    if (blocked || changes || !active || (publish && (job.stage !== "confirmed" || !canPublishForDate(job.serviceDate)))) return;
+    if (blocked || changes || !active || hasPackedPortions || (publish && (job.stage !== "confirmed" || !canPublishForDate(job.serviceDate)))) return;
     const payload = { jobId: job.id, expectedRevision: job.revision, portions, publish };
     setBusy("prep");
     setPrepMessage("");
@@ -336,6 +436,27 @@ function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSav
       }
     } catch {
       setPrepMessage("The kitchen portions could not be saved. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function savePackedPreparation(packedPortions: CateringPrepPortions, reference: string) {
+    if (blocked || changes || !canRecordPackedPortions(job)) return;
+    const payload = { jobId: job.id, expectedRevision: job.revision, packedPortions, reference };
+    setBusy("packed");
+    setPackedMessage("");
+    try {
+      const result = await saveChurchSquareCateringPackedPortionsAction({ ...payload, requestId: requestIdFor("save-packed", payload) });
+      if (result.ok && result.mode === "live" && result.persisted && result.data.id === job.id) {
+        onSaved(result.data);
+        setPackedMessage("Packed portion totals recorded.");
+        return;
+      }
+      setPackedMessage(!result.ok && result.code === "stale" ? "The catering job changed. Refresh jobs and check the latest counts before recording." :
+        "message" in result ? result.message : "The packed totals could not be recorded.");
+    } catch {
+      setPackedMessage("The packed totals could not be recorded. Try again.");
     } finally {
       setBusy(null);
     }
@@ -355,30 +476,35 @@ function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSav
       <details className="mt-3 border-t border-[var(--line)] pt-2">
         <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">Edit job</summary>
         <form onSubmit={(event) => void save(event)} className="mt-2">
-          <fieldset disabled={blocked} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(7rem,auto)_auto] sm:items-end">
+          <fieldset disabled={blocked || !active} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(7rem,auto)_auto] sm:items-end">
             <label className={labelClass}>
               Internal event name
               <input className={fieldClass} required maxLength={120} value={title} autoComplete="off" aria-describedby="catering-title-help" onChange={(event) => setTitle(event.target.value)} />
             </label>
             <label className={labelClass}>
               Service date
-              <input className={fieldClass} type="date" min="2000-01-01" max="2100-12-31" required disabled={Boolean(invoice)} value={serviceDate} onChange={(event) => setServiceDate(event.target.value)} />
+              <input className={fieldClass} type="date" min="2000-01-01" max="2100-12-31" required disabled={Boolean(invoice) || hasPackedPortions || !active} value={serviceDate} onChange={(event) => setServiceDate(event.target.value)} />
             </label>
             <label className={labelClass}>
               Stage
               <select className={fieldClass} value={stage} onChange={(event) => setStage(event.target.value as CateringJobStage)}>
-                {cateringJobStageTransitions[job.stage].map((value) => <option key={value} value={value}>{stageLabels[value]}</option>)}
+                {stageOptions.map((value) => <option key={value} value={value}>{stageLabels[value]}</option>)}
               </select>
             </label>
             <Button type="submit" variant="secondary" size="sm" disabled={!changes}>{busy === "save" ? "Saving…" : "Save job"}</Button>
           </fieldset>
           {invoice && <p className="mt-2 text-xs text-[var(--ink-soft)]">The job date is locked while an invoice is linked.</p>}
-          {job.prepPublishedAt && (serviceDate !== job.serviceDate || stage !== job.stage) && <p className="mt-2 text-xs text-[var(--ink-soft)]">Saving a new service date or stage removes the current Kitchen handoff.</p>}
+          {hasPackedPortions && active && <p className="mt-2 text-xs text-[var(--ink-soft)]">Packed portions lock the service date and Kitchen plan. You can still complete or cancel the job.</p>}
+          {job.prepPublishedAt && (serviceDate !== job.serviceDate || stage !== job.stage) && <p className="mt-2 text-xs text-[var(--ink-soft)]">
+            {stage === "completed" || stage === "canceled" ? "Closing this job removes its remaining portions from Kitchen. Any packed amounts stay in the job record." : "Saving a new service date or stage removes the current Kitchen handoff."}
+          </p>}
         </form>
         <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{jobMessage}</p>
       </details>
       <CateringPortionEditor job={job} active={active} blocked={blocked} saving={busy === "prep"}
-        unsavedJob={changes} message={prepMessage} onSave={savePreparation} />
+        unsavedJob={changes} packed={hasPackedPortions} message={prepMessage} onSave={savePreparation} />
+      <CateringPackedPortions job={job} blocked={blocked} saving={busy === "packed"}
+        unsavedJob={changes} message={packedMessage} onSave={savePackedPreparation} />
       {(invoice || active) && <details className="mt-2 border-t border-[var(--line)] pt-2">
         <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">{invoice ? "Recheck linked invoice" : "Verify and attach invoice"}</summary>
         <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => void verify(event)}>

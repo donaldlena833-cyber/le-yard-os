@@ -32,6 +32,9 @@ export const emptyCateringPrepPortions: Readonly<CateringPrepPortions> = {
   parisien: 0, verger: 0, bellecour: 0, bleu: 0, rustique: 0, figaro: 0,
 };
 
+export const cateringPackedPortionsReference = z.string().trim().min(1).max(120)
+  .regex(/^[^\p{Cc}\p{Cf}]+$/u, "Use a short, single-line pack list reference.");
+
 export const cateringInvoiceReference = z.string().regex(/^[A-Za-z0-9_:-]{1,10}$/);
 const cents = z.number().int().safe().nullable().transform((value) => value !== null && value >= 0 ? value : null);
 const instant = z.iso.datetime({ offset: true });
@@ -45,6 +48,8 @@ export const cateringJobSchema = z.object({
   revision: cateringJobRevision,
   updatedAt: instant,
   portions: cateringPrepPortionsSchema.default(() => ({ ...emptyCateringPrepPortions })),
+  // Historical immutable job receipts predate the packed count.
+  packedPortions: cateringPrepPortionsSchema.optional(),
   prepPublishedAt: instant.nullable().default(null),
   invoice: z.object({
     invoiceReference: cateringInvoiceReference,
@@ -60,6 +65,8 @@ export const cateringJobSchema = z.object({
       completedCents: cents,
     }),
   }).nullable(),
+}).refine(({ portions, packedPortions }) => !packedPortions || churchSandwichRecipeKeys.every((key) => packedPortions[key] <= portions[key]), {
+  path: ["packedPortions"], message: "Packed portions must be within the published plan.",
 });
 
 export type CateringJob = z.infer<typeof cateringJobSchema>;

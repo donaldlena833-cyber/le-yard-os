@@ -13,10 +13,12 @@ import {
   cateringJobServiceDate,
   cateringJobStage,
   cateringJobTitle,
+  cateringPackedPortionsReference,
   cateringPrepPortionsSchema,
 } from "@/lib/integrations/church-square-catering-jobs";
 import { churchSquareResourceId } from "@/lib/integrations/church-square-order-projection";
 import { ChurchSquareOrderClient, churchSquareOrderConfiguration } from "@/lib/integrations/church-square-orders.server";
+import { churchSandwichRecipeKeys } from "@/lib/kitchen/church-sandwich-bench";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const jobId = z.uuid();
@@ -54,6 +56,14 @@ const prepInput = z.strictObject({
 }).refine(({ portions, publish }) => !publish || Object.values(portions).some((quantity) => quantity > 0), {
   path: ["portions"],
   message: "Enter at least one sandwich before publishing to Kitchen.",
+});
+
+const packInput = z.strictObject({
+  requestId: z.uuid(),
+  jobId,
+  expectedRevision: cateringJobRevision,
+  packedPortions: cateringPrepPortionsSchema,
+  reference: cateringPackedPortionsReference,
 });
 
 async function locationIdFor(context: WorkflowContext) {
@@ -219,6 +229,34 @@ export async function saveChurchSquareCateringProductionPlanAction(input: unknow
       }).abortSignal(AbortSignal.timeout(6_000));
       if (error) throwDatabaseError(error, "Catering portions could not be saved.");
       return parseSavedJob(data);
+    },
+  });
+  if (result.ok && result.persisted) refreshCatering();
+  return result;
+}
+
+export async function saveChurchSquareCateringPackedPortionsAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "church-square.catering.job.pack",
+    schema: packInput,
+    input,
+    run: async (context, { requestId, jobId, expectedRevision, packedPortions, reference }) => {
+      const locationId = await locationIdFor(context);
+      const { data, error } = await context.supabase.rpc("save_church_catering_packed_portions", {
+        p_request_id: requestId,
+        p_location_id: locationId,
+        p_job_id: jobId,
+        p_expected_revision: expectedRevision,
+        p_packed_portions: packedPortions,
+        p_reference: reference,
+      }).abortSignal(AbortSignal.timeout(6_000));
+      if (error) throwDatabaseError(error, "Packed catering portions could not be saved.");
+      const job = parseSavedJob(data);
+      const confirmed = job.packedPortions;
+      assertCondition(job.id === jobId && confirmed
+        && churchSandwichRecipeKeys.every((key) => confirmed[key] === packedPortions[key]),
+      "database", "The packed catering count could not be confirmed.");
+      return job;
     },
   });
   if (result.ok && result.persisted) refreshCatering();

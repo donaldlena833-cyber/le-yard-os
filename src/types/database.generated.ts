@@ -11225,6 +11225,17 @@ export type Database = {
         }
         Returns: Json
       };
+      "save_church_catering_packed_portions": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_job_id": string | null
+          "p_expected_revision": number | null
+          "p_packed_portions": Json | null
+          "p_reference": string | null
+        }
+        Returns: Json
+      };
       "save_church_catering_prep": {
         Args: {
           "p_request_id": string | null
@@ -13046,6 +13057,7 @@ export const DatabaseObjectNames = {
       "revoke_user_invitation",
       "save_availability_rule",
       "save_church_catering_job",
+      "save_church_catering_packed_portions",
       "save_church_catering_prep",
       "save_church_ingredient_evidence",
       "save_church_sandwich_formula",

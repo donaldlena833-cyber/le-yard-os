@@ -6,6 +6,7 @@ import {
   attachChurchSquareCateringInvoiceAction,
   createChurchSquareCateringJobAction,
   detachChurchSquareCateringInvoiceAction,
+  saveChurchSquareCateringPackedPortionsAction,
   saveChurchSquareCateringProductionPlanAction,
   updateChurchSquareCateringJobAction,
 } from "@/app/actions/workflows/church-square-catering-jobs";
@@ -18,6 +19,7 @@ vi.mock("@/app/actions/workflows/church-square-catering-jobs", () => ({
   createChurchSquareCateringJobAction: vi.fn(),
   detachChurchSquareCateringInvoiceAction: vi.fn(),
   listChurchSquareCateringJobsAction: vi.fn(),
+  saveChurchSquareCateringPackedPortionsAction: vi.fn(),
   saveChurchSquareCateringProductionPlanAction: vi.fn(),
   updateChurchSquareCateringJobAction: vi.fn(),
 }));
@@ -42,6 +44,64 @@ afterEach(() => {
   cleanup();
   vi.resetAllMocks();
   vi.useRealTimers();
+});
+
+it("records bounded cumulative packed portions on the New York service date and keeps separate job closure", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-12-15T02:30:00Z"));
+  const sameDay: CateringJob = { ...job, stage: "confirmed", serviceDate: "2026-12-14", prepPublishedAt: "2026-12-14T15:00:00Z",
+    portions: { ...emptyCateringPrepPortions, parisien: 5, bleu: 3 } };
+  const packedPortions = { ...emptyCateringPrepPortions, parisien: 4 };
+  const corrected = { ...packedPortions, parisien: 3 };
+  vi.mocked(saveChurchSquareCateringPackedPortionsAction)
+    .mockResolvedValueOnce(saved({ ...sameDay, revision: 2, packedPortions }))
+    .mockResolvedValueOnce(saved({ ...sameDay, revision: 3, packedPortions: corrected }));
+  vi.mocked(updateChurchSquareCateringJobAction)
+    .mockResolvedValueOnce(saved({ ...sameDay, revision: 4, stage: "completed", prepPublishedAt: null, packedPortions: corrected }));
+  render(<ChurchCateringWorkspace initialJobs={[sameDay]} />);
+  const card = within(screen.getByRole("article", { name: job.title }));
+  fireEvent.click(card.getByText(/Record packed portions · 0 packed · 8 still to build/));
+  const save = card.getByRole("button", { name: "Save packed totals" }) as HTMLButtonElement;
+  const parisien = card.getByRole("spinbutton", { name: "Packed total for Le Parisien" });
+  fireEvent.change(parisien, { target: { value: "6" } });
+  const reference = card.getByLabelText("Pack-list reference");
+  fireEvent.change(reference, { target: { value: "   " } });
+  expect(save.disabled).toBe(true);
+  fireEvent.change(reference, { target: { value: "  Pack sheet 14-A  " } });
+  expect(save.disabled).toBe(true);
+  fireEvent.change(parisien, { target: { value: "4" } });
+  expect(save.disabled).toBe(false);
+  fireEvent.click(save);
+  await card.findByText(/Record packed portions · 4 packed · 4 still to build/);
+  expect(saveChurchSquareCateringPackedPortionsAction).toHaveBeenLastCalledWith({
+    jobId: sameDay.id, expectedRevision: 1, requestId: expect.any(String), packedPortions, reference: "Pack sheet 14-A",
+  });
+  fireEvent.change(parisien, { target: { value: "3" } });
+  expect(save.disabled).toBe(true);
+  fireEvent.change(reference, { target: { value: "Pack sheet 14-A corrected" } });
+  fireEvent.click(save);
+  await card.findByText(/Record packed portions · 3 packed · 5 still to build/);
+  expect(saveChurchSquareCateringPackedPortionsAction).toHaveBeenLastCalledWith(expect.objectContaining({
+    expectedRevision: 2, packedPortions: corrected, reference: "Pack sheet 14-A corrected",
+  }));
+  fireEvent.click(card.getByText("Kitchen portions · 8 published"));
+  expect((card.getByRole("spinbutton", { name: "Le Parisien" }) as HTMLInputElement).matches(":disabled")).toBe(true);
+  fireEvent.click(card.getByText("Edit job"));
+  expect((card.getByLabelText("Service date") as HTMLInputElement).disabled).toBe(true);
+  expect(card.queryByRole("option", { name: "Quoted" })).toBeNull();
+  expect(card.getByRole("option", { name: "Canceled" })).toBeTruthy();
+  fireEvent.change(card.getByLabelText("Stage"), { target: { value: "completed" } });
+  fireEvent.click(card.getByRole("button", { name: "Save job" }));
+  expect(await card.findByText(/Packed portion record · 3 packed · 5 not packed/)).toBeTruthy();
+  expect(card.queryByRole("button", { name: "Save packed totals" })).toBeNull();
+});
+
+it("waits for the New York service date before offering packed-portion edits", () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-12-15T02:30:00Z"));
+  const future: CateringJob = { ...job, stage: "confirmed", prepPublishedAt: "2026-12-14T15:00:00Z", portions: { ...emptyCateringPrepPortions, parisien: 5 } };
+  render(<ChurchCateringWorkspace initialJobs={[future]} />);
+  expect(screen.queryByText(/Record packed portions/)).toBeNull();
 });
 
 it("creates a durable inquiry and advances its stage using the saved revision", async () => {

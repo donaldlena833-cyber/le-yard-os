@@ -35,6 +35,7 @@ import {
   createChurchSquareCateringJobAction,
   detachChurchSquareCateringInvoiceAction,
   listChurchSquareCateringJobsAction,
+  saveChurchSquareCateringPackedPortionsAction,
   saveChurchSquareCateringProductionPlanAction,
   updateChurchSquareCateringJobAction,
 } from "@/app/actions/workflows/church-square-catering-jobs";
@@ -69,6 +70,35 @@ beforeEach(() => {
 });
 
 describe("Church Street catering job actions", () => {
+  it("records a referenced packed count at the selected location without calling Square", async () => {
+    const portions = { ...emptyCateringPrepPortions, parisien: 12 };
+    const packedPortions = { ...emptyCateringPrepPortions, parisien: 5 };
+    const input = { requestId, jobId, expectedRevision: 7, packedPortions, reference: " Pack A checked " };
+    for (const bad of [
+      { ...input, locationId: "foreign" },
+      { ...input, reference: "" },
+      { ...input, reference: "Pack\u202eA" },
+      { ...input, packedPortions: { ...packedPortions, parisien: 1.5 } },
+    ]) {
+      expect(await saveChurchSquareCateringPackedPortionsAction(bad)).toMatchObject({ ok: false });
+    }
+    mocks.scope.mockResolvedValueOnce(false);
+    expect(await saveChurchSquareCateringPackedPortionsAction(input)).toMatchObject({ ok: false });
+    expect(mocks.userRpc).not.toHaveBeenCalled();
+
+    mocks.userRpc.mockReturnValueOnce(response({ ...job, portions, packedPortions, revision: 8 }));
+    expect(await saveChurchSquareCateringPackedPortionsAction(input)).toMatchObject({ ok: true, data: { packedPortions } });
+    expect(mocks.userRpc).toHaveBeenCalledWith("save_church_catering_packed_portions", {
+      p_request_id: requestId, p_location_id: "church", p_job_id: jobId, p_expected_revision: 7,
+      p_packed_portions: packedPortions, p_reference: "Pack A checked",
+    });
+    expect(mocks.serviceRpc).not.toHaveBeenCalled();
+    expect(mocks.getInvoice).not.toHaveBeenCalled();
+    expect(mocks.revalidate).toHaveBeenCalledWith("/kitchen");
+    mocks.userRpc.mockReturnValueOnce(response({ ...job, portions, packedPortions: emptyCateringPrepPortions }));
+    expect(await saveChurchSquareCateringPackedPortionsAction(input)).toMatchObject({ ok: false, message: /could not be confirmed/ });
+  });
+
   it("loads and creates with the session location through the authenticated client", async () => {
     expect(await listChurchSquareCateringJobsAction()).toMatchObject({ ok: true, persisted: false, data: [job] });
     const payload = { requestId, title: job.title, serviceDate: job.serviceDate, stage: job.stage };

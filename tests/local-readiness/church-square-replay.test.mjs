@@ -473,7 +473,8 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
 
     await asRole(db, "authenticated", prepUserId);
     expect(await kitchenSummary()).toEqual([{ serviceDate: tomorrow, jobCount: 2,
-      portions: { ...zeros, parisien: 17, rustique: 2, bleu: 4 } }]);
+      portions: { ...zeros, parisien: 17, rustique: 2, bleu: 4 }, packedPortions: zeros,
+      remainingPortions: { ...zeros, parisien: 17, rustique: 2, bleu: 4 } }]);
     await expect(listJobs()).rejects.toMatchObject({ code: "42501" });
     await expect(updatePrep(firstPublished, zeros, false)).rejects.toMatchObject({ code: "42501" });
     await asRole(db, "authenticated", otherTenantUser);
@@ -492,6 +493,38 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
       from private.church_catering_job_changes where request_id=$1::uuid
     `, [publishRequest]);
     expect(prepAudit.rows).toEqual([{ operation: "prep_publish", actor_id: ownerId, portions }]);
+
+    const today = (await db.query("select (now() at time zone 'America/New_York')::date::text as day")).rows[0].day;
+    const packingDraft = await saveJob(randomUUID(), "Private packing room", "inquiry", null, null, today);
+    const packingJob = await saveJob(randomUUID(), packingDraft.title, "confirmed", packingDraft.id, packingDraft.revision, today);
+    const packingPlan = await updatePrep(packingJob, portions, true);
+    const packedCounts = { ...zeros, parisien: 3, rustique: 2 };
+    const packRequest = randomUUID();
+    const savePacked = async (job, packed, id = randomUUID(), reference = "Pack list P-07") => (await db.query(
+      "select public.save_church_catering_packed_portions($1,$2,$3,$4,$5::jsonb,$6) as result",
+      [id, workspaceLocationId, job.id, job.revision, JSON.stringify(packed), reference],
+    )).rows[0].result;
+    await asRole(db, "authenticated", prepUserId);
+    await expect(savePacked(packingPlan, packedCounts)).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", ownerId);
+    await expect(savePacked(packingPlan, { ...packedCounts, parisien: 11 })).rejects.toMatchObject({ code: "PT409" });
+    const packed = await savePacked(packingPlan, packedCounts, packRequest);
+    expect(packed).toMatchObject({ portions, packedPortions: packedCounts, revision: packingPlan.revision + 1 });
+    expect(await savePacked(packingPlan, packedCounts, packRequest)).toEqual(packed);
+    await expect(savePacked(packingPlan, packedCounts, packRequest, "Different reference")).rejects.toMatchObject({ code: "PT409" });
+    await expect(updatePrep(packed, otherPortions, false)).rejects.toMatchObject({ code: "PT409" });
+    await expect(saveJob(randomUUID(), packed.title, "confirmed", packed.id, packed.revision, tomorrow)).rejects.toMatchObject({ code: "PT409" });
+
+    await asRole(db, "authenticated", prepUserId);
+    expect(await kitchenSummary()).toEqual([{ serviceDate: today, jobCount: 1, portions,
+      packedPortions: packedCounts, remainingPortions: { ...zeros, parisien: 7 } }]);
+    await asRole(db, "authenticated", ownerId);
+    const corrected = await savePacked(packed, { ...packedCounts, parisien: 2 }, randomUUID(), "Pack list P-07 correction");
+    expect((await kitchenSummary())[0].remainingPortions.parisien).toBe(8);
+    const closed = await saveJob(randomUUID(), corrected.title, "canceled", corrected.id, corrected.revision, today);
+    expect(closed.packedPortions).toEqual({ ...packedCounts, parisien: 2 });
+    expect(await kitchenSummary()).toEqual([]);
+    expect(await protectedCounts()).toEqual(before);
 
     const ingredient = churchSandwichComponents[0];
     const review = {
@@ -697,7 +730,7 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     expect(batch).toEqual({ id: batchRequest, ingredientKey: "French-style ham", evidenceRevision: 3, supplierSku: "HQ-HAM-02",
       supplierLot: "LOT-42", batchCode: "PREP-42", handledAs: "prepped", handledAt: expect.any(String), discardAt: expect.any(String),
       storageRule: review.storageRule, handlingRule: review.preppedRule, recordedAt: expect.any(String), recordedByName: expect.any(String),
-      evidenceCurrent: true, voidedAt: null, voidReason: null, disposition: null });
+      evidenceCurrent: true, voidedAt: null, voidReason: null, disposition: null, latestMeasurement: null });
     expect(Date.parse(batch.handledAt)).toBe(Date.parse(handledAt));
     expect(Date.parse(batch.discardAt)).toBe(Date.parse(discardAt));
     expect(await recordBatch({ request: batchRequest, lot: "  LOT-42  " })).toEqual(batch);

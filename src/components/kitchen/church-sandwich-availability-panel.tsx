@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { ChurchCateringPrepDay } from "@/lib/kitchen/church-catering-prep";
 import {
@@ -15,7 +17,7 @@ import {
   type ChurchAvailabilityQuantities,
   type ChurchAvailabilityRecipe,
 } from "@/lib/kitchen/church-sandwich-availability";
-import { churchSandwichBenchRecipes, churchSandwichBread, type ChurchSandwichRecipeKey } from "@/lib/kitchen/church-sandwich-bench";
+import { churchSandwichBenchRecipes, churchSandwichBread, churchSandwichRecipeKeys, type ChurchSandwichRecipeKey } from "@/lib/kitchen/church-sandwich-bench";
 
 type Availability = ReturnType<typeof calculateChurchSandwichAvailability>;
 type Blocker = Availability["rows"][number]["blockers"][number];
@@ -35,7 +37,7 @@ const blockerLabels: Record<Blocker["reason"], string> = {
   supplier_pending: "Supplier evidence needs review",
   supplier_hold: "Supplier evidence on hold",
   count_needed: "Usable count needed",
-  catering_short: "Published catering needs more stock",
+  catering_short: "Catering still to build needs more stock",
 };
 const mixLabels = {
   empty: { label: "No portions to check", tone: "neutral" },
@@ -60,10 +62,21 @@ function blockersText(blockers: readonly Blocker[]) {
 }
 
 export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, catering, serviceDate }: Props) {
-  const [selectedMode, setMode] = useState<"approved" | "bench" | null>(null);
-  const [stockFields, setStockFields] = useState<Partial<Record<ChurchAvailabilityIngredient, string>>>({});
-  const [mixFields, setMixFields] = useState<Partial<Record<ChurchSandwichRecipeKey, string>>>({});
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const todayCatering = catering?.serviceDate === serviceDate ? catering : null;
+  const stockBasis = JSON.stringify([serviceDate, todayCatering?.jobCount ?? 0, churchSandwichRecipeKeys.map((key) =>
+    [todayCatering?.portions[key] ?? 0, todayCatering?.packedPortions[key] ?? 0])]);
+  const [selectedMode, setMode] = useState<"approved" | "bench" | null>(null);
+  const [stockEntry, setStockEntry] = useState<{
+    basis: string;
+    fields: Partial<Record<ChurchAvailabilityIngredient, string>>;
+  }>({ basis: stockBasis, fields: {} });
+  const [mixFields, setMixFields] = useState<Partial<Record<ChurchSandwichRecipeKey, string>>>({});
+  // Measurements can include ingredients used by a newly packed portion. Clear them before recalculating.
+  const sameStockBasis = stockEntry.basis === stockBasis;
+  if (!sameStockBasis) setStockEntry({ basis: stockBasis, fields: {} });
+  const stockFields = sameStockBasis ? stockEntry.fields : {};
   const mode = selectedMode ?? (approvedRecipes.length ? "approved" : "bench");
   const isRehearsal = mode === "bench";
   const stock: ChurchAvailabilityQuantities = {};
@@ -90,7 +103,7 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
     recipes: isRehearsal ? churchAvailabilityBenchRecipes : approvedRecipes,
     evidence,
     stock,
-    catering: todayCatering?.portions ?? {},
+    catering: todayCatering?.remainingPortions ?? {},
     mix,
     mode,
   });
@@ -99,10 +112,18 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
 
   return (
     <section aria-labelledby="sandwich-availability-title" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-      <h2 id="sandwich-availability-title" className="text-lg font-semibold">Sandwich portion feasibility</h2>
-      <p className="mt-2 text-sm text-[var(--ink-soft)]">
-        Check Church Street portions against usable stock you measure. Entries stay on this page for planning. Inventory and Square are managed separately.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="sandwich-availability-title" className="text-lg font-semibold">Sandwich portion feasibility</h2>
+          <p className="mt-2 text-sm text-[var(--ink-soft)]">Check Church Street portions against usable stock you measure. Counts are used only in this planning view.</p>
+        </div>
+        <Button variant="secondary" size="sm" disabled={refreshing} onClick={() => {
+          setStockEntry({ basis: stockBasis, fields: {} });
+          startRefresh(() => router.refresh());
+        }}>
+          {refreshing ? "Refreshing Kitchen…" : "Refresh Kitchen"}
+        </Button>
+      </div>
       <fieldset className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
         <legend className="mb-2 text-xs font-semibold">Calculation basis</legend>
         <label className="inline-flex items-center gap-2">
@@ -124,7 +145,7 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
       <details className="mt-4 border-t border-[var(--line)] pt-3">
         <summary className="focus-ring cursor-pointer rounded-md text-sm font-semibold">Enter usable stock</summary>
         <div className="my-3">
-          <p className="text-sm text-[var(--ink-soft)]">Count whole baguettes and weigh ready-to-use fillings in grams. Include stock set aside for today’s published catering so the planner deducts it once. Leave unknown quantities blank and enter zero for a confirmed empty count.</p>
+          <p className="text-sm text-[var(--ink-soft)]">Count whole baguettes and weigh ready-to-use fillings in grams. Include ingredients set aside for catering still to build. Leave unknown quantities blank and enter zero after confirming stock is empty. Refresh Kitchen and recount after packing or changing a plan. Updated catering totals clear entered stock.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {churchAvailabilityIngredients.map((ingredient, index) => {
               const isBread = ingredient === churchSandwichBread;
@@ -135,9 +156,9 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
                   <label className="block text-xs font-semibold">
                     <span className="first-letter:uppercase">{ingredient} ({isBread ? "each" : "g"})</span>
                     <input
-                      type="text" inputMode={isBread ? "numeric" : "decimal"} autoComplete="off" maxLength={14}
+                      type="text" inputMode={isBread ? "numeric" : "decimal"} autoComplete="off" maxLength={14} disabled={refreshing}
                       value={stockFields[ingredient] ?? ""}
-                      onChange={(event) => setStockFields({ ...stockFields, [ingredient]: event.target.value })}
+                      onChange={(event) => setStockEntry({ basis: stockBasis, fields: { ...stockFields, [ingredient]: event.target.value } })}
                       aria-invalid={invalid || undefined} aria-describedby={invalid ? errorId : undefined} className={fieldClass}
                     />
                   </label>
@@ -154,24 +175,23 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
       <div className="mt-4 border-y border-[var(--line)] py-3">
         <h3 className="text-sm font-semibold">Published catering for <time dateTime={serviceDate}>{dateLabel.format(new Date(`${serviceDate}T00:00:00Z`))}</time></h3>
         {todayCatering ? (
-          <>
-            <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--ink-soft)]">
-              {churchSandwichBenchRecipes.filter(({ key }) => todayCatering.portions[key] > 0).map(({ key, name }) => (
-                <li key={key}>{name} · {number.format(todayCatering.portions[key])}</li>
-              ))}
-            </ul>
-            <p className="mt-2 text-xs text-[var(--ink-soft)]">If any published portions have been assembled or issued, check the catering job and refresh Kitchen before using this estimate. The planner uses the full published quantities.</p>
-          </>
+          <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--ink-soft)]">
+            {churchSandwichBenchRecipes.filter(({ key }) => todayCatering.portions[key] > 0).map(({ key, name }) => (
+              <li key={key}>
+                {name} · {number.format(todayCatering.portions[key])} published · {number.format(todayCatering.packedPortions[key])} packed · {number.format(todayCatering.remainingPortions[key])} still to build
+              </li>
+            ))}
+          </ul>
         ) : <p className="mt-1 text-xs text-[var(--ink-soft)]">No published catering portions for this service day.</p>}
       </div>
 
       <div className="mt-4 overflow-x-auto">
         <h3 className="text-sm font-semibold">{isRehearsal ? "Rehearsal limits" : "Stand-alone portion limits"}</h3>
         <p className="my-2 text-xs text-[var(--ink-soft)]" id="availability-capacity-note">
-          Individual limits use the stock left after published catering. These sandwiches share stock, so use the combined check to plan more than one sandwich.
+          Individual limits set aside stock for catering still to build. These sandwiches share stock, so use the combined check to plan more than one sandwich.
         </p>
         <table className="w-full text-left text-sm" aria-describedby="availability-capacity-note">
-          <caption className="sr-only">Stand-alone sandwich limits after published catering</caption>
+          <caption className="sr-only">Stand-alone sandwich limits after outstanding catering</caption>
           <thead className="border-b border-[var(--line)] text-xs text-[var(--ink-soft)]">
             <tr>
               <th scope="col" className="py-2 pr-3">Sandwich</th>
@@ -203,7 +223,7 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, cat
         <summary className="focus-ring cursor-pointer rounded-md text-sm font-semibold">Check a combined sandwich mix</summary>
         <fieldset className="mt-3">
           <legend className="text-xs font-semibold">Extra café portions</legend>
-          <p className="mt-1 text-xs text-[var(--ink-soft)]">Enter up to 999 additional portions per sandwich. Leave these blank to check published catering by itself.</p>
+          <p className="mt-1 text-xs text-[var(--ink-soft)]">Enter up to 999 additional portions per sandwich. Leave these blank to check catering still to build.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             {churchSandwichBenchRecipes.map(({ key, name }) => {
               const invalid = invalidMix.has(key);

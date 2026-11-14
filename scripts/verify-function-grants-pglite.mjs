@@ -107,6 +107,7 @@ const approvedAuthenticatedFunctions = new Set([
   "list_church_square_count_items",
   "save_church_catering_job",
   "save_church_catering_prep",
+  "save_church_catering_packed_portions",
   "save_church_ingredient_evidence",
   "record_church_ingredient_batch",
   "record_church_ingredient_batch_measurement",

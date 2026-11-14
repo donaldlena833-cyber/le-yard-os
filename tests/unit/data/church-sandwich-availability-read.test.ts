@@ -24,6 +24,8 @@ const hold: ChurchIngredientEvidence = {
 const today: ChurchCateringPrepDay = {
   serviceDate: "2026-11-14", jobCount: 1,
   portions: { parisien: 8, verger: 0, bellecour: 0, bleu: 0, rustique: 0, figaro: 0 },
+  packedPortions: { parisien: 3, verger: 0, bellecour: 0, bleu: 0, rustique: 0, figaro: 0 },
+  remainingPortions: { parisien: 5, verger: 0, bellecour: 0, bleu: 0, rustique: 0, figaro: 0 },
 };
 
 afterEach(() => vi.useRealTimers());

@@ -9,8 +9,13 @@ const dailyPortions = z.record(z.enum(churchSandwichRecipeKeys), count);
 const day = z.object({
   serviceDate: z.iso.date(),
   portions: dailyPortions,
+  packedPortions: dailyPortions,
+  remainingPortions: dailyPortions,
   jobCount: count.min(1),
-});
+}).refine(({ portions, packedPortions, remainingPortions }) =>
+  churchSandwichRecipeKeys.some((key) => portions[key] > 0)
+  && churchSandwichRecipeKeys.every((key) => portions[key] === packedPortions[key] + remainingPortions[key]),
+);
 
 export const churchCateringPrepDays = z.array(day).max(7).refine((days) =>
   days.every((entry, index) => !index || days[index - 1].serviceDate < entry.serviceDate),
@@ -35,15 +40,16 @@ function signedChurchCateringPrep(
   portions: ChurchCateringPrepDay["portions"],
   recipes: readonly ChurchAvailabilityRecipe[] | null,
 ): SignedPrep {
+  const toBuild = churchSandwichBenchRecipes.filter(({ key }) => portions[key] > 0);
+  if (toBuild.length === 0) return { status: "ready", pendingNames: [], ingredients: [] };
   if (!recipes) return { status: "unavailable", pendingNames: [], ingredients: [] };
   const byKey = new Map(recipes.map(({ key, ingredients }) => [key, ingredients]));
-  const published = churchSandwichBenchRecipes.filter(({ key }) => portions[key] > 0);
-  const pendingNames = published.filter(({ key }) => !byKey.has(key)).map(({ name }) => name);
+  const pendingNames = toBuild.filter(({ key }) => !byKey.has(key)).map(({ name }) => name);
   if (pendingNames.length) return { status: "pending", pendingNames, ingredients: [] };
 
   const scale = 1_000;
   const totals = new Map<string, number>();
-  for (const { key } of published) {
+  for (const { key } of toBuild) {
     const recipe = byKey.get(key);
     if (recipe?.[churchSandwichBread] !== 1) return { status: "unavailable", pendingNames: [], ingredients: [] };
     for (const [ingredient, perSandwich] of Object.entries(recipe)) {
@@ -58,7 +64,7 @@ function signedChurchCateringPrep(
 }
 
 export function calculateChurchCateringPrep(
-  { portions }: ChurchCateringPrepDay,
+  { portions, packedPortions, remainingPortions }: ChurchCateringPrepDay,
   { recipes = null }: { recipes?: readonly ChurchAvailabilityRecipe[] | null } = {},
 ) {
   const ingredients = new Map<string, number>();
@@ -66,7 +72,7 @@ export function calculateChurchCateringPrep(
   let assemblySeconds = 0;
 
   for (const recipe of churchSandwichBenchRecipes) {
-    const quantity = portions[recipe.key];
+    const quantity = remainingPortions[recipe.key];
     if (quantity === 0) continue;
     baguettes += quantity;
     assemblySeconds += quantity * recipe.seconds;
@@ -77,10 +83,14 @@ export function calculateChurchCateringPrep(
 
   return {
     baguettes,
+    published: churchSandwichRecipeKeys.reduce((sum, key) => sum + portions[key], 0),
+    packed: churchSandwichRecipeKeys.reduce((sum, key) => sum + packedPortions[key], 0),
     assemblySeconds,
     ingredients: ingredientList(ingredients),
     sandwiches: churchSandwichBenchRecipes.filter((recipe) => portions[recipe.key] > 0)
-      .map((recipe) => ({ name: recipe.name, quantity: portions[recipe.key] })),
-    signed: signedChurchCateringPrep(portions, recipes),
+      .map(({ name, key }) => ({
+        name, published: portions[key], packed: packedPortions[key], remaining: remainingPortions[key],
+      })),
+    signed: signedChurchCateringPrep(remainingPortions, recipes),
   };
 }
