@@ -1,11 +1,11 @@
 export const CONNECTED_ACCEPTANCE_ATTESTATION_PATH =
   "/api/internal/connected-acceptance/attest";
 
-// These exact routes authenticate the provider at the route boundary with
-// Twilio's signature (or the dedicated agent-tool secret), not browser cookies.
-// Do not allow the entire /api/twilio prefix: outbound staff calling must retain
-// session authentication and tenant membership checks.
+// These exact routes verify provider signatures or a dedicated agent-tool
+// secret at the route boundary. Staff API routes require session authentication.
 const providerAuthenticatedPaths = new Set([
+  "/api/integrations/square/webhook",
+  "/api/internal/integrations/church-square-recovery",
   "/api/twilio/readiness",
   "/api/twilio/voice/incoming",
   "/api/twilio/voice/ai/turn",

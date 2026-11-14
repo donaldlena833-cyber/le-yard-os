@@ -1,0 +1,421 @@
+"use client";
+
+import { useState } from "react";
+import { ChurchSquareCateringInvoice } from "@/components/today/church-square-catering-invoice";
+import { ChurchSquareOrderEvidence } from "@/components/today/church-square-order-evidence";
+import { ChurchSquareReconciliation } from "@/components/today/church-square-reconciliation";
+import { Button } from "@/components/ui/button";
+import {
+  churchSquareDemandHorizons,
+  churchSquareOrderWindowHours,
+  churchSquareOrderWindowLimit,
+  churchSquareOrderWindowPath,
+  churchSquareOrderWindowResponse,
+  summarizeChurchSquareFulfillmentDemand,
+  type ChurchSquareOrderWindowResponse,
+} from "@/lib/integrations/church-square-order-window";
+import { churchSquareReadySampleMinimum, summarizeChurchSquareReadiness, summarizeChurchSquareSources } from "@/lib/integrations/church-square-source-summary";
+import { churchSandwichBenchRecipes } from "@/lib/kitchen/church-sandwich-bench";
+
+type Order = ChurchSquareOrderWindowResponse["orders"][number];
+type Fulfillment = Order["fulfillments"][number];
+type State =
+  | { status: "idle" | "loading" | "forbidden" | "setup_pending" | "unavailable" }
+  | { status: "ready"; window: ChurchSquareOrderWindowResponse };
+
+const sources: Record<Order["source"], string> = {
+  DOORDASH: "DoorDash",
+  UBER_EATS: "Uber Eats",
+  GRUBHUB: "Grubhub",
+  SQUARE_ONLINE: "Square Online",
+  SQUARE_POS: "Square POS",
+  SQUARE_INVOICES: "Square Invoices",
+  UNKNOWN: "Unknown",
+};
+
+const statuses: Record<Order["status"], string> = {
+  OPEN: "Open",
+  COMPLETED: "Completed",
+  CANCELED: "Canceled",
+  DRAFT: "Draft",
+  UNKNOWN: "Unknown",
+};
+
+const fulfillmentTypes: Record<Fulfillment["type"], string> = {
+  PICKUP: "Pickup",
+  DELIVERY: "Delivery",
+  SHIPMENT: "Shipment",
+  UNKNOWN: "Fulfillment",
+};
+
+const fulfillmentStatuses: Record<Fulfillment["status"], string> = {
+  PROPOSED: "Proposed",
+  RESERVED: "Reserved",
+  PREPARED: "Ready",
+  COMPLETED: "Completed",
+  CANCELED: "Canceled",
+  FAILED: "Failed",
+  UNKNOWN: "Status unavailable",
+};
+
+const scheduledLabels: Record<Fulfillment["type"], string> = {
+  PICKUP: "Pickup window",
+  DELIVERY: "Scheduled delivery",
+  SHIPMENT: "Scheduled shipment",
+  UNKNOWN: "Scheduled",
+};
+
+const handoffLabels: Record<Fulfillment["type"], string> = {
+  PICKUP: "Picked up",
+  DELIVERY: "Delivered",
+  SHIPMENT: "Shipped",
+  UNKNOWN: "Handoff",
+};
+
+const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const number = new Intl.NumberFormat("en-US");
+const minutes = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
+const sandwichNames = new Map(churchSandwichBenchRecipes.map(({ key, name }) => [key, name]));
+const localTime = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+});
+
+function SquareFulfillmentDemand({ window }: { window: ChurchSquareOrderWindowResponse }) {
+  const demand = summarizeChurchSquareFulfillmentDemand(window);
+
+  return (
+    <div className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4">
+      <h4 id="church-square-demand-title" className="text-sm font-semibold">Pickup and delivery due</h4>
+      <p id="church-square-demand-scope" className="mt-1 text-xs text-[var(--ink-soft)]">
+        Counts cover pending fulfillments at the last manual check, including orders already ready for pickup or delivery. Time windows use Square’s promised times and overlap.
+        {window.hasMore && " Partial results. More orders may fall within this window."}
+      </p>
+      <div className="mt-2 overflow-x-auto">
+        <table aria-labelledby="church-square-demand-title" aria-describedby="church-square-demand-scope church-square-orders-bounds church-square-orders-check" className="w-full text-xs">
+          <thead className="text-[var(--ink-soft)]">
+            <tr className="border-b border-[var(--line)]">
+              <th scope="col" className="py-2 pr-1 text-left sm:pr-2">Type</th>
+              <th scope="col" className="px-1 py-2 text-right sm:px-2">Past due</th>
+              {churchSquareDemandHorizons.map((minutes) => (
+                <th key={minutes} scope="col" className="px-1 py-2 text-right sm:px-2">Next {minutes} min</th>
+              ))}
+              <th scope="col" className="py-2 pl-1 text-right sm:pl-2">No promised time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--line)] tabular-nums">
+            {(["PICKUP", "DELIVERY"] as const).map((type) => (
+              <tr key={type}>
+                <th scope="row" className="py-2 pr-2 text-left font-medium">{fulfillmentTypes[type]}</th>
+                <td className="px-2 py-2 text-right">{demand[type].pastDue}</td>
+                {churchSquareDemandHorizons.map((minutes) => (
+                  <td key={minutes} className="px-2 py-2 text-right">{demand[type].upcoming[minutes]}</td>
+                ))}
+                <td className="py-2 pl-2 text-right">{demand[type].noPromisedTime}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SourceTiming({ timing }: { timing: ReturnType<typeof summarizeChurchSquareSources>[number]["pickup"] }) {
+  return (
+    <>
+      <p className="font-medium tabular-nums">{timing.comparable ? `${timing.byTarget} of ${timing.comparable} by window start` : "No comparable times"}</p>
+      <p className="mt-0.5 text-[var(--ink-soft)]">{timing.fulfillmentCount} sampled</p>
+    </>
+  );
+}
+
+function SquareSourceActivity({ window }: { window: ChurchSquareOrderWindowResponse }) {
+  const rows = summarizeChurchSquareSources(window);
+  return (
+    <section aria-labelledby="church-square-sources-title" className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4">
+      <h4 id="church-square-sources-title" className="text-sm font-semibold">Order activity by Square source</h4>
+      <p id="church-square-sources-context" className="mt-1 text-xs leading-relaxed text-[var(--ink-soft)]">
+        {window.orders.length} {window.orders.length === 1 ? "order" : "orders"} in this manual sample. Square provides source hints. Orders without a recognized hint appear as Unknown source.
+        {window.hasMore && " Square may have more orders in this window."}
+      </p>
+      <p id="church-square-sources-timing" className="mt-1 text-xs leading-relaxed text-[var(--ink-soft)]">
+        Timing compares reported pickup and delivery with the start of their respective Square windows. Rejections can overlap order states.
+      </p>
+      <div className="mt-2 overflow-x-auto">
+        <table aria-labelledby="church-square-sources-title" aria-describedby="church-square-sources-context church-square-sources-timing church-square-orders-bounds church-square-orders-check" className="w-full text-left text-xs">
+          <thead className="border-b border-[var(--line)] text-[var(--ink-soft)]">
+            <tr>
+              <th scope="col" className="py-2 pr-2">Source hint</th>
+              <th scope="col" className="px-2 py-2">Orders</th>
+              <th scope="col" className="px-2 py-2">Pickup timing</th>
+              <th scope="col" className="py-2 pl-2">Delivery timing</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--line)]">
+            {rows.map((row) => (
+              <tr key={row.source} className="align-top">
+                <th scope="row" className="py-2 pr-2 font-medium">{row.source === "UNKNOWN" ? "Unknown source" : sources[row.source]}</th>
+                <td className="px-2 py-2">
+                  <p className="font-medium tabular-nums">{row.orderCount} {row.orderCount === 1 ? "order" : "orders"}</p>
+                  <p className="mt-0.5 text-[var(--ink-soft)]">{row.open} open · {row.completed} completed · {row.canceled} canceled</p>
+                  {(row.draft > 0 || row.unknownStatus > 0) && <p className="mt-0.5 text-[var(--ink-soft)]">{row.draft} draft · {row.unknownStatus} unknown status</p>}
+                  {row.rejectedOrders > 0 && <p className="mt-0.5 text-[var(--ink-soft)]">{row.rejectedOrders} with a rejection recorded</p>}
+                </td>
+                <td className="px-2 py-2"><SourceTiming timing={row.pickup} /></td>
+                <td className="py-2 pl-2"><SourceTiming timing={row.delivery} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function durationMinutes(value: number | null) {
+  if (value === null) return "—";
+  if (value > 0 && value < 3_000) return "<0.1 min";
+  return `${minutes.format(value / 60_000)} min`;
+}
+
+function SquareReadinessTiming({ window }: { window: ChurchSquareOrderWindowResponse }) {
+  const rows = summarizeChurchSquareReadiness(window);
+  return (
+    <section aria-labelledby="church-square-ready-title" className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4">
+      <h4 id="church-square-ready-title" className="text-sm font-semibold">Kitchen readiness from Square</h4>
+      <p id="church-square-ready-scope" className="mt-1 text-xs leading-relaxed text-[var(--ink-soft)]">
+        For ASAP orders, elapsed time runs from accepted or marked in progress to marked ready in Square. Across all schedules, the ready-by-target check uses the customer pickup window start or the courier pickup window start for delivery.
+        {window.hasMore && " This is a partial sample. Square may have more orders in the window."}
+        {!!window.fulfillmentConflictCount && ` Conflicting Square fulfillments excluded: ${window.fulfillmentConflictCount}.`}
+      </p>
+      {rows.length ? (
+        <>
+          <div className="mt-2 overflow-x-auto">
+            <table aria-labelledby="church-square-ready-title" aria-describedby="church-square-ready-scope church-square-ready-coverage church-square-orders-bounds" className="w-full text-left text-xs">
+              <thead className="border-b border-[var(--line)] text-[var(--ink-soft)]">
+                <tr>
+                  <th scope="col" className="py-2 pr-2">Source hint</th>
+                  <th scope="col" className="px-2 py-2">Type</th>
+                  <th scope="col" className="px-2 py-2">ASAP time pairs</th>
+                  <th scope="col" className="px-2 py-2">Median</th>
+                  <th scope="col" className="px-2 py-2">90th percentile</th>
+                  <th scope="col" className="py-2 pl-2">Ready by target</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line)] tabular-nums">
+                {rows.map((row) => (
+                  <tr key={`${row.source}:${row.type}`} className="align-top">
+                    <th scope="row" className="py-2 pr-2 font-medium">{row.source === "UNKNOWN" ? "Unknown source" : sources[row.source]}</th>
+                    <td className="px-2 py-2">{fulfillmentTypes[row.type]}</td>
+                    <td className="px-2 py-2">
+                      <p>{row.count} of {row.asapCount}</p>
+                      {(row.scheduledCount > 0 || row.unknownScheduleCount > 0) && (
+                        <p className="mt-0.5 text-[var(--ink-soft)]">{row.scheduledCount} scheduled · {row.unknownScheduleCount} schedule unknown</p>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2">{durationMinutes(row.medianMs)}</td>
+                    <td className="whitespace-nowrap px-2 py-2">{durationMinutes(row.p90Ms)}</td>
+                    <td className="py-2 pl-2">
+                      <p>{row.targetComparable ? `${row.readyByTarget} of ${row.targetComparable}` : "No comparable times"}</p>
+                      <p className="mt-0.5 text-[var(--ink-soft)]">{row.asapCount + row.scheduledCount + row.unknownScheduleCount} ready or completed</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p id="church-square-ready-coverage" className="mt-2 text-xs text-[var(--ink-soft)]">
+            A dash means too few valid time pairs. Median needs {churchSquareReadySampleMinimum.median}, and the 90th percentile needs {churchSquareReadySampleMinimum.p90}.
+          </p>
+        </>
+      ) : <p className="mt-2 text-xs text-[var(--ink-soft)]">No ready or completed pickup or delivery fulfillments in this sample.</p>}
+    </section>
+  );
+}
+
+function SquareSandwichMix({ window }: { window: ChurchSquareOrderWindowResponse }) {
+  const mix = window.itemMix;
+  if (!mix) return null;
+
+  return (
+    <section aria-labelledby="church-square-item-mix-title" className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4">
+      <h4 id="church-square-item-mix-title" className="text-sm font-semibold">Sandwich units by Square source</h4>
+      {mix.status === "unavailable" ? (
+        <p className="mt-1 text-xs text-[var(--ink-soft)]">The sandwich mix could not be verified for this check. Refresh orders to try again.</p>
+      ) : (
+        <>
+          <p id="church-square-item-mix-context" className="mt-1 text-xs leading-relaxed text-[var(--ink-soft)]">
+            Whole units of the six exact Regular sandwich variations on completed Square orders in this sample of recent order updates. Square supplies the source hints, which can reflect the app that modified the order. Use reconciliation to verify payments and refunds.
+            {window.hasMore && " This is a partial sample. Square may have more orders in the window."}
+          </p>
+          <p className="mt-2 text-xs text-[var(--ink-soft)]">
+            {number.format(mix.matchedOrders)} of {number.format(mix.evaluatedOrders)} completed orders had eligible sandwich units.
+            {mix.ordersWithoutLines > 0 && ` Orders with no item lines returned: ${number.format(mix.ordersWithoutLines)}.`}
+            {mix.ordersWithReturns > 0 && ` Orders excluded because Square reported returns: ${number.format(mix.ordersWithReturns)}.`}
+            {mix.excludedMatchedLines > 0 && ` Matching lines excluded: ${number.format(mix.excludedMatchedLines)}.`}
+          </p>
+          {mix.rows.length === 0 ? (
+            <p className="mt-2 text-xs text-[var(--ink-soft)]">{mix.evaluatedOrders === 0 ? "No completed orders in this sample." : "No eligible sandwich units in this sample."}</p>
+          ) : (
+            <details open={mix.rows.length <= 8} className="mt-2">
+              <summary className="focus-ring cursor-pointer rounded text-xs font-semibold">Sandwich and source breakdown · {number.format(mix.rows.length)} {mix.rows.length === 1 ? "row" : "rows"}</summary>
+              <div className="mt-2 overflow-x-auto">
+                <table aria-labelledby="church-square-item-mix-title" aria-describedby="church-square-item-mix-context church-square-orders-bounds church-square-orders-check" className="w-full text-left text-xs">
+                  <thead className="border-b border-[var(--line)] text-[var(--ink-soft)]">
+                    <tr>
+                      <th scope="col" className="py-2 pr-2">Sandwich</th>
+                      <th scope="col" className="px-2 py-2">Source hint</th>
+                      <th scope="col" className="px-2 py-2 text-right">Whole units</th>
+                      <th scope="col" className="py-2 pl-2 text-right">Distinct completed orders</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--line)] tabular-nums">
+                    {mix.rows.map((row) => (
+                      <tr key={`${row.recipeKey}:${row.source}`}>
+                        <th scope="row" className="py-2 pr-2 font-medium">{sandwichNames.get(row.recipeKey)}</th>
+                        <td className="px-2 py-2">{row.source === "UNKNOWN" ? "Unknown source" : sources[row.source]}</td>
+                        <td className="px-2 py-2 text-right">{number.format(row.units)}</td>
+                        <td className="py-2 pl-2 text-right">{number.format(row.orders)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-[var(--ink-soft)]">One order can appear in more than one sandwich row.</p>
+            </details>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function OrderFulfillmentSummary({ fulfillments }: { fulfillments: Order["fulfillments"] }) {
+  if (!fulfillments.length) return <span className="text-[var(--ink-faint)]">Unavailable</span>;
+
+  return (
+    <ul className="min-w-40 space-y-2">
+      {fulfillments.map((fulfillment, index) => {
+        const milestones = [
+          ["Placed", fulfillment.placedAt],
+          ["Accepted", fulfillment.acceptedAt],
+          [scheduledLabels[fulfillment.type], fulfillment.promisedAt],
+          ["Courier pickup target", fulfillment.courierPickupAt],
+          ["Ready", fulfillment.readyAt],
+          [handoffLabels[fulfillment.type], fulfillment.handoffAt],
+          ["Completed", fulfillment.completedAt === fulfillment.handoffAt ? null : fulfillment.completedAt],
+          ["Canceled", fulfillment.canceledAt],
+          ["Rejected", fulfillment.rejectedAt],
+        ] as const;
+        return (
+          <li key={index}>
+            <div className="font-medium">
+              {fulfillmentTypes[fulfillment.type]} · {fulfillmentStatuses[fulfillment.status]}
+            </div>
+            {milestones.map(([label, at]) => at && (
+              <div key={label} className="mt-0.5 whitespace-nowrap text-[var(--ink-soft)]">
+                {label} <time dateTime={at}>{localTime.format(new Date(at))}</time>
+              </div>
+            ))}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function ChurchSquareOrderWindow() {
+  const [state, setState] = useState<State>({ status: "idle" });
+
+  async function load() {
+    setState({ status: "loading" });
+    try {
+      const response = await fetch(churchSquareOrderWindowPath, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: AbortSignal.timeout(27_000),
+      });
+      if (response.status === 401 || response.status === 403 || response.status === 404) {
+        setState({ status: "forbidden" });
+        return;
+      }
+      const body: unknown = await response.json();
+      if (!response.ok) {
+        const setupPending = response.status === 503
+          && typeof body === "object" && body !== null && "status" in body && body.status === "setup_pending";
+        setState({ status: setupPending ? "setup_pending" : "unavailable" });
+        return;
+      }
+      const result = churchSquareOrderWindowResponse.safeParse(body);
+      setState(result.success ? { status: "ready", window: result.data } : { status: "unavailable" });
+    } catch {
+      setState({ status: "unavailable" });
+    }
+  }
+
+  return (
+    <section aria-labelledby="church-square-orders-title" className="mt-9 border-y border-[var(--line)] py-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 id="church-square-orders-title" className="text-xl font-semibold">Church Street Square orders</h3>
+          <p id="church-square-orders-bounds" className="mt-1 text-sm text-[var(--ink-soft)]">Manual check of up to {churchSquareOrderWindowLimit} orders updated in the previous {churchSquareOrderWindowHours} hours.</p>
+        </div>
+        <Button variant="secondary" size="sm" disabled={state.status === "loading"} onClick={load}>
+          {state.status === "loading" ? "Checking Square…" : state.status === "idle" ? "Load orders" : "Refresh orders"}
+        </Button>
+      </div>
+      <div id="church-square-orders-check" role="status" className="mt-3 text-xs text-[var(--ink-faint)]">
+        {state.status === "loading" && "Checking for recent order updates."}
+        {state.status === "forbidden" && "This order view requires access to Church Street financial reports."}
+        {state.status === "setup_pending" && "The Square order connection is awaiting setup."}
+        {state.status === "unavailable" && "Square orders could not be loaded. Try refreshing."}
+        {state.status === "ready" && (
+          <>
+            Last checked <time dateTime={state.window.checkedAt}>{localTime.format(new Date(state.window.checkedAt))} ET</time>
+            {state.window.orders.length === 0 && " · Square returned no orders in this read."}
+          </>
+        )}
+      </div>
+      {state.status === "ready" && <SquareFulfillmentDemand window={state.window} />}
+      {state.status === "ready" && <SquareReadinessTiming window={state.window} />}
+      {state.status === "ready" && state.window.orders.length > 0 && <SquareSourceActivity window={state.window} />}
+      {state.status === "ready" && <SquareSandwichMix window={state.window} />}
+      {state.status === "ready" && state.window.orders.length > 0 && (
+        <div className="mt-3 overflow-x-auto rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-[var(--line)] text-[var(--ink-faint)]">
+                <th scope="col" className="px-3 py-2">Order ID suffix</th>
+                <th scope="col" className="px-3 py-2">Source hint</th>
+                <th scope="col" className="px-3 py-2">Order state</th>
+                <th scope="col" className="px-3 py-2">Fulfillment (ET)</th>
+                <th scope="col" className="px-3 py-2 text-right">Recorded total</th>
+                <th scope="col" className="px-3 py-2 text-right">Updated (ET)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--line)]">
+              {state.window.orders.map((order, index) => (
+                <tr key={`${order.reference}-${index}`}>
+                  <th scope="row" className="whitespace-nowrap px-3 py-2 font-mono font-medium">{order.reference}</th>
+                  <td className="px-3 py-2">{sources[order.source]}</td>
+                  <td className="px-3 py-2">{statuses[order.status]}</td>
+                  <td className="px-3 py-2"><OrderFulfillmentSummary fulfillments={order.fulfillments} /></td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                    {order.totalCents === null ? "—" : money.format(order.totalCents / 100)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right">
+                    <time dateTime={order.updatedAt}>{localTime.format(new Date(order.updatedAt))}</time>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <ChurchSquareOrderEvidence />
+      <ChurchSquareReconciliation />
+      <ChurchSquareCateringInvoice />
+    </section>
+  );
+}

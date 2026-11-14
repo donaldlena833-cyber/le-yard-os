@@ -1112,6 +1112,37 @@ export type Database = {
           },
         ]
       };
+      "church_square_stock_invalidation_signals": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "revision": number
+          "updated_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "revision"?: number
+          "updated_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "revision"?: number
+          "updated_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "church_square_stock_invalidati_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
       "closeout_attachments": {
         Row: {
           "id": string
@@ -9375,6 +9406,14 @@ export type Database = {
         }
         Returns: boolean
       };
+      "acknowledge_church_square_stock_alert": {
+        Args: {
+          "p_location_id": string | null
+          "p_item_id": string | null
+          "p_episode_id": string | null
+        }
+        Returns: Json
+      };
       "acknowledge_preshift": {
         Args: {
           "p_request_id": string | null
@@ -9667,6 +9706,13 @@ export type Database = {
         }
         Returns: boolean
       };
+      "can_read_church_square_stock_scope": {
+        Args: {
+          "p_organization_id": string | null
+          "p_location_id": string | null
+        }
+        Returns: boolean
+      };
       "can_read_employee_management": {
         Args: {
           "p_employee_id": string | null
@@ -9877,6 +9923,16 @@ export type Database = {
         }
         Returns: Json
       };
+      "configure_square_production_source_connection": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_enabled": boolean | null
+        }
+        Returns: Json
+      };
       "configure_square_source_connection": {
         Args: {
           "p_request_id": string | null
@@ -9912,6 +9968,16 @@ export type Database = {
           "p_effective_from": string | null
           "p_effective_to": string | null
           "p_is_active": boolean | null
+        }
+        Returns: Json
+      };
+      "convert_church_catering_inquiry": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_inquiry_id": string | null
+          "p_title": string | null
+          "p_service_date": string | null
         }
         Returns: Json
       };
@@ -10126,6 +10192,16 @@ export type Database = {
         }
         Returns: string
       };
+      "detach_church_catering_invoice": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_job_id": string | null
+          "p_expected_revision": number | null
+          "p_expected_invoice_reference": string | null
+        }
+        Returns: Json
+      };
       "effective_capabilities": {
         Args: {
           "p_organization_id": string | null
@@ -10190,6 +10266,50 @@ export type Database = {
           "p_is_employee_visible"?: boolean | null
         }
         Returns: Database["public"]["Tables"]["employee_documents"]["Row"]
+      };
+      "get_church_catering_inquiry": {
+        Args: {
+          "p_location_id": string | null
+          "p_inquiry_id": string | null
+        }
+        Returns: Json
+      };
+      "get_church_sandwich_register_check_receipt": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_request_id": string | null
+        }
+        Returns: Json
+      };
+      "get_church_square_marketplace_link": {
+        Args: {
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_order_id": string | null
+        }
+        Returns: Json
+      };
+      "get_church_square_order_evidence": {
+        Args: {
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_order_id": string | null
+          "p_square_updated_at": string | null
+          "p_square_version": number | null
+        }
+        Returns: Json
+      };
+      "get_church_square_order_receipt_evidence": {
+        Args: {
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_order_id": string | null
+        }
+        Returns: Json
       };
       "get_pos_labor_sync_status": {
         Args: {
@@ -10481,6 +10601,96 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       };
+      "list_church_catering_inquiries": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_catering_jobs": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_catering_prep": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_ingredient_batch_queue": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_ingredient_batches": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_ingredient_evidence": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_sandwich_formulas": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_sandwich_pack_costs": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_sandwich_register_checks": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_sandwich_timing_runs": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_square_count_items": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_square_order_watch": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_square_reconciliation": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_square_stock_alerts": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
+      "list_church_square_webhook_receipts": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "manage_location_release_control": {
         Args: {
           "p_request_id": string | null
@@ -10722,6 +10932,87 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["checklist_responses"]["Row"]
       };
+      "record_church_ingredient_batch": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_ingredient_key": string | null
+          "p_evidence_revision": number | null
+          "p_supplier_lot": string | null
+          "p_batch_code": string | null
+          "p_handled_as": string | null
+          "p_handled_at": string | null
+          "p_discard_at": string | null
+        }
+        Returns: Json
+      };
+      "record_church_ingredient_batch_from_source": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_source_batch_id": string | null
+          "p_batch_code": string | null
+          "p_handled_at": string | null
+          "p_discard_at": string | null
+        }
+        Returns: Json
+      };
+      "record_church_ingredient_batch_measurement": {
+        Args: {
+          "p_location_id": string | null
+          "p_batch_id": string | null
+          "p_request_id": string | null
+          "p_expected_latest_id": string | null
+          "p_quantity": number | null
+          "p_observed_at": string | null
+        }
+        Returns: Json
+      };
+      "record_church_sandwich_pack_cost": {
+        Args: {
+          "p_location_id": string | null
+          "p_request_id": string | null
+          "p_ingredient_key": string | null
+          "p_evidence_revision": number | null
+          "p_pack_quantity": number | null
+          "p_pack_cost_cents": number | null
+          "p_invoice_date": string | null
+          "p_invoice_reference": string | null
+        }
+        Returns: Json
+      };
+      "record_church_sandwich_register_check": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_request_id": string | null
+          "p_recipe_key": string | null
+          "p_formula_revision": number | null
+          "p_square_item_id": string | null
+          "p_square_catalog_version": string | null
+          "p_outcome": string | null
+          "p_device": string | null
+          "p_reference": string | null
+        }
+        Returns: Json
+      };
+      "record_church_sandwich_timing_run": {
+        Args: {
+          "p_location_id": string | null
+          "p_request_id": string | null
+          "p_recipe_key": string | null
+          "p_attempted": number | null
+          "p_accepted": number | null
+          "p_crew_size": number | null
+          "p_build_seconds": number | null
+          "p_reference": string | null
+          "p_formula_revision"?: number | null
+          "p_prep_seconds"?: number | null
+          "p_pack_seconds"?: number | null
+          "p_note"?: string | null
+        }
+        Returns: Json
+      };
       "record_clock_in": {
         Args: {
           "p_request_id": string | null
@@ -10890,6 +11181,15 @@ export type Database = {
         }
         Returns: { "startsAt": string | null; "partySize": number | null; "kind": string | null }[]
       };
+      "resolve_church_ingredient_batch": {
+        Args: {
+          "p_location_id": string | null
+          "p_batch_id": string | null
+          "p_request_id": string | null
+          "p_outcome": string | null
+        }
+        Returns: Json
+      };
       "resolve_receipt_duplicate": {
         Args: {
           "p_request_id": string | null
@@ -11000,6 +11300,68 @@ export type Database = {
           "p_notes"?: string | null
         }
         Returns: Database["public"]["Tables"]["availability_rules"]["Row"]
+      };
+      "save_church_catering_job": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_title": string | null
+          "p_service_date": string | null
+          "p_stage": string | null
+          "p_job_id"?: string | null
+          "p_expected_revision"?: number | null
+        }
+        Returns: Json
+      };
+      "save_church_catering_packed_portions": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_job_id": string | null
+          "p_expected_revision": number | null
+          "p_packed_portions": Json | null
+          "p_reference": string | null
+        }
+        Returns: Json
+      };
+      "save_church_catering_prep": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_job_id": string | null
+          "p_expected_revision": number | null
+          "p_portions": Json | null
+          "p_publish": boolean | null
+        }
+        Returns: Json
+      };
+      "save_church_ingredient_evidence": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_ingredient_key": string | null
+          "p_expected_revision": number | null
+          "p_status": string | null
+          "p_supplier_sku": string | null
+          "p_source_reference": string | null
+          "p_allergen_notes": string | null
+          "p_cross_contact_notes": string | null
+          "p_storage_rule": string | null
+          "p_opened_rule": string | null
+          "p_prepped_rule": string | null
+        }
+        Returns: Json
+      };
+      "save_church_sandwich_formula": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_recipe_key": string | null
+          "p_expected_revision": number | null
+          "p_measurements": Json | null
+          "p_review_reference": string | null
+        }
+        Returns: Json
       };
       "save_employee_certification": {
         Args: {
@@ -11310,6 +11672,32 @@ export type Database = {
         }
         Returns: { "id": string | null; "created_at": string | null }[]
       };
+      "service_attach_church_catering_invoice": {
+        Args: {
+          "p_actor_id": string | null
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_job_id": string | null
+          "p_expected_revision": number | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_invoice_id": string | null
+          "p_order_id": string | null
+          "p_invoice_status": string | null
+          "p_invoice_service_date": string | null
+          "p_invoice_updated_at": string | null
+          "p_deposit_state": string | null
+          "p_deposit_due_cents": number | null
+          "p_deposit_completed_cents": number | null
+        }
+        Returns: Json
+      };
+      "service_authenticate_catering_client": {
+        Args: {
+          "p_key_hash": string | null
+        }
+        Returns: Json
+      };
       "service_availability_subjects": {
         Args: {
           "p_organization_id": string | null
@@ -11386,6 +11774,14 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_capture_catering_inquiry": {
+        Args: {
+          "p_client_id": string | null
+          "p_request_id": string | null
+          "p_payload": Json | null
+        }
+        Returns: Json
+      };
       "service_capture_guest_interest": {
         Args: {
           "p_request_id": string | null
@@ -11413,6 +11809,31 @@ export type Database = {
           "p_bucket_hash": string | null
           "p_limit": number | null
           "p_window_seconds": number | null
+        }
+        Returns: Json
+      };
+      "service_claim_church_square_count": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_item_id": string | null
+          "p_request_id": string | null
+          "p_quantity": string | null
+          "p_reason": string | null
+        }
+        Returns: Json
+      };
+      "service_claim_church_square_order_backfill": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+        }
+        Returns: Json
+      };
+      "service_claim_church_square_receipts": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
         }
         Returns: Json
       };
@@ -11469,6 +11890,26 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_commit_church_square_order_backfill": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_lease": string | null
+          "p_orders": Json | null
+        }
+        Returns: boolean
+      };
+      "service_complete_church_square_receipt": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_event_id": string | null
+          "p_lease": string | null
+          "p_facts"?: Json | null
+          "p_failure"?: string | null
+        }
+        Returns: boolean
+      };
       "service_complete_identity_delivery": {
         Args: {
           "p_id": string | null
@@ -11524,6 +11965,19 @@ export type Database = {
           "p_provider_status_code": number | null
           "p_block_subscription": boolean | null
           "p_now": string | null
+        }
+        Returns: Json
+      };
+      "service_configure_church_square_count_item": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_item_id": string | null
+          "p_label": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_variation_id": string | null
+          "p_enabled": boolean | null
         }
         Returns: Json
       };
@@ -11658,6 +12112,15 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_finish_church_square_count": {
+        Args: {
+          "p_request_id": string | null
+          "p_attempt_id": string | null
+          "p_status": string | null
+          "p_provider_count_id"?: string | null
+        }
+        Returns: Json
+      };
       "service_get_managed_reservation": {
         Args: {
           "p_organization_id": string | null
@@ -11718,6 +12181,17 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_ingest_square_production_source_window": {
+        Args: {
+          "p_request_id": string | null
+          "p_connection_id": string | null
+          "p_window_from": string | null
+          "p_window_to": string | null
+          "p_snapshots": Json | null
+          "p_source_scope": Json | null
+        }
+        Returns: Json
+      };
       "service_ingest_square_source_window": {
         Args: {
           "p_request_id": string | null
@@ -11727,6 +12201,20 @@ export type Database = {
           "p_snapshots": Json | null
         }
         Returns: Json
+      };
+      "service_list_church_square_stock_mappings": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+        }
+        Returns: Json
+      };
+      "service_mark_church_square_count_dispatched": {
+        Args: {
+          "p_request_id": string | null
+          "p_attempt_id": string | null
+        }
+        Returns: boolean
       };
       "service_merge_guests": {
         Args: {
@@ -11780,6 +12268,14 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_reconcile_church_square_stock": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_inventory": Json | null
+        }
+        Returns: Json
+      };
       "service_reconcile_user_invitation_auth": {
         Args: {
           "p_request_id": string | null
@@ -11787,6 +12283,19 @@ export type Database = {
           "p_error_code"?: string | null
         }
         Returns: Json
+      };
+      "service_record_church_square_webhook": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_event_id": string | null
+          "p_event_type": string | null
+          "p_created_at": string | null
+          "p_resource_id": string | null
+          "p_inventory": Json | null
+          "p_related_order_id"?: string | null
+        }
+        Returns: boolean
       };
       "service_record_guest_consent": {
         Args: {
@@ -11799,6 +12308,26 @@ export type Database = {
           "p_evidence_note": string | null
         }
         Returns: { "id": string | null; "captured_at": string | null }[]
+      };
+      "service_recover_church_square_order": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_order_id": string | null
+          "p_facts": Json | null
+        }
+        Returns: boolean
+      };
+      "service_release_church_square_order_backfill": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_lease": string | null
+          "p_failure": string | null
+        }
+        Returns: boolean
       };
       "service_renew_integration_sync_job_lease": {
         Args: {
@@ -11855,6 +12384,22 @@ export type Database = {
       };
       "service_runtime_schema_contract": {
         Args: Record<PropertyKey, never>
+        Returns: Json
+      };
+      "service_save_church_square_marketplace_link": {
+        Args: {
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_order_id": string | null
+          "p_actor_id": string | null
+          "p_square_updated_at": string | null
+          "p_square_version": number | null
+          "p_channel": string | null
+          "p_external_store_id": string | null
+          "p_external_order_id": string | null
+          "p_evidence": string | null
+        }
         Returns: Json
       };
       "service_save_guest": {
@@ -12162,6 +12707,15 @@ export type Database = {
       "validate_human_ai_decision": {
         Args: Record<PropertyKey, never>
         Returns: unknown
+      };
+      "void_church_ingredient_batch": {
+        Args: {
+          "p_location_id": string | null
+          "p_batch_id": string | null
+          "p_request_id": string | null
+          "p_reason": string | null
+        }
+        Returns: Json
       }
     }
     Enums: {
@@ -12244,6 +12798,7 @@ export const DatabaseObjectNames = {
       "checklist_runs",
       "checklist_template_items",
       "checklist_templates",
+      "church_square_stock_invalidation_signals",
       "closeout_attachments",
       "cogs_periods",
       "communication_case_notes",
@@ -12388,6 +12943,7 @@ export const DatabaseObjectNames = {
     ],
     Functions: [
       "accept_my_invitation",
+      "acknowledge_church_square_stock_alert",
       "acknowledge_preshift",
       "acknowledge_sop",
       "add_guest_note",
@@ -12423,6 +12979,7 @@ export const DatabaseObjectNames = {
       "can_manage_storage_scope",
       "can_operate_employee",
       "can_operate_org",
+      "can_read_church_square_stock_scope",
       "can_read_employee_management",
       "can_read_guest_note_scope",
       "can_read_guest_profile_scope",
@@ -12447,9 +13004,11 @@ export const DatabaseObjectNames = {
       "configure_reservation_location",
       "configure_retention_policy",
       "configure_service_shift_exception",
+      "configure_square_production_source_connection",
       "configure_square_source_connection",
       "configure_tip_pool_policy",
       "configure_user_capability_override",
+      "convert_church_catering_inquiry",
       "correct_prep_completion",
       "correct_reservation_status",
       "create_chat_channel",
@@ -12470,6 +13029,7 @@ export const DatabaseObjectNames = {
       "decide_shift_swap",
       "decide_time_off_request",
       "delete_availability_rule",
+      "detach_church_catering_invoice",
       "effective_capabilities",
       "employee_is_effectively_assigned",
       "end_employee_job_assignment",
@@ -12478,6 +13038,11 @@ export const DatabaseObjectNames = {
       "execute_owner_intelligence_task_proposal",
       "fail_owner_intelligence_run",
       "finalize_employee_document",
+      "get_church_catering_inquiry",
+      "get_church_sandwich_register_check_receipt",
+      "get_church_square_marketplace_link",
+      "get_church_square_order_evidence",
+      "get_church_square_order_receipt_evidence",
       "get_pos_labor_sync_status",
       "guard_active_owner_count",
       "guard_cash_movement_append_only",
@@ -12536,6 +13101,21 @@ export const DatabaseObjectNames = {
       "is_owner_pending_mfa",
       "is_self_employee",
       "jwt_aal",
+      "list_church_catering_inquiries",
+      "list_church_catering_jobs",
+      "list_church_catering_prep",
+      "list_church_ingredient_batch_queue",
+      "list_church_ingredient_batches",
+      "list_church_ingredient_evidence",
+      "list_church_sandwich_formulas",
+      "list_church_sandwich_pack_costs",
+      "list_church_sandwich_register_checks",
+      "list_church_sandwich_timing_runs",
+      "list_church_square_count_items",
+      "list_church_square_order_watch",
+      "list_church_square_reconciliation",
+      "list_church_square_stock_alerts",
+      "list_church_square_webhook_receipts",
       "manage_location_release_control",
       "manual_import_headers_are_valid",
       "mark_channel_read",
@@ -12563,6 +13143,12 @@ export const DatabaseObjectNames = {
       "recipe_cost_snapshot",
       "record_canonical_service_availability_event",
       "record_checklist_response",
+      "record_church_ingredient_batch",
+      "record_church_ingredient_batch_from_source",
+      "record_church_ingredient_batch_measurement",
+      "record_church_sandwich_pack_cost",
+      "record_church_sandwich_register_check",
+      "record_church_sandwich_timing_run",
       "record_clock_in",
       "record_clock_out",
       "record_guest_consent",
@@ -12581,6 +13167,7 @@ export const DatabaseObjectNames = {
       "request_time_entry_correction",
       "required_report_capability",
       "reservation_capacity_snapshot",
+      "resolve_church_ingredient_batch",
       "resolve_receipt_duplicate",
       "retry_integration_sync_job",
       "retry_waitlist_delivery",
@@ -12593,6 +13180,11 @@ export const DatabaseObjectNames = {
       "revoke_service_shift_exception",
       "revoke_user_invitation",
       "save_availability_rule",
+      "save_church_catering_job",
+      "save_church_catering_packed_portions",
+      "save_church_catering_prep",
+      "save_church_ingredient_evidence",
+      "save_church_sandwich_formula",
       "save_employee_certification",
       "save_employee_emergency_contact",
       "save_expense_category",
@@ -12617,6 +13209,8 @@ export const DatabaseObjectNames = {
       "seat_waitlist_entry",
       "serialize_tip_labor_evidence",
       "service_add_guest_note",
+      "service_attach_church_catering_invoice",
+      "service_authenticate_catering_client",
       "service_availability_subjects",
       "service_begin_reservation_delivery_run",
       "service_begin_reservation_message_delivery",
@@ -12624,19 +13218,26 @@ export const DatabaseObjectNames = {
       "service_book_public_reservation",
       "service_book_public_reservation_release_legacy",
       "service_cancel_public_reservation",
+      "service_capture_catering_inquiry",
       "service_capture_guest_interest",
       "service_claim_booking_rate_limit",
+      "service_claim_church_square_count",
+      "service_claim_church_square_order_backfill",
+      "service_claim_church_square_receipts",
       "service_claim_identity_delivery",
       "service_claim_integration_sync_job",
       "service_claim_owner_sms_alert",
       "service_claim_reservation_message_outbox",
       "service_claim_reservation_push_deliveries",
       "service_claim_sms_ai_run",
+      "service_commit_church_square_order_backfill",
+      "service_complete_church_square_receipt",
       "service_complete_identity_delivery",
       "service_complete_integration_sync_job",
       "service_complete_reservation_delivery_run",
       "service_complete_reservation_message_outbox",
       "service_complete_reservation_push_delivery",
+      "service_configure_church_square_count_item",
       "service_confirm_public_reservation",
       "service_connected_acceptance_marker",
       "service_create_public_reservation",
@@ -12650,21 +13251,29 @@ export const DatabaseObjectNames = {
       "service_fence_integration_sync_job",
       "service_finalize_employee_document",
       "service_finalize_guest_interest",
+      "service_finish_church_square_count",
       "service_get_managed_reservation",
       "service_guest_profiles",
       "service_guest_sensitive_metrics",
       "service_guest_sensitive_notes",
       "service_guest_sensitive_profiles",
       "service_ingest_pos_time_entry",
+      "service_ingest_square_production_source_window",
       "service_ingest_square_source_window",
+      "service_list_church_square_stock_mappings",
+      "service_mark_church_square_count_dispatched",
       "service_merge_guests",
       "service_modify_public_reservation",
       "service_provision_church_street",
       "service_provision_user_invitation_request",
       "service_public_release_state",
       "service_queue_user_invitation_delivery",
+      "service_reconcile_church_square_stock",
       "service_reconcile_user_invitation_auth",
+      "service_record_church_square_webhook",
       "service_record_guest_consent",
+      "service_recover_church_square_order",
+      "service_release_church_square_order_backfill",
       "service_renew_integration_sync_job_lease",
       "service_reservation_delivery_health",
       "service_reservation_guest_summaries",
@@ -12673,6 +13282,7 @@ export const DatabaseObjectNames = {
       "service_reservation_pacing_snapshot",
       "service_reservation_shift_snapshot",
       "service_runtime_schema_contract",
+      "service_save_church_square_marketplace_link",
       "service_save_guest",
       "service_set_church_street_active",
       "set_chat_channel_archived",
@@ -12708,6 +13318,7 @@ export const DatabaseObjectNames = {
       "update_sop_draft",
       "validate_employee_job_assignment",
       "validate_human_ai_decision",
+      "void_church_ingredient_batch",
     ],
     Enums: [
       "ai_run_kind",

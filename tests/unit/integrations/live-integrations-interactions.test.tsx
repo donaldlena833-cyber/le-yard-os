@@ -3,8 +3,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  configureSquareProductionSourceAction,
   createManualCsvUploadUrlAction,
   finalizeManualCsvImportAction,
+  syncSquareProductionSourceAction,
 } from "@/app/actions/workflows/integrations";
 import { LiveIntegrationsWorkspace } from "@/components/integrations/live-integrations-workspace";
 import type { LiveIntegrationsModel } from "@/data/read-models/integrations";
@@ -20,9 +22,11 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/app/actions/workflows/integrations", () => ({
+  configureSquareProductionSourceAction: vi.fn(),
   createManualCsvUploadUrlAction: vi.fn(),
   finalizeManualCsvImportAction: vi.fn(),
   retryIntegrationSyncAction: vi.fn(),
+  syncSquareProductionSourceAction: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -87,6 +91,42 @@ const model: LiveIntegrationsModel = {
 };
 
 describe("connected integration import interactions", () => {
+  it("saves only location identifiers and lets the owner retry the same unconfirmed import", async () => {
+    vi.mocked(configureSquareProductionSourceAction).mockResolvedValue({
+      ok: true, persisted: true, mode: "live",
+      data: { id: "50000000-0000-4000-8000-000000000001", status: "pending" },
+    });
+    vi.mocked(syncSquareProductionSourceAction).mockRejectedValueOnce(new Error("connection dropped"))
+      .mockResolvedValueOnce({
+        ok: true, persisted: true, mode: "live",
+        data: { id: "50000000-0000-4000-8000-000000000002", windowFrom: "2026-11-12T11:00:00Z", windowTo: "2026-11-13T11:00:00Z",
+          recordsProcessed: 3, versionsInserted: 3, headsAdvanced: 3, replayedRecords: 0, staleRecords: 0,
+          sourceCounts: { orders: 1, payments: 2, refunds: 0 }, financialPostingEnabled: false, reconciliation: "pending", replayed: true },
+      });
+    const connected = { ...model, connections: [{
+      id: "50000000-0000-4000-8000-000000000001", provider: "square", displayName: "Square · Ninth Avenue",
+      locationId: workspace.activeLocation.id, scopeLabel: "Ninth Avenue", adapterVersion: "square-source-evidence-v1",
+      status: "pending", lastSyncedAt: null, capabilities: [], createdAt: "2026-11-13T11:00:00Z", updatedAt: "2026-11-13T11:00:00Z",
+    }] };
+    render(<LiveIntegrationsWorkspace workspace={workspace} squareSetup="ready" squareSyncEnabled result={{ ok: true, data: connected }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Square integration details" }));
+    fireEvent.change(await screen.findByLabelText("Square merchant ID"), { target: { value: "MERCHANT_TEST" } });
+    fireEvent.change(screen.getByLabelText("Square location ID"), { target: { value: "LOCATION_TEST" } });
+    fireEvent.click(screen.getByRole("button", { name: "Verify and save location" }));
+    expect(await screen.findByText(/location verified and saved/)).toBeTruthy();
+    expect(configureSquareProductionSourceAction).toHaveBeenCalledWith({
+      organizationId: workspace.organization.id, locationId: workspace.activeLocation.id,
+      requestId: expect.any(String), merchantId: "MERCHANT_TEST", squareLocationId: "LOCATION_TEST",
+    });
+    const run = screen.getByRole("button", { name: "Import last 24 hours" });
+    fireEvent.click(run);
+    expect(await screen.findByText(/could not be confirmed/)).toBeTruthy();
+    fireEvent.click(run);
+    expect(await screen.findByText(/Read 1 orders, 2 payments, and 0 refunds/)).toBeTruthy();
+    expect(vi.mocked(syncSquareProductionSourceAction).mock.calls[1]).toEqual(
+      vi.mocked(syncSquareProductionSourceAction).mock.calls[0],
+    );
+  });
   it("blocks file selection before upload when no processor is deployed", () => {
     render(
       <LiveIntegrationsWorkspace

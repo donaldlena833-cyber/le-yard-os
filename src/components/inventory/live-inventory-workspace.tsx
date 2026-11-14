@@ -70,6 +70,7 @@ import {
   localDateTimeParts,
   zonedLocalToIso,
 } from "@/data/read-models/local-time";
+import { churchSandwichBenchRecipes, type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
 import type { LiveReadResult } from "@/data/read-models/shared";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import {
@@ -2227,6 +2228,7 @@ export function LiveInventoryWorkspace({
   const [recipeDialog, setRecipeDialog] = useState<{
     requestId: string;
     record?: RecipeRecord;
+    benchRecipe?: ChurchSandwichBenchRecipe;
   } | null>(null);
   const [mutationReturnFocus, setMutationReturnFocus] =
     useState<HTMLElement | null>(null);
@@ -3317,7 +3319,7 @@ export function LiveInventoryWorkspace({
             ) : null}
 
             {activeTab === "recipes" ? (
-              <section className="mt-5">
+              <section id="kitchen-recipes" className="mt-5 scroll-mt-20">
                 <SectionHeading
                   title="Recipe costing"
                   detail="Edit recipe specs here. Ingredient prices and opening stock remain available in Setup."
@@ -3348,6 +3350,29 @@ export function LiveInventoryWorkspace({
                     ) : undefined
                   }
                 />
+                {model.churchStreet && canManageRecipes && model.catalog ? (
+                  <div className="mb-5 rounded-2xl border border-[var(--line)] p-4">
+                    <h4 className="text-sm font-semibold">Church Street sandwich trials</h4>
+                    <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
+                      {model.catalog.units.some((unit) => unit.isActive && unit.dimension === "count")
+                        ? "Review the bench portions and save an editable draft. Match each ingredient to the verified catalog item before scheduling prep."
+                        : "Add an active count unit such as Each in Costs & stock to save a one-sandwich draft."}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {churchSandwichBenchRecipes.map((benchRecipe) => {
+                        const record = model.catalog?.recipes.find(({ name }) => name === benchRecipe.name);
+                        const canStart = model.catalog?.units.some((unit) => unit.isActive && unit.dimension === "count");
+                        return (
+                          <Button key={benchRecipe.name} size="sm" variant="secondary"
+                            disabled={!record && !canStart}
+                            onClick={() => setRecipeDialog({ requestId: crypto.randomUUID(), record, benchRecipe })}>
+                            {record ? `Edit ${benchRecipe.name}` : `Draft ${benchRecipe.name}`}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
                 {model.recipes.length ? (
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {model.recipes.map((recipe) => {
@@ -3381,6 +3406,9 @@ export function LiveInventoryWorkspace({
                                   setRecipeDialog({
                                     requestId: crypto.randomUUID(),
                                     record: editableRecipe,
+                                    benchRecipe: model.churchStreet
+                                      ? churchSandwichBenchRecipes.find(({ name }) => name === recipe.name)
+                                      : undefined,
                                   })
                                 }
                                 className="focus-ring flex size-10 shrink-0 items-center justify-center rounded-full bg-[var(--paper-strong)] shadow-[var(--shadow-card)] text-[var(--ink-faint)] transition hover:border-[var(--line-strong)] hover:text-[var(--ink)]"

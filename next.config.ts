@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: projectRoot,
   outputFileTracingIncludes: {
     "/api/twilio/*": ["./docs/le-yard-receptionist.md", "./docs/le-yard-receptionist-live.md", "./public/audio/le-yard-room-tone.wav"],
+    "/api/workspace/church-sandwich-staff-resources/*": ["./src/lib/kitchen/church-staff-documents/*.pdf"],
   },
   experimental: {
     taint: true,

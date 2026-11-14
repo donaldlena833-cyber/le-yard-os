@@ -120,6 +120,7 @@ export interface LiveIncident {
 export interface LiveOperationsModel {
   date: string;
   loadedAt: string;
+  churchStreet: boolean;
   timeZone: string;
   currencyCode: string;
   currentEmployeeId: string | null;
@@ -170,13 +171,13 @@ export async function loadLiveOperations(
     const [locationResult, organizationResult] = await Promise.all([
       supabase
         .from("locations")
-        .select("timezone")
+        .select("timezone, code, is_active")
         .eq("organization_id", organizationId)
         .eq("id", locationId)
         .single(),
       supabase
         .from("organizations")
-        .select("currency_code")
+        .select("currency_code, slug, status")
         .eq("id", organizationId)
         .single(),
     ]);
@@ -473,6 +474,9 @@ export async function loadLiveOperations(
     return readSuccess({
       date,
       loadedAt,
+      churchStreet: workspace.serviceSettings?.serviceModel === "counter"
+        && organizationResult.data.slug === "le-yard-church-street" && organizationResult.data.status === "active"
+        && locationResult.data.code === "CHURCH" && locationResult.data.is_active,
       timeZone,
       currencyCode: organizationResult.data.currency_code,
       currentEmployeeId: currentEmployee?.id ?? null,

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { squareProductionAccessToken } from "@/lib/integrations/square-production.server";
 import { runSquareSourceSync, squareSyncInputSchema, SquareSourceSyncError } from "@/lib/integrations/square-sync.server";
 
 export const runtime = "nodejs";
@@ -23,13 +24,19 @@ export async function POST(request: Request) {
   if (!authorized(request)) return json({ error: "Unauthorized" }, 401);
   if (process.env.LE_YARD_SQUARE_SOURCE_SYNC_ENABLED?.trim() !== "true") return json({ error: "Square source sync is disabled." }, 503);
   if (request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() !== "application/json") return json({ error: "A JSON source request is required." }, 415);
-  const connectionId = process.env.SQUARE_SOURCE_CONNECTION_ID?.trim(), accessToken = process.env.SQUARE_SANDBOX_ACCESS_TOKEN?.trim();
-  if (!connectionId || !accessToken) return json({ error: "Square Sandbox configuration is unavailable." }, 503);
+  const environment = process.env.SQUARE_SOURCE_ENVIRONMENT?.trim() || "sandbox";
+  if (environment !== "sandbox" && environment !== "production") return json({ error: "Square source environment is invalid." }, 503);
+  const connectionId = process.env.SQUARE_SOURCE_CONNECTION_ID?.trim();
+  const accessToken = environment === "production" ? squareProductionAccessToken() : process.env.SQUARE_SANDBOX_ACCESS_TOKEN?.trim();
+  if (!connectionId || !accessToken) return json({ error: "Square source configuration is unavailable for the selected environment." }, 503);
   try {
     const input = squareSyncInputSchema.safeParse(await readBody(request));
     if (!input.success) return json({ error: "Valid request identity and elapsed source dates are required." }, 400);
-    const result = await runSquareSourceSync(input.data, { admin: createAdminClient(), connectionId, accessToken });
-    return json({ ...result, providerAccepted: false });
+    if (environment === "production" && Date.parse(input.data.windowTo) - Date.parse(input.data.windowFrom) > 72 * 60 * 60 * 1000) {
+      return json({ error: "A production pilot source window cannot exceed 72 elapsed hours." }, 400);
+    }
+    const result = await runSquareSourceSync(input.data, { admin: createAdminClient(), connectionId, accessToken, environment });
+    return json({ ...result, environment, providerAccepted: false });
   } catch (error) {
     return json({ error: error instanceof SquareSourceSyncError ? error.message : "Square source sync requires review." }, error instanceof SquareSourceSyncError ? error.status : 502);
   }

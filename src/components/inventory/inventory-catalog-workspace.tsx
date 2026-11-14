@@ -32,6 +32,7 @@ import type { LiveInventoryCatalog, LiveInventoryModel } from "@/data/read-model
 import { localDateTimeParts, zonedLocalToIso } from "@/data/read-models/local-time";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { parseInventoryMoneyToCents, parseInventoryQuantity } from "@/lib/inventory/input-parsing";
+import { churchSandwichBread, type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
 import { hasCapability } from "@/lib/permissions/capabilities";
 import { cn, formatMoney } from "@/lib/utils";
 import { InventoryModalFrame } from "./inventory-modal-frame";
@@ -54,7 +55,12 @@ type CatalogDialog =
   | { kind: "cost"; requestId: string }
   | { kind: "stock"; requestId: string }
   | { kind: "par"; requestId: string }
-  | { kind: "recipe"; requestId: string; record?: RecipeRecord };
+  | {
+      kind: "recipe";
+      requestId: string;
+      record?: RecipeRecord;
+      benchRecipe?: ChurchSandwichBenchRecipe;
+    };
 
 const emptyCatalog: LiveInventoryCatalog = {
   units: [],
@@ -408,10 +414,13 @@ export function RecipeEditorDialog({
   onSave: (input: unknown) => Promise<boolean>;
 }) {
   const record = dialog.record;
+  const benchRecipe = dialog.benchRecipe;
+  const newBenchDraft = Boolean(benchRecipe && !record);
   const units = catalog.units.filter((unit) => unit.isActive);
+  const yieldUnits = newBenchDraft ? units.filter((unit) => unit.dimension === "count") : units;
   const items = catalog.items.filter((item) => item.isActive);
   const initialItem = items[0];
-  const [ingredients, setIngredients] = useState(() => (record?.ingredients.length ? record.ingredients : initialItem ? [{ inventoryItemId: initialItem.id, unitId: initialItem.baseUnitId, quantity: 1, wasteFactor: 0 }] : []).map((ingredient) => ({ key: crypto.randomUUID(), inventoryItemId: ingredient.inventoryItemId, unitId: ingredient.unitId, quantity: String(ingredient.quantity), wastePercent: String(ingredient.wasteFactor * 100) })));
+  const [ingredients, setIngredients] = useState(() => (record?.ingredients ?? (!benchRecipe && initialItem ? [{ inventoryItemId: initialItem.id, unitId: initialItem.baseUnitId, quantity: 1, wasteFactor: 0 }] : [])).map((ingredient) => ({ key: crypto.randomUUID(), inventoryItemId: ingredient.inventoryItemId, unitId: ingredient.unitId, quantity: String(ingredient.quantity), wastePercent: String(ingredient.wasteFactor * 100) })));
   const itemById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const compatibleUnits = (itemId: string) => {
     const item = itemById.get(itemId);
@@ -451,20 +460,33 @@ export function RecipeEditorDialog({
       yieldQuantity,
       yieldUnitId: String(form.get("yieldUnitId")),
       menuPriceCents,
-      isActive: form.get("isActive") === "on",
+      isActive: !newBenchDraft && form.get("isActive") === "on",
       ingredients: parsedIngredients.map((ingredient) => ({ ...ingredient, quantity: ingredient.quantity!, wasteFactor: ingredient.wasteFactor! / 100 })),
     });
     if (succeeded) onClose();
   };
 
   return (
-    <InventoryModalFrame title={record ? `Edit ${record.name}` : "Add recipe"} description="Update the yield, menu price, status, and every ingredient in one place." labelledBy="catalog-recipe-dialog" notice={notice} onClose={onClose} width="max-w-5xl" layout="task">
+    <InventoryModalFrame title={record ? `Edit ${record.name}` : newBenchDraft ? `Draft ${benchRecipe?.name}` : "Add recipe"} description={newBenchDraft ? "Save an inactive recipe for chef review." : "Update the yield, menu price, status, and every ingredient in one place."} labelledBy="catalog-recipe-dialog" notice={notice} onClose={onClose} width="max-w-5xl" layout="task">
       <form className="flex h-full min-h-0 flex-col" onSubmit={(event) => void submit(event)}>
         <div data-recipe-editor-scroll className="grid min-h-0 flex-1 gap-6 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7 sm:py-6">
           <section className="rounded-2xl bg-[var(--paper)] shadow-[var(--shadow-card)] p-4 sm:p-5">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Field label="Recipe name"><input name="name" required autoFocus maxLength={160} defaultValue={record?.name} className={fieldClass} /></Field><Field label="Yield"><input name="yieldQuantity" required inputMode="decimal" defaultValue={record?.yieldQuantity ?? 1} className={fieldClass} /></Field><Field label="Yield unit"><select name="yieldUnitId" required defaultValue={record?.yieldUnitId} className={fieldClass}>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} ({unit.symbol})</option>)}</select></Field><Field label={`Menu price · ${model.currencyCode}`}><input name="menuPrice" inputMode="decimal" defaultValue={record?.menuPriceCents == null ? "" : (record.menuPriceCents / 100).toFixed(2)} className={fieldClass} placeholder="0.00" /></Field></div>
-            <div className="mt-4 max-w-sm"><Toggle name="isActive" defaultChecked={record?.isActive ?? false} label="Published and active" /></div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Field label="Recipe name"><input name="name" required autoFocus maxLength={160} defaultValue={record?.name ?? benchRecipe?.name} className={fieldClass} /></Field><Field label="Yield"><input name="yieldQuantity" required inputMode="decimal" defaultValue={record?.yieldQuantity ?? 1} className={fieldClass} /></Field><Field label="Yield unit"><select name="yieldUnitId" required defaultValue={record?.yieldUnitId ?? (newBenchDraft ? "" : undefined)} className={fieldClass}>{newBenchDraft ? <option value="">Select one sandwich unit</option> : null}{yieldUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} ({unit.symbol})</option>)}</select></Field><Field label={`Menu price · ${model.currencyCode}`}><input name="menuPrice" inputMode="decimal" defaultValue={record?.menuPriceCents == null ? "" : (record.menuPriceCents / 100).toFixed(2)} className={fieldClass} placeholder="0.00" /></Field></div>
+            {newBenchDraft ? null : <div className="mt-4 max-w-sm"><Toggle name="isActive" defaultChecked={record?.isActive ?? false} label="Published and active" /></div>}
           </section>
+          {benchRecipe ? (
+            <section aria-label="Bench portions" className="rounded-2xl border border-[var(--line)] p-4 sm:p-5">
+              <h4 className="text-sm font-semibold">Bench portions per sandwich</h4>
+              <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Use verified inventory items and compatible units when entering the trial formula.</p>
+              <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm">
+                <dt>{churchSandwichBread}</dt><dd>1 each</dd>
+                {benchRecipe.portions.map(({ ingredient, grams }) => (
+                  <div key={ingredient} className="contents"><dt>{ingredient}</dt><dd>{grams} g</dd></div>
+                ))}
+              </dl>
+              <p className="mt-3 text-[13px] text-[var(--ink-faint)]">{benchRecipe.build}</p>
+            </section>
+          ) : null}
           <section>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3"><div><h4 className="text-sm font-semibold">Ingredients</h4><p className="mt-1 text-[13px] text-[var(--ink-faint)]">Edit the item, measured quantity, unit, or expected waste.</p></div><Button type="button" size="sm" variant="secondary" disabled={!initialItem || busy} onClick={() => setIngredients((current) => [...current, { key: crypto.randomUUID(), inventoryItemId: initialItem!.id, unitId: initialItem!.baseUnitId, quantity: "1", wastePercent: "0" }])}><Plus className="size-3.5" />Add ingredient</Button></div>
             <div className="grid gap-3">

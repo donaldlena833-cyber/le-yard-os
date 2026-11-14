@@ -1,0 +1,73 @@
+# Square stock counts at Church Street
+
+Operations → Inventory shows Square stock counts to assigned Church Street managers and staff with the inventory count capability. An owner or admin selects eligible Square variations to show on the count screen. Use this for sellable, physically countable units such as a short run of prepared sandwiches or packaged items. Ingredient counts belong in Operations inventory.
+
+## Connect the café
+
+1. Create the café application in the Square Developer Console and verify its production merchant and active location. The adapter verifies the exact merchant, Square location, address at 140 Church Street, New York 10007, USD, and the New York time zone. Use the café's own credential. A scoped OAuth token needs `MERCHANT_PROFILE_READ`, `ITEMS_READ`, `INVENTORY_READ`, and `INVENTORY_WRITE`. Plan for credential rotation. Store it in the Operations production project as `SQUARE_CHURCH_ACCESS_TOKEN`, with server-only `SQUARE_CHURCH_MERCHANT_ID` and `SQUARE_CHURCH_LOCATION_ID`.
+2. Follow the shared schema release process for Operations, Host, and Phone. Enable `LE_YARD_CHURCH_SQUARE_COUNTS_ENABLED=true` only on Operations Production when the stock pilot starts.
+3. Start with one sandwich. In **Operations → Church Street → Inventory → Square stock counts**, have an owner or admin run the sandwich catalog check. Compare the exact Square variation and tracking status. The diagnostic reports whether Operations has confirmed a physical count for that variation. Use Square Dashboard for its latest stock. Have the manager or chef physically count whole sellable units. In Square’s item editor at Le Yard Cafe, switch the exact variation to **Track by stock count** and initialize it using that observation. Square can mark an item sold out when tracking starts without stock. Back in Operations, choose **Find tracked items in Square** and add the exact variation to the count screen.
+4. Have a manager and an appropriately authorized chef each take a fresh count and verify the saved count in Square inventory history. Compare POS availability, and separately check any connected customer storefront. For an actual zero, verify sold-out behavior, then repeat with an actual restock. Use Sandbox or a controlled test item to exercise zero and restore before doing so with a live item.
+
+## Turn on Square events and live stock alerts
+
+In the Square production developer application, create a webhook subscription with the exact URL `https://operations.leyardny.com/api/integrations/square/webhook` and API version `2026-09-16`. The receiver verifies the signature using the registered URL and original request bytes. Save the subscription signature key as `SQUARE_CHURCH_WEBHOOK_SIGNATURE_KEY` in Operations Production and enable `LE_YARD_CHURCH_SQUARE_WEBHOOK_ENABLED=true` after the database migration is applied. The configured Church merchant and location IDs must match the Square account in the subscription.
+
+- For stock alerts, subscribe to `inventory.count.updated`. Add an eligible Church Street tracked item to Operations so an incoming count maps to a known item. Operations raises an alert when the latest count reaches five units or fewer, keeps the alert active while it is low, and clears it when stock goes above five. A repeat drop opens a fresh alert.
+- For the Square event health feed, subscribe to `order.created`, `order.updated`, `order.fulfillment.updated`, `payment.created`, `payment.updated`, `refund.created`, `refund.updated`, `invoice.published`, `invoice.updated`, `invoice.payment_made`, `invoice.refunded`, and `invoice.canceled`. The feed shows receipt types and times. Order detail, channel attribution, and money totals need an authenticated Square API read and periodic reconciliation. Square’s webhook overview and individual order event reference describe different creation triggers. Verify which events each staffed ordering route emits.
+
+To verify transport, send an `order.created` test event from the production subscription in Square Developer Console. Check that the log shows the configured Operations URL, a success status, and **Test event** set to true. Square uses an example merchant and location in the test payload. When these are outside Church Street scope, the receiver can acknowledge the signed message without saving a receipt. For ingestion acceptance, use a real staffed Church Street ticket and compare the signed receipt and exact order revision in Operations Today.
+
+Verify using the dedicated `LY-OPS-STOCK-TEST` fixture. Change its count from above five to five and confirm the receipt, alert, and quantity in Operations. Repeat with four, restock above five, then lower it again to confirm rearming. Restore the agreed test quantity at the end. Check the webhook delivery log for 2xx acknowledgments and confirm there are no repeat alert popups while a single alert stays active. Square retries unsuccessful deliveries for up to 24 hours.
+
+On a low-stock alert, choose **Acknowledge** to record who saw that alert for the team. The item stays flagged in Inventory with its latest Square quantity until stock goes above five. The popup's close button hides it in the current browser tab. Check acknowledgment from a second signed-in Church Street screen, then restock and lower the test item again to verify the new alert. Acknowledgment does not submit a new stock count or change order availability.
+
+[Square webhook signatures](https://developer.squareup.com/docs/webhooks/step3validate) · [Square webhook retries](https://developer.squareup.com/docs/webhooks/overview) · [Square test delivery](https://developer.squareup.com/reference/square/webhook-subscriptions-api/test-webhook-subscription) · [Square webhook event overview](https://developer.squareup.com/docs/webhooks/v2webhook-events-tech-ref#orders) · [Square order-created reference](https://developer.squareup.com/reference/square/orders-api/webhooks/order.created)
+
+For a production rehearsal, Operations can optionally display the stock-only Square item whose exact variation ID is configured in `SQUARE_CHURCH_TEST_VARIATION_ID`. The item must have SKU `LY-OPS-STOCK-TEST`, be tracked at the café, and be explicitly non-sellable. The café's dedicated test item is excluded from customer menus. Leave this setting empty on deployments that don't need a rehearsal.
+
+## During service
+
+After Operations confirms a physical count, it uses the separately verified current Square stock and its calculation time to check the shared alert. A signed Square event or the scheduled stock read can also update the alert. The latest Square observation takes precedence. Open or return to Operations to see the popup. If an alert says the check is delayed, verify stock in Square before acting on the quantity.
+
+Enter the whole number of units currently on hand and a short reason. Square applies a physical count in order of observation and may report a different current quantity if sales have occurred since the count. Operations shows a confirmed result after it finds the matching Square history entry and reads current in-stock quantity.
+
+In **Check the six sandwich variations**, select **Check Square availability** to read the current Church Street flag for each variation, including untracked items. Square can flag an item sold out while the stock count is positive. A time beside the flag is the expiration reported by Square. Check again after placing or clearing a hold in Square, then check the guest view for each active channel. [Square sold-out flags](https://developer.squareup.com/docs/inventory-api/monitor-sold-out-status-on-item-variation)
+
+If an import stalls, select **Check pending count**. Operations keeps the same request ID and observed time, serializes attempts to send it, and uses the same Square idempotency key. After 24 hours it only checks Square history. If it still cannot confirm, use Square inventory history and the Square POS as the operational fallback, and ask an owner to review the unresolved record. Temporarily unavailable dishes and modifiers use Square’s native availability controls. A zero physical count means zero sellable units were actually counted.
+
+[Square batch inventory changes](https://developer.squareup.com/reference/square/inventory-api/batch-change-inventory) · [Physical counts](https://developer.squareup.com/reference/square/objects/InventoryPhysicalCount) · [Square availability controls](https://squareup.com/help/us/en/article/8495-beta-item-availability)
+
+Square distinguishes physical stock on hand from stock available after commitments. Storefront status and current Square inventory should be checked separately at handoff. [Enable tracking and enter the first count](https://squareup.com/help/us/en/article/8331-set-up-inventory-tracking)
+
+## Check Square payouts
+
+In the Church Street workspace, authorized managers with financial reporting access can open **Today → Square payouts** and request the latest seven days of Square transfers. The live read uses the same Church Street connection as orders. If that connection uses OAuth, the credential needs the separate `PAYOUTS_READ` scope. An access error leaves the result unavailable.
+
+Record the Square payout reference, signed amount, and provider status. Compare it to the corresponding entry on the bank statement. Square can update a paid payout to failed if a rejection arrives later. Use the separate DoorDash, Uber Eats, and Grubhub statements for their respective settlements, even when those orders appear in Square. [Square Payouts API](https://developer.squareup.com/docs/payouts-api/overview) · [List Payouts permissions](https://developer.squareup.com/reference/square/payouts-api/ListPayouts)
+
+## Rehearse sandwich availability in Kitchen
+
+In **Kitchen → Sandwich portion feasibility**, count whole baguettes and weigh ready-to-use fillings. Include loose usable ingredients set aside for sandwiches **Still to build** on the selected catering date so the planner deducts them once. Refresh Kitchen and recount usable stock after catering packing or a correction. An uncounted ingredient stays unknown. Enter zero only after checking that the ingredient is unavailable.
+
+Use the stand-alone limits to look for a bottleneck and the combined mix to check competing demand for the same ingredient. The current Church Street builds are available in **Bench rehearsal** for trial planning. The planner keeps inputs on the page and does not post inventory or change Square item status. Use the exact Square variation and the normal manager count or availability workflow after independently verifying sellable units. [Square physical count](https://developer.squareup.com/reference/square/objects/InventoryPhysicalCount) · [Square availability controls](https://squareup.com/help/us/en/article/8495-beta-item-availability)
+
+Switching between Bench rehearsal and Approved recipes clears entered counts and extra portions. Changes to recipe or supplier evidence and catering totals also clear these entries. Enter fresh measurements for the current basis.
+
+In **Kitchen → Chef signoff for sandwich recipes**, sign one recipe using the chef's recorded measurements and the current reviewed supplier evidence. Record as-received and usable amounts in the same unit, plus the usable quantity for one sandwich. Use whole units for bread and grams for fillings. Include the worksheet reference so staff can trace the measurements. The planner uses the latest signed recipe while every supplier revision still matches. When a supplier label changes, recheck and sign a new recipe revision. Use the supplier evidence record and lot label for actual discard times.
+
+## Record an opened or prepped batch
+
+In **Kitchen → Batch labels**, select the exact reviewed supplier product. Enter the lot from the pack, a unique batch code, the actual opened or prepped time, and the earliest discard time approved for that batch. Carry forward the earliest applicable limit from the pack, opening or prep rule, and any source batch. Transferring it to another container leaves its clock in place. Match the physical container label to the saved record.
+
+In **Open batches by discard time**, use **Measure remaining** on a current, unexpired batch. Count the whole baguettes or weigh usable filling in grams without the container. Confirm the Eastern observation time and save. Check physically before entering zero. Record **Used up** or **Discarded** separately when the batch ends. Before using the planner, check other usable batches and sealed stock as well.
+
+The log is separate from stock and prep completion. If a record is incorrect, void it with a reason and remove or correct the physical label. Record the corrected label with a fresh batch code. Review any active batch whose supplier evidence changes before serving from it. [NYC Health Code Article 81](https://www.nyc.gov/assets/doh/downloads/pdf/about/healthcode/health-code-article81.pdf)
+
+## Check Square item allergen tags
+
+In **Kitchen → Square allergen check**, staff with recipe management access can read the native Square catalog tags for the six Church Street sandwiches. The supplier side displays the exact reviewed label and its cross-contact statement when all ingredient revisions match the signed recipe. An empty tag list gives no information about which allergens an item contains or shared prep risks.
+
+At the Church Street register, press and hold the item tile and compare the details with the reviewed supplier records. Check direct pickup and each active marketplace separately. Run a supervised order with a rehearsal allergy note and see whether it reaches Order Manager and the actual kitchen display or printer. [Square food and beverage details](https://developer.squareup.com/reference/square/objects/CatalogItemFoodAndBeverageDetails) · [Square restaurant menus](https://squareup.com/help/us/en/article/6424-create-menus-with-square-for-restaurants) · [Square kitchen tickets](https://squareup.com/help/us/en/article/5194-print-order-tickets)
+
+After comparing the physical tile, use **Save register check** on the exact sandwich in Kitchen. Choose the observed result, then enter the register device label and a short internal evidence or follow-up reference. The record preserves the signed recipe revision, Square item and catalog version, reviewer and Eastern time. If the signed recipe or a supplier label changes, repeat the review. Run **Check Square tags again** to compare the saved observation with the latest Square item. Use the first-shift checklist to record guest checkout and kitchen ticket results separately.

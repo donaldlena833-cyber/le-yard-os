@@ -96,7 +96,7 @@ try {
     report.files.push(item);
   }
   await verifyChurchStreetTenant({
-    query: (sql) => db.query(sql),
+    query: (sql, params) => db.query(sql, params),
     exec: (sql) => db.query(sql),
   });
   report.churchStreetTenant = "passed";

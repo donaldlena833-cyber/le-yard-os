@@ -23,6 +23,16 @@ function mockRequest(overrides: Partial<Record<string, unknown>> = {}) {
 }
 
 describe("Square read-only source protocol", () => {
+  it("binds the production reader to the Ninth Avenue address, including within the same merchant", async () => {
+    const production = { ...config, environment: "production" as const };
+    const ninth = { address_line_1: "858 Ninth Avenue", postal_code: "10019-7053", country: "US" };
+    const verified = mockRequest({ location: { address: ninth } });
+    await expect(new SquareReadClient(production, verified).readWindow(from, to)).resolves.toHaveLength(3);
+    expect(verified.mock.calls.every(([url]) => new URL(String(url)).hostname === "connect.squareup.com")).toBe(true);
+    const other = mockRequest({ location: { address: { ...ninth, address_line_1: "140 Church Street" } } });
+    await expect(new SquareReadClient(production, other).readWindow(from, to)).rejects.toThrow(/Ninth Avenue/);
+    expect(other.mock.calls).toHaveLength(2);
+  });
   it("pins host/version, verifies merchant/location, preserves POS orders without numeric versions and reads late updates to older sales", async () => {
     const request = mockRequest(), rows = await new SquareReadClient(config, request).readWindow(from, to);
     expect(rows).toHaveLength(3); expect(rows[0].objectVersion).toBeNull(); expect(rows[0].facts.created_at).toBe("2020-01-01T14:00:00Z");

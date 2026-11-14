@@ -26,6 +26,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   type FormEvent,
@@ -57,6 +58,14 @@ import {
 import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/files";
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
+import { isWorkspaceRouteAccessible } from "@/components/shell/navigation";
+import {
+  churchSandwichIndividualTraining,
+  churchSandwichRehearsal,
+  churchSandwichSop,
+  churchSandwichSupplierReview,
+  churchSquareFirstShiftRehearsal,
+} from "@/components/tasks/church-sandwich-starters";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { ReadState } from "@/components/ui/read-state";
@@ -100,6 +109,12 @@ type RunAction = (
   operation: () => Promise<ActionResult>,
   onSuccess?: () => void,
 ) => void;
+const churchChecklistStarters = {
+  rehearsal: { ...churchSandwichRehearsal, actionLabel: "Draft sandwich rehearsal checklist" },
+  individualTraining: churchSandwichIndividualTraining,
+  supplierReview: { ...churchSandwichSupplierReview, actionLabel: "Draft supplier label and allergen checklist" },
+  firstShiftSquare: churchSquareFirstShiftRehearsal,
+};
 type DialogState =
   | { kind: "task-create" }
   | {
@@ -108,8 +123,8 @@ type DialogState =
       suggestedStatus?: LiveTaskStatus;
     }
   | { kind: "checklist-start" }
-  | { kind: "checklist-author" }
-  | { kind: "sop-create" }
+  | { kind: "checklist-author"; starter?: keyof typeof churchChecklistStarters }
+  | { kind: "sop-create"; sandwichStarter?: true }
   | { kind: "sop-edit"; sop: LiveSopDocument }
   | { kind: "sop-version"; sop: LiveSopDocument }
   | { kind: "maintenance-create" }
@@ -954,6 +969,11 @@ function ChecklistPanel({
   const requiredComplete = selected
     ? selected.requiredResponseCount === selected.requiredCount
     : false;
+  const availableChurchStarters = canManage && model.churchStreet
+    ? (Object.keys(churchChecklistStarters) as Array<keyof typeof churchChecklistStarters>).filter(
+        (id) => !model.checklistTemplates.some((template) => template.name === churchChecklistStarters[id].name),
+      )
+    : [];
 
   return (
     <section className="mt-5 grid gap-7 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
@@ -989,6 +1009,16 @@ function ChecklistPanel({
             </div>
           }
         />
+        {availableChurchStarters.length ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {availableChurchStarters.map((id) => (
+              <Button key={id} variant="quiet" size="sm" disabled={busy}
+                onClick={() => onDialog({ kind: "checklist-author", starter: id })}>
+                {churchChecklistStarters[id].actionLabel}
+              </Button>
+            ))}
+          </div>
+        ) : null}
         {model.checklistRuns.length ? (
           <div className="border-y border-[var(--line)]">
             {model.checklistRuns.map((run) => (
@@ -1270,12 +1300,14 @@ function ChecklistPanel({
 function SopPanel({
   model,
   canManage,
+  canOpenKitchen,
   busy,
   onDialog,
   onRun,
 }: {
   model: LiveOperationsModel;
   canManage: boolean;
+  canOpenKitchen: boolean;
   busy: boolean;
   onDialog: (dialog: DialogState) => void;
   onRun: RunAction;
@@ -1306,6 +1338,22 @@ function SopPanel({
             ) : undefined
           }
         />
+        {model.churchStreet ? (
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {canManage && !model.sops.some((sop) => sop.title === churchSandwichSop.title) ? (
+              <Button variant="quiet" size="sm" disabled={busy}
+                onClick={() => onDialog({ kind: "sop-create", sandwichStarter: true })}>
+                Draft sandwich station playbook
+              </Button>
+            ) : null}
+            {canOpenKitchen ? (
+              <Link className="focus-ring rounded text-xs font-semibold text-[var(--accent-strong)] underline"
+                href="/kitchen#kitchen-recipes">
+                Open Kitchen recipes
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
         {model.sops.length ? (
           <div className="border-y border-[var(--line)]">
             {model.sops.map((sop) => (
@@ -2174,6 +2222,7 @@ function OperationDialog({
   }
 
   if (dialog.kind === "checklist-author") {
+    const starter = canManage && model.churchStreet && dialog.starter ? churchChecklistStarters[dialog.starter] : undefined;
     return (
       <ModalFrame
         title="Author checklist version"
@@ -2217,13 +2266,14 @@ function OperationDialog({
                   maxLength={240}
                   autoFocus
                   placeholder="Closing bar"
+                  defaultValue={starter?.name}
                   className={fieldClass}
                 />
               </FieldLabel>
               <FieldLabel label="Routine type">
                 <select
                   name="checklistType"
-                  defaultValue="custom"
+                  defaultValue={starter?.checklistType ?? "custom"}
                   className={fieldClass}
                 >
                   <option value="opening">Opening</option>
@@ -2240,6 +2290,7 @@ function OperationDialog({
                 required
                 rows={9}
                 maxLength={100_000}
+                defaultValue={starter?.items}
                 placeholder={
                   "Lock front door | checkbox | required | Confirm deadbolt\nWalk-in temperature | temperature | required | Enter °F\nClosing photo | photo | optional | Photograph clean bar"
                 }
@@ -2263,6 +2314,7 @@ function OperationDialog({
   }
 
   if (dialog.kind === "sop-create") {
+    const starter = model.churchStreet && dialog.sandwichStarter ? churchSandwichSop : undefined;
     return (
       <ModalFrame
         title="Author SOP draft"
@@ -2298,6 +2350,7 @@ function OperationDialog({
                   required
                   maxLength={240}
                   autoFocus
+                  defaultValue={starter?.title}
                   className={fieldClass}
                 />
               </FieldLabel>
@@ -2306,6 +2359,7 @@ function OperationDialog({
                   name="category"
                   maxLength={120}
                   placeholder="Service, safety…"
+                  defaultValue={starter?.category}
                   className={fieldClass}
                 />
               </FieldLabel>
@@ -2316,6 +2370,7 @@ function OperationDialog({
                 required
                 rows={12}
                 maxLength={100_000}
+                defaultValue={starter?.body}
                 className={textAreaClass}
               />
             </FieldLabel>
@@ -2325,6 +2380,7 @@ function OperationDialog({
                 rows={2}
                 maxLength={2_000}
                 placeholder="Why this procedure exists"
+                defaultValue={starter?.changeSummary}
                 className={textAreaClass}
               />
             </FieldLabel>
@@ -2332,6 +2388,7 @@ function OperationDialog({
               <input
                 name="requiresAcknowledgement"
                 type="checkbox"
+                defaultChecked={Boolean(starter)}
                 className="size-4 rounded border-[var(--line)]"
               />
               Require each employee to acknowledge the published version
@@ -2845,12 +2902,14 @@ function OperationDialog({
 export function LiveTasksWorkspace({
   workspace,
   result,
+  initialTab = "tasks",
 }: {
   workspace: WorkspaceContextValue;
   result: LiveReadResult<LiveOperationsModel>;
+  initialTab?: Tab;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>("tasks");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, startTransition] = useTransition();
@@ -3069,6 +3128,7 @@ export function LiveTasksWorkspace({
               <SopPanel
                 model={model}
                 canManage={canManage}
+                canOpenKitchen={isWorkspaceRouteAccessible("/kitchen", workspace)}
                 busy={busy}
                 onDialog={setDialog}
                 onRun={run}
