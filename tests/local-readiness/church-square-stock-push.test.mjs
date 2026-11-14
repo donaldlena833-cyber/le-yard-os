@@ -20,6 +20,9 @@ const ciphertext = `01${"c0".repeat(40)}`;
 
 it("fences stock push to new Church episodes and the exact opted-in device version", async () => {
   const isolatedSocket = process.env.CHURCH_STOCK_PUSH_TEST_SOCKET;
+  if (isolatedSocket && !/^\/tmp\/le-yard-stock-push\.[A-Za-z0-9]+$/.test(isolatedSocket)) {
+    throw new Error("The native stock push test requires an isolated local cluster socket.");
+  }
   const native = isolatedSocket ? new Pool({ host: isolatedSocket, port: 5432, user: "postgres", database: "church_stock_push_test", max: 3 }) : null;
   const fixture = native ? await native.connect() : null;
   const db = fixture ? { query: fixture.query.bind(fixture), exec: fixture.query.bind(fixture) }
@@ -213,9 +216,17 @@ it("fences stock push to new Church episodes and the exact opted-in device versi
         await second.query("set role authenticated");
         await second.query("begin");
         await second.query("select public.remove_church_square_stock_push_device($1,$2)", [location, secondHash]);
+        const { rows: [{ pid }] } = await first.query("select pg_backend_pid() as pid");
         const attempt = simultaneous(first);
+        let waitsOnRevocation = false;
+        for (let tries = 0; tries < 100; tries += 1) {
+          const event = await one("select wait_event_type as result from pg_stat_activity where pid=$1", [pid]);
+          if (event === "Lock") { waitsOnRevocation = true; break; }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
         await second.query("commit");
         assert.equal(await attempt, null);
+        assert(waitsOnRevocation);
       } finally {
         await Promise.allSettled([first.query("rollback"), second.query("rollback")]);
         first.release();
