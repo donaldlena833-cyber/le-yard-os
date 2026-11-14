@@ -28,7 +28,7 @@ const facts: ChurchSquareMenuDiagnostic = {
     { key: "bellecour", name: "Le Bellecour", status: "ambiguous", itemId: null, variations: [] },
     { key: "bleu", name: "Le Bleu", status: "matched", itemId: "parent-bleu", variations: [] },
     { key: "rustique", name: "Le Rustique", status: "matched", itemId: "parent-rustique", variations: [
-      { id: "variation-rustique", name: "Regular", sku: null, tracking: "unknown", mapping: "unknown", openingCount: "unknown" },
+      { id: "variation-rustique", name: "Regular", sku: null, tracking: "default_off", mapping: "unknown", openingCount: "unknown" },
     ] },
     { key: "figaro", name: "Le Figaro", status: "missing", itemId: null, variations: [] },
   ],
@@ -66,7 +66,7 @@ it("shows the exact parent and variation evidence and removes prior data when a 
   expect(diagnosticPanel.getByText("Operations physical count recorded", { exact: true })).toBeTruthy();
   expect(diagnosticPanel.getByText("Tracking off · No active Operations mapping")).toBeTruthy();
   expect(diagnosticPanel.getByText("No Operations physical count recorded")).toBeTruthy();
-  expect(diagnosticPanel.getByText("Tracking unverified · Operations mapping unverified")).toBeTruthy();
+  expect(diagnosticPanel.getByText("Tracking off by default · Operations mapping unverified")).toBeTruthy();
   expect(diagnosticPanel.getByText("Operations physical count unverified")).toBeTruthy();
   expect(diagnosticPanel.getByText(/Multiple exact item matches/)).toBeTruthy();
   expect(diagnosticPanel.getAllByText("No exact item at the Church Street location.")).toHaveLength(2);

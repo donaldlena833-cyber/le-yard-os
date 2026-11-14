@@ -9,7 +9,7 @@ type Variation = Diagnostic["items"][number]["variations"][number];
 const trackingLabel: Record<Variation["tracking"], string> = {
   tracked: "Tracked",
   untracked: "Tracking off",
-  unknown: "Tracking unverified",
+  default_off: "Tracking off by default",
 };
 const mappingLabel: Record<Variation["mapping"], string> = {
   mapped: "Mapped in Operations",

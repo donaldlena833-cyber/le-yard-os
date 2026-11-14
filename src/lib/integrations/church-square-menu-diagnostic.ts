@@ -4,7 +4,7 @@ export type ChurchSquareMenuDiagnosticVariation = {
   id: string;
   name: string;
   sku: string | null;
-  tracking: "tracked" | "untracked" | "unknown";
+  tracking: "tracked" | "untracked" | "default_off";
   mapping: "mapped" | "unmapped" | "unknown";
   openingCount: "confirmed" | "unrecorded" | "unknown";
 };

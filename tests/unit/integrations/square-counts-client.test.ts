@@ -140,7 +140,7 @@ describe("Church sandwich catalog evidence", () => {
     await expect(new SquareCountClient(config, request).verifyChurchSandwichCatalog()).resolves.toEqual([
       { name: "Le Parisien", status: "matched", itemId: "PARISIEN", variations: [
         { id: "V_C", name: "Half", sku: null, tracking: "tracked" },
-        { id: "V_A", name: "Regular", sku: null, tracking: "unknown" },
+        { id: "V_A", name: "Regular", sku: null, tracking: "default_off" },
         { id: "V_B", name: "Regular", sku: null, tracking: "tracked" },
         { id: "V_Z", name: "Wedge", sku: "PAR-W", tracking: "untracked" },
       ] },

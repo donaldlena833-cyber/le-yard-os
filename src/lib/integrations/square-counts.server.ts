@@ -135,7 +135,7 @@ export interface SquareChurchSandwichCatalogVariation {
   id: string;
   name: string;
   sku: string | null;
-  tracking: "tracked" | "untracked" | "unknown";
+  tracking: "tracked" | "untracked" | "default_off";
 }
 export type SquareChurchSandwichCatalogItem =
   | { name: string; status: "missing" | "ambiguous"; itemId: null; variations: [] }
@@ -380,7 +380,8 @@ export class SquareCountClient {
           id: variation.id,
           name: data.name,
           sku: data.sku?.trim() ? data.sku : null,
-          tracking: tracked === undefined ? "unknown" : tracked ? "tracked" : "untracked",
+          // Square disables tracking when neither the variation nor its location sets it.
+          tracking: tracked === undefined ? "default_off" : tracked ? "tracked" : "untracked",
         });
       }
 
