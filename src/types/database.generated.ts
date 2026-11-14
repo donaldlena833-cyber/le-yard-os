@@ -10282,6 +10282,17 @@ export type Database = {
         }
         Returns: Json
       };
+      "get_church_square_order_evidence": {
+        Args: {
+          "p_location_id": string | null
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_order_id": string | null
+          "p_square_updated_at": string | null
+          "p_square_version": number | null
+        }
+        Returns: Json
+      };
       "get_pos_labor_sync_status": {
         Args: {
           "p_location_id": string | null
@@ -12954,6 +12965,7 @@ export const DatabaseObjectNames = {
       "finalize_employee_document",
       "get_church_catering_inquiry",
       "get_church_sandwich_register_check_receipt",
+      "get_church_square_order_evidence",
       "get_pos_labor_sync_status",
       "guard_active_owner_count",
       "guard_cash_movement_append_only",

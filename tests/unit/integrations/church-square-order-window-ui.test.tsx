@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { lookupChurchSquareOrderEvidenceAction } from "@/app/actions/workflows/church-square-order-evidence";
 import { ChurchSquareOrderWindow } from "@/components/today/church-square-order-window";
 import {
   churchSquareOrderWindowPath,
@@ -12,10 +13,53 @@ vi.mock("@/app/actions/workflows/church-square-catering", () => ({
   lookupChurchSquareCateringInvoiceAction: vi.fn(),
   saveChurchSquareCateringHandoffAction: vi.fn(),
 }));
+vi.mock("@/app/actions/workflows/church-square-order-evidence", () => ({
+  lookupChurchSquareOrderEvidenceAction: vi.fn(),
+}));
 
 afterEach(() => {
   cleanup();
+  vi.resetAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("checks a completed order independently and copies evidence without the full Square ID", async () => {
+  const checkedAt = "2026-11-14T18:00:00Z";
+  const id = "private-order-id-0123456789";
+  vi.mocked(lookupChurchSquareOrderEvidenceAction).mockResolvedValue({
+    ok: true, mode: "live", persisted: false, data: {
+      reference: id.slice(-10), checkedAt,
+      square: {
+        source: "DOORDASH", status: "COMPLETED", createdAt: checkedAt, updatedAt: checkedAt,
+        fulfillments: [{
+          type: "DELIVERY", status: "COMPLETED", promisedAt: checkedAt, handoffAt: checkedAt,
+          readyAt: null, completedAt: checkedAt, canceledAt: null, rejectedAt: null,
+        }],
+      },
+      operations: { status: "observed", matches: false, updatedAt: "2026-11-14T17:50:00Z" },
+    },
+  });
+  render(<ChurchSquareOrderWindow />);
+  const lookup = within(screen.getByText("Check an exact Square order").closest("details")!);
+  fireEvent.click(lookup.getByText("Check an exact Square order"));
+  const input = lookup.getByLabelText("Exact Square order ID") as HTMLInputElement;
+  fireEvent.change(input, { target: { value: ` ${id} ` } });
+  fireEvent.click(lookup.getByRole("button", { name: "Check order" }));
+  expect(await lookup.findByText("Operations has a different order revision from this Square check.")).toBeTruthy();
+  expect(lookupChurchSquareOrderEvidenceAction).toHaveBeenCalledWith({ orderId: id });
+  expect(input.value).toBe("");
+  expect(lookup.getByText("Square source hint · DoorDash")).toBeTruthy();
+  expect(lookup.getByText("Delivered").querySelector("time")?.dateTime).toBe(checkedAt);
+
+  fireEvent.click(lookup.getByRole("button", { name: "Copy order evidence" }));
+  const evidence = await lookup.findByRole("textbox", { name: "Order evidence" }) as HTMLTextAreaElement;
+  expect(evidence.value).toContain("Church Street Square order ending 0123456789");
+  expect(evidence.value).toContain("Operations has a different order revision");
+  expect(evidence.value).not.toContain(id);
+
+  fireEvent.change(input, { target: { value: "different-order" } });
+  expect(lookup.queryByText("Square source hint · DoorDash")).toBeNull();
+  expect(lookup.queryByRole("textbox", { name: "Order evidence" })).toBeNull();
 });
 
 it("shows several fulfillments and labels only the Square milestones that are present", async () => {

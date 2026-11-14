@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ChurchSquareCateringInvoice } from "@/components/today/church-square-catering-invoice";
+import { ChurchSquareOrderEvidence } from "@/components/today/church-square-order-evidence";
 import { ChurchSquareReconciliation } from "@/components/today/church-square-reconciliation";
 import { Button } from "@/components/ui/button";
 import {
@@ -346,6 +347,7 @@ export function ChurchSquareOrderWindow() {
           </table>
         </div>
       )}
+      <ChurchSquareOrderEvidence />
       <ChurchSquareReconciliation />
       <ChurchSquareCateringInvoice />
     </section>
