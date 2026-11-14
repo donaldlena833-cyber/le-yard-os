@@ -8,6 +8,7 @@ const amount = z.number().int().safe().nullable();
 export const churchSquareReconciliationResponse = z.object({
   pending: z.number().int().nonnegative().safe(),
   needsReview: z.number().int().nonnegative().safe(),
+  orderCoverageThrough: z.iso.datetime({ offset: true }).nullable().optional(),
   resources: z.array(z.object({
     kind: z.enum(["order", "payment", "refund", "invoice"]),
     reference,

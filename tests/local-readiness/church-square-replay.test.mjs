@@ -28,6 +28,7 @@ vi.mock("@/lib/integrations/church-square-orders.server", async (importOriginal)
 import { POST } from "@/app/api/integrations/square/webhook/route";
 import { churchSquareWebhookUrl } from "@/lib/integrations/church-square-webhook.server";
 import { churchSquareReconciliationResponse } from "@/lib/integrations/church-square-reconciliation";
+import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
 
 const ownerId = "10000000-0000-4000-8000-000000000001";
 const otherTenantUser = "10000000-0000-4000-8000-000000000006";
@@ -61,6 +62,18 @@ function useServiceRpc(db) {
           "select public.service_complete_church_square_receipt($1,$2,$3,$4::uuid,$5::jsonb,$6) as result",
           [params.p_merchant_id, params.p_square_location_id, params.p_event_id, params.p_lease,
             params.p_facts ? JSON.stringify(params.p_facts) : null, params.p_failure ?? null],
+        ],
+        service_claim_church_square_order_backfill: [
+          "select public.service_claim_church_square_order_backfill($1,$2) as result",
+          [params.p_merchant_id, params.p_square_location_id],
+        ],
+        service_commit_church_square_order_backfill: [
+          "select public.service_commit_church_square_order_backfill($1,$2,$3::uuid,$4::jsonb) as result",
+          [params.p_merchant_id, params.p_square_location_id, params.p_lease, JSON.stringify(params.p_orders)],
+        ],
+        service_release_church_square_order_backfill: [
+          "select public.service_release_church_square_order_backfill($1,$2,$3::uuid,$4) as result",
+          [params.p_merchant_id, params.p_square_location_id, params.p_lease, params.p_failure],
         ],
       };
       const statement = statements[name];
@@ -194,7 +207,7 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     expect(transport).not.toHaveBeenCalled();
 
     await asRole(db, "authenticated", ownerId);
-    expect(await readSummary()).toEqual({ pending: 2, needsReview: 0, resources: [] });
+    expect(await readSummary()).toEqual({ orderCoverageThrough: null, pending: 2, needsReview: 0, resources: [] });
     await asRole(db, "service_role");
     for (const [work] of doubles.after.mock.calls) await work();
     expect(transport).toHaveBeenCalledTimes(4);
@@ -227,6 +240,105 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     ]);
     expect(JSON.stringify(stored)).not.toMatch(/recipient@example\.invalid|Private fixture|primary_recipient/);
     expect((await db.query("select count(*)::int as count from private.church_square_webhook_receipts")).rows[0].count).toBe(2);
+
+    const missedId = "missed-square-order";
+    const secondId = "second-missed-square-order";
+    let failSecondPage = true;
+    let exhaustPages = false;
+    const pageCalls = [];
+    transport.mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.origin !== "https://connect.squareupsandbox.com") throw new Error("Unexpected provider origin");
+      if (url.pathname !== "/v2/orders/search") {
+        if (init?.method !== "GET" || !provider.has(url.pathname)) throw new Error("Unexpected provider read");
+        return Response.json(provider.get(url.pathname));
+      }
+      expect(init?.method).toBe("POST");
+      const body = JSON.parse(init.body);
+      const window = body.query.filter.date_time_filter.updated_at;
+      expect(body).toMatchObject({ location_ids: [locationId], limit: 50, return_entries: false,
+        query: { sort: { sort_field: "UPDATED_AT", sort_order: "ASC" } } });
+      pageCalls.push({ cursor: body.cursor, ...window });
+      const facts = (id, version) => ({
+        id, version, location_id: locationId, state: "OPEN", created_at: window.start_at, updated_at: window.end_at,
+      });
+      if (!body.cursor) return Response.json({
+        orders: [facts(missedId, 1), facts(pickupOrderId, 1)], cursor: "page-two",
+      });
+      if (exhaustPages) return Response.json({ orders: [], cursor: body.cursor + "-next" });
+      if (failSecondPage) return new Response(null, { status: 503 });
+      return Response.json({ orders: [facts(secondId, 1)] });
+    });
+    const backfillState = async () => {
+      await db.exec("reset role");
+      return (await db.query("select covered_through::text, last_failure, window_seconds from private.church_square_order_backfill")).rows[0];
+    };
+    const expireRetry = async () => {
+      await db.exec("reset role; update private.church_square_order_backfill set retry_after = '-infinity'");
+      await asRole(db, "service_role");
+    };
+
+    await asRole(db, "service_role");
+    await processChurchSquareOrderBackfill();
+    expect(pageCalls).toHaveLength(0);
+    vi.stubEnv("LE_YARD_CHURCH_SQUARE_ORDER_BACKFILL_ENABLED", "true");
+    const claimWindow = async (merchant = merchantId) => (await db.query(
+      "select public.service_claim_church_square_order_backfill($1,$2) as result", [merchant, locationId],
+    )).rows[0].result;
+    await expect(claimWindow("ANOTHER_MERCHANT")).rejects.toMatchObject({ code: "42501" });
+    const claimed = await claimWindow();
+    expect(await claimWindow()).toBeNull();
+    const duplicate = { kind: "order", id: missedId, locationId, currency: "USD", updatedAt: claimed.from };
+    const commit = async (lease, orders) => (await db.query(
+      "select public.service_commit_church_square_order_backfill($1,$2,$3::uuid,$4::jsonb) as result",
+      [merchantId, locationId, lease, JSON.stringify(orders)],
+    )).rows[0].result;
+    expect(await commit(randomUUID(), [])).toBe(false);
+    await expect(commit(claimed.lease, [duplicate, duplicate])).rejects.toMatchObject({ code: "22023" });
+    await expect(commit(claimed.lease, [{ ...duplicate, locationId: "OTHER" }])).rejects.toMatchObject({ code: "22023" });
+    await expect(commit(claimed.lease, Array(151).fill(duplicate))).rejects.toMatchObject({ code: "22023" });
+    await db.exec("reset role; update private.church_square_order_backfill set lease_expires_at = now() - interval '1 second'");
+    await asRole(db, "service_role");
+    expect(await commit(claimed.lease, [])).toBe(false);
+
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await processChurchSquareOrderBackfill();
+      expect(await backfillState()).toMatchObject({ covered_through: null, last_failure: "provider_unavailable" });
+      expect((await db.query("select count(*)::int as count from private.church_square_resource_state")).rows[0].count).toBe(2);
+      await expireRetry();
+      exhaustPages = true;
+      await processChurchSquareOrderBackfill();
+      expect(await backfillState()).toMatchObject({ covered_through: null, last_failure: "window_too_large", window_seconds: 10800 });
+      expect(pageCalls).toHaveLength(5);
+
+      await expireRetry();
+      exhaustPages = false;
+      failSecondPage = false;
+      await processChurchSquareOrderBackfill();
+      expect(await backfillState()).toMatchObject({ last_failure: null });
+      const [lastFirst, lastSecond] = pageCalls.slice(-2);
+      expect(lastSecond).toEqual({ ...lastFirst, cursor: "page-two" });
+      expect(Date.parse(lastFirst.end_at) - Date.parse(lastFirst.start_at)).toBe(3 * 60 * 60_000);
+      await asRole(db, "authenticated", ownerId);
+      const recovered = churchSquareReconciliationResponse.parse(await readSummary());
+      expect(Date.parse(recovered.orderCoverageThrough)).toBe(Date.parse(lastFirst.end_at));
+      expect(recovered.resources.map((resource) => resource.reference)).toEqual(expect.arrayContaining([
+        missedId.slice(-10), secondId.slice(-10),
+      ]));
+
+      await asRole(db, "service_role");
+      await processChurchSquareOrderBackfill();
+      const [overlapFirst] = pageCalls.slice(-2);
+      expect(Date.parse(lastFirst.end_at) - Date.parse(overlapFirst.start_at)).toBe(5 * 60_000);
+      expect(await protectedCounts()).toEqual(before);
+      expect((await db.query("select count(*)::int as count from private.church_square_webhook_receipts")).rows[0].count).toBe(2);
+      const pickup = await db.query("select source_version::int, facts from private.church_square_resource_state where resource_id = $1", [pickupOrderId]);
+      expect(pickup.rows[0].source_version).toBe(2);
+      expect(pickup.rows[0].facts.fulfillments[0].readyAt).toBe(readyAt);
+    } finally {
+      log.mockRestore();
+    }
   } finally {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();

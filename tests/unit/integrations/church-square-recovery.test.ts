@@ -2,11 +2,15 @@ import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/internal/integrations/church-square-recovery/route";
 import { processChurchSquareReceipts } from "@/lib/integrations/church-square-event-worker.server";
+import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
 
 const schedule = vi.hoisted(() => vi.fn());
 vi.mock("next/server", () => ({ after: schedule }));
 vi.mock("@/lib/integrations/church-square-event-worker.server", () => ({
   processChurchSquareReceipts: vi.fn(),
+}));
+vi.mock("@/lib/integrations/church-square-order-backfill.server", () => ({
+  processChurchSquareOrderBackfill: vi.fn(),
 }));
 
 const url = "https://operations.leyardny.com/api/internal/integrations/church-square-recovery";
@@ -47,13 +51,17 @@ afterEach(() => {
 });
 
 describe("internal Church Street Square recovery trigger", () => {
-  it.each([undefined, "{}"])("queues a single existing worker for an authorized request with %s body", async (body) => {
+  it.each([undefined, "{}"])("queues both recovery workers for an authorized request with %s body", async (body) => {
     const response = await POST(request(body));
     expect(response.status).toBe(202);
     expect(await response.text()).toBe("");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(schedule).toHaveBeenCalledExactlyOnceWith(processChurchSquareReceipts);
+    expect(schedule).toHaveBeenCalledOnce();
     expect(processChurchSquareReceipts).not.toHaveBeenCalled();
+    expect(processChurchSquareOrderBackfill).not.toHaveBeenCalled();
+    await schedule.mock.calls[0]?.[0]();
+    expect(processChurchSquareReceipts).toHaveBeenCalledOnce();
+    expect(processChurchSquareOrderBackfill).toHaveBeenCalledOnce();
   });
 
   it("rejects a missing, malformed, incorrect, or expired signature", async () => {

@@ -30,3 +30,45 @@ export const churchSquareOrderWindowResponse = z.object({
 });
 
 export type ChurchSquareOrderWindowResponse = z.infer<typeof churchSquareOrderWindowResponse>;
+
+export const churchSquareDemandHorizons = [15, 30, 60] as const;
+
+function emptyFulfillmentDemand() {
+  return {
+    pastDue: 0,
+    noPromisedTime: 0,
+    upcoming: { 15: 0, 30: 0, 60: 0 },
+  };
+}
+
+export function summarizeChurchSquareFulfillmentDemand({ checkedAt, orders }: ChurchSquareOrderWindowResponse) {
+  const demand = { PICKUP: emptyFulfillmentDemand(), DELIVERY: emptyFulfillmentDemand() };
+  const checkedAtMs = Date.parse(checkedAt);
+
+  for (const order of orders) {
+    if (order.status !== "OPEN") continue;
+    for (const fulfillment of order.fulfillments) {
+      if (fulfillment.type !== "PICKUP" && fulfillment.type !== "DELIVERY") continue;
+      if (fulfillment.status !== "PROPOSED" && fulfillment.status !== "RESERVED" && fulfillment.status !== "PREPARED") continue;
+      if (fulfillment.handoffAt || fulfillment.completedAt || fulfillment.canceledAt || fulfillment.rejectedAt) continue;
+
+      const counts = demand[fulfillment.type];
+      if (!fulfillment.promisedAt) {
+        counts.noPromisedTime += 1;
+        continue;
+      }
+
+      const minutesUntilPromised = (Date.parse(fulfillment.promisedAt) - checkedAtMs) / 60_000;
+      if (minutesUntilPromised < 0) {
+        counts.pastDue += 1;
+        continue;
+      }
+
+      for (const minutes of churchSquareDemandHorizons) {
+        if (minutesUntilPromised <= minutes) counts.upcoming[minutes] += 1;
+      }
+    }
+  }
+
+  return demand;
+}

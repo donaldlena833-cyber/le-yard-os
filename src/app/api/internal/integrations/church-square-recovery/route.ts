@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { after } from "next/server";
 import { processChurchSquareReceipts } from "@/lib/integrations/church-square-event-worker.server";
+import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
 import { churchSquareOrderConfiguration } from "@/lib/integrations/church-square-orders.server";
 
 export const runtime = "nodejs";
@@ -51,7 +52,9 @@ export async function POST(request: Request) {
 
   try {
     if (!await hasNoInput(request)) return respond(400);
-    after(processChurchSquareReceipts);
+    after(async () => {
+      await Promise.allSettled([processChurchSquareReceipts(), processChurchSquareOrderBackfill()]);
+    });
     return respond(202);
   } catch {
     return respond(503);

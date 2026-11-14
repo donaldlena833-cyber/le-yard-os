@@ -1,12 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { ChurchSquareCateringInvoice } from "@/components/today/church-square-catering-invoice";
 import { ChurchSquareReconciliation } from "@/components/today/church-square-reconciliation";
 import { Button } from "@/components/ui/button";
 import {
+  churchSquareDemandHorizons,
   churchSquareOrderWindowHours,
+  churchSquareOrderWindowLimit,
   churchSquareOrderWindowPath,
   churchSquareOrderWindowResponse,
+  summarizeChurchSquareFulfillmentDemand,
   type ChurchSquareOrderWindowResponse,
 } from "@/lib/integrations/church-square-order-window";
 
@@ -70,6 +74,46 @@ const localTime = new Intl.DateTimeFormat("en-US", {
   timeZone: "America/New_York",
   month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
 });
+
+function SquareFulfillmentDemand({ window }: { window: ChurchSquareOrderWindowResponse }) {
+  const demand = summarizeChurchSquareFulfillmentDemand(window);
+
+  return (
+    <div className="mt-3 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-3 sm:p-4">
+      <h4 id="church-square-demand-title" className="text-sm font-semibold">Pickup and delivery due</h4>
+      <p id="church-square-demand-scope" className="mt-1 text-xs text-[var(--ink-soft)]">
+        Counts cover pending fulfillments at the last manual check, including orders already ready for pickup or delivery. Time windows use Square’s promised times and overlap.
+        {window.hasMore && " Partial results. More orders may fall within this window."}
+      </p>
+      <div className="mt-2 overflow-x-auto">
+        <table aria-labelledby="church-square-demand-title" aria-describedby="church-square-demand-scope church-square-orders-bounds church-square-orders-check" className="w-full text-xs">
+          <thead className="text-[var(--ink-soft)]">
+            <tr className="border-b border-[var(--line)]">
+              <th scope="col" className="py-2 pr-1 text-left sm:pr-2">Type</th>
+              <th scope="col" className="px-1 py-2 text-right sm:px-2">Past due</th>
+              {churchSquareDemandHorizons.map((minutes) => (
+                <th key={minutes} scope="col" className="px-1 py-2 text-right sm:px-2">Next {minutes} min</th>
+              ))}
+              <th scope="col" className="py-2 pl-1 text-right sm:pl-2">No promised time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--line)] tabular-nums">
+            {(["PICKUP", "DELIVERY"] as const).map((type) => (
+              <tr key={type}>
+                <th scope="row" className="py-2 pr-2 text-left font-medium">{fulfillmentTypes[type]}</th>
+                <td className="px-2 py-2 text-right">{demand[type].pastDue}</td>
+                {churchSquareDemandHorizons.map((minutes) => (
+                  <td key={minutes} className="px-2 py-2 text-right">{demand[type].upcoming[minutes]}</td>
+                ))}
+                <td className="py-2 pl-2 text-right">{demand[type].noPromisedTime}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function OrderFulfillmentSummary({ fulfillments }: { fulfillments: Order["fulfillments"] }) {
   if (!fulfillments.length) return <span className="text-[var(--ink-faint)]">Unavailable</span>;
@@ -136,25 +180,25 @@ export function ChurchSquareOrderWindow() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 id="church-square-orders-title" className="text-xl font-semibold">Church Street Square orders</h3>
-          <p className="mt-1 text-sm text-[var(--ink-soft)]">Orders updated in the past {churchSquareOrderWindowHours} hours.</p>
+          <p id="church-square-orders-bounds" className="mt-1 text-sm text-[var(--ink-soft)]">Manual check of up to {churchSquareOrderWindowLimit} orders updated in the previous {churchSquareOrderWindowHours} hours.</p>
         </div>
         <Button variant="secondary" size="sm" disabled={state.status === "loading"} onClick={load}>
           {state.status === "loading" ? "Checking Square…" : state.status === "idle" ? "Load orders" : "Refresh orders"}
         </Button>
       </div>
-      <div role="status" className="mt-3 text-xs text-[var(--ink-faint)]">
+      <div id="church-square-orders-check" role="status" className="mt-3 text-xs text-[var(--ink-faint)]">
         {state.status === "loading" && "Checking for recent order updates."}
         {state.status === "forbidden" && "This order view requires access to Church Street financial reports."}
         {state.status === "setup_pending" && "The Square order connection is awaiting setup."}
         {state.status === "unavailable" && "Square orders could not be loaded. Try refreshing."}
         {state.status === "ready" && (
           <>
-            {state.window.orders.length === 0 ? "No recent orders returned by Square." : "Checked"}{" "}
-            <time dateTime={state.window.checkedAt}>{localTime.format(new Date(state.window.checkedAt))} ET</time>
-            {state.window.hasMore && " · More results are available in Square."}
+            Last checked <time dateTime={state.window.checkedAt}>{localTime.format(new Date(state.window.checkedAt))} ET</time>
+            {state.window.orders.length === 0 && " · Square returned no orders in this read."}
           </>
         )}
       </div>
+      {state.status === "ready" && <SquareFulfillmentDemand window={state.window} />}
       {state.status === "ready" && state.window.orders.length > 0 && (
         <div className="mt-3 overflow-x-auto rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
           <table className="w-full text-left text-xs">
@@ -188,6 +232,7 @@ export function ChurchSquareOrderWindow() {
         </div>
       )}
       <ChurchSquareReconciliation />
+      <ChurchSquareCateringInvoice />
     </section>
   );
 }

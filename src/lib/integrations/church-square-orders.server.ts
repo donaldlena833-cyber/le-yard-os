@@ -45,7 +45,7 @@ const churchAddress = { street: "140 Church Street", postalCode: "10007", countr
 type ClientConfig = z.infer<typeof configuration>;
 export type ChurchSquareOrderConfiguration = z.input<typeof configuration>;
 export type ChurchSquareOrderWindow = z.input<typeof windowSchema>;
-type ErrorCode = "invalid_input" | "scope_mismatch" | "provider_unavailable" | "invalid_response";
+type ErrorCode = "invalid_input" | "scope_mismatch" | "provider_unavailable" | "invalid_response" | "response_too_large";
 
 export class ChurchSquareOrderReadError extends Error {
   constructor(message: string, readonly code: ErrorCode, readonly status?: number) {
@@ -77,7 +77,7 @@ async function readBounded(response: Response) {
       if (entry.done) break;
       bytes += entry.value.byteLength;
       if (bytes > maximumResponseBytes) {
-        throw new ChurchSquareOrderReadError("Square response exceeded the allowable size.", "invalid_response");
+        throw new ChurchSquareOrderReadError("Square response exceeded the allowable size.", "response_too_large");
       }
       chunks.push(entry.value);
     }

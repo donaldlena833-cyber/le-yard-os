@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ChurchSquareOrderWindow } from "@/components/today/church-square-order-window";
 import {
   churchSquareOrderWindowPath,
   type ChurchSquareOrderWindowResponse,
 } from "@/lib/integrations/church-square-order-window";
+
+vi.mock("@/app/actions/workflows/church-square-catering", () => ({
+  lookupChurchSquareCateringInvoiceAction: vi.fn(),
+  saveChurchSquareCateringHandoffAction: vi.fn(),
+}));
 
 afterEach(() => {
   cleanup();
@@ -58,4 +63,81 @@ it("shows several fulfillments and labels only the Square milestones that are pr
   expect(within(mixed).queryByText("Completed", { exact: true })).toBeNull();
   expect(within(mixed).queryByText(/Delivered|ETA/)).toBeNull();
   expect(within(screen.getByRole("row", { name: /missing/ })).getByText("Unavailable")).toBeTruthy();
+});
+
+it("counts active pickup and delivery fulfillments at the last manual check", async () => {
+  const checkedAt = "2026-11-14T18:00:00Z";
+  type Order = ChurchSquareOrderWindowResponse["orders"][number];
+  type Fulfillment = Order["fulfillments"][number];
+  const fulfillment = (overrides: Partial<Fulfillment>): Fulfillment => ({
+    type: "PICKUP", status: "RESERVED", promisedAt: null,
+    readyAt: null, handoffAt: null, completedAt: null, canceledAt: null, rejectedAt: null,
+    ...overrides,
+  });
+  const order = (reference: string, status: Order["status"], ...fulfillments: Fulfillment[]): Order => ({
+    reference, source: "SQUARE_ONLINE", status, updatedAt: checkedAt, totalCents: null, fulfillments,
+  });
+  const fixture: ChurchSquareOrderWindowResponse = {
+    checkedAt,
+    hasMore: true,
+    orders: [
+      order("mixed", "OPEN",
+        fulfillment({ status: "PROPOSED", promisedAt: checkedAt }),
+        fulfillment({ promisedAt: "2026-11-14T13:15:00-05:00" }),
+        fulfillment({ type: "DELIVERY", status: "PREPARED", promisedAt: "2026-11-14T18:30:00Z", readyAt: checkedAt }),
+        fulfillment({ type: "DELIVERY", promisedAt: "2026-11-14T19:00:00Z" }),
+      ),
+      order("next", "OPEN",
+        fulfillment({ promisedAt: "2026-11-14T18:15:01Z" }),
+        fulfillment({ promisedAt: "2026-11-14T17:59:59Z" }),
+        fulfillment({ type: "DELIVERY", promisedAt: "2026-11-14T19:00:01Z" }),
+        fulfillment({ type: "DELIVERY", promisedAt: "2026-11-14T17:00:00Z" }),
+        fulfillment({ type: "DELIVERY", readyAt: checkedAt }),
+        fulfillment({}),
+      ),
+      order("excluded", "OPEN",
+        fulfillment({ type: "SHIPMENT", promisedAt: checkedAt }),
+        fulfillment({ type: "UNKNOWN", promisedAt: checkedAt }),
+        fulfillment({ status: "UNKNOWN", promisedAt: checkedAt }),
+        fulfillment({ status: "COMPLETED", promisedAt: checkedAt }),
+        fulfillment({ status: "CANCELED", promisedAt: checkedAt }),
+        fulfillment({ status: "FAILED", promisedAt: checkedAt }),
+        fulfillment({ promisedAt: checkedAt, handoffAt: checkedAt }),
+        fulfillment({ promisedAt: checkedAt, completedAt: checkedAt }),
+        fulfillment({ promisedAt: checkedAt, canceledAt: checkedAt }),
+        fulfillment({ promisedAt: checkedAt, rejectedAt: checkedAt }),
+      ),
+      order("complete", "COMPLETED", fulfillment({ promisedAt: checkedAt })),
+      order("canceled", "CANCELED", fulfillment({ promisedAt: checkedAt })),
+      order("draft", "DRAFT", fulfillment({ promisedAt: checkedAt })),
+      order("unknown", "UNKNOWN", fulfillment({ promisedAt: checkedAt })),
+    ],
+  };
+  const laterCheck = "2026-11-14T19:30:00Z";
+  vi.stubGlobal("fetch", vi.fn()
+    .mockResolvedValueOnce({ ok: true, json: async () => fixture })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ checkedAt: laterCheck, hasMore: false, orders: [] }) }));
+  render(<ChurchSquareOrderWindow />);
+  expect(screen.queryByRole("table", { name: "Pickup and delivery due" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Load orders" }));
+
+  const demand = await screen.findByRole("table", { name: "Pickup and delivery due" });
+  expect(within(demand).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
+    "Type", "Past due", "Next 15 min", "Next 30 min", "Next 60 min", "No promised time",
+  ]);
+  const values = (type: string) => within(within(demand).getByRole("row", { name: new RegExp(type) }))
+    .getAllByRole("cell").map((cell) => cell.textContent);
+  expect(values("Pickup")).toEqual(["1", "2", "3", "3", "1"]);
+  expect(values("Delivery")).toEqual(["1", "0", "1", "2", "1"]);
+  expect(demand.getAttribute("aria-describedby")).toContain("church-square-orders-check");
+  expect(screen.getByText(/partial results/i)).toBeTruthy();
+  expect(screen.getByText(/manual check of up to 50 orders.*24 hours/i)).toBeTruthy();
+  expect(screen.getByText(/last checked/i).querySelector("time")?.dateTime).toBe(checkedAt);
+
+  fireEvent.click(screen.getByRole("button", { name: "Refresh orders" }));
+  await waitFor(() => expect(screen.getByText(/last checked/i).querySelector("time")?.dateTime).toBe(laterCheck));
+  const refreshedDemand = screen.getByRole("table", { name: "Pickup and delivery due" });
+  expect(within(refreshedDemand).getAllByRole("cell").every((cell) => cell.textContent === "0")).toBe(true);
+  expect(screen.queryByText(/partial results/i)).toBeNull();
+  expect(screen.getByText(/no orders in this read/i)).toBeTruthy();
 });

@@ -77,6 +77,14 @@ export function ChurchSquareReconciliation() {
         {state.status === "unavailable" && "Reconciliation is temporarily unavailable. Try refreshing."}
         {state.status === "ready" && (
           <ul className="space-y-1">
+            {state.snapshot.orderCoverageThrough && (
+              <li>
+                Order updates checked through{" "}
+                <time dateTime={state.snapshot.orderCoverageThrough}>
+                  {localTime.format(new Date(state.snapshot.orderCoverageThrough))} ET
+                </time>.
+              </li>
+            )}
             <li>{state.snapshot.pending} {state.snapshot.pending === 1 ? "update is" : "updates are"} awaiting verification.</li>
             <li>
               {state.snapshot.needsReview} {state.snapshot.needsReview === 1 ? "update needs" : "updates need"} review.

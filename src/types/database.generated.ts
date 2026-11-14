@@ -11499,6 +11499,13 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_claim_church_square_order_backfill": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+        }
+        Returns: Json
+      };
       "service_claim_church_square_receipts": {
         Args: {
           "p_merchant_id": string | null
@@ -11558,6 +11565,15 @@ export type Database = {
           "p_source_sid": string | null
         }
         Returns: Json
+      };
+      "service_commit_church_square_order_backfill": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_lease": string | null
+          "p_orders": Json | null
+        }
+        Returns: boolean
       };
       "service_complete_church_square_receipt": {
         Args: {
@@ -11953,6 +11969,15 @@ export type Database = {
           "p_evidence_note": string | null
         }
         Returns: { "id": string | null; "captured_at": string | null }[]
+      };
+      "service_release_church_square_order_backfill": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_lease": string | null
+          "p_failure": string | null
+        }
+        Returns: boolean
       };
       "service_renew_integration_sync_job_lease": {
         Args: {
@@ -12788,6 +12813,7 @@ export const DatabaseObjectNames = {
       "service_capture_guest_interest",
       "service_claim_booking_rate_limit",
       "service_claim_church_square_count",
+      "service_claim_church_square_order_backfill",
       "service_claim_church_square_receipts",
       "service_claim_identity_delivery",
       "service_claim_integration_sync_job",
@@ -12795,6 +12821,7 @@ export const DatabaseObjectNames = {
       "service_claim_reservation_message_outbox",
       "service_claim_reservation_push_deliveries",
       "service_claim_sms_ai_run",
+      "service_commit_church_square_order_backfill",
       "service_complete_church_square_receipt",
       "service_complete_identity_delivery",
       "service_complete_integration_sync_job",
@@ -12834,6 +12861,7 @@ export const DatabaseObjectNames = {
       "service_reconcile_user_invitation_auth",
       "service_record_church_square_webhook",
       "service_record_guest_consent",
+      "service_release_church_square_order_backfill",
       "service_renew_integration_sync_job_lease",
       "service_reservation_delivery_health",
       "service_reservation_guest_summaries",
