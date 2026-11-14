@@ -29,6 +29,7 @@ import { POST } from "@/app/api/integrations/square/webhook/route";
 import { churchSquareWebhookUrl } from "@/lib/integrations/church-square-webhook.server";
 import { churchSquareReconciliationResponse } from "@/lib/integrations/church-square-reconciliation";
 import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
+import { churchSandwichComponents } from "@/lib/kitchen/church-sandwich-bench";
 
 const ownerId = "10000000-0000-4000-8000-000000000001";
 const otherTenantUser = "10000000-0000-4000-8000-000000000006";
@@ -491,6 +492,67 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
       from private.church_catering_job_changes where request_id=$1::uuid
     `, [publishRequest]);
     expect(prepAudit.rows).toEqual([{ operation: "prep_publish", actor_id: ownerId, portions }]);
+
+    const ingredient = churchSandwichComponents[0];
+    const review = {
+      supplierSku: "REHEARSAL-SKU-01",
+      sourceReference: "Local fixture label rev 1",
+      allergenNotes: "Illustrative label evidence only",
+      crossContactNotes: "Illustrative shared bench check",
+      storageRule: "Rehearsal closed-packaging instruction",
+      openedRule: "Rehearsal opened-product instruction",
+      preppedRule: "Rehearsal prepared-product instruction",
+    };
+    const readEvidence = async () => (await db.query(
+      "select public.list_church_ingredient_evidence($1::uuid) as result", [workspaceLocationId],
+    )).rows[0].result;
+    const saveEvidence = async (key, revision, status, fields = {}, request = randomUUID()) => (await db.query(`
+      select public.save_church_ingredient_evidence($1::uuid,$2::uuid,$3,$4::integer,$5,$6,$7,$8,$9,$10,$11,$12) as result
+    `, [request, workspaceLocationId, key, revision, status, fields.supplierSku ?? null, fields.sourceReference ?? null,
+      fields.allergenNotes ?? null, fields.crossContactNotes ?? null, fields.storageRule ?? null,
+      fields.openedRule ?? null, fields.preppedRule ?? null])).rows[0].result;
+    const library = await db.query(
+      "select key from unnest($1::text[]) key where private.is_church_ingredient_key(key)", [churchSandwichComponents],
+    );
+    expect(library.rows.map(({ key }) => key)).toEqual(churchSandwichComponents);
+    await asRole(db, "authenticated", ownerId);
+    expect(await readEvidence()).toEqual([]);
+    await expect(saveEvidence("Unapproved substitution", 0, "pending")).rejects.toMatchObject({ code: "22023" });
+    await expect(saveEvidence(ingredient, 0, "reviewed", { ...review, preppedRule: null })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveEvidence(ingredient, 0, "reviewed", { ...review, crossContactNotes: "\n\t" })).rejects.toMatchObject({ code: "22023" });
+    const originalRequest = randomUUID();
+    const recorded = await saveEvidence(ingredient, 0, "reviewed", review, originalRequest);
+    expect(recorded).toMatchObject({ ingredientKey: ingredient, revision: 1, status: "reviewed",
+      reviewedAt: expect.any(String), reviewerName: expect.any(String), ...review });
+    expect(await saveEvidence(ingredient, 0, "reviewed", review, originalRequest)).toEqual(recorded);
+    await expect(saveEvidence(ingredient, 0, "hold", {}, originalRequest)).rejects.toMatchObject({ code: "PT409" });
+    await expect(saveEvidence(ingredient, 0, "hold")).rejects.toMatchObject({ code: "PT409" });
+    const hold = await saveEvidence(ingredient, 1, "hold", { supplierSku: "REHEARSAL-REPLACEMENT" });
+    expect(hold).toMatchObject({ revision: 2, status: "hold", sourceReference: null, openedRule: null,
+      reviewedAt: null, reviewerName: null, supplierSku: "REHEARSAL-REPLACEMENT" });
+
+    await asRole(db, "authenticated", prepUserId);
+    expect(await readEvidence()).toEqual([hold]);
+    const privateAccess = await db.query(`
+      select has_table_privilege(current_user,catalog.oid,'select') as readable
+      from pg_class catalog join pg_namespace namespace on namespace.oid = catalog.relnamespace
+      where namespace.nspname = 'private' and catalog.relname = 'church_ingredient_evidence_changes'
+    `);
+    expect(privateAccess.rows[0].readable).toBe(false);
+    await expect(saveEvidence(ingredient, 2, "reviewed", review)).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", otherTenantUser);
+    await expect(readEvidence()).rejects.toMatchObject({ code: "42501" });
+    await expect(saveEvidence(ingredient, 2, "reviewed", review)).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "service_role");
+    await expect(readEvidence()).rejects.toMatchObject({ code: "42501" });
+    expect(await protectedCounts()).toEqual(before);
+    const evidenceHistory = await db.query(`
+      select previous_facts,result from private.church_ingredient_evidence_changes
+      where ingredient_key=$1 order by recorded_at
+    `, [ingredient]);
+    expect(evidenceHistory.rows).toHaveLength(2);
+    expect(evidenceHistory.rows[0]).toEqual({ previous_facts: null, result: recorded });
+    expect(evidenceHistory.rows[1]).toEqual({ previous_facts: { ...recorded, reviewedBy: ownerId }, result: hold });
   } finally {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();

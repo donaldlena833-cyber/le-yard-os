@@ -13,6 +13,8 @@ In the 140 Church Street workspace, open **Catering**. A manager with financial 
 
 Set the six sandwich quantities on the catering job. Save a draft while the counts are still changing. Confirm the job, check the portions against the agreed order and use **Publish to Kitchen**. Open Kitchen to check the service date, sandwich counts, usable ingredient weights and approximate bench assembly time. Confirm the signed recipes, supplier dates and actual available ingredients before prep. The worksheet combines jobs for the day and excludes private job names and Square details.
 
+In **Kitchen → Supplier label evidence**, check the current supplier SKU and reference for each ingredient in the recipe. Record the storage condition and the approved use-by rule for opened and prepared product separately. Use the prep batch and its lot labels to establish the actual discard time. Put an ingredient on hold when the pack differs or a rule is unresolved. **Sandwich evidence by recipe** shows which builds share the held ingredient. A reviewed row records the ingredient evidence. The chef’s signed matrix and a separate POS and storefront check determine what staff can publish or tell guests.
+
 Editing quantities, the service date or the confirmed stage can withdraw the worksheet handoff. Verify the new quantities and publish again after a change. The handoff records planned demand. Staff still count and adjust real inventory through the usual workflow.
 
 Creating or linking a job in Operations does not send an invoice, collect payment or reserve kitchen capacity. The next seven-day summary on **Today** counts quoted and confirmed jobs by Church Street calendar dates. It can report partial counts when the displayed workspace list reaches its 100-job limit.
