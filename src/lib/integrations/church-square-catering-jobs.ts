@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { churchSandwichRecipeKeys } from "@/lib/kitchen/church-sandwich-bench";
 import { churchSquareInvoiceStates } from "./church-square-order-projection";
 
 export const cateringJobStages = ["inquiry", "quoted", "confirmed", "completed", "canceled"] as const;
@@ -21,6 +22,16 @@ export const cateringJobServiceDate = z.iso.date()
   .refine((date) => date >= "2000-01-01" && date <= "2100-12-31", "Enter a date between 2000 and 2100.");
 export const cateringJobRevision = z.number().int().min(1).max(2_147_483_647);
 
+export const cateringPrepPortionMaximum = 2_000;
+export const cateringPrepPortionsSchema = z.record(
+  z.enum(churchSandwichRecipeKeys),
+  z.number().int().min(0).max(cateringPrepPortionMaximum),
+);
+export type CateringPrepPortions = z.infer<typeof cateringPrepPortionsSchema>;
+export const emptyCateringPrepPortions: Readonly<CateringPrepPortions> = {
+  parisien: 0, verger: 0, bellecour: 0, bleu: 0, rustique: 0, figaro: 0,
+};
+
 export const cateringInvoiceReference = z.string().regex(/^[A-Za-z0-9_:-]{1,10}$/);
 const cents = z.number().int().safe().nullable().transform((value) => value !== null && value >= 0 ? value : null);
 const instant = z.iso.datetime({ offset: true });
@@ -33,6 +44,8 @@ export const cateringJobSchema = z.object({
   ownerName: z.string().min(1),
   revision: cateringJobRevision,
   updatedAt: instant,
+  portions: cateringPrepPortionsSchema.default(() => ({ ...emptyCateringPrepPortions })),
+  prepPublishedAt: instant.nullable().default(null),
   invoice: z.object({
     invoiceReference: cateringInvoiceReference,
     orderReference: cateringInvoiceReference,

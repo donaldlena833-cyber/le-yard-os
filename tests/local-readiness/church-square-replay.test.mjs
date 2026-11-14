@@ -430,6 +430,67 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     expect(await protectedCounts()).toEqual(before);
     const audit = await db.query("select previous_link from private.church_catering_job_changes where request_id=$1::uuid", [detachRequest]);
     expect(audit.rows[0].previous_link).toMatchObject({ invoice: invoiceId, order: invoiceOrderId });
+
+    const { rows: [dates] } = await db.query(`
+      select ((now() at time zone 'America/New_York')::date + 1)::text as tomorrow,
+        ((now() at time zone 'America/New_York')::date + 7)::text as following_week
+    `);
+    const { tomorrow, following_week: nextWeek } = dates;
+    const zeros = { parisien: 0, verger: 0, bellecour: 0, bleu: 0, rustique: 0, figaro: 0 };
+    const portions = { ...zeros, parisien: 10, rustique: 2 };
+    const otherPortions = { ...zeros, parisien: 7, bleu: 4 };
+    const updatePrep = async (job, quantities, publish, request = randomUUID()) => (await db.query(
+      "select public.save_church_catering_prep($1::uuid,$2::uuid,$3::uuid,$4::integer,$5::jsonb,$6::boolean) as result",
+      [request, workspaceLocationId, job.id, job.revision, JSON.stringify(quantities), publish],
+    )).rows[0].result;
+    const kitchenSummary = async () => (await db.query(
+      "select public.list_church_catering_prep($1::uuid) as result", [workspaceLocationId],
+    )).rows[0].result;
+    await asRole(db, "authenticated", ownerId);
+    const firstKitchenJob = await saveJob(randomUUID(), "Private prep title", "inquiry", null, null, tomorrow);
+    const nextKitchenJob = await saveJob(randomUUID(), "Another private title", "inquiry", null, null, tomorrow);
+    const laterJob = await saveJob(randomUUID(), "Following week", "inquiry", null, null, nextWeek);
+    expect(firstKitchenJob).toMatchObject({ portions: zeros, prepPublishedAt: null });
+    await expect(updatePrep(firstKitchenJob, portions, true)).rejects.toMatchObject({ code: "PT409" });
+    for (const quantities of [{ ...zeros, bleu: 0.5 }, { ...zeros, bleu: 2001 }, { ...zeros, turkey: 1 }, { ...zeros, bleu: "1" }]) {
+      await expect(updatePrep(firstKitchenJob, quantities, false)).rejects.toMatchObject({ code: "22023" });
+    }
+
+    const draft = await updatePrep(firstKitchenJob, portions, false);
+    expect(draft).toMatchObject({ portions, revision: 2, prepPublishedAt: null });
+    const firstConfirmed = await saveJob(randomUUID(), draft.title, "confirmed", draft.id, draft.revision, tomorrow);
+    const nextConfirmed = await saveJob(randomUUID(), nextKitchenJob.title, "confirmed", nextKitchenJob.id, nextKitchenJob.revision, tomorrow);
+    const laterConfirmed = await saveJob(randomUUID(), laterJob.title, "confirmed", laterJob.id, laterJob.revision, nextWeek);
+    const publishRequest = randomUUID();
+    const firstPublished = await updatePrep(firstConfirmed, portions, true, publishRequest);
+    expect(firstPublished.prepPublishedAt).toEqual(expect.any(String));
+    expect(await updatePrep(firstConfirmed, portions, true, publishRequest)).toEqual(firstPublished);
+    await expect(updatePrep(firstConfirmed, otherPortions, true)).rejects.toMatchObject({ code: "PT409" });
+    await expect(updatePrep(nextConfirmed, zeros, true)).rejects.toMatchObject({ code: "PT409" });
+    const nextPublished = await updatePrep(nextConfirmed, otherPortions, true);
+    await updatePrep(laterConfirmed, portions, true);
+
+    await asRole(db, "authenticated", prepUserId);
+    expect(await kitchenSummary()).toEqual([{ serviceDate: tomorrow, jobCount: 2,
+      portions: { ...zeros, parisien: 17, rustique: 2, bleu: 4 } }]);
+    await expect(listJobs()).rejects.toMatchObject({ code: "42501" });
+    await expect(updatePrep(firstPublished, zeros, false)).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", otherTenantUser);
+    await expect(kitchenSummary()).rejects.toMatchObject({ code: "42501" });
+
+    await asRole(db, "authenticated", ownerId);
+    const amended = await updatePrep(firstPublished, { ...portions, parisien: 12 }, false);
+    expect(amended.prepPublishedAt).toBeNull();
+    const quoted = await saveJob(randomUUID(), nextPublished.title, "quoted", nextPublished.id, nextPublished.revision, tomorrow);
+    const reconfirmed = await saveJob(randomUUID(), quoted.title, "confirmed", quoted.id, quoted.revision, tomorrow);
+    expect(reconfirmed.prepPublishedAt).toBeNull();
+    expect(await kitchenSummary()).toEqual([]);
+    expect(await protectedCounts()).toEqual(before);
+    const prepAudit = await db.query(`
+      select operation, actor_id::text, request_facts->'portions' as portions
+      from private.church_catering_job_changes where request_id=$1::uuid
+    `, [publishRequest]);
+    expect(prepAudit.rows).toEqual([{ operation: "prep_publish", actor_id: ownerId, portions }]);
   } finally {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();

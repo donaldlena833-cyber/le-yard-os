@@ -35,8 +35,10 @@ import {
   createChurchSquareCateringJobAction,
   detachChurchSquareCateringInvoiceAction,
   listChurchSquareCateringJobsAction,
+  saveChurchSquareCateringProductionPlanAction,
   updateChurchSquareCateringJobAction,
 } from "@/app/actions/workflows/church-square-catering-jobs";
+import { emptyCateringPrepPortions } from "@/lib/integrations/church-square-catering-jobs";
 
 const jobId = "30000000-0000-4000-8000-000000000001";
 const requestId = "30000000-0000-4000-8000-000000000002";
@@ -45,6 +47,7 @@ const invoiceUpdatedAt = "2026-11-14T16:00:00.123456Z";
 const job = {
   id: jobId, title: "Studio lunch", serviceDate: "2026-12-10", stage: "inquiry", ownerName: "Manager",
   revision: 1, updatedAt: "2026-11-14T16:00:00Z", invoice: null,
+  portions: emptyCateringPrepPortions, prepPublishedAt: null,
 } as const;
 const verifiedInvoice = {
   id: invoiceId, orderId: "provider-order-1234567", serviceDate: job.serviceDate, updatedAt: invoiceUpdatedAt,
@@ -145,5 +148,57 @@ describe("Church Street catering job actions", () => {
     });
     expect(mocks.getInvoice).not.toHaveBeenCalled();
     expect(mocks.serviceRpc).not.toHaveBeenCalled();
+  });
+
+  it("saves the six Church Street quantities as an editable draft or explicit Kitchen publication", async () => {
+    const portions = { ...emptyCateringPrepPortions, parisien: 12, figaro: 2_000 };
+    const input = { requestId, jobId, expectedRevision: 4, portions };
+    mocks.userRpc.mockReturnValueOnce(response({ ...job, portions, revision: 5 }))
+      .mockReturnValueOnce(response({ ...job, stage: "confirmed", portions, revision: 6, prepPublishedAt: invoiceUpdatedAt }));
+    expect(await saveChurchSquareCateringProductionPlanAction({ ...input, publish: false })).toMatchObject({
+      ok: true, persisted: true, data: { portions, revision: 5, prepPublishedAt: null },
+    });
+    const publishRequestId = "30000000-0000-4000-8000-000000000003";
+    expect(await saveChurchSquareCateringProductionPlanAction({ ...input, requestId: publishRequestId, expectedRevision: 5, publish: true })).toMatchObject({
+      ok: true, persisted: true, data: { portions, revision: 6, prepPublishedAt: invoiceUpdatedAt },
+    });
+    const rpcInput = {
+      p_request_id: requestId, p_job_id: jobId, p_location_id: "church", p_portions: portions,
+    };
+    expect(mocks.userRpc).toHaveBeenNthCalledWith(1, "save_church_catering_prep", {
+      ...rpcInput, p_expected_revision: 4, p_publish: false,
+    });
+    expect(mocks.userRpc).toHaveBeenNthCalledWith(2, "save_church_catering_prep", {
+      ...rpcInput, p_request_id: publishRequestId, p_expected_revision: 5, p_publish: true,
+    });
+    expect(mocks.serviceRpc).not.toHaveBeenCalled();
+    expect(mocks.getInvoice).not.toHaveBeenCalled();
+    expect(mocks.revalidate).toHaveBeenCalledWith("/kitchen");
+  });
+
+  it("accepts replays of jobs saved before prep planning without adding a publication", async () => {
+    const legacyJob = { ...job, portions: undefined, prepPublishedAt: undefined };
+    mocks.userRpc.mockReturnValueOnce(response(legacyJob));
+    expect(await createChurchSquareCateringJobAction({
+      requestId, title: job.title, serviceDate: job.serviceDate, stage: job.stage,
+    })).toMatchObject({
+      ok: true, data: { portions: emptyCateringPrepPortions, prepPublishedAt: null },
+    });
+  });
+
+  it("rejects incomplete, extra, fractional, excessive, empty publication, and foreign-scope quantities", async () => {
+    const input = { requestId, jobId, expectedRevision: 4, portions: emptyCateringPrepPortions, publish: false };
+    const { bleu: omitted, ...incomplete } = emptyCateringPrepPortions;
+    expect(omitted).toBe(0);
+    for (const portions of [
+      incomplete, { ...input.portions, surprise: 1 }, { ...input.portions, bleu: 0.5 }, { ...input.portions, bleu: 2_001 },
+    ]) {
+      expect(await saveChurchSquareCateringProductionPlanAction({ ...input, portions })).toMatchObject({ ok: false });
+    }
+    expect(await saveChurchSquareCateringProductionPlanAction({ ...input, publish: true })).toMatchObject({ ok: false });
+    expect(await saveChurchSquareCateringProductionPlanAction({ ...input, locationId: "foreign" })).toMatchObject({ ok: false });
+    mocks.scope.mockResolvedValueOnce(false);
+    expect(await saveChurchSquareCateringProductionPlanAction(input)).toMatchObject({ ok: false });
+    expect(mocks.userRpc).not.toHaveBeenCalled();
   });
 });

@@ -9,6 +9,12 @@ In the 140 Church Street workspace, open **Catering**. A manager with financial 
 3. Reopen or refresh Catering to see current verified events. If Square changes the linked order or service date, resolve the discrepancy in Square and Operations before using the deposit for scheduling. A deposit reflects the Square payment schedule. Compare the Square invoice and corresponding payments or refunds when adjudicating a difference.
 4. To correct an invoice attached to the wrong active job, record the present invoice reference and use the confirmed detach action. The audit records the operator, prior link and time. Reattach to the correct job after doing the exact check again.
 
+## Send reviewed quantities to Kitchen
+
+Set the six sandwich quantities on the catering job. Save a draft while the counts are still changing. Confirm the job, check the portions against the agreed order and use **Publish to Kitchen**. Open Kitchen to check the service date, sandwich counts, usable ingredient weights and approximate bench assembly time. Confirm the signed recipes, supplier dates and actual available ingredients before prep. The worksheet combines jobs for the day and excludes private job names and Square details.
+
+Editing quantities, the service date or the confirmed stage can withdraw the worksheet handoff. Verify the new quantities and publish again after a change. The handoff records planned demand. Staff still count and adjust real inventory through the usual workflow.
+
 Creating or linking a job in Operations does not send an invoice, collect payment or reserve kitchen capacity. The next seven-day summary on **Today** counts quoted and confirmed jobs by Church Street calendar dates. It can report partial counts when the displayed workspace list reaches its 100-job limit.
 
 The Ninth Avenue public catering form prepares an email. Church Street needs its own public intake destination and ownership before routing leads automatically. Use manual entry for now. [Square invoice and payment reference](https://developer.squareup.com/docs/invoices-api/retrieve-list-search-invoices)

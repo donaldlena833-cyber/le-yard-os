@@ -6,17 +6,19 @@ import {
   attachChurchSquareCateringInvoiceAction,
   createChurchSquareCateringJobAction,
   detachChurchSquareCateringInvoiceAction,
+  saveChurchSquareCateringProductionPlanAction,
   updateChurchSquareCateringJobAction,
 } from "@/app/actions/workflows/church-square-catering-jobs";
 import { lookupChurchSquareCateringInvoiceAction } from "@/app/actions/workflows/church-square-catering";
 import { ChurchCateringWorkspace } from "@/components/catering/church-catering-workspace";
-import type { CateringJob } from "@/lib/integrations/church-square-catering-jobs";
+import { emptyCateringPrepPortions, type CateringJob } from "@/lib/integrations/church-square-catering-jobs";
 
 vi.mock("@/app/actions/workflows/church-square-catering-jobs", () => ({
   attachChurchSquareCateringInvoiceAction: vi.fn(),
   createChurchSquareCateringJobAction: vi.fn(),
   detachChurchSquareCateringInvoiceAction: vi.fn(),
   listChurchSquareCateringJobsAction: vi.fn(),
+  saveChurchSquareCateringProductionPlanAction: vi.fn(),
   updateChurchSquareCateringJobAction: vi.fn(),
 }));
 vi.mock("@/app/actions/workflows/church-square-catering", () => ({
@@ -26,6 +28,7 @@ vi.mock("@/app/actions/workflows/church-square-catering", () => ({
 const job: CateringJob = {
   id: "019385e1-91d3-7413-9dc7-dc5ff2a89653", title: "December lunch", serviceDate: "2026-12-15",
   stage: "inquiry", revision: 1, ownerName: "Shift manager", updatedAt: "2026-11-14T15:45:00Z", invoice: null,
+  portions: emptyCateringPrepPortions, prepPublishedAt: null,
 };
 const invoice: NonNullable<CateringJob["invoice"]> = {
   invoiceReference: "invoice42", orderReference: "order42", status: "PARTIALLY_PAID", serviceDate: job.serviceDate,
@@ -38,6 +41,7 @@ const verified = (serviceDate: string) => ({ ok: true, mode: "live", persisted: 
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  vi.useRealTimers();
 });
 
 it("creates a durable inquiry and advances its stage using the saved revision", async () => {
@@ -102,5 +106,61 @@ it("fences attachments behind matching verification, handles stale evidence, and
   await card.findByText("No Square invoice attached.");
   expect(detachChurchSquareCateringInvoiceAction).toHaveBeenCalledWith(expect.objectContaining({
     requestId: expect.any(String), jobId: job.id, expectedRevision: 2, expectedInvoiceReference: invoice.invoiceReference,
+  }));
+});
+
+it("saves six named portions as a manager draft and requires a confirmed job for handoff", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-12-15T02:00:00Z"));
+  const portions = { ...job.portions, parisien: 12, bleu: 5 };
+  vi.mocked(saveChurchSquareCateringProductionPlanAction).mockResolvedValue(saved({ ...job, portions, revision: 2 }));
+  render(<ChurchCateringWorkspace initialJobs={[job]} />);
+  const card = within(screen.getByRole("article", { name: job.title }));
+  fireEvent.click(card.getByText(/Kitchen portions/));
+  expect(card.getAllByRole("spinbutton")).toHaveLength(6);
+  fireEvent.change(card.getByRole("spinbutton", { name: "Le Parisien" }), { target: { value: "12" } });
+  fireEvent.change(card.getByRole("spinbutton", { name: "Le Bleu" }), { target: { value: "5" } });
+  expect((card.getByRole("button", { name: "Publish to Kitchen" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(card.getByText("Confirm the job before publishing to Kitchen.")).toBeTruthy();
+  fireEvent.click(card.getByRole("button", { name: "Save portion draft" }));
+  await card.findByText("Portion draft saved.");
+  expect(card.getByText("Kitchen portions · 17 in draft")).toBeTruthy();
+  expect(saveChurchSquareCateringProductionPlanAction).toHaveBeenCalledWith(expect.objectContaining({
+    requestId: expect.any(String), jobId: job.id, expectedRevision: 1, portions, publish: false,
+  }));
+});
+
+it("publishes a confirmed job, then removes the handoff when revised quantities are saved as a draft", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  // December 15 in UTC is still December 14 at Church Street.
+  vi.setSystemTime(new Date("2026-12-15T02:00:00Z"));
+  const activeJob: CateringJob = { ...job, serviceDate: "2026-12-14", stage: "confirmed" };
+  const portions = { ...job.portions, figaro: 8 };
+  const published: CateringJob = { ...activeJob, portions, revision: 2, prepPublishedAt: "2026-12-15T02:00:01Z" };
+  vi.mocked(saveChurchSquareCateringProductionPlanAction)
+    .mockResolvedValueOnce(saved(published))
+    .mockResolvedValueOnce(saved({ ...published, portions: { ...portions, figaro: 6 }, revision: 3, prepPublishedAt: null }));
+  render(<ChurchCateringWorkspace initialJobs={[activeJob]} />);
+  const card = within(screen.getByRole("article", { name: job.title }));
+  fireEvent.click(card.getByText(/Kitchen portions/));
+  const publish = card.getByRole("button", { name: "Publish to Kitchen" }) as HTMLButtonElement;
+  expect(publish.disabled).toBe(true);
+  fireEvent.change(card.getByRole("spinbutton", { name: "Le Figaro" }), { target: { value: "2001" } });
+  expect(publish.disabled).toBe(true);
+  fireEvent.change(card.getByRole("spinbutton", { name: "Le Figaro" }), { target: { value: "8" } });
+  expect(publish.disabled).toBe(false);
+  fireEvent.click(publish);
+  await card.findByText("Portions published to Kitchen.");
+  expect(card.getByText("Kitchen portions · 8 published")).toBeTruthy();
+  expect(saveChurchSquareCateringProductionPlanAction).toHaveBeenCalledWith(expect.objectContaining({
+    jobId: job.id, expectedRevision: 1, portions, publish: true,
+  }));
+  fireEvent.change(card.getByRole("spinbutton", { name: "Le Figaro" }), { target: { value: "6" } });
+  expect(card.getByText(/removes the current Kitchen handoff/)).toBeTruthy();
+  fireEvent.click(card.getByRole("button", { name: "Save portion draft" }));
+  await card.findByText("Kitchen portions · 6 in draft");
+  expect(card.queryByText(/Published to Kitchen/)).toBeNull();
+  expect(saveChurchSquareCateringProductionPlanAction).toHaveBeenLastCalledWith(expect.objectContaining({
+    jobId: job.id, expectedRevision: 2, portions: { ...portions, figaro: 6 }, publish: false,
   }));
 });

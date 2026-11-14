@@ -13,6 +13,7 @@ import {
   cateringJobServiceDate,
   cateringJobStage,
   cateringJobTitle,
+  cateringPrepPortionsSchema,
 } from "@/lib/integrations/church-square-catering-jobs";
 import { churchSquareResourceId } from "@/lib/integrations/church-square-order-projection";
 import { ChurchSquareOrderClient, churchSquareOrderConfiguration } from "@/lib/integrations/church-square-orders.server";
@@ -43,6 +44,16 @@ const detachInput = z.strictObject({
   jobId,
   expectedRevision: cateringJobRevision,
   expectedInvoiceReference: cateringInvoiceReference,
+});
+const prepInput = z.strictObject({
+  requestId: z.uuid(),
+  jobId,
+  expectedRevision: cateringJobRevision,
+  portions: cateringPrepPortionsSchema,
+  publish: z.boolean(),
+}).refine(({ portions, publish }) => !publish || Object.values(portions).some((quantity) => quantity > 0), {
+  path: ["portions"],
+  message: "Enter at least one sandwich before publishing to Kitchen.",
 });
 
 async function locationIdFor(context: WorkflowContext) {
@@ -191,7 +202,31 @@ export async function detachChurchSquareCateringInvoiceAction(input: unknown) {
   return result;
 }
 
+export async function saveChurchSquareCateringProductionPlanAction(input: unknown) {
+  const result = await executeWorkflowAction({
+    operation: "church-square.catering.job.prep",
+    schema: prepInput,
+    input,
+    run: async (context, { requestId, jobId, expectedRevision, portions, publish }) => {
+      const locationId = await locationIdFor(context);
+      const { data, error } = await context.supabase.rpc("save_church_catering_prep", {
+        p_request_id: requestId,
+        p_location_id: locationId,
+        p_job_id: jobId,
+        p_expected_revision: expectedRevision,
+        p_portions: portions,
+        p_publish: publish,
+      }).abortSignal(AbortSignal.timeout(6_000));
+      if (error) throwDatabaseError(error, "Catering portions could not be saved.");
+      return parseSavedJob(data);
+    },
+  });
+  if (result.ok && result.persisted) refreshCatering();
+  return result;
+}
+
 function refreshCatering() {
   revalidatePath("/catering");
   revalidatePath("/today");
+  revalidatePath("/kitchen");
 }

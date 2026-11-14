@@ -10545,6 +10545,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_catering_prep": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_square_count_items": {
         Args: {
           "p_location_id": string | null
@@ -11098,6 +11104,17 @@ export type Database = {
           "p_stage": string | null
           "p_job_id"?: string | null
           "p_expected_revision"?: number | null
+        }
+        Returns: Json
+      };
+      "save_church_catering_prep": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_job_id": string | null
+          "p_expected_revision": number | null
+          "p_portions": Json | null
+          "p_publish": boolean | null
         }
         Returns: Json
       };
@@ -12768,6 +12785,7 @@ export const DatabaseObjectNames = {
       "is_self_employee",
       "jwt_aal",
       "list_church_catering_jobs",
+      "list_church_catering_prep",
       "list_church_square_count_items",
       "list_church_square_reconciliation",
       "list_church_square_stock_alerts",
@@ -12830,6 +12848,7 @@ export const DatabaseObjectNames = {
       "revoke_user_invitation",
       "save_availability_rule",
       "save_church_catering_job",
+      "save_church_catering_prep",
       "save_employee_certification",
       "save_employee_emergency_contact",
       "save_expense_category",

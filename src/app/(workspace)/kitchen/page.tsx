@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { ChurchCateringPrep } from "@/components/kitchen/church-catering-prep";
 import { KitchenWorkspace } from "@/components/kitchen/kitchen-workspace";
 import { LiveInventoryWorkspace } from "@/components/inventory/live-inventory-workspace";
 import { LivePrepWorkspace } from "@/components/prep/live-prep-workspace";
@@ -22,6 +24,7 @@ export default async function KitchenPage() {
   return (
     <>
       <PageFrame width="full" className="max-w-[1400px] pb-0">
+        <Suspense fallback={null}><ChurchCateringPrep workspace={resolution.context} /></Suspense>
         <LivePrepWorkspace
           key={`prep-${resolution.context.activeLocation.id}`}
           workspace={resolution.context}

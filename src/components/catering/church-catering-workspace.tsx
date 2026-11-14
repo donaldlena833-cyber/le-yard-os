@@ -7,13 +7,23 @@ import {
   createChurchSquareCateringJobAction,
   detachChurchSquareCateringInvoiceAction,
   listChurchSquareCateringJobsAction,
+  saveChurchSquareCateringProductionPlanAction,
   updateChurchSquareCateringJobAction,
 } from "@/app/actions/workflows/church-square-catering-jobs";
 import { lookupChurchSquareCateringInvoiceAction } from "@/app/actions/workflows/church-square-catering";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
+import { localDateKey } from "@/data/read-models/local-time";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
-import { cateringJobStageTransitions, type CateringJob, type CateringJobStage } from "@/lib/integrations/church-square-catering-jobs";
+import {
+  cateringJobStageTransitions,
+  cateringPrepPortionMaximum,
+  cateringPrepPortionsSchema,
+  type CateringJob,
+  type CateringJobStage,
+  type CateringPrepPortions,
+} from "@/lib/integrations/church-square-catering-jobs";
+import { churchSandwichBenchRecipes, churchSandwichRecipeKeys } from "@/lib/kitchen/church-sandwich-bench";
 
 type VerifiedInvoice = Extract<Awaited<ReturnType<typeof lookupChurchSquareCateringInvoiceAction>>, { mode: "live" }>["data"];
 type InvoiceFacts = Pick<VerifiedInvoice, "invoiceReference" | "orderReference" | "status" | "serviceDate" | "updatedAt" | "deposit">;
@@ -34,6 +44,14 @@ const labelClass = "grid min-w-0 gap-1 text-xs font-semibold";
 const date = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 const time = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/New_York" });
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+function portionTotal(portions: CateringPrepPortions) {
+  return churchSandwichRecipeKeys.reduce((total, key) => total + portions[key], 0);
+}
+
+function canPublishForDate(serviceDate: string) {
+  return serviceDate >= localDateKey(new Date(), "America/New_York");
+}
 
 function CalendarDate({ value }: { value: string }) {
   return <time dateTime={value}>{date.format(new Date(value))}</time>;
@@ -119,16 +137,87 @@ function NewCateringJob({ onSaved, disabled }: { onSaved: (job: CateringJob) => 
   );
 }
 
+function CateringPortionEditor({ job, active, blocked, saving, unsavedJob, message, onSave }: {
+  job: CateringJob;
+  active: boolean;
+  blocked: boolean;
+  saving: boolean;
+  unsavedJob: boolean;
+  message: string;
+  onSave: (portions: CateringPrepPortions, publish: boolean) => Promise<void>;
+}) {
+  const [fields, setFields] = useState(() => Object.fromEntries(
+    churchSandwichRecipeKeys.map((key) => [key, String(job.portions[key])]),
+  ));
+  const parsed = cateringPrepPortionsSchema.safeParse(Object.fromEntries(
+    churchSandwichRecipeKeys.map((key) => [key, fields[key].trim() === "" ? NaN : Number(fields[key])]),
+  ));
+  const changed = churchSandwichRecipeKeys.some((key) => Number(fields[key]) !== job.portions[key]);
+  const total = parsed.success ? portionTotal(parsed.data) : null;
+  const totalSaved = portionTotal(job.portions);
+  const isUpcoming = canPublishForDate(job.serviceDate);
+  const canPublish = job.stage === "confirmed" && isUpcoming && Boolean(total);
+  const descriptionId = `catering-prep-${job.id}`;
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const publish = submitter instanceof HTMLButtonElement && submitter.value === "publish";
+    if (blocked || !active || unsavedJob || !parsed.success || !(publish ? canPublish && (changed || !job.prepPublishedAt) : changed)) return;
+    void onSave(parsed.data, publish);
+  }
+
+  if (!active && totalSaved === 0) return null;
+  return (
+    <details className="mt-2 border-t border-[var(--line)] pt-2">
+      <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">
+        Kitchen portions · {totalSaved === 0 ? "No plan" : `${totalSaved} ${job.prepPublishedAt ? "published" : "in draft"}`}
+      </summary>
+      <p id={descriptionId} className="mt-2 text-xs text-[var(--ink-soft)]">Plan whole sandwiches for kitchen prep. Published portions appear as the service date enters Kitchen’s seven-day view. Update invoices and stock counts separately.</p>
+      {job.prepPublishedAt && (
+        <p className="mt-2 text-xs font-semibold">Published to Kitchen <time dateTime={job.prepPublishedAt}>{time.format(new Date(job.prepPublishedAt))} ET</time></p>
+      )}
+      <form onSubmit={submit} aria-describedby={descriptionId} className="mt-2 space-y-3">
+        <fieldset disabled={!active || blocked || unsavedJob} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <legend className="sr-only">Sandwich portions</legend>
+          {churchSandwichBenchRecipes.map(({ key, name }) => (
+            <label key={key} className={labelClass}>
+              {name}
+              <input aria-invalid={parsed.success || /^\d+$/.test(fields[key]) && Number(fields[key]) <= cateringPrepPortionMaximum ? undefined : true}
+                className={`${fieldClass} tabular-nums`} type="number" min={0} max={cateringPrepPortionMaximum} step={1}
+                inputMode="numeric" required value={fields[key]}
+                onChange={(event) => setFields({ ...fields, [key]: event.target.value })} />
+            </label>
+          ))}
+        </fieldset>
+        {active && <>
+          <p className="text-xs font-medium">{total === null ? `Enter a whole quantity from 0 to ${cateringPrepPortionMaximum} for each sandwich.` : `${total} ${total === 1 ? "sandwich" : "sandwiches"} in this plan.`}</p>
+          {unsavedJob && <p className="text-xs text-[var(--ink-soft)]">Save your job changes before editing kitchen portions.</p>}
+          {job.stage !== "confirmed" && <p className="text-xs text-[var(--ink-soft)]">Confirm the job before publishing to Kitchen.</p>}
+          {job.stage === "confirmed" && !isUpcoming && <p className="text-xs text-[var(--ink-soft)]">Publishing is available through the service date.</p>}
+          {changed && job.prepPublishedAt && <p className="text-xs text-[var(--ink-soft)]">Saving changed quantities as a draft removes the current Kitchen handoff.</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="secondary" size="sm" disabled={blocked || unsavedJob || !parsed.success || !changed}>Save portion draft</Button>
+            <Button type="submit" value="publish" variant="primary" size="sm" disabled={blocked || unsavedJob || !canPublish || (!changed && Boolean(job.prepPublishedAt))}>Publish to Kitchen</Button>
+          </div>
+        </>}
+      </form>
+      <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{saving ? "Saving kitchen portions…" : message}</p>
+    </details>
+  );
+}
+
 function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSaved: (job: CateringJob) => void; refreshing: boolean }) {
   const [title, setTitle] = useState(job.title);
   const [serviceDate, setServiceDate] = useState(job.serviceDate);
   const [stage, setStage] = useState(job.stage);
   const [invoiceId, setInvoiceId] = useState("");
   const [verified, setVerified] = useState<VerifiedInvoice>();
-  const [busy, setBusy] = useState<"save" | "verify" | "attach" | "detach" | null>(null);
+  const [busy, setBusy] = useState<"save" | "verify" | "attach" | "detach" | "prep" | null>(null);
   const [confirmDetach, setConfirmDetach] = useState(false);
   const [jobMessage, setJobMessage] = useState("");
   const [invoiceMessage, setInvoiceMessage] = useState("");
+  const [prepMessage, setPrepMessage] = useState("");
   const { requestIdFor } = useStableRequestIds();
   const invoice = job.invoice;
   const active = job.stage !== "completed" && job.stage !== "canceled";
@@ -231,6 +320,26 @@ function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSav
     }
   }
 
+  async function savePreparation(portions: CateringPrepPortions, publish: boolean) {
+    if (blocked || changes || !active || (publish && (job.stage !== "confirmed" || !canPublishForDate(job.serviceDate)))) return;
+    const payload = { jobId: job.id, expectedRevision: job.revision, portions, publish };
+    setBusy("prep");
+    setPrepMessage("");
+    try {
+      const result = await saveChurchSquareCateringProductionPlanAction({ ...payload, requestId: requestIdFor("save-prep", payload) });
+      if (result.ok && result.mode === "live" && result.persisted) {
+        onSaved(result.data);
+        setPrepMessage(publish ? "Portions published to Kitchen." : "Portion draft saved.");
+      } else {
+        setPrepMessage("message" in result ? result.message : "The kitchen portions could not be saved.");
+      }
+    } catch {
+      setPrepMessage("The kitchen portions could not be saved. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <article aria-labelledby={`catering-job-${job.id}`} className="rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
       <h3 id={`catering-job-${job.id}`} className="break-words text-base font-semibold">{job.title}</h3>
@@ -263,9 +372,12 @@ function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSav
             <Button type="submit" variant="secondary" size="sm" disabled={!changes}>{busy === "save" ? "Saving…" : "Save job"}</Button>
           </fieldset>
           {invoice && <p className="mt-2 text-xs text-[var(--ink-soft)]">The job date is locked while an invoice is linked.</p>}
+          {job.prepPublishedAt && (serviceDate !== job.serviceDate || stage !== job.stage) && <p className="mt-2 text-xs text-[var(--ink-soft)]">Saving a new service date or stage removes the current Kitchen handoff.</p>}
         </form>
         <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{jobMessage}</p>
       </details>
+      <CateringPortionEditor job={job} active={active} blocked={blocked} saving={busy === "prep"}
+        unsavedJob={changes} message={prepMessage} onSave={savePreparation} />
       {(invoice || active) && <details className="mt-2 border-t border-[var(--line)] pt-2">
         <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">{invoice ? "Recheck linked invoice" : "Verify and attach invoice"}</summary>
         <form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={(event) => void verify(event)}>

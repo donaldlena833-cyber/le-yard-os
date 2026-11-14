@@ -1,4 +1,8 @@
+export const churchSandwichRecipeKeys = ["parisien", "verger", "bellecour", "bleu", "rustique", "figaro"] as const;
+export type ChurchSandwichRecipeKey = typeof churchSandwichRecipeKeys[number];
+
 export type ChurchSandwichBenchRecipe = {
+  key: ChurchSandwichRecipeKey;
   name: string;
   portions: readonly { ingredient: string; grams: number }[];
   accent: string;
@@ -10,6 +14,7 @@ export const churchSandwichBread = "10-inch baguette";
 
 export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = [
   {
+    key: "parisien",
     name: "Le Parisien",
     portions: [
       { ingredient: "French-style ham", grams: 72 },
@@ -20,6 +25,7 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     seconds: 60,
   },
   {
+    key: "verger",
     name: "Le Verger",
     portions: [
       { ingredient: "Brie", grams: 45 },
@@ -32,6 +38,7 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     seconds: 90,
   },
   {
+    key: "bellecour",
     name: "Le Bellecour",
     portions: [
       { ingredient: "Brie", grams: 45 },
@@ -44,6 +51,7 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     seconds: 90,
   },
   {
+    key: "bleu",
     name: "Le Bleu",
     portions: [
       { ingredient: "Danish blue cheese", grams: 38 },
@@ -57,6 +65,7 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     seconds: 90,
   },
   {
+    key: "rustique",
     name: "Le Rustique",
     portions: [
       { ingredient: "Coppa", grams: 58 },
@@ -70,6 +79,7 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     seconds: 90,
   },
   {
+    key: "figaro",
     name: "Le Figaro",
     portions: [
       { ingredient: "Prosciutto", grams: 55 },
