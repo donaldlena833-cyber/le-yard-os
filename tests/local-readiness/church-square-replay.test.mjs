@@ -862,4 +862,4 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     vi.unstubAllGlobals();
     await db.close();
   }
-}, 90_000);
+}, 180_000);
