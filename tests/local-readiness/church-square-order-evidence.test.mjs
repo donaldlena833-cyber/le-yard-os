@@ -104,10 +104,10 @@ async function verifyOrderEvidence(db) {
 }
 
 async function verifyExactOrderRecovery(db, { organization, location, evidence }) {
-  const id = "recovery-order-1234567890";
+  const id = "recovery-order-0987654321";
   const scanStartedAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const updatedAt = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
-  const updatedLater = new Date(Date.parse(updatedAt) + 60_000).toISOString();
+  const updatedLater = updatedAt; // Square advanced the version within the same timestamp.
   const facts = {
     kind: "order", id, locationId: "L_TEST", currency: "USD", status: "COMPLETED",
     createdAt: updatedAt, updatedAt, version: 1, sourceHint: "UNKNOWN",
@@ -131,7 +131,7 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
     ) values ($1,$2,'M_TEST','L_TEST',$3::timestamptz,$3::timestamptz)
   `, [organization, location, scanStartedAt]);
   for (const [kind, resourceId, amount] of [
-    ["order", "other-order-1234567890", 200],
+    ["order", "other-order-0987654321", 200],
     ["payment", id, 300],
     ["refund", id, 400],
     ["invoice", id, 500],
@@ -153,7 +153,7 @@ async function verifyExactOrderRecovery(db, { organization, location, evidence }
   await assert.rejects(recover({ workspaceLocation: otherLocation }), { code: "42501" });
   await assert.rejects(recover({ merchant: "M_OTHER" }), { code: "42501" });
   await assert.rejects(recover({ squareLocation: "L_OTHER", orderFacts: { ...facts, locationId: "L_OTHER" } }), { code: "42501" });
-  await assert.rejects(recover({ requestedId: "different-order-1234567890" }), { code: "22023" });
+  await assert.rejects(recover({ requestedId: "different-order-0987654321" }), { code: "22023" });
   for (const orderFacts of [
     { ...facts, kind: "payment" }, { ...facts, locationId: "L_OTHER" }, { ...facts, currency: "EUR" },
     { ...facts, createdAt: "infinity" }, { ...facts, updatedAt: "infinity" }, { ...facts, version: -1 },
