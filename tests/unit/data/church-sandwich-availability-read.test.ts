@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { buildChurchSandwichAvailability } from "@/data/read-models/church-sandwich-availability.server";
+import { currentChurchAvailabilityRecipes } from "@/data/read-models/church-sandwich-formula.server";
 import { readFailure, readSuccess } from "@/data/read-models/shared";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import type { ChurchCateringPrepDay } from "@/lib/kitchen/church-catering-prep";
@@ -84,6 +85,8 @@ it("projects signed measured edible grams only while each exact supplier evidenc
   expect(estimate([{ ...evidence[0], revision: 3 }, ...evidence.slice(1)])).toMatchObject({ data: { approvedRecipes: [] } });
   expect(estimate([{ ...evidence[0], status: "hold" }, ...evidence.slice(1)])).toMatchObject({ data: { approvedRecipes: [] } });
   expect(estimate(evidence, false)).toMatchObject({ data: { approvedRecipes: [] } });
+  expect(currentChurchAvailabilityRecipes([formula], evidence.slice(1))).toEqual([]);
+  expect(currentChurchAvailabilityRecipes([formula], [{ ...evidence[0], revision: 1 }, ...evidence.slice(1)])).toEqual([]);
 });
 
 it("rejects invalid measured yield, fractional baguettes, or a mismatched ingredient set", () => {

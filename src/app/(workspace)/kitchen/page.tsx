@@ -13,7 +13,7 @@ import { loadLiveInventory } from "@/data/read-models/inventory";
 import { loadChurchIngredientEvidence } from "@/data/read-models/church-ingredient-evidence.server";
 import { loadChurchCateringPrep } from "@/data/read-models/church-catering-prep.server";
 import { buildChurchSandwichAvailability } from "@/data/read-models/church-sandwich-availability.server";
-import { loadChurchSandwichFormulas } from "@/data/read-models/church-sandwich-formula.server";
+import { currentChurchAvailabilityRecipes, loadChurchSandwichFormulas } from "@/data/read-models/church-sandwich-formula.server";
 import { loadLivePrep } from "@/data/read-models/prep";
 import { type WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
@@ -66,6 +66,9 @@ export default async function KitchenPage() {
   const ingredientEvidence = loadChurchIngredientEvidence(resolution.context);
   const cateringPrep = loadChurchCateringPrep(resolution.context);
   const sandwichFormulas = loadChurchSandwichFormulas(resolution.context);
+  const approvedRecipes = Promise.all([sandwichFormulas, ingredientEvidence]).then(([formulas, evidence]) =>
+    formulas?.ok && evidence?.ok ? currentChurchAvailabilityRecipes(formulas.data, evidence.data) : null,
+  );
   const [prepResult, inventoryResult] = await Promise.all([
     loadLivePrep(resolution.context),
     loadLiveInventory(resolution.context),
@@ -73,7 +76,7 @@ export default async function KitchenPage() {
   return (
     <>
       <PageFrame width="full" className="max-w-[1400px] pb-0">
-        <Suspense fallback={null}><ChurchCateringPrep data={cateringPrep} /></Suspense>
+        <Suspense fallback={null}><ChurchCateringPrep data={cateringPrep} approvedRecipes={approvedRecipes} /></Suspense>
         <Suspense fallback={null}><ChurchSupplierEvidence workspace={resolution.context} data={ingredientEvidence} /></Suspense>
         <Suspense fallback={null}><ChurchSandwichPlanning workspace={resolution.context} evidence={ingredientEvidence} catering={cateringPrep} formulas={sandwichFormulas} /></Suspense>
         <LivePrepWorkspace
