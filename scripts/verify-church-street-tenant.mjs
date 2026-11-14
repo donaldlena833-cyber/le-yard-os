@@ -148,6 +148,79 @@ async function verifyChurchSquareCountLedger(db, churchId, locationId) {
   process.stdout.write("PASS Church Street Square count authorization, isolation, replay and expired recovery\n");
 }
 
+async function verifyChurchSquareWebhookProjection(db, locationId) {
+  const read = async (sql, args = []) => (await db.query(sql, args)).rows[0]?.result;
+  const list = () => read("select public.list_church_square_stock_alerts($1::uuid) as result", [locationId]);
+  const record = (id, quantity, instant, merchant = "M_TEST", variation = "V_TEST") => read(`
+    select public.service_record_church_square_webhook(
+      $1, 'L_TEST', $2, 'inventory.count.updated', $3::timestamptz,
+      'inventory-event-object', $4::jsonb
+    ) as result
+  `, [merchant, id, instant, JSON.stringify([{ variationId: variation, quantity, calculatedAt: instant }])]);
+  const assertRestricted = () => read(`
+    select has_function_privilege(
+      current_user,
+      'public.service_record_church_square_webhook(text,text,text,text,timestamptz,text,jsonb,text)',
+      'execute'
+    ) as result
+  `);
+  const times = Array.from({ length: 7 }, (_, index) => `2026-11-14T12:00:0${index}.0000002Z`);
+
+  await claims(db, undefined, "service_role");
+  assert.equal(await record("square-event-1", "7", times[0]), true);
+  assert.equal(await record("square-event-2", "5.00000", times[1]), true);
+  await claims(db, churchEmployeeId);
+  assert.equal(await assertRestricted(), false);
+  const [initial] = await list();
+  assert.equal(initial.quantity, "5");
+  assert.equal(initial.label, "Fixture Sandwich");
+  assert.equal(JSON.stringify(initial).includes("V_TEST"), false);
+  assert.match(initial.episode, /^[a-f0-9-]{36}$/);
+  const revision = () => read("select revision::int as result from public.church_square_stock_invalidation_signals where location_id = $1::uuid", [locationId]);
+  assert.equal(await revision(), 1);
+
+  await claims(db, undefined, "service_role");
+  assert.equal(await record("square-event-2", "1", times[2]), false);
+  assert.equal(await record("square-event-stale", "9", times[0]), true);
+  assert.equal(await record("square-event-unmapped", "1", times[2], "M_TEST", "UNMAPPED"), true);
+  await claims(db, churchEmployeeId);
+  assert.deepEqual(await list(), [initial]);
+  assert.equal(await revision(), 1);
+
+  await claims(db, undefined, "service_role");
+  assert.equal(await record("square-event-3", "4", times[3]), true);
+  await claims(db, churchEmployeeId);
+  const [stillLow] = await list();
+  assert.equal(stillLow.quantity, "4");
+  assert.equal(stillLow.episode, initial.episode);
+  assert.equal(await revision(), 2);
+
+  await claims(db, undefined, "service_role");
+  assert.equal(await record("square-event-4", "12", times[4]), true);
+  await claims(db, churchEmployeeId);
+  assert.deepEqual(await list(), []);
+  assert.equal(await revision(), 3);
+  await claims(db, undefined, "service_role");
+  assert.equal(await record("square-event-5", "0", times[5]), true);
+  await claims(db, churchEmployeeId);
+  const [again] = await list();
+  assert.equal(again.quantity, "0");
+  assert.notEqual(again.episode, initial.episode);
+  assert.equal(await revision(), 4);
+  await expectDenial(db, `select public.list_church_square_webhook_receipts('${locationId}')`, "42501",
+    "Resource receipt history requires Church Street management");
+  await claims(db, ownerId);
+  const recent = await read("select public.list_church_square_webhook_receipts($1::uuid) as result", [locationId]);
+  assert.equal(recent.length, 7);
+  assert.deepEqual(Object.keys(recent[0]).sort(), ["createdAt", "receivedAt", "type"]);
+
+  await claims(db, restaurantEmployeeId);
+  assert.equal(await revision(), undefined);
+  await expectDenial(db, `select public.list_church_square_stock_alerts('${locationId}')`, "42501",
+    "Other tenants cannot read the Church Street alert queue");
+  process.stdout.write("PASS Church Street webhook replay, stale exclusion, and low-stock alert rearming\n");
+}
+
 export async function verifyChurchStreetTenant(db) {
   const roster = [
     { user_id: ownerId, role: "owner" },
@@ -279,6 +352,7 @@ export async function verifyChurchStreetTenant(db) {
     `), { church: true, restaurant: false, prep: true, manages_prep: false });
 
     await verifyChurchSquareCountLedger(db, churchId, churchLocationId);
+    await verifyChurchSquareWebhookProjection(db, churchLocationId);
 
     await claims(db, undefined, "service_role");
     assert.equal((await get(`select public.service_set_church_street_active('${churchId}', false) as result`)).result.status, "suspended");

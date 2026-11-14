@@ -6,8 +6,11 @@ import { redirect } from "next/navigation";
 import { signOutAction } from "@/app/actions/auth";
 import { WorkspaceProvider } from "@/components/providers/workspace-provider";
 import { AppShell } from "@/components/shell/app-shell";
+import { ChurchSquareStockNotifications } from "@/components/inventory/church-square-stock-notifications";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { Button } from "@/components/ui/button";
+import { canViewChurchSquareStockAlerts, loadChurchSquareStockAlerts } from "@/data/read-models/church-square-stock-alerts";
+import { churchSquareWebhookConfiguration } from "@/lib/integrations/church-square-webhook.server";
 import {
   resolveWorkspaceSession,
   type WorkspaceSessionResolution,
@@ -113,10 +116,19 @@ export default async function WorkspaceLayout({
     return <WorkspaceAccessState resolution={resolution} />;
   }
 
+  const { context } = resolution;
+  const squareAlertsEnabled = canViewChurchSquareStockAlerts(context) && Boolean(churchSquareWebhookConfiguration());
+  const squareAlerts = squareAlertsEnabled ? await loadChurchSquareStockAlerts(context.activeLocation.id) : null;
+
   return (
-    <WorkspaceProvider value={resolution.context}>
-      <WorkspaceAccessGuard revision={resolution.context.mode === "live" ? workspaceAccessRevision(resolution.context) : null} userId={resolution.context.identity.userId} homePath={defaultWorkspacePath}>
+    <WorkspaceProvider value={context}>
+      <WorkspaceAccessGuard revision={context.mode === "live" ? workspaceAccessRevision(context) : null} userId={context.identity.userId} homePath={defaultWorkspacePath}>
         {isPhoneSurface ? children : <AppShell>{children}</AppShell>}
+        {squareAlertsEnabled ? (
+          <ChurchSquareStockNotifications key={`${context.identity.userId}:${context.activeLocation.id}`}
+            organizationId={context.organization.id} locationId={context.activeLocation.id}
+            userId={context.identity.userId} alerts={squareAlerts} />
+        ) : null}
       </WorkspaceAccessGuard>
     </WorkspaceProvider>
   );

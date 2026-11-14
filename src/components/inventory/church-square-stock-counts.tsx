@@ -4,12 +4,17 @@ import { type FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { configureChurchSquareCountItemAction, listTrackedChurchSquareVariationsAction, sendChurchSquareCountAction } from "@/app/actions/workflows/church-square-counts";
 import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/status-pill";
 import type { ChurchSquareCountItem } from "@/data/read-models/church-square-counts";
+import type { ChurchSquareStockAlert } from "@/data/read-models/church-square-stock-alerts";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+import { formatSquareStockQuantity } from "@/lib/integrations/square-stock-alerts";
 
 type LocationScope = { organizationId: string; locationId: string };
 
-function CountItem({ item, scope, enabled }: { item: ChurchSquareCountItem; scope: LocationScope; enabled: boolean }) {
+function CountItem({ item, scope, enabled, alert }: {
+  item: ChurchSquareCountItem; scope: LocationScope; enabled: boolean; alert?: ChurchSquareStockAlert;
+}) {
   const router = useRouter();
   const { requestIdFor, rotateRequestId } = useStableRequestIds();
   const [saving, setSaving] = useState(false);
@@ -59,7 +64,14 @@ function CountItem({ item, scope, enabled }: { item: ChurchSquareCountItem; scop
 
   return (
     <li className="py-4">
-      <h3 className="text-sm font-semibold">{item.label}</h3>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold">{item.label}</h3>
+        {alert ? (
+          <StatusPill size="sm" tone="warning">
+            Low stock · {formatSquareStockQuantity(alert.quantity)} in stock
+          </StatusPill>
+        ) : null}
+      </div>
       {item.lastConfirmedQuantity != null ? (
         <p className="mt-1 text-xs text-[var(--ink-faint)]">Last confirmed physical count: {item.lastConfirmedQuantity}</p>
       ) : null}
@@ -87,13 +99,15 @@ function CountItem({ item, scope, enabled }: { item: ChurchSquareCountItem; scop
   );
 }
 
-export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure }: {
+export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, alerts }: {
   items: ChurchSquareCountItem[]; scope: LocationScope; enabled: boolean; canConfigure: boolean;
+  alerts?: readonly ChurchSquareStockAlert[] | null;
 }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [variations, setVariations] = useState<{ id: string; label: string }[]>();
+  const alertsByItem = new Map(alerts?.map((alert) => [alert.id, alert]));
 
   async function loadVariations() {
     if (saving || !enabled || !canConfigure) return;
@@ -140,7 +154,7 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure }:
         <p className="mt-1 text-sm text-[var(--ink-faint)]">Count sellable units now. A confirmed zero can mark a tracked item sold out. For temporary holds or modifiers, use Square’s availability controls.</p>
         {!enabled ? <p className="mt-2 text-sm">Waiting for the Church Street Square connection.</p> : null}
         {items.length ? <ul className="mt-2 divide-y divide-[var(--line)]">
-          {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} />)}
+          {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} alert={alertsByItem.get(item.id)} />)}
         </ul> : <p className="mt-2 text-sm">No items are set up for Square counts yet.</p>}
         {canConfigure && enabled ? (
           <details className="mt-4 border-t border-[var(--line)] pt-3">
