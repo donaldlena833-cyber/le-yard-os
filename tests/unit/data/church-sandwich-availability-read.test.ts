@@ -97,3 +97,10 @@ it("rejects invalid measured yield, fractional baguettes, or a mismatched ingred
   }).success).toBe(false);
   expect(saveChurchSandwichFormulaInput.safeParse({ ...input, recipeKey: "figaro" }).success).toBe(false);
 });
+
+it("reads review text within PostgreSQL character limits when it contains supplementary characters", () => {
+  expect(churchSandwichFormula.safeParse({
+    ...measured, reviewReference: "🍎".repeat(200), reviewerName: "🍎".repeat(65),
+    revision: 3, reviewedAt: hold.updatedAt, current: true,
+  }).success).toBe(true);
+});

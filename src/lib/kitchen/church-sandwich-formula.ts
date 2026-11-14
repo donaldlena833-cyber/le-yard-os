@@ -9,6 +9,7 @@ import {
 const quantity = (maximum: number) => z.number().positive().max(maximum)
   .refine((value) => Math.round(value * 1_000) / 1_000 === value, "Use up to three decimal places.");
 const revision = z.number().int().max(2_147_483_647);
+const postgresText = (maximum: number) => z.string().min(1).refine((value) => Array.from(value).length <= maximum);
 const fields = {
   recipeKey: z.enum(churchSandwichRecipeKeys),
   reviewReference: z.string().trim().min(1).max(300).regex(/^[^\p{Cc}\p{Cf}]+$/u),
@@ -49,9 +50,10 @@ export const saveChurchSandwichFormulaInput = z.strictObject({
 
 export const churchSandwichFormula = z.object({
   ...fields,
+  reviewReference: postgresText(300),
   revision: revision.min(1),
   reviewedAt: z.iso.datetime({ offset: true }),
-  reviewerName: z.string().trim().min(1).max(120),
+  reviewerName: postgresText(120),
   current: z.boolean(),
 }).superRefine(validFormula);
 
