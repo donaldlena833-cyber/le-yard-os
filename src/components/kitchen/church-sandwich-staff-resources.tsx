@@ -17,7 +17,7 @@ export function ChurchSandwichStaffResources() {
   return (
     <section id="church-sandwich-staff-resources" aria-labelledby="church-sandwich-staff-resources-heading" className="mb-6 scroll-mt-20 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
       <h2 id="church-sandwich-staff-resources-heading" className="text-lg font-semibold">Sandwich station training</h2>
-      <p className="mt-2 text-sm text-[var(--ink-soft)]">Guide v0.19 covers bench recipes and linked prep batches. Use the current chef-signed recipes and reviewed supplier labels for service.</p>
+      <p className="mt-2 text-sm text-[var(--ink-soft)]">Guide v0.20 covers bench recipes, linked prep batches, and printing saved labels. Use the current chef-signed recipes and reviewed supplier labels for service.</p>
       <ul aria-label="Training PDFs" className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
         {pdfs.map(({ slug, label }) => (
           <li key={slug}>

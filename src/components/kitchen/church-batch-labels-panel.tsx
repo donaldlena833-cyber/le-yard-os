@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useRef, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
   measureChurchIngredientBatchAction, recordChurchIngredientBatchAction, recordChurchIngredientBatchFromSourceAction,
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { localDateTimeParts, zonedLocalToIso } from "@/data/read-models/local-time";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+import { openChurchBatchPrintLabel } from "@/lib/kitchen/church-batch-print-label";
 import type { ChurchBatchLabel, ChurchBatchMeasurement } from "@/lib/kitchen/church-ingredient-batches";
 import { churchSandwichBread, churchSandwichComponents } from "@/lib/kitchen/church-sandwich-bench";
 import { validChurchAvailabilityStock } from "@/lib/kitchen/church-sandwich-availability";
@@ -235,6 +236,7 @@ function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave, o
   const [initialObservedAt, setInitialObservedAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const printPreview = useRef<Window | null>(null);
   const { requestIdFor } = useStableRequestIds();
   const current = isCurrentEvidence(record, evidence);
   const discard = Date.parse(record.discardAt);
@@ -244,12 +246,30 @@ function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave, o
   const usable = unresolved && current && !expired && !sourceNeedsReview;
   const canMeasure = canRecord && usable;
   const canPrepFrom = canRecord && usable && Boolean(evidence?.preppedRule);
+  const canPrint = canRecord && usable;
   const measurement = record.latestMeasurement;
   const latestId = measurement?.id ?? null;
   const isBread = record.ingredientKey === churchSandwichBread;
   const unit = isBread ? "each" : "g";
   const status = appearance[record.voidedAt ? "voided" : record.disposition?.outcome
     ?? (expired ? "expired" : sourceNeedsReview ? "source_recheck" : current ? "current" : "recheck")];
+
+  useEffect(() => {
+    return () => {
+      printPreview.current?.close();
+      printPreview.current = null;
+    };
+  }, [canPrint]);
+
+  function printLabel() {
+    if (!canPrint || Date.now() >= discard) {
+      setMessage("The batch label now needs review. Refresh it before printing.");
+      return;
+    }
+    printPreview.current?.close();
+    printPreview.current = openChurchBatchPrintLabel(record);
+    setMessage(printPreview.current ? "" : "The print preview could not open. Allow pop-ups for Operations and try again.");
+  }
 
   async function recordFromSource(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -437,6 +457,7 @@ function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave, o
           <div className="flex flex-wrap gap-2">
             {canMeasure && <Button variant="secondary" size="sm" onClick={() => { setMeasurementBaseline(latestId); setInitialObservedAt(currentEasternInput()); setCommand("measure"); setMessage(""); }}>Measure remaining</Button>}
             {canPrepFrom && <Button variant="secondary" size="sm" onClick={() => { setEarlierDeadline(false); setCommand("prep"); setMessage(""); }}>Prep from this batch</Button>}
+            {canPrint && <Button variant="secondary" size="sm" onClick={printLabel}>Print label</Button>}
             {canResolve && usable && <Button variant="secondary" size="sm" onClick={() => setCommand("used_up")}>Record used up</Button>}
             {canResolve && <Button variant="secondary" size="sm" onClick={() => setCommand("discarded")}>Record discard</Button>}
             {canRecord && <Button variant="quiet" size="sm" onClick={() => setCommand("void")}>Void label</Button>}

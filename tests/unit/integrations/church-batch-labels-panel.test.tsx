@@ -136,11 +136,48 @@ it("records a linked prep label against an earlier approved Eastern deadline and
   fireEvent.click(sourceRow.getByRole("button", { name: "Record discard" }));
   fireEvent.click(sourceRow.getByRole("button", { name: "Confirm discard" }));
   expect(await childRow.findByText("Source batch needs review")).toBeTruthy();
-  for (const name of ["Measure remaining", "Prep from this batch", "Record used up"]) {
+  for (const name of ["Measure remaining", "Prep from this batch", "Record used up", "Print label"]) {
     expect(childRow.queryByRole("button", { name })).toBeNull();
   }
   expect(childRow.getByRole("button", { name: "Record discard" })).toBeTruthy();
   expect(childRow.getByRole("button", { name: "Void label" })).toBeTruthy();
+});
+
+it("opens a safe printable label on request and closes the preview when its source needs review", () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(asOf));
+  const doc = document.implementation.createHTMLDocument();
+  const preview = { document: doc, opener: window, print: vi.fn(), close: vi.fn(), addEventListener: vi.fn() };
+  const open = vi.spyOn(window, "open").mockReturnValueOnce(null).mockReturnValue(preview as unknown as Window);
+  const batch: ChurchBatchLabel = {
+    ...recorded, supplierLot: "LóT <script>throw 1</script>", supplierSku: "HF☕️",
+    storageRule: "<img src=x onerror=alert(1)>\nReview pack label", recordedByName: "Élodie",
+    sourceBatch: { id: "77777777-7777-4777-8777-777777777777", batchCode: "HAM–05", discardAt: "2026-11-14T18:00:00.123456Z" },
+    sourceNeedsReview: false,
+  };
+  const props = { evidence: [evidence], asOf, canRecord: true };
+  const view = render(<ChurchBatchLabelsPanel {...props} records={[batch]} />);
+  const row = openDetails("French-style ham · HAM-07");
+  fireEvent.click(row.getByRole("button", { name: "Print label" }));
+  expect(row.getByText(/print preview could not open/)).toBeTruthy();
+  fireEvent.click(row.getByRole("button", { name: "Print label" }));
+
+  expect(open).toHaveBeenLastCalledWith("", "_blank", expect.stringContaining("popup"));
+  expect(preview.opener).toBeNull();
+  expect(preview.print).not.toHaveBeenCalled();
+  const printable = within(doc.body);
+  const label = within(printable.getByRole("main", { hidden: true }));
+  expect(label.getByRole("heading", { hidden: true }).textContent).toBe("French-style ham");
+  for (const text of [
+    "Batch HAM-07", "LóT <script>throw 1</script>", "HF☕️ · r4", "Élodie", "HAM–05",
+    "DISCARD BY Nov 14, 2026, 1:00:00 PM EST", "Nov 14, 2026, 1:00:00.123456 PM EST",
+  ]) expect(label.getByText(text)).toBeTruthy();
+  expect(doc.querySelector("script, img")).toBeNull();
+  printable.getByText("Print batch label").click();
+  expect(preview.print).toHaveBeenCalledOnce();
+
+  view.rerender(<ChurchBatchLabelsPanel {...props} records={[{ ...batch, sourceNeedsReview: true }]} />);
+  expect(row.queryByRole("button", { name: "Print label" })).toBeNull();
+  expect(preview.close).toHaveBeenCalledOnce();
 });
 
 it("requires physical-label removal to void and preserves newer server void evidence over a late local reply", async () => {
