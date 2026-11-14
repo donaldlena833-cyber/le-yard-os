@@ -154,4 +154,41 @@ describe("Church Street Square low stock notification", () => {
     expect(screen.queryByRole("complementary", { name: "Square low stock notification" })).toBeNull();
     expect(refresh).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps Inventory and the popup in sync even when the route props stay stale", async () => {
+    vi.useFakeTimers();
+    const initial = { ...alert, episode: "30000000-0000-4000-8000-000000000016" };
+    const next = { ...initial, episode: "30000000-0000-4000-8000-000000000017" };
+    const request = vi.fn();
+    for (const alerts of [[], [initial], [{ ...initial, ...receipt, quantity: "4" }], [], [next]]) {
+      request.mockResolvedValueOnce({ ok: true, json: async () => ({ ...scope, userId, alerts }) });
+    }
+    vi.stubGlobal("fetch", request);
+    render(<ChurchSquareStockNotifications {...scope} userId={userId} alerts={[]}>
+      <ChurchSquareStockCounts scope={scope} items={[{ id: initial.id, label: initial.label }]}
+        alerts={[initial]} alertUserId={userId} enabled canConfigure={false} />
+    </ChurchSquareStockNotifications>);
+
+    expect(screen.getByText("Low stock · 5 in stock")).toBeTruthy();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.queryByText("Low stock · 5 in stock")).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.getByText("Low stock · 5 in stock")).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Square low stock notification" })).toBeTruthy();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.getByText("Low stock · 4 in stock")).toBeTruthy();
+    expect(screen.getByText(/Acknowledged by Prep lead/)).toBeTruthy();
+    expect(screen.queryByRole("complementary", { name: "Square low stock notification" })).toBeNull();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.queryByText(/Low stock ·/)).toBeNull();
+    expect(screen.queryByText(/Acknowledged by/)).toBeNull();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(screen.getByText("Low stock · 5 in stock")).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Square low stock notification" })).toBeTruthy();
+  });
 });

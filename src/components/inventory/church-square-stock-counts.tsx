@@ -11,6 +11,7 @@ import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import { formatSquareStockQuantity } from "@/lib/integrations/square-stock-alerts";
 import { ChurchSquareMenuDiagnostic } from "./church-square-menu-diagnostic";
 import { AcknowledgeStockAlertButton, StockAcknowledgmentReceipt, stockAcknowledgment, stockAcknowledgmentScope, useStockAcknowledgments } from "./church-square-stock-acknowledgment";
+import { useLiveChurchSquareStockAlerts } from "./church-square-stock-notifications";
 
 type LocationScope = { organizationId: string; locationId: string };
 
@@ -115,8 +116,9 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [variations, setVariations] = useState<{ id: string; label: string }[]>();
-  const alertsByItem = new Map(alerts?.map((alert) => [alert.id, alert]));
   const alertScope = alertUserId ? stockAcknowledgmentScope(scope.organizationId, scope.locationId, alertUserId) : undefined;
+  const currentAlerts = useLiveChurchSquareStockAlerts(alertScope) ?? alerts;
+  const alertsByItem = new Map(currentAlerts?.map((alert) => [alert.id, alert]));
 
   async function loadVariations() {
     if (saving || !enabled || !canConfigure) return;

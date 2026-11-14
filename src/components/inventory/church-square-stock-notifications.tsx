@@ -3,7 +3,7 @@
 import { PackageX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import type { ChurchSquareStockAlert } from "@/data/read-models/church-square-stock-alerts";
 import {
@@ -28,6 +28,13 @@ type AlertStatus = {
   userId: string;
   alerts: ChurchSquareStockAlert[];
 };
+
+const StockAlertSnapshotContext = createContext<{ scopeKey: string; alerts: ChurchSquareStockAlert[] } | undefined>(undefined);
+
+export function useLiveChurchSquareStockAlerts(scopeKey: string | undefined) {
+  const snapshot = useContext(StockAlertSnapshotContext);
+  return snapshot && snapshot.scopeKey === scopeKey ? snapshot.alerts : undefined;
+}
 
 function subscribeToDismissals(notify: () => void) {
   window.addEventListener(dismissalEvent, notify);
@@ -55,12 +62,13 @@ function persistDismissals(key: string, episodes: string[]) {
 }
 
 export function ChurchSquareStockNotifications({
-  alerts, organizationId, locationId, userId,
+  alerts, organizationId, locationId, userId, children,
 }: {
   alerts: readonly ChurchSquareStockAlert[] | null;
   organizationId: string;
   locationId: string;
   userId: string;
+  children?: ReactNode;
 }) {
   const { refresh } = useRouter();
   const scopeKey = stockAcknowledgmentScope(organizationId, locationId, userId);
@@ -68,7 +76,8 @@ export function ChurchSquareStockNotifications({
   const activeRequest = useRef<AbortController | null>(null);
   const renderedAlerts = useRef<readonly ChurchSquareStockAlert[] | null>(alerts);
   const [snapshot, setSnapshot] = useState<{ scopeKey: string; alerts: ChurchSquareStockAlert[] }>();
-  const currentAlerts = snapshot?.scopeKey === scopeKey ? snapshot.alerts : alerts;
+  const currentSnapshot = snapshot?.scopeKey === scopeKey ? snapshot : undefined;
+  const currentAlerts = currentSnapshot?.alerts ?? alerts;
 
   useEffect(() => { renderedAlerts.current = currentAlerts; }, [currentAlerts]);
 
@@ -78,10 +87,12 @@ export function ChurchSquareStockNotifications({
     activeRequest.current = controller;
     const timeout = window.setTimeout(() => controller.abort(), 8_000);
     function applyAlerts(next: ChurchSquareStockAlert[]) {
-      if (JSON.stringify(next) === JSON.stringify(renderedAlerts.current)) return;
+      const nextKey = JSON.stringify(next);
+      const changed = nextKey !== JSON.stringify(renderedAlerts.current);
       renderedAlerts.current = next;
-      setSnapshot({ scopeKey, alerts: next });
-      refresh();
+      setSnapshot((previous) => previous?.scopeKey === scopeKey && JSON.stringify(previous.alerts) === nextKey
+        ? previous : { scopeKey, alerts: next });
+      if (changed) refresh();
     }
     try {
       const response = await fetch("/api/integrations/square/stock-alerts", {
@@ -143,7 +154,8 @@ export function ChurchSquareStockNotifications({
   const pending = dismissalSnapshot === null ? [] : pendingSquareStockAlerts(unacknowledged, dismissed);
   const sample = pending.slice(0, 3);
   return (
-    <>
+    <StockAlertSnapshotContext.Provider value={currentSnapshot}>
+      {children}
       <p role="status" aria-atomic="true" className="sr-only">
         {pending.length ? `Square low stock. ${sample.map((alert) => `${alert.label} has ${formatSquareStockQuantity(alert.quantity)} in stock`).join(". ")}` : ""}
       </p>
@@ -176,6 +188,6 @@ export function ChurchSquareStockNotifications({
           </Link>
         </aside>
       ) : null}
-    </>
+    </StockAlertSnapshotContext.Provider>
   );
 }

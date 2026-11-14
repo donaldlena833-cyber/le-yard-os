@@ -123,16 +123,18 @@ export default async function WorkspaceLayout({
     squareAlertsEnabled ? loadChurchSquareStockAlerts(context.activeLocation.id) : null,
     verifyChurchSquareOrderWindowScope(context).catch(() => false),
   ]);
+  const workspace = isPhoneSurface ? children : <AppShell canOpenChurchCatering={canOpenChurchCatering}>{children}</AppShell>;
 
   return (
     <WorkspaceProvider value={context}>
       <WorkspaceAccessGuard revision={context.mode === "live" ? workspaceAccessRevision(context) : null} userId={context.identity.userId} homePath={defaultWorkspacePath}>
-        {isPhoneSurface ? children : <AppShell canOpenChurchCatering={canOpenChurchCatering}>{children}</AppShell>}
         {squareAlertsEnabled ? (
           <ChurchSquareStockNotifications key={`${context.identity.userId}:${context.activeLocation.id}`}
             organizationId={context.organization.id} locationId={context.activeLocation.id}
-            userId={context.identity.userId} alerts={squareAlerts} />
-        ) : null}
+            userId={context.identity.userId} alerts={squareAlerts}>
+            {workspace}
+          </ChurchSquareStockNotifications>
+        ) : workspace}
       </WorkspaceAccessGuard>
     </WorkspaceProvider>
   );
