@@ -4,6 +4,8 @@ import { POST } from "@/app/api/integrations/square/webhook/route";
 import { churchSquareWebhookUrl } from "@/lib/integrations/church-square-webhook.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const schedule = vi.hoisted(() => vi.fn());
+vi.mock("next/server", () => ({ after: schedule }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 const mockAdmin = vi.mocked(createAdminClient);
 const rpc = vi.fn();
@@ -64,6 +66,7 @@ describe("signed Church Street Square webhooks", () => {
       p_related_order_id: undefined,
       p_inventory: [{ variationId: "VARIATION_1", quantity: "5", calculatedAt: createdAt }],
     });
+    expect(schedule).not.toHaveBeenCalled();
   });
 
   it("suppresses unrelated sellers, locations, and resource mismatches", async () => {
@@ -94,6 +97,7 @@ describe("signed Church Street Square webhooks", () => {
       p_event_type: "invoice.payment_made", p_created_at: createdAt, p_resource_id: invoice.id,
       p_related_order_id: "order-1", p_inventory: [],
     });
+    expect(schedule).toHaveBeenCalledOnce();
   });
 
   it("acknowledges a duplicate only after persistence and returns a retry status during failures", async () => {
@@ -103,6 +107,7 @@ describe("signed Church Street Square webhooks", () => {
     const failed = await POST(request(body));
     expect(failed.status).toBe(503);
     expect(await failed.text()).toBe("");
+    expect(schedule).toHaveBeenCalledOnce();
   });
 
   it("keeps the receiver disabled in preview", async () => {
