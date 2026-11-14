@@ -35,7 +35,7 @@ function variationLabel(variation: { itemName: string; variationName: string }) 
     ? variation.itemName : `${variation.itemName} · ${variation.variationName}`;
 }
 
-function stockItemId(locationId: string, variationId: string) {
+export function stockItemId(locationId: string, variationId: string) {
   const hash = createHash("sha256").update(`church-square-stock:${locationId}:${variationId}`).digest("hex");
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-8${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }

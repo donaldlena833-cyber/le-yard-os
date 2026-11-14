@@ -1,6 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
+import { churchSandwichBenchRecipes } from "../kitchen/church-sandwich-bench";
 import { SQUARE_API_VERSION } from "./square-source";
 
 const squareId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
@@ -79,6 +80,17 @@ const parentSchema = catalogLocationSchema.extend({
     variations: z.array(z.unknown()).max(250).optional(),
   }),
 });
+const exactParentSchema = parentSchema.extend({
+  item_data: parentSchema.shape.item_data.extend({ name: z.string().min(1).max(2048) }),
+});
+const exactVariationSchema = variationSchema.extend({
+  item_variation_data: variationSchema.shape.item_variation_data.extend({
+    name: z.string().min(1).max(2048).refine((name) => name.trim() && !/[\p{Cc}\p{Cf}]/u.test(name)),
+    sku: z.string().max(255).regex(/^[^\p{Cc}\p{Cf}]*$/u).optional(),
+    location_overrides: variationSchema.shape.item_variation_data.shape.location_overrides.refine((overrides) =>
+      !overrides || new Set(overrides.map(({ location_id }) => location_id)).size === overrides.length),
+  }),
+});
 const physicalCountSchema = z.object({
   id: squareId,
   reference_id: z.string().max(255).optional(),
@@ -119,6 +131,15 @@ export interface SquareTrackedVariation {
   itemName: string;
   variationName: string;
 }
+export interface SquareChurchSandwichCatalogVariation {
+  id: string;
+  name: string;
+  sku: string | null;
+  tracking: "tracked" | "untracked" | "unknown";
+}
+export type SquareChurchSandwichCatalogItem =
+  | { name: string; status: "missing" | "ambiguous"; itemId: null; variations: [] }
+  | { name: string; status: "matched"; itemId: string; variations: SquareChurchSandwichCatalogVariation[] };
 export interface SquarePhysicalCountReceipt {
   status: "confirmed";
   variationId: string;
@@ -221,8 +242,9 @@ export class SquareCountClient {
     this.configuration = parsed.data;
   }
 
-  private async call(path: string, options?: { body: object }) {
+  private async call(path: string, options?: { body: object }, deadline?: AbortSignal) {
     const provider = this.configuration;
+    const requestTimeout = AbortSignal.timeout(10_000);
     let response: Response;
     try {
       response = await this.request(hosts[provider.environment] + path, {
@@ -236,7 +258,7 @@ export class SquareCountClient {
         ...(options ? { body: JSON.stringify(options.body) } : {}),
         cache: "no-store",
         redirect: "error",
-        signal: AbortSignal.timeout(10_000),
+        signal: deadline ? AbortSignal.any([deadline, requestTimeout]) : requestTimeout,
       });
     } catch {
       throw new SquareCountError("Square inventory transport failed.", "provider_unavailable");
@@ -252,11 +274,11 @@ export class SquareCountClient {
     return envelope;
   }
 
-  async verifyScope(): Promise<void> {
+  async verifyScope(deadline?: AbortSignal): Promise<void> {
     const expected = this.configuration;
     const [merchantResult, locationResult] = await Promise.all([
-      this.call(`/v2/merchants/${expected.merchantId}`),
-      this.call(`/v2/locations/${expected.locationId}`),
+      this.call(`/v2/merchants/${expected.merchantId}`, undefined, deadline),
+      this.call(`/v2/locations/${expected.locationId}`, undefined, deadline),
     ]);
     const merchant = merchantSchema.safeParse(merchantResult.merchant);
     const location = locationSchema.safeParse(locationResult.location);
@@ -276,46 +298,98 @@ export class SquareCountClient {
     }
   }
 
-  async listTrackedVariations(): Promise<SquareTrackedVariation[]> {
-    await this.verifyScope();
-    const { locationId } = this.configuration;
-    const trackedVariations = new Map<string, SquareTrackedVariation>();
+  private async *catalogItems(deadline?: AbortSignal): AsyncGenerator<unknown> {
     const seen = new Set<string>();
     let cursor: string | undefined;
     for (let page = 0; page < MAX_PAGES; page++) {
       const query = new URLSearchParams({ types: "ITEM", ...(cursor ? { cursor } : {}) });
-      const response = await this.call(`/v2/catalog/list?${query}`);
+      const response = await this.call(`/v2/catalog/list?${query}`, undefined, deadline);
       const objects = parseProvider(z.array(z.unknown()).max(100).optional(), response.objects) ?? [];
-      for (const object of objects) {
-        const item = parseProvider(parentSchema, object);
-        if (!itemPresentAtLocation(item, locationId)) continue;
-        for (const objectVariation of item.item_data.variations ?? []) {
-          const variation = parseProvider(variationSchema, objectVariation);
-          if (variation.item_variation_data.item_id !== item.id) {
-            throw new SquareCountError("Square returned an inconsistent parent item.", "scope_mismatch");
-          }
-          if (!presentAtLocation(variation, locationId) || !canCountVariation(variation, this.configuration)) continue;
-          const option = trackedVariationLabels(item, variation);
-          if (!option.itemName || !option.variationName || trackedVariations.has(option.variationId)) {
-            throw new SquareCountError("Square returned an ambiguous catalog variation.", "scope_mismatch");
-          }
-          trackedVariations.set(option.variationId, option);
-          if (trackedVariations.size > MAX_VARIATIONS) {
-            throw new SquareCountError("More than 150 tracked Square variations matched this location.", "provider_unavailable");
-          }
-        }
-      }
+      yield* objects;
       cursor = response.cursor;
-      if (!cursor) {
-        return [...trackedVariations.values()].sort((first, second) =>
-          first.itemName.localeCompare(second.itemName, "en-US")
-          || first.variationName.localeCompare(second.variationName, "en-US")
-          || first.variationId.localeCompare(second.variationId));
-      }
+      if (!cursor) return;
       if (seen.has(cursor)) break;
       seen.add(cursor);
     }
     throw new SquareCountError("Square catalog pagination could not be completed.", "provider_unavailable");
+  }
+
+  async listTrackedVariations(): Promise<SquareTrackedVariation[]> {
+    await this.verifyScope();
+    const { locationId } = this.configuration;
+    const trackedVariations = new Map<string, SquareTrackedVariation>();
+    for await (const object of this.catalogItems()) {
+      const item = parseProvider(parentSchema, object);
+      if (!itemPresentAtLocation(item, locationId)) continue;
+      for (const objectVariation of item.item_data.variations ?? []) {
+        const variation = parseProvider(variationSchema, objectVariation);
+        if (variation.item_variation_data.item_id !== item.id) {
+          throw new SquareCountError("Square returned an inconsistent parent item.", "scope_mismatch");
+        }
+        if (!presentAtLocation(variation, locationId) || !canCountVariation(variation, this.configuration)) continue;
+        const option = trackedVariationLabels(item, variation);
+        if (!option.itemName || !option.variationName || trackedVariations.has(option.variationId)) {
+          throw new SquareCountError("Square returned an ambiguous catalog variation.", "scope_mismatch");
+        }
+        trackedVariations.set(option.variationId, option);
+        if (trackedVariations.size > MAX_VARIATIONS) {
+          throw new SquareCountError("More than 150 tracked Square variations matched this location.", "provider_unavailable");
+        }
+      }
+    }
+    return [...trackedVariations.values()].sort((first, second) =>
+      first.itemName.localeCompare(second.itemName, "en-US")
+      || first.variationName.localeCompare(second.variationName, "en-US")
+      || first.variationId.localeCompare(second.variationId));
+  }
+
+  async verifyChurchSandwichCatalog(): Promise<SquareChurchSandwichCatalogItem[]> {
+    const deadline = AbortSignal.timeout(22_000);
+    await this.verifyScope(deadline);
+    const { locationId } = this.configuration;
+    const items = new Map<string, SquareChurchSandwichCatalogItem>(churchSandwichBenchRecipes.map(({ name }) => [name, {
+      name, status: "missing", itemId: null, variations: [],
+    }]));
+    const catalogIds = new Set<string>();
+    let variationCount = 0;
+    for await (const object of this.catalogItems(deadline)) {
+      const item = parseProvider(exactParentSchema, object);
+      const name = item.item_data.name;
+      if (catalogIds.has(item.id)) {
+        throw new SquareCountError("Square returned a duplicate catalog ID.", "scope_mismatch");
+      }
+      catalogIds.add(item.id);
+      const previous = items.get(name);
+      if (!previous || !itemPresentAtLocation(item, locationId)) continue;
+
+      const variations: SquareChurchSandwichCatalogVariation[] = [];
+      for (const raw of item.item_data.variations ?? []) {
+        const variation = parseProvider(exactVariationSchema, raw);
+        const data = variation.item_variation_data;
+        if (data.item_id !== item.id || catalogIds.has(variation.id)) {
+          throw new SquareCountError("Square returned an inconsistent or duplicate catalog variation.", "scope_mismatch");
+        }
+        catalogIds.add(variation.id);
+        if (!presentAtLocation(variation, locationId)) continue;
+        if (++variationCount > MAX_VARIATIONS) {
+          throw new SquareCountError("Square returned too many sandwich variations to verify.", "provider_unavailable");
+        }
+        const override = data.location_overrides?.find(({ location_id }) => location_id === locationId);
+        const tracked = override?.track_inventory ?? data.track_inventory;
+        variations.push({
+          id: variation.id,
+          name: data.name,
+          sku: data.sku?.trim() ? data.sku : null,
+          tracking: tracked === undefined ? "unknown" : tracked ? "tracked" : "untracked",
+        });
+      }
+
+      items.set(name, previous.status === "missing" ? {
+        name, status: "matched", itemId: item.id, variations: variations.sort((first, second) =>
+          first.name.localeCompare(second.name, "en-US") || first.id.localeCompare(second.id)),
+      } : { name, status: "ambiguous", itemId: null, variations: [] });
+    }
+    return [...items.values()];
   }
 
   async verifyTrackedVariation(variationId: string): Promise<SquareTrackedVariation> {

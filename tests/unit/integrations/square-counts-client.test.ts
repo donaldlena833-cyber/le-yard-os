@@ -97,6 +97,100 @@ function requestsTo(mock: ReturnType<typeof mockSquare>, path: string) {
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }).setSystemTime(new Date(now)));
 afterEach(() => vi.useRealTimers());
 
+describe("Church sandwich catalog evidence", () => {
+  const sandwich = (id: string, name: string, variations: unknown[] = [], assignment?: object) => ({
+    id, type: "ITEM", ...assignment, item_data: { name, variations },
+  });
+  const child = (id: string, name: string, fields?: object, assignment?: object) => ({
+    id, type: "ITEM_VARIATION", ...assignment,
+    item_variation_data: { item_id: "PARISIEN", name, ...fields },
+  });
+
+  it("returns exact active site matches and each assigned variation's explicit tracking evidence", async () => {
+    const site = config.locationId;
+    const candidates = [
+      sandwich("PARISIEN", "Le Parisien", [
+        child("V_Z", "Wedge", { sku: "PAR-W", track_inventory: true, location_overrides: [
+          { location_id: site, track_inventory: false },
+        ] }),
+        child("V_B", "Regular", { track_inventory: false, location_overrides: [
+          { location_id: site, track_inventory: true },
+        ] }, { present_at_all_locations: false, present_at_location_ids: [site] }),
+        child("V_A", "Regular", { location_overrides: [{ location_id: "OTHER_LOCATION", track_inventory: true }] }),
+        child("OTHER_LOCATION_ONLY", "Not assigned", { track_inventory: true }, { absent_at_location_ids: [site] }),
+        child("DELETED", "Deleted", { track_inventory: true }, { is_deleted: true }),
+        child("V_C", "Half", { track_inventory: true, location_overrides: [{ location_id: site }] }),
+      ]),
+      sandwich("VERGER_A", "Le Verger"),
+      sandwich("OTHER_PARISIEN", "Le Parisien", [], { absent_at_location_ids: [site] }),
+      sandwich("DELETED_PARISIEN", "Le Parisien", [], { is_deleted: true }),
+      { ...sandwich("ARCHIVED_PARISIEN", "Le Parisien"), item_data: { name: "Le Parisien", is_archived: true } },
+      sandwich("CASE_VARIANT", "le bleu"),
+      sandwich("SPACE_VARIANT", "Le Rustique "),
+      sandwich("UNASSIGNED_FIGARO", "Le Figaro", [], {
+        present_at_all_locations: false, present_at_location_ids: ["OTHER_LOCATION"],
+      }),
+    ];
+    const request = mockSquare({ catalog: (query) => {
+      expect(query.get("types")).toBe("ITEM");
+      return query.get("cursor") === "second page"
+        ? respond({ objects: [sandwich("VERGER_B", "Le Verger"), sandwich("BELLECOUR", "Le Bellecour")] })
+        : respond({ objects: candidates, cursor: "second page" });
+    } });
+    await expect(new SquareCountClient(config, request).verifyChurchSandwichCatalog()).resolves.toEqual([
+      { name: "Le Parisien", status: "matched", itemId: "PARISIEN", variations: [
+        { id: "V_C", name: "Half", sku: null, tracking: "tracked" },
+        { id: "V_A", name: "Regular", sku: null, tracking: "unknown" },
+        { id: "V_B", name: "Regular", sku: null, tracking: "tracked" },
+        { id: "V_Z", name: "Wedge", sku: "PAR-W", tracking: "untracked" },
+      ] },
+      { name: "Le Verger", status: "ambiguous", itemId: null, variations: [] },
+      { name: "Le Bellecour", status: "matched", itemId: "BELLECOUR", variations: [] },
+      { name: "Le Bleu", status: "missing", itemId: null, variations: [] },
+      { name: "Le Rustique", status: "missing", itemId: null, variations: [] },
+      { name: "Le Figaro", status: "missing", itemId: null, variations: [] },
+    ]);
+    expect(requestsTo(request, urls.catalog)).toHaveLength(2);
+    expect(request.mock.calls).toHaveLength(4);
+    expect(request.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
+  it("checks the merchant and location before enumerating catalog rows", async () => {
+    const request = mockSquare({ location: { ...baseLocation, merchant_id: "OTHER_MERCHANT" } });
+    await expect(new SquareCountClient(config, request).verifyChurchSandwichCatalog())
+      .rejects.toMatchObject({ code: "scope_mismatch" });
+    expect(requestsTo(request, urls.catalog)).toHaveLength(0);
+  });
+
+  it.each([
+    ["mismatched parent", [child("V1", "Regular", { item_id: "OTHER_PARENT" })], "scope_mismatch"],
+    ["repeated variation ID", [child("V1", "Regular"), child("V1", "Large")], "scope_mismatch"],
+    ["repeated location override", [child("V1", "Regular", { location_overrides: [
+      { location_id: config.locationId, track_inventory: true },
+      { location_id: config.locationId, track_inventory: false },
+    ] })], "provider_unavailable"],
+    ["unsafe label", [child("V1", "Regular\u202e")], "provider_unavailable"],
+  ])("rejects %s without returning partial evidence", async (_case, variations, code) => {
+    const request = mockSquare({ catalog: () => respond({ objects: [sandwich("PARISIEN", "Le Parisien", variations)] }) });
+    await expect(new SquareCountClient(config, request).verifyChurchSandwichCatalog()).rejects.toMatchObject({ code });
+  });
+
+  it("fails closed when Square repeats a parent ID across pages", async () => {
+    const request = mockSquare({ catalog: (query) => respond({
+      objects: [sandwich("PARISIEN", "Le Parisien")], cursor: query.has("cursor") ? undefined : "page_2",
+    }) });
+    await expect(new SquareCountClient(config, request).verifyChurchSandwichCatalog())
+      .rejects.toMatchObject({ code: "scope_mismatch" });
+  });
+
+  it.each(["repeat", "always new"])("rejects incomplete catalog pagination with a %s cursor", async (mode) => {
+    const request = mockSquare({ catalog: (query) => respond({ cursor: mode === "repeat" ? "same" : `${query.get("cursor") ?? ""}next` }) });
+    await expect(new SquareCountClient(config, request).verifyChurchSandwichCatalog())
+      .rejects.toMatchObject({ code: "provider_unavailable" });
+    expect(requestsTo(request, urls.catalog)).toHaveLength(mode === "repeat" ? 2 : 10);
+  });
+});
+
 describe("Square physical count client", () => {
   it("lists only tracked, whole variations with a live parent at the verified location across pages", async () => {
     const row = (id: string, overrides?: Record<string, unknown>) => ({

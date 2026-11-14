@@ -9,6 +9,7 @@ import type { ChurchSquareCountItem } from "@/data/read-models/church-square-cou
 import type { ChurchSquareStockAlert } from "@/data/read-models/church-square-stock-alerts";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import { formatSquareStockQuantity } from "@/lib/integrations/square-stock-alerts";
+import { ChurchSquareMenuDiagnostic } from "./church-square-menu-diagnostic";
 
 type LocationScope = { organizationId: string; locationId: string };
 
@@ -156,6 +157,7 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
         {items.length ? <ul className="mt-2 divide-y divide-[var(--line)]">
           {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} alert={alertsByItem.get(item.id)} />)}
         </ul> : <p className="mt-2 text-sm">No items are set up for Square counts yet.</p>}
+        {canConfigure && enabled && <ChurchSquareMenuDiagnostic key={scope.locationId} />}
         {canConfigure && enabled ? (
           <details className="mt-4 border-t border-[var(--line)] pt-3">
             <summary className="cursor-pointer text-sm font-semibold">Set up a tracked Square item</summary>
