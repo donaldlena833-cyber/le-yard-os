@@ -33,6 +33,7 @@ const payout = {
 function mockSquare(
   reply: () => Response | Promise<Response> = () => Response.json({ payouts: [payout] }),
   location = church,
+  detail: { payout?: () => Response; entries?: () => Response } = {},
 ) {
   return vi.fn<typeof fetch>(async (resource) => {
     switch (new URL(String(resource)).pathname) {
@@ -42,6 +43,10 @@ function mockSquare(
         return Response.json({ location });
       case "/v2/payouts":
         return reply();
+      case `/v2/payouts/${payout.id}`:
+        return detail.payout?.() ?? Response.json({ payout: { ...payout, type: "BATCH" } });
+      case `/v2/payouts/${payout.id}/payout-entries`:
+        return detail.entries?.() ?? Response.json({});
       default:
         throw new Error("Unexpected mock provider call");
     }
@@ -52,6 +57,117 @@ beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }).setSystemTime(new Date(w
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.useRealTimers();
+});
+
+describe("Church Street Square payout entries", () => {
+  const charge = {
+    id: "poe_charge", payout_id: payout.id, type: "CHARGE", effective_at: "2026-11-10T09:00:00-05:00",
+    gross_amount_money: { amount: 100, currency: "USD" },
+    fee_amount_money: { amount: 19, currency_code: "USD" }, net_amount_money: { amount: 81, currency_code: "USD" },
+    type_charge_details: { payment_id: "PAYMENT_SECRET_FOR_TESTS" },
+  };
+  const refund = {
+    id: "poe_refund", payout_id: payout.id, type: "REFUND", effective_at: "2026-11-11T16:00:00Z",
+    gross_amount_money: { amount: -50, currency_code: "USD" },
+    fee_amount_money: { amount: -2, currency_code: "USD" }, net_amount_money: { amount: -48, currency_code: "USD" },
+    type_refund_details: { refund_id: "REFUND_SECRET_FOR_TESTS" },
+  };
+
+  function paths(request: ReturnType<typeof mockSquare>) {
+    return request.mock.calls.map(([input]) => new URL(String(input)).pathname);
+  }
+
+  it("verifies the seller and exact payout before returning only signed USD entry facts and a truncation flag", async () => {
+    const request = mockSquare(undefined, undefined, { entries: () => Response.json({
+      payout_entries: [refund, charge, {
+        id: "poe_fee", payout_id: payout.id, type: "DEPOSIT_FEE",
+        gross_amount_money: { amount: -5, currency_code: "USD" }, fee_amount_money: { amount: 0, currency: "USD" },
+      }], cursor: "SECRET_FOR_TESTS_CURSOR",
+    }) });
+    await expect(new ChurchSquarePayoutClient(config, request).getPayoutEntries(payout.id)).resolves.toEqual({
+      payout: { id: payout.id, payoutType: "BATCH", status: "PAID", amountCents: 10_273,
+        createdAt: payout.created_at, updatedAt: payout.updated_at, arrivalDate: payout.arrival_date },
+      entries: [
+        { reference: refund.id, type: "REFUND", effectiveAt: refund.effective_at, grossCents: -50, feeCents: -2, netCents: -48 },
+        { reference: charge.id, type: "CHARGE", effectiveAt: charge.effective_at, grossCents: 100, feeCents: 19, netCents: 81 },
+        { reference: "poe_fee", type: "DEPOSIT_FEE", effectiveAt: null, grossCents: -5, feeCents: 0, netCents: null },
+      ], hasMore: true,
+    });
+    expect(paths(request)).toEqual([
+      `/v2/merchants/${config.merchantId}`, `/v2/locations/${config.locationId}`, `/v2/payouts/${payout.id}`,
+      `/v2/payouts/${payout.id}/payout-entries`,
+    ]);
+    const [payoutRequest, entriesRequest] = request.mock.calls.slice(-2);
+    expect(new URL(String(payoutRequest[0])).search).toBe("");
+    expect(Object.fromEntries(new URL(String(entriesRequest[0])).searchParams)).toEqual({ sort_order: "DESC", limit: "50" });
+    expect(entriesRequest[1]?.signal).toBe(payoutRequest[1]?.signal);
+    expect(entriesRequest[1]).toMatchObject({ method: "GET", cache: "no-store", redirect: "error" });
+  });
+
+  it("returns an eligible negative SIMPLE withdrawal with no component request, as Square specifies", async () => {
+    const request = mockSquare(undefined, undefined, {
+      payout: () => Response.json({ payout: {
+        ...payout, type: "SIMPLE", amount_money: { amount: -100, currency_code: "USD" }, created_at: window.from,
+      } }),
+    });
+    await expect(new ChurchSquarePayoutClient(config, request).getPayoutEntries(payout.id)).resolves.toMatchObject({
+      payout: { payoutType: "SIMPLE", amountCents: -100, createdAt: window.from }, entries: [], hasMore: false,
+    });
+    expect(paths(request)).toHaveLength(3);
+  });
+
+  it("retains provider entries from an unrecognized payout type without treating it as BATCH", async () => {
+    const request = mockSquare(undefined, undefined, {
+      payout: () => Response.json({ payout: { ...payout, type: "FUTURE_TYPE" } }),
+      entries: () => Response.json({ payout_entries: [charge] }),
+    });
+    await expect(new ChurchSquarePayoutClient(config, request).getPayoutEntries(payout.id)).resolves.toMatchObject({
+      payout: { payoutType: "UNKNOWN" }, entries: [{ reference: charge.id }], hasMore: false,
+    });
+  });
+
+  it.each([
+    ["a missing payout", () => Response.json({ errors: [{ detail: "SECRET_FOR_TESTS" }] }, { status: 404 })],
+    ["a different site", () => Response.json({ payout: { ...payout, location_id: "OTHER_LOCATION" } })],
+    ["an older payout", () => Response.json({ payout: { ...payout, created_at: "2026-11-07T15:59:59.999Z" } })],
+    ["a future payout", () => Response.json({ payout: { ...payout, created_at: "2026-11-14T16:00:00.001Z" } })],
+  ])("returns no information or entries for %s", async (_label, get) => {
+    const request = mockSquare(undefined, undefined, { payout: get });
+    await expect(new ChurchSquarePayoutClient(config, request).getPayoutEntries(payout.id)).resolves.toBeNull();
+    expect(paths(request)).toHaveLength(3);
+  });
+
+  it("rejects malformed input, wrong seller and mismatched parent before looking up entries", async () => {
+    const invalid = mockSquare();
+    await expect(new ChurchSquarePayoutClient(config, invalid).getPayoutEntries("../../wrong")).rejects.toMatchObject({ code: "invalid_input" });
+    expect(invalid).not.toHaveBeenCalled();
+    const otherSeller = mockSquare(undefined, { ...church, merchant_id: "OTHER_MERCHANT" });
+    await expect(new ChurchSquarePayoutClient(config, otherSeller).getPayoutEntries(payout.id)).rejects.toMatchObject({ code: "scope_mismatch" });
+    expect(paths(otherSeller)).toHaveLength(2);
+    const parent = mockSquare(undefined, undefined, { payout: () => Response.json({ payout: { ...payout, id: "WRONG" } }) });
+    await expect(new ChurchSquarePayoutClient(config, parent).getPayoutEntries(payout.id)).rejects.toMatchObject({ code: "scope_mismatch" });
+    expect(paths(parent)).toHaveLength(3);
+  });
+
+  it.each([
+    ["wrong payout", { payout_entries: [{ ...charge, payout_id: "OTHER_PAYOUT" }] }, "scope_mismatch"],
+    ["duplicate IDs", { payout_entries: [charge, { ...refund, id: charge.id }] }, "scope_mismatch"],
+    ["foreign currency", { payout_entries: [{ ...charge, gross_amount_money: { amount: 91, currency_code: "EUR" } }] }, "invalid_response"],
+    ["conflicting currencies", { payout_entries: [{ ...charge, fee_amount_money: { amount: 91, currency: "USD", currency_code: "EUR" } }] }, "invalid_response"],
+    ["fractional integer cents", { payout_entries: [{ ...charge, net_amount_money: { amount: 2.5, currency: "USD" } }] }, "invalid_response"],
+    ["invalid effective date", { payout_entries: [{ ...charge, effective_at: "2026-11-12" }] }, "invalid_response"],
+    ["more than 50 entries", { payout_entries: Array.from({ length: 51 }, (_, index) => ({ ...charge, id: `ROW_${index}` })) }, "invalid_response"],
+  ])("rejects %s without returning a partial response", async (_label, body, code) => {
+    const request = mockSquare(undefined, undefined, { entries: () => Response.json(body) });
+    await expect(new ChurchSquarePayoutClient(config, request).getPayoutEntries(payout.id)).rejects.toMatchObject({ code });
+  });
+
+  it.each([401, 403, 404, 429])("preserves safe HTTP %s from entry collection failures", async (status) => {
+    const request = mockSquare(undefined, undefined, { entries: () => Response.json({ detail: "SECRET_FOR_TESTS" }, { status }) });
+    const result = new ChurchSquarePayoutClient(config, request).getPayoutEntries(payout.id);
+    await expect(result).rejects.toMatchObject({ code: "provider_unavailable", status });
+    await expect(result).rejects.not.toThrow(/SECRET_FOR_TESTS/);
+  });
 });
 
 describe("Church Street Square payout client", () => {
