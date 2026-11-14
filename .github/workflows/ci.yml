@@ -121,4 +121,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e -- --project=desktop-chromium
+      - name: Run default demo browser tests
+        run: npm run test:e2e -- --project=desktop-chromium '^(?!.*[/\\]full-service-day\.spec\.ts$)'
+        env:
+          NEXT_PUBLIC_SERVICE_SIMULATION: ""
+      - name: Run fixed-clock demo browser tests
+        run: npm run test:e2e -- --project=desktop-chromium tests/e2e/full-service-day.spec.ts
+        env:
+          NEXT_PUBLIC_SERVICE_SIMULATION: full-service-day-v1

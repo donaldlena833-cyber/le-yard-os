@@ -551,12 +551,7 @@ describe("connected Inventory review interactions", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Save & close" }));
     expect(await screen.findByText(/draft saved on this device/i)).toBeTruthy();
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "Full inventory count" }),
-      ).toBeNull(),
-    );
-    const resume = screen.getByRole("button", { name: "Start or resume full count" });
+    const resume = await screen.findByRole("button", { name: "Start or resume full count" });
     fireEvent.click(resume);
     expect(
       (

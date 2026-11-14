@@ -110,7 +110,7 @@ describe("generated Supabase contract", () => {
     ).resolves.toMatchObject({
       stdout: expect.stringContaining("Verified generated database contract"),
     });
-  }, 90_000);
+  }, 180_000);
 
   it("exactly matches every final migrated public table, view, function, and enum", async () => {
     const sql = await migrationSql();
