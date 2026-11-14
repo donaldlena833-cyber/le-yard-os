@@ -20,6 +20,7 @@ type Props = {
   evidence: readonly ChurchIngredientEvidence[];
   records: readonly ChurchBatchLabel[];
   canRecord: boolean;
+  canPrint?: boolean;
   asOf: string;
   queue?: { batches: readonly ChurchBatchLabel[]; total: number } | null;
 };
@@ -34,16 +35,19 @@ const measurementTime = new Intl.DateTimeFormat("en-US", {
   timeZone: zone, month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit", timeZoneName: "short",
 });
 const quantityLabel = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
+const dueSoonMs = 30 * 60_000;
 const field = "focus-ring mt-1 block w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm font-normal";
 const appearance = {
   current: { label: "Recorded label", tone: "positive" },
   recheck: { label: "Supplier recheck needed", tone: "warning" },
   source_recheck: { label: "Source batch needs review", tone: "warning" },
+  due_soon: { label: "Due within 30 minutes", tone: "warning" },
   expired: { label: "Discard time reached", tone: "danger" },
   voided: { label: "Voided", tone: "danger" },
   used_up: { label: "Used up", tone: "neutral" },
   discarded: { label: "Discarded", tone: "neutral" },
 } as const;
+type BatchStatus = keyof typeof appearance;
 
 function easternInput(value: FormDataEntryValue | null) {
   const [date, time] = String(value ?? "").split("T");
@@ -66,6 +70,20 @@ function localLabel(value: string) {
 
 function isCurrentEvidence(batch: ChurchBatchLabel, evidence?: ChurchIngredientEvidence) {
   return batch.evidenceCurrent && evidence?.status === "reviewed" && evidence.revision === batch.evidenceRevision;
+}
+
+function batchStatus(record: ChurchBatchLabel, now: number, current: boolean): BatchStatus {
+  if (record.voidedAt) return "voided";
+  if (record.disposition) return record.disposition.outcome;
+  const remaining = Date.parse(record.discardAt) - now;
+  if (remaining <= 0) return "expired";
+  if (record.sourceNeedsReview) return "source_recheck";
+  if (!current) return "recheck";
+  return remaining <= dueSoonMs ? "due_soon" : "current";
+}
+
+function usableStatus(status: BatchStatus) {
+  return status === "current" || status === "due_soon";
 }
 
 function compareMeasurementTimes(left: string, right: string) {
@@ -220,11 +238,13 @@ function RecordBatchLabel({ evidence, onSave }: {
   );
 }
 
-function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave, onMeasure, onRefresh }: {
+function BatchLabelRow({ record, evidence, statusKey, showMeasurement, canRecord, canPrint: printingAllowed, canResolve, onSave, onMeasure, onRefresh }: {
   record: ChurchBatchLabel;
   evidence?: ChurchIngredientEvidence;
-  now: number;
+  statusKey: BatchStatus;
+  showMeasurement: boolean;
   canRecord: boolean;
+  canPrint: boolean;
   canResolve: boolean;
   onSave: (record: ChurchBatchLabel) => void;
   onMeasure: (measurement: ChurchBatchMeasurement) => void;
@@ -240,19 +260,17 @@ function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave, o
   const { requestIdFor } = useStableRequestIds();
   const current = isCurrentEvidence(record, evidence);
   const discard = Date.parse(record.discardAt);
-  const expired = now >= discard;
   const unresolved = !record.voidedAt && !record.disposition;
   const sourceNeedsReview = record.sourceNeedsReview === true;
-  const usable = unresolved && current && !expired && !sourceNeedsReview;
+  const usable = usableStatus(statusKey);
   const canMeasure = canRecord && usable;
   const canPrepFrom = canRecord && usable && Boolean(evidence?.preppedRule);
-  const canPrint = canRecord && usable;
+  const canPrint = canRecord && usable && printingAllowed;
   const measurement = record.latestMeasurement;
   const latestId = measurement?.id ?? null;
   const isBread = record.ingredientKey === churchSandwichBread;
   const unit = isBread ? "each" : "g";
-  const status = appearance[record.voidedAt ? "voided" : record.disposition?.outcome
-    ?? (expired ? "expired" : sourceNeedsReview ? "source_recheck" : current ? "current" : "recheck")];
+  const status = appearance[statusKey];
 
   useEffect(() => {
     return () => {
@@ -434,6 +452,10 @@ function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave, o
           <span className="break-words font-semibold">{record.ingredientKey} · {record.batchCode}</span>
           <StatusPill tone={status.tone} size="sm">{status.label}</StatusPill>
           <span className="text-xs text-[var(--ink-soft)]">Discard by <time dateTime={record.discardAt}>{localLabel(record.discardAt)}</time></span>
+          {showMeasurement && usable && <span className="text-xs text-[var(--ink-soft)]">
+            {measurement ? <>Measured {quantityLabel.format(measurement.quantity)} {unit} · <time dateTime={measurement.observedAt}>{measurementTime.format(new Date(measurement.observedAt))}</time></>
+              : "Remaining quantity unmeasured"}
+          </span>}
         </span>
       </summary>
       <div className="mt-1 space-y-2 break-words pb-3 text-xs text-[var(--ink-soft)]">
@@ -529,7 +551,7 @@ function BatchLabelRow({ record, evidence, now, canRecord, canResolve, onSave, o
   );
 }
 
-export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, queue }: Props) {
+export function ChurchBatchLabelsPanel({ evidence, records, canRecord, canPrint = true, asOf, queue }: Props) {
   const { refresh } = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [clock, setClock] = useState(() => Date.parse(asOf));
@@ -553,18 +575,36 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, que
   const queueTotal = Math.max(unresolved.length, (queue?.total ?? 0) - closedInQueue + additionalOpen.length);
   const now = Math.max(clock, Date.parse(asOf));
   const activity = (queue ? batches.filter((row) => !visibleQueueIds.has(row.id)) : batches).slice(0, 50);
-  const nextDeadline = [...visibleQueue, ...activity].reduce((soonest, row) => {
-    const deadline = Date.parse(row.discardAt);
-    return !row.voidedAt && !row.disposition && deadline > now ? Math.min(soonest, deadline) : soonest;
+  function describeBatch(record: ChurchBatchLabel) {
+    const ingredientEvidence = byIngredient.get(record.ingredientKey);
+    const updated = { ...record, latestMeasurement: latestMeasurement(record.latestMeasurement, measurements[record.id]),
+      sourceNeedsReview: needsSourceReview(record, knownBatches) };
+    return { record: updated, ingredientEvidence, statusKey: batchStatus(updated, now, isCurrentEvidence(updated, ingredientEvidence)) };
+  }
+  const queueRows = visibleQueue.map(describeBatch);
+  const activityRows = activity.map(describeBatch);
+  const expiredCount = queueRows.filter(({ statusKey }) => statusKey === "expired").length;
+  const heldCount = queueRows.filter(({ statusKey }) => statusKey === "recheck" || statusKey === "source_recheck").length;
+  const dueSoonCount = queueRows.filter(({ statusKey }) => statusKey === "due_soon").length;
+  const unmeasuredCount = queueRows.filter(({ statusKey, record }) => usableStatus(statusKey) && !record.latestMeasurement).length;
+  const nextDeadline = [...queueRows, ...activityRows].reduce((soonest, { record, statusKey }) => {
+    const deadline = Date.parse(record.discardAt);
+    const next = statusKey === "current" ? deadline - dueSoonMs : deadline;
+    return !record.voidedAt && !record.disposition && next > now ? Math.min(soonest, next) : soonest;
   }, Infinity);
   useEffect(() => {
     if (!Number.isFinite(nextDeadline)) return;
     const updateClock = () => setClock(Date.now());
+    const recheckWhenVisible = () => { if (!document.hidden) updateClock(); };
     const timer = window.setTimeout(updateClock, Math.min(15_000, nextDeadline - now));
     window.addEventListener("focus", updateClock);
+    window.addEventListener("pageshow", updateClock);
+    document.addEventListener("visibilitychange", recheckWhenVisible);
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener("focus", updateClock);
+      window.removeEventListener("pageshow", updateClock);
+      document.removeEventListener("visibilitychange", recheckWhenVisible);
     };
   }, [nextDeadline, now]);
   useEffect(() => {
@@ -585,10 +625,9 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, que
     setMeasurements((previous) => ({ ...previous, [receipt.batchId]: latestMeasurement(previous[receipt.batchId], receipt) ?? receipt }));
   }
 
-  function renderBatch(record: ChurchBatchLabel, canResolve: boolean) {
-    const latest = latestMeasurement(record.latestMeasurement, measurements[record.id]);
-    return <BatchLabelRow key={record.id} record={{ ...record, latestMeasurement: latest, sourceNeedsReview: needsSourceReview(record, knownBatches) }} evidence={byIngredient.get(record.ingredientKey)}
-      now={now} canRecord={canRecord} canResolve={canResolve} onSave={saved} onMeasure={measured} onRefresh={() => startRefresh(refresh)} />;
+  function renderBatch({ record, ingredientEvidence, statusKey }: ReturnType<typeof describeBatch>, canResolve: boolean, showMeasurement = false) {
+    return <BatchLabelRow key={record.id} record={record} evidence={ingredientEvidence} statusKey={statusKey} showMeasurement={showMeasurement}
+      canRecord={canRecord} canPrint={canPrint} canResolve={canResolve} onSave={saved} onMeasure={measured} onRefresh={() => startRefresh(refresh)} />;
   }
 
   return (
@@ -607,8 +646,20 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, que
             <>
               <p className="mt-1 text-xs text-[var(--ink-soft)]">{queueTotal === 0 ? "No open batches." : `${queueTotal} open ${queueTotal === 1 ? "batch" : "batches"}. Earliest deadline first.`}</p>
               {queueTotal > visibleQueue.length && <p className="mt-1 text-xs text-[var(--ink-soft)]">Showing {visibleQueue.length} of {queueTotal}. Refresh Kitchen to see more after recording outcomes.</p>}
+              {queueRows.length > 0 && (
+                <section className="mt-3 rounded-xl border border-[var(--line)] p-3 text-xs" aria-labelledby="church-batch-shift-checks">
+                  <h4 id="church-batch-shift-checks" className="font-semibold">Current shift batch checks</h4>
+                  <p className="mt-1 text-[var(--ink-soft)]">Counts cover the {queueRows.length} open {queueRows.length === 1 ? "batch shown" : "batches shown"}. Check expired batches for discard and hold batches that need review.</p>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 tabular-nums sm:grid-cols-4">
+                    <div><dt>Expired</dt><dd className={expiredCount ? "font-semibold text-[var(--danger)]" : "font-semibold"}>{expiredCount}</dd></div>
+                    <div><dt>Held for review</dt><dd className={heldCount ? "font-semibold text-[var(--warning)]" : "font-semibold"}>{heldCount}</dd></div>
+                    <div><dt>Due within 30 min</dt><dd className="font-semibold">{dueSoonCount}</dd></div>
+                    <div><dt>Usable batches unmeasured</dt><dd className="font-semibold">{unmeasuredCount}</dd></div>
+                  </dl>
+                </section>
+              )}
               <div className="mt-1 divide-y divide-[var(--line)]">
-                {visibleQueue.map((record) => renderBatch(record, canRecord))}
+                {queueRows.map((row) => renderBatch(row, canRecord, true))}
               </div>
             </>
           )}
@@ -618,7 +669,7 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, asOf, que
         <h3 id="church-batch-activity-heading" className="text-sm font-semibold">Recent batch label activity</h3>
         {activity.length === 0 ? <p className="mt-2 text-xs text-[var(--ink-soft)]">No other recent batch labels.</p> : (
           <div className="mt-1 divide-y divide-[var(--line)]">
-            {activity.map((record) => renderBatch(record, canRecord && queue !== undefined))}
+            {activityRows.map((row) => renderBatch(row, canRecord && queue !== undefined))}
           </div>
         )}
       </section>

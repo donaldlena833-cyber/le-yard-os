@@ -252,6 +252,7 @@ it("blocks used up after a deadline or evidence change, and communicates an unav
   view.rerender(<ChurchBatchLabelsPanel {...props} queue={null} asOf={asOf} canRecord={false} />);
   const queue = within(screen.getByRole("region", { name: "Open batches by discard time" }));
   expect(queue.getByText(/batch queue could not be loaded/)).toBeTruthy();
+  expect(queue.queryByRole("region", { name: "Current shift batch checks" })).toBeNull();
   expect(queue.queryByText("French-style ham · HAM-07")).toBeNull();
   expect(screen.queryByRole("button", { name: "Record discard" })).toBeNull();
   fireEvent.click(queue.getByRole("button", { name: "Refresh list" }));
@@ -261,16 +262,56 @@ it("blocks used up after a deadline or evidence change, and communicates an unav
 it("updates due status exactly at the next visible deadline", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(asOf));
-  const soon = { ...recorded, discardAt: "2026-11-14T16:00:02.000Z" };
+  const soon = { ...recorded, discardAt: "2026-11-14T16:30:02.000Z" };
   render(<ChurchBatchLabelsPanel evidence={[evidence]} records={[soon]} queue={{ batches: [soon], total: 1 }} asOf={asOf} canRecord />);
   const row = openDetails("French-style ham · HAM-07");
   await act(async () => { await vi.advanceTimersByTimeAsync(1_999); });
+  expect(row.getByText("Recorded label")).toBeTruthy();
+  await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+  expect(row.getByText("Due within 30 minutes")).toBeTruthy();
   expect(row.getByRole("button", { name: "Record used up" })).toBeTruthy();
+  expect(row.getByRole("button", { name: "Measure remaining" })).toBeTruthy();
+  // Restore a suspended tab immediately before the exact deadline, then let the timer expire.
+  act(() => {
+    vi.setSystemTime(new Date("2026-11-14T16:30:01.999Z"));
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  });
   expect(row.getByRole("button", { name: "Measure remaining" })).toBeTruthy();
   await act(async () => { await vi.advanceTimersByTimeAsync(1); });
   expect(row.getByText("Discard time reached")).toBeTruthy();
   expect(row.queryByRole("button", { name: "Record used up" })).toBeNull();
   expect(row.queryByRole("button", { name: "Measure remaining" })).toBeNull();
+});
+
+it("counts only displayed open batches and keeps a measured zero separate from missing observations", () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse(asOf));
+  const expired = { ...recorded, id: "expired", batchCode: "HAM-EXPIRED", discardAt: asOf, evidenceCurrent: false };
+  const held = { ...recorded, id: "supplier-hold", batchCode: "HAM-OLD-LABEL", evidenceRevision: 3 };
+  const child = { ...recorded, id: "child", batchCode: "HAM-CHILD", discardAt: "2026-11-14T16:30:00Z",
+    sourceBatch: { id: recorded.id, batchCode: recorded.batchCode, discardAt: recorded.discardAt } };
+  const discardedSource: ChurchBatchLabel = { ...recorded,
+    disposition: { outcome: "discarded", resolvedAt: asOf, resolvedByName: "Chef lead" } };
+  const zero = { ...recorded, id: "zero", batchCode: "HAM-ZERO", discardAt: "2026-11-14T16:30:00Z",
+    latestMeasurement: { ...measurement, batchId: "zero", quantity: 0 } };
+  const unmeasured = { ...recorded, id: "unmeasured", batchCode: "HAM-COUNT" };
+  render(<ChurchBatchLabelsPanel evidence={[evidence]} records={[discardedSource]} canRecord asOf={asOf}
+    queue={{ batches: [expired, held, child, zero, unmeasured], total: 7 }} />);
+
+  const triage = within(screen.getByRole("region", { name: "Current shift batch checks" }));
+  expect(triage.getByText(/Counts cover the 5 open batches shown/)).toBeTruthy();
+  expect(screen.getByText(/Showing 5 of 7/)).toBeTruthy();
+  for (const [label, count] of [["Expired", "1"], ["Held for review", "2"], ["Due within 30 min", "1"], ["Usable batches unmeasured", "1"]]) {
+    expect(triage.getByText(label).nextElementSibling?.textContent).toBe(count);
+  }
+  const zeroSummary = within(screen.getByText("French-style ham · HAM-ZERO").closest("summary")!);
+  expect(zeroSummary.getByText(/Measured 0 g/).querySelector("time")?.dateTime).toBe(asOf);
+  expect(zeroSummary.getByText("Due within 30 minutes")).toBeTruthy();
+  expect(screen.getByText("Remaining quantity unmeasured")).toBeTruthy();
+  const heldChild = openDetails("French-style ham · HAM-CHILD");
+  expect(heldChild.getByText("Source batch needs review")).toBeTruthy();
+  expect(heldChild.queryByRole("button", { name: "Print label" })).toBeNull();
+  expect(heldChild.queryByRole("button", { name: "Measure remaining" })).toBeNull();
+  expect(heldChild.getByRole("button", { name: "Record discard" })).toBeTruthy();
 });
 
 it("records an explicit zero against the latest batch reading and leaves the batch open", async () => {
