@@ -89,7 +89,7 @@ export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
         </p>
       </div>
       <p className="mt-3 text-xs text-[var(--ink-soft)]">
-        POS tile and online display checks are pending. On the Church Street register, press and hold the item tile to verify what staff see. Check each ordering channel separately.
+        POS tile and online display checks are pending. Use the item checklist below for the Church Street register. Verify each online ordering channel separately.
       </p>
       <div className="mt-3 divide-y divide-[var(--line)] border-t border-[var(--line)]">
         {churchSandwichBenchRecipes.map(({ key, name, portions }) => {
@@ -100,6 +100,8 @@ export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
             formula.measurements[row.ingredientKey]?.evidenceRevision === row.revision &&
             Boolean(row.allergenNotes?.trim()) && Boolean(row.crossContactNotes?.trim()));
           const item = items.get(key);
+          const canRehearse = current && item?.status === "matched" && item.name === name && item.variationIds.length > 0 &&
+            (item.allergens.status === "configured" || item.allergens.status === "empty");
           return (
             <details key={key} className="py-2">
               <summary className="focus-ring cursor-pointer rounded-md py-2 text-sm font-semibold">
@@ -135,6 +137,16 @@ export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
                   ) : <p>{formula ? "Recheck the signed recipe against the current reviewed supplier labels before comparing." : "A current signed recipe with reviewed supplier labels is needed for comparison."}</p>}
                 </div>
               </div>
+              {canRehearse && formula && (
+                <div className="mb-2 ml-1 mt-2 border-t border-[var(--line)] pt-3 text-xs text-[var(--ink-soft)]">
+                  <h3 className="text-sm font-semibold text-[var(--ink)]">Register checklist · verification pending</h3>
+                  <ol className="mt-2 list-decimal space-y-1 pl-4">
+                    <li>On the Church Street register, press and hold the <strong>{item.name}</strong> menu tile. Check the Allergens section against the Square catalog tags above.</li>
+                    <li>Compare the tile’s direct allergen tags with signed recipe r{formula.revision} and the supplier labels above. {item.allergens.status === "empty" && "Treat an empty field as an unchecked disclosure."}</li>
+                    <li>Use the separate supplier cross-contact statements and kitchen procedures. Bring missing tags or mismatches to the person in charge before relying on the tile.</li>
+                  </ol>
+                </div>
+              )}
             </details>
           );
         })}

@@ -70,6 +70,7 @@ it("checks Square only on request and preserves the six distinct catalog outcome
   expect(openRow("Le Bleu").getByText(/returned multiple exact Church Street matches/)).toBeTruthy();
   expect(openRow("Le Rustique").getByText(/could not be confirmed for this Square product type/)).toBeTruthy();
   expect(openRow("Le Figaro").getByText(/native allergen fields were unavailable/)).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: /Register checklist/ })).toBeNull();
   expect(getChurchSquareAllergenDiagnosticAction).toHaveBeenCalledTimes(1);
 });
 
@@ -98,4 +99,36 @@ it("clears old native tags when a repeat lookup cannot be completed", async () =
   fireEvent.click(screen.getByRole("button", { name: "Check Square tags again" }));
   expect(await parisien.findByText("Square tags are unavailable for this check.")).toBeTruthy();
   expect(parisien.queryByText("WHEAT")).toBeNull();
+});
+
+it("shows a read-only register checklist for that exact item and current supplier review", async () => {
+  const match = snapshot.items[0];
+  if (match.status !== "matched") throw new Error("Expected matched test item");
+  const empty = { ...snapshot, items: [{ ...match, allergens: { status: "empty" as const, standard: [], custom: [] } }] };
+  const unsupported = { ...snapshot, items: [{ ...match, allergens: { status: "unsupported" as const, standard: [], custom: [] } }] };
+  vi.mocked(getChurchSquareAllergenDiagnosticAction)
+    .mockResolvedValueOnce({ ok: true, mode: "live", persisted: false, data: empty })
+    .mockResolvedValueOnce({ ok: true, mode: "live", persisted: false, data: unsupported });
+  const view = render(<ChurchSquareAllergenPanel formulas={[formula]} evidence={evidence} />);
+  const parisien = openRow("Le Parisien");
+  expect(parisien.queryByRole("heading", { name: /Register checklist/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Check Square allergen tags" }));
+  const checklist = await parisien.findByRole("heading", { name: "Register checklist · verification pending" });
+  const steps = within(checklist.parentElement!).getAllByRole("listitem").map((step) => step.textContent);
+  expect(steps[0]).toMatch(/Church Street register, press and hold the Le Parisien menu tile/);
+  expect(steps[1]).toMatch(/direct allergen tags with signed recipe r2.*empty field/);
+  expect(steps[2]).toMatch(/separate supplier cross-contact.*person in charge/);
+  expect(parisien.getByText(/10-inch baguette · label r1/)).toBeTruthy();
+  expect(parisien.getByText(/French-style ham · label r2/)).toBeTruthy();
+  expect(parisien.getByText(/cultured butter · label r3/)).toBeTruthy();
+  expect(parisien.getByRole("link", { name: /Open Le Parisien/ }).getAttribute("href")).toMatch(/square-parisien$/);
+  expect(parisien.queryByRole("button")).toBeNull();
+
+  view.rerender(<ChurchSquareAllergenPanel formulas={[{ ...formula, current: false }]} evidence={evidence} />);
+  expect(parisien.queryByRole("heading", { name: /Register checklist/ })).toBeNull();
+  view.rerender(<ChurchSquareAllergenPanel formulas={[formula]} evidence={evidence} />);
+  expect(parisien.getByRole("heading", { name: /Register checklist/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Check Square tags again" }));
+  expect(await parisien.findByText(/could not be confirmed for this Square product type/)).toBeTruthy();
+  expect(parisien.queryByRole("heading", { name: /Register checklist/ })).toBeNull();
 });
