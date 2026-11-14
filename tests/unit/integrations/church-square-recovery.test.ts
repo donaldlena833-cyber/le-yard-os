@@ -4,6 +4,7 @@ import { POST } from "@/app/api/internal/integrations/church-square-recovery/rou
 import { processChurchSquareReceipts } from "@/lib/integrations/church-square-event-worker.server";
 import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
 import { processChurchSquareStockRecovery } from "@/lib/integrations/church-square-stock-recovery.server";
+import { processChurchSquareStockPush } from "@/lib/integrations/church-square-stock-push.server";
 
 const schedule = vi.hoisted(() => vi.fn());
 vi.mock("next/server", () => ({ after: schedule }));
@@ -15,6 +16,9 @@ vi.mock("@/lib/integrations/church-square-order-backfill.server", () => ({
 }));
 vi.mock("@/lib/integrations/church-square-stock-recovery.server", () => ({
   processChurchSquareStockRecovery: vi.fn(),
+}));
+vi.mock("@/lib/integrations/church-square-stock-push.server", () => ({
+  processChurchSquareStockPush: vi.fn(),
 }));
 
 const url = "https://operations.leyardny.com/api/internal/integrations/church-square-recovery";
@@ -46,6 +50,7 @@ beforeEach(() => {
   vi.stubEnv("SQUARE_CHURCH_ACCESS_TOKEN", "synthetic");
   vi.stubEnv("SQUARE_CHURCH_MERCHANT_ID", "MERCHANT_1");
   vi.stubEnv("SQUARE_CHURCH_LOCATION_ID", "CHURCH_1");
+  vi.mocked(processChurchSquareStockRecovery).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -64,10 +69,12 @@ describe("internal Church Street Square recovery trigger", () => {
     expect(processChurchSquareReceipts).not.toHaveBeenCalled();
     expect(processChurchSquareOrderBackfill).not.toHaveBeenCalled();
     expect(processChurchSquareStockRecovery).not.toHaveBeenCalled();
+    expect(processChurchSquareStockPush).not.toHaveBeenCalled();
     await schedule.mock.calls[0]?.[0]();
     expect(processChurchSquareReceipts).toHaveBeenCalledOnce();
     expect(processChurchSquareOrderBackfill).toHaveBeenCalledOnce();
     expect(processChurchSquareStockRecovery).toHaveBeenCalledOnce();
+    expect(processChurchSquareStockPush).toHaveBeenCalledOnce();
   });
 
   it("rejects a missing, malformed, incorrect, or expired signature", async () => {

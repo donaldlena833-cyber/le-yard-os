@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ChurchSquareStockCounts } from "@/components/inventory/church-square-stock-counts";
+import { ChurchSquareStockPushDevice } from "@/components/inventory/church-square-stock-push-device";
 import { ChurchSquareActivity } from "@/components/inventory/church-square-activity";
 import { LiveInventoryWorkspace } from "@/components/inventory/live-inventory-workspace";
 import { InventoryWorkspace } from "@/components/inventory/inventory-workspace";
@@ -8,6 +9,7 @@ import { loadChurchSquareCountItems } from "@/data/read-models/church-square-cou
 import { canViewChurchSquareStockAlerts, loadChurchSquareStockAlerts } from "@/data/read-models/church-square-stock-alerts";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { churchSquareCountConfiguration } from "@/lib/integrations/church-square-configuration.server";
+import { churchSquareStockPushPublicKey } from "@/lib/integrations/church-square-stock-push.server";
 import { churchSquareWebhookConfiguration } from "@/lib/integrations/church-square-webhook.server";
 import { hasAnyCapability, KITCHEN_CAPABILITIES } from "@/lib/permissions/capabilities";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
@@ -39,6 +41,8 @@ export default async function InventoryPage() {
         alertUserId={alertsEnabled ? context.identity.userId : undefined}
         scope={{ organizationId: context.organization.id, locationId: context.activeLocation.id }}
         canConfigure={context.role === "owner" || context.role === "admin"} /> : null}
+      {squareAlerts !== null ? <ChurchSquareStockPushDevice key={`${context.activeLocation.id}:${context.identity.userId}`}
+        locationId={context.activeLocation.id} vapidPublicKey={churchSquareStockPushPublicKey()} /> : null}
       {canSeeSquareActivity ? <ChurchSquareActivity locationId={context.activeLocation.id} configured={alertsEnabled} /> : null}
       {result ? <LiveInventoryWorkspace key={context.activeLocation.id} workspace={context} result={result} /> : null}
     </>

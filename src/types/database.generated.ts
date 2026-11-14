@@ -10311,6 +10311,13 @@ export type Database = {
         }
         Returns: Json
       };
+      "get_church_square_stock_push_device": {
+        Args: {
+          "p_location_id": string | null
+          "p_endpoint_hash": string | null
+        }
+        Returns: boolean
+      };
       "get_pos_labor_sync_status": {
         Args: {
           "p_location_id": string | null
@@ -11105,6 +11112,13 @@ export type Database = {
         }
         Returns: Json
       };
+      "remove_church_square_stock_push_device": {
+        Args: {
+          "p_location_id": string | null
+          "p_endpoint_hash": string | null
+        }
+        Returns: boolean
+      };
       "remove_push_subscription": {
         Args: {
           "p_request_id": string | null
@@ -11362,6 +11376,14 @@ export type Database = {
           "p_review_reference": string | null
         }
         Returns: Json
+      };
+      "save_church_square_stock_push_device": {
+        Args: {
+          "p_location_id": string | null
+          "p_endpoint_hash": string | null
+          "p_encrypted_subscription": string | null
+        }
+        Returns: boolean
       };
       "save_employee_certification": {
         Args: {
@@ -11837,6 +11859,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_claim_church_square_stock_push": {
+        Args: {
+          "p_worker_id": string | null
+        }
+        Returns: Json
+      };
       "service_claim_identity_delivery": {
         Args: {
           "p_worker_id": string | null
@@ -11907,6 +11935,14 @@ export type Database = {
           "p_lease": string | null
           "p_facts"?: Json | null
           "p_failure"?: string | null
+        }
+        Returns: boolean
+      };
+      "service_complete_church_square_stock_push": {
+        Args: {
+          "p_id": string | null
+          "p_claim_token": string | null
+          "p_status": string | null
         }
         Returns: boolean
       };
@@ -13043,6 +13079,7 @@ export const DatabaseObjectNames = {
       "get_church_square_marketplace_link",
       "get_church_square_order_evidence",
       "get_church_square_order_receipt_evidence",
+      "get_church_square_stock_push_device",
       "get_pos_labor_sync_status",
       "guard_active_owner_count",
       "guard_cash_movement_append_only",
@@ -13158,6 +13195,7 @@ export const DatabaseObjectNames = {
       "record_service_availability_event",
       "record_tip_payroll_export",
       "redact_audit_record",
+      "remove_church_square_stock_push_device",
       "remove_push_subscription",
       "reopen_shift",
       "report_filters_are_scope_safe",
@@ -13185,6 +13223,7 @@ export const DatabaseObjectNames = {
       "save_church_catering_prep",
       "save_church_ingredient_evidence",
       "save_church_sandwich_formula",
+      "save_church_square_stock_push_device",
       "save_employee_certification",
       "save_employee_emergency_contact",
       "save_expense_category",
@@ -13224,6 +13263,7 @@ export const DatabaseObjectNames = {
       "service_claim_church_square_count",
       "service_claim_church_square_order_backfill",
       "service_claim_church_square_receipts",
+      "service_claim_church_square_stock_push",
       "service_claim_identity_delivery",
       "service_claim_integration_sync_job",
       "service_claim_owner_sms_alert",
@@ -13232,6 +13272,7 @@ export const DatabaseObjectNames = {
       "service_claim_sms_ai_run",
       "service_commit_church_square_order_backfill",
       "service_complete_church_square_receipt",
+      "service_complete_church_square_stock_push",
       "service_complete_identity_delivery",
       "service_complete_integration_sync_job",
       "service_complete_reservation_delivery_run",

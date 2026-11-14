@@ -4,6 +4,7 @@ import { processChurchSquareReceipts } from "@/lib/integrations/church-square-ev
 import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
 import { churchSquareOrderConfiguration } from "@/lib/integrations/church-square-orders.server";
 import { processChurchSquareStockRecovery } from "@/lib/integrations/church-square-stock-recovery.server";
+import { processChurchSquareStockPush } from "@/lib/integrations/church-square-stock-push.server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -54,7 +55,11 @@ export async function POST(request: Request) {
   try {
     if (!await hasNoInput(request)) return respond(400);
     after(async () => {
-      await Promise.allSettled([processChurchSquareReceipts(), processChurchSquareOrderBackfill(), processChurchSquareStockRecovery()]);
+      await Promise.allSettled([
+        processChurchSquareReceipts(),
+        processChurchSquareOrderBackfill(),
+        processChurchSquareStockRecovery().finally(processChurchSquareStockPush),
+      ]);
     });
     return respond(202);
   } catch {

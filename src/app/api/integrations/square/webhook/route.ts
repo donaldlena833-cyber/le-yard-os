@@ -2,6 +2,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { churchSquareWebhookConfiguration, churchSquareWebhookUrl, prepareChurchSquareWebhook } from "@/lib/integrations/church-square-webhook.server";
 import { processChurchSquareReceipts } from "@/lib/integrations/church-square-event-worker.server";
+import { processChurchSquareStockPush } from "@/lib/integrations/church-square-stock-push.server";
 import { verifySquareWebhookSignature } from "@/lib/integrations/square-read.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -69,7 +70,8 @@ export async function POST(request: Request) {
       p_inventory: receipt.inventory,
     }).abortSignal(AbortSignal.timeout(6_000));
     if (error) return respond(503);
-    if (receipt.eventType !== "inventory.count.updated") after(processChurchSquareReceipts);
+    if (receipt.eventType === "inventory.count.updated") after(processChurchSquareStockPush);
+    else after(processChurchSquareReceipts);
     return respond(204);
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) return respond(400);

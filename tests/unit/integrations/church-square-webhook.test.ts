@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/integrations/square/webhook/route";
 import { churchSquareWebhookUrl } from "@/lib/integrations/church-square-webhook.server";
+import { processChurchSquareStockPush } from "@/lib/integrations/church-square-stock-push.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const schedule = vi.hoisted(() => vi.fn());
@@ -66,7 +67,7 @@ describe("signed Church Street Square webhooks", () => {
       p_related_order_id: undefined,
       p_inventory: [{ variationId: "VARIATION_1", quantity: "5", calculatedAt: createdAt }],
     });
-    expect(schedule).not.toHaveBeenCalled();
+    expect(schedule).toHaveBeenCalledExactlyOnceWith(processChurchSquareStockPush);
   });
 
   it("suppresses unrelated sellers, locations, and resource mismatches", async () => {

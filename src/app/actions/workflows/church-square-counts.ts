@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import { assertCondition } from "@/data/errors";
 import { executeWorkflowAction, type WorkflowContext } from "@/data/execute";
 import { configureChurchSquareCountItem, listTrackedChurchSquareVariations, sendChurchSquareCount } from "@/data/workflows/church-square-counts";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
+import { processChurchSquareStockPush } from "@/lib/integrations/church-square-stock-push.server";
 
 const workspaceInput = { organizationId: z.uuid(), locationId: z.uuid(), itemId: z.uuid() };
 
@@ -60,5 +62,6 @@ export async function sendChurchSquareCountAction(input: unknown) {
     },
   });
   revalidatePath("/inventory");
+  if (result.ok && result.mode === "live" && result.data.status === "confirmed") after(processChurchSquareStockPush);
   return result;
 }
