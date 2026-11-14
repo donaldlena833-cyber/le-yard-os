@@ -267,11 +267,12 @@ describe("Church sandwich catalog evidence", () => {
               { type: "STANDARD", standard_name: "FUTURE_LABEL" },
             ],
           },
-        }),
+        }, { version: 1_794_643_600_001 }),
         item("OUTSIDE_PARISIEN", "Le Parisien", { product_type: "FOOD_AND_BEV", food_and_beverage_details: {
           ingredients: [{ type: "STANDARD", standard_name: "FISH" }],
         } }, { absent_at_location_ids: [config.locationId] }),
-        item("VERGER", "Le Verger", { product_type: "FOOD_AND_BEV", food_and_beverage_details: { ingredients: [] } }),
+        item("VERGER", "Le Verger", { product_type: "FOOD_AND_BEV", food_and_beverage_details: { ingredients: [] } },
+          { version: Number.MAX_SAFE_INTEGER + 1 }),
         item("BELLECOUR", "Le Bellecour", { product_type: "REGULAR" }),
         item("BLEU", "Le Bleu", { product_type: "FOOD_AND_BEV", food_and_beverage_details: null }),
         item("RUSTIQUE", "Le Rustique", { product_type: "FOOD_AND_BEV", food_and_beverage_details: {
@@ -281,6 +282,8 @@ describe("Church sandwich catalog evidence", () => {
       ],
     }) });
     const result = await new SquareCountClient(config, request).verifyChurchSandwichCatalog({ includeAllergens: true });
+    expect(result[0]).toMatchObject({ catalogVersion: "1794643600001" });
+    expect(result[1]).toMatchObject({ catalogVersion: null });
     expect(result.map((row) => "allergens" in row ? row.allergens : null)).toEqual([
       { status: "configured", standard: ["MUSTARD", "FUTURE_LABEL"], custom: ["Walnut"] },
       { status: "empty", standard: [], custom: [] },

@@ -83,6 +83,7 @@ const parentSchema = catalogLocationSchema.extend({
   }),
 });
 const exactParentSchema = parentSchema.extend({
+  version: z.unknown().optional(),
   item_data: parentSchema.shape.item_data.extend({
     name: z.string().min(1).max(2048),
     product_type: z.unknown().optional(),
@@ -169,7 +170,7 @@ export type SquareChurchSandwichCatalogItem =
   | { name: string; status: "missing" | "ambiguous"; itemId: null; variations: [] }
   | {
     name: string; status: "matched"; itemId: string; variations: SquareChurchSandwichCatalogVariation[];
-    allergens?: ChurchSquareCatalogAllergens; presentation?: ChurchSquareItemPresentation;
+    allergens?: ChurchSquareCatalogAllergens; catalogVersion?: string | null; presentation?: ChurchSquareItemPresentation;
   };
 export interface SquarePhysicalCountReceipt {
   status: "confirmed";
@@ -479,7 +480,11 @@ export class SquareCountClient {
       items.set(name, previous.status === "missing" ? {
         name, status: "matched", itemId: item.id, variations: variations.sort((first, second) =>
           first.name.localeCompare(second.name, "en-US") || first.id.localeCompare(second.id)),
-        ...(includeAllergens ? { allergens: squareAllergenTags(item) } : {}),
+        ...(includeAllergens ? {
+          allergens: squareAllergenTags(item),
+          catalogVersion: typeof item.version === "number" && Number.isSafeInteger(item.version) && item.version > 0
+            ? String(item.version) : null,
+        } : {}),
         ...(includePresentation ? { presentation: itemPresentation(item.item_data) } : {}),
       } : { name, status: "ambiguous", itemId: null, variations: [] });
     }

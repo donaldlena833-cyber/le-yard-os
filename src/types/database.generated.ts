@@ -10274,6 +10274,14 @@ export type Database = {
         }
         Returns: Json
       };
+      "get_church_sandwich_register_check_receipt": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_request_id": string | null
+        }
+        Returns: Json
+      };
       "get_pos_labor_sync_status": {
         Args: {
           "p_location_id": string | null
@@ -10606,6 +10614,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_sandwich_register_checks": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_sandwich_timing_runs": {
         Args: {
           "p_location_id": string | null
@@ -10905,6 +10919,21 @@ export type Database = {
           "p_expected_latest_id": string | null
           "p_quantity": number | null
           "p_observed_at": string | null
+        }
+        Returns: Json
+      };
+      "record_church_sandwich_register_check": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_request_id": string | null
+          "p_recipe_key": string | null
+          "p_formula_revision": number | null
+          "p_square_item_id": string | null
+          "p_square_catalog_version": string | null
+          "p_outcome": string | null
+          "p_device": string | null
+          "p_reference": string | null
         }
         Returns: Json
       };
@@ -12924,6 +12953,7 @@ export const DatabaseObjectNames = {
       "fail_owner_intelligence_run",
       "finalize_employee_document",
       "get_church_catering_inquiry",
+      "get_church_sandwich_register_check_receipt",
       "get_pos_labor_sync_status",
       "guard_active_owner_count",
       "guard_cash_movement_append_only",
@@ -12989,6 +13019,7 @@ export const DatabaseObjectNames = {
       "list_church_ingredient_batches",
       "list_church_ingredient_evidence",
       "list_church_sandwich_formulas",
+      "list_church_sandwich_register_checks",
       "list_church_sandwich_timing_runs",
       "list_church_square_count_items",
       "list_church_square_order_watch",
@@ -13024,6 +13055,7 @@ export const DatabaseObjectNames = {
       "record_checklist_response",
       "record_church_ingredient_batch",
       "record_church_ingredient_batch_measurement",
+      "record_church_sandwich_register_check",
       "record_church_sandwich_timing_run",
       "record_clock_in",
       "record_clock_out",

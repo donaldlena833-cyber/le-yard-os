@@ -1,18 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useState, type FormEvent } from "react";
 import { getChurchSquareAllergenDiagnosticAction } from "@/app/actions/workflows/church-square-allergen-diagnostic";
+import { recordChurchSandwichRegisterCheckAction } from "@/app/actions/workflows/church-sandwich-register-check";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
+import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
 import type { ChurchSquareAllergenDiagnostic, ChurchSquareAllergenDiagnosticItem } from "@/lib/integrations/church-square-allergen-diagnostic";
 import { churchSandwichBenchRecipes, churchSandwichBread } from "@/lib/kitchen/church-sandwich-bench";
 import type { ChurchSandwichFormula } from "@/lib/kitchen/church-sandwich-formula";
 import { matchesChurchSandwichFormulaEvidence } from "@/lib/kitchen/church-sandwich-formula-evidence";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
+import type { ChurchSandwichRegisterCheck } from "@/lib/kitchen/church-sandwich-register-check";
 
 type Props = {
   formulas: readonly ChurchSandwichFormula[];
   evidence: readonly ChurchIngredientEvidence[];
+  registerChecks: readonly ChurchSandwichRegisterCheck[] | null;
 };
 type ReadState =
   | { status: "idle" | "loading" | "error"; message: string }
@@ -24,6 +29,31 @@ const squareDetail = {
   unsupported: "Native allergen tags could not be confirmed for this Square product type.",
   unavailable: "Square’s native allergen fields were unavailable for this item.",
 } as const;
+const registerOutcomes = {
+  matched: { label: "Tile matched", tone: "positive" },
+  mismatch: { label: "Tile mismatch", tone: "warning" },
+  unavailable: { label: "Tile unavailable", tone: "warning" },
+} as const;
+const registerField = "focus-ring mt-1 block w-full min-w-0 rounded-lg border border-[var(--line)] bg-[var(--paper)] px-3 py-2 text-sm font-normal";
+type RegisterCheckInput = Pick<ChurchSandwichRegisterCheck, "recipeKey" | "formulaRevision" | "squareItemId" | "squareCatalogVersion" | "outcome" | "device" | "reference">;
+
+function registerCheckStatus(check: ChurchSandwichRegisterCheck, currentFormulaRevision: number | undefined,
+  squareChecked: boolean, item: ChurchSquareAllergenDiagnosticItem | undefined) {
+  if (check.formulaRevision !== currentFormulaRevision) return { label: "Recipe or labels changed", tone: "warning" } as const;
+  if (!squareChecked) return { label: "Recheck Square catalog", tone: "neutral" } as const;
+  if (item?.status !== "matched" || !item.catalogVersion || item.variationIds.length === 0) {
+    return { label: "Catalog comparison unavailable", tone: "warning" } as const;
+  }
+  if (check.squareItemId !== item.itemId || check.squareCatalogVersion !== item.catalogVersion) {
+    return { label: "Square item or version changed", tone: "warning" } as const;
+  }
+  if (check.outcome === "matched" && item.allergens.status === "empty") return { label: "Square tags are empty", tone: "warning" } as const;
+  if ((check.outcome === "matched" || check.outcome === "mismatch") &&
+    item.allergens.status !== "configured" && item.allergens.status !== "empty") {
+    return { label: "Catalog comparison unavailable", tone: "warning" } as const;
+  }
+  return registerOutcomes[check.outcome];
+}
 
 function squareSummary(item: ChurchSquareAllergenDiagnosticItem | undefined) {
   if (!item) return "Catalog result unavailable";
@@ -59,11 +89,115 @@ function SquareCatalogTags({ item }: { item: ChurchSquareAllergenDiagnosticItem 
   );
 }
 
-export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
+function RegisterCheckForm({ name, catalogAllergens, recordCheck }: {
+  name: string;
+  catalogAllergens: Extract<ChurchSquareAllergenDiagnosticItem, { status: "matched" }>["allergens"]["status"];
+  recordCheck: (fields: Pick<RegisterCheckInput, "outcome" | "device" | "reference">) => Promise<string | undefined>;
+}) {
+  const [outcome, setOutcome] = useState<RegisterCheckInput["outcome"] | "">("");
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+  const allowMatch = catalogAllergens === "configured";
+  const allowMismatch = allowMatch || catalogAllergens === "empty";
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const device = String(form.get("device") ?? "").trim();
+    const reference = String(form.get("reference") ?? "").trim();
+    if (!outcome || !device || !reference || Array.from(device).length > 120 || Array.from(reference).length > 300 ||
+      /[\p{Cc}\p{Cf}]/u.test(device + reference)) {
+      setMessage("Choose the result and enter the register device and a short evidence or follow-up reference.");
+      return;
+    }
+    if (outcome === "matched" && (!allowMatch || form.get("compared") !== "on")) {
+      setMessage("Confirm you compared this physical tile with the current signed recipe and supplier labels.");
+      return;
+    }
+    if (outcome === "mismatch" && !allowMismatch) {
+      setMessage("Record an unavailable tile when Square’s allergen fields cannot be read.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+    try {
+      const error = await recordCheck({ outcome, device, reference });
+      if (error) {
+        setMessage(error);
+        return;
+      }
+      formElement.reset();
+      setOutcome("");
+      setMessage("Register check recorded.");
+    } catch {
+      setMessage("The register check could not be confirmed. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="mt-4" aria-label={`Record the ${name} register check`} onSubmit={(event) => void save(event)} noValidate>
+      <fieldset className="space-y-3" disabled={saving}>
+        <legend className="mb-2 text-sm font-semibold text-[var(--ink)]">Record this register tile check</legend>
+        <p>This result applies to the physical Square tile on the register you enter below. Keep guest or payment details out of the reference.</p>
+        {catalogAllergens === "empty" && <p>Square returned an empty allergen field. Record a mismatch or an unavailable tile.</p>}
+        {!allowMismatch && <p>Square’s allergen fields could not be verified. Record the check as unavailable.</p>}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block font-semibold">Tile result
+            <select className={registerField} value={outcome} required
+              onChange={(event) => setOutcome(event.target.value as RegisterCheckInput["outcome"] | "")}>
+              <option value="">Choose a result</option>
+              {allowMatch && <option value="matched">Matched the signed recipe</option>}
+              {allowMismatch && <option value="mismatch">Missing or different tags</option>}
+              <option value="unavailable">Tile or allergen details unavailable</option>
+            </select>
+          </label>
+          <label className="block font-semibold">Register device label
+            <input className={registerField} name="device" required maxLength={120} autoComplete="off" />
+          </label>
+        </div>
+        <label className="block font-semibold">Evidence or follow-up reference
+          <input className={registerField} name="reference" required maxLength={300} autoComplete="off" />
+        </label>
+        {outcome === "matched" && (
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" name="compared" required className="mt-1" />
+            <span>I checked the physical register tile against the current signed recipe and supplier labels.</span>
+          </label>
+        )}
+        <Button type="submit" size="sm">{saving ? "Saving…" : "Save register check"}</Button>
+      </fieldset>
+      {message && <p role="status" className="mt-2">{message}</p>}
+    </form>
+  );
+}
+
+export function ChurchSquareAllergenPanel({ formulas, evidence, registerChecks }: Props) {
   const [state, setState] = useState<ReadState>({ status: "idle", message: "" });
+  const [savedChecks, setSavedChecks] = useState<ChurchSandwichRegisterCheck[]>([]);
+  const { requestIdFor, rotateRequestId } = useStableRequestIds();
   const byRecipe = new Map(formulas.map((formula) => [formula.recipeKey, formula]));
   const byIngredient = new Map(evidence.map((row) => [row.ingredientKey, row]));
   const items = new Map(state.status === "ready" ? state.diagnostic.items.map((item) => [item.key, item]) : []);
+  const checks = new Map(registerChecks?.map((check) => [check.recipeKey, check]));
+  for (const check of savedChecks) {
+    const loaded = checks.get(check.recipeKey);
+    if (!loaded || Date.parse(check.recordedAt) > Date.parse(loaded.recordedAt)) checks.set(check.recipeKey, check);
+  }
+
+  async function recordCheck(input: RegisterCheckInput) {
+    const scope = `church-register-check:${input.recipeKey}`;
+    const result = await recordChurchSandwichRegisterCheckAction({ ...input, requestId: requestIdFor(scope, input) });
+    if (!result.ok || result.mode !== "live" || !result.persisted) {
+      return "message" in result ? result.message : "The register check could not be confirmed. Try again.";
+    }
+    setSavedChecks((previous) => [result.data, ...previous.filter((check) => check.recipeKey !== input.recipeKey)]);
+    rotateRequestId(scope);
+  }
 
   async function checkCatalog() {
     if (state.status === "loading") return;
@@ -90,8 +224,10 @@ export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
         </p>
       </div>
       <p className="mt-3 text-xs text-[var(--ink-soft)]">
-        POS tile and online display checks are pending. Use the item checklist below for the Church Street register. Verify each online ordering channel separately.
+        Register checks record what an operator saw on a specific device. Record the guest menu display and whether a mock allergy note reached the kitchen separately for each channel.{" "}
+        <Link href="/tasks?tab=checklists" className="focus-ring rounded font-semibold underline underline-offset-2">Open Operations Checklists</Link>
       </p>
+      {registerChecks === null && <p className="mt-2 text-sm text-[var(--ink-soft)]">Register check records could not be loaded. Reload Kitchen to try again.</p>}
       <div className="mt-3 divide-y divide-[var(--line)] border-t border-[var(--line)]">
         {churchSandwichBenchRecipes.map(({ key, name, portions }) => {
           const formula = byRecipe.get(key);
@@ -100,15 +236,21 @@ export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
           const current = matchesChurchSandwichFormulaEvidence(formula, byIngredient) &&
             supplierRows.every((row) => Boolean(row?.allergenNotes?.trim()) && Boolean(row?.crossContactNotes?.trim()));
           const item = items.get(key);
-          const canRehearse = current && item?.status === "matched" && item.name === name && item.variationIds.length > 0 &&
+          const catalogVersion = item?.status === "matched" ? item.catalogVersion : null;
+          const canRecordRegister = current && item?.status === "matched" && item.name === name && item.variationIds.length > 0;
+          const canRehearse = canRecordRegister &&
             (item.allergens.status === "configured" || item.allergens.status === "empty");
+          const lastCheck = checks.get(key);
+          const registerStatus = lastCheck && registerCheckStatus(lastCheck, current ? formula?.revision : undefined,
+            state.status === "ready", item);
           return (
             <details key={key} className="py-2">
               <summary className="focus-ring cursor-pointer rounded-md py-2 text-sm font-semibold">
                 <span className="ml-1 inline-flex flex-wrap items-center gap-2 align-middle">
                   {name}
                   {state.status === "ready" && <StatusPill tone="accent" size="sm">{squareSummary(item)}</StatusPill>}
-                  <StatusPill tone="neutral" size="sm">{current ? "Manual comparison pending" : "Supplier comparison pending"}</StatusPill>
+                  {registerStatus ? <StatusPill tone={registerStatus.tone} size="sm">{registerStatus.label}</StatusPill>
+                    : <StatusPill tone="neutral" size="sm">{current ? "Manual comparison pending" : "Supplier comparison pending"}</StatusPill>}
                 </span>
               </summary>
               <div className="grid gap-4 px-1 pb-2 pt-2 text-xs sm:grid-cols-2">
@@ -137,15 +279,37 @@ export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
                   ) : <p>{formula ? "Recheck the signed recipe against the current reviewed supplier labels before comparing." : "A current signed recipe with reviewed supplier labels is needed for comparison."}</p>}
                 </div>
               </div>
-              {canRehearse && formula && (
+              {lastCheck && (
+                <div className="mt-2 space-y-1 break-words border-t border-[var(--line)] px-1 pt-3 text-xs text-[var(--ink-soft)]">
+                  <h3 className="text-sm font-semibold text-[var(--ink)]">Last register check</h3>
+                  <p>{registerOutcomes[lastCheck.outcome].label} · {lastCheck.device} · Signed recipe r{lastCheck.formulaRevision}</p>
+                  <p>Recorded by {lastCheck.recordedByName} · <time dateTime={lastCheck.recordedAt}>{localTime.format(new Date(lastCheck.recordedAt))} ET</time></p>
+                  <p>Reference · {lastCheck.reference}</p>
+                  <p>Square item {lastCheck.squareItemId} · Catalog version {lastCheck.squareCatalogVersion}</p>
+                </div>
+              )}
+              {canRecordRegister && formula && (
                 <div className="mb-2 ml-1 mt-2 border-t border-[var(--line)] pt-3 text-xs text-[var(--ink-soft)]">
-                  <h3 className="text-sm font-semibold text-[var(--ink)]">Register checklist · verification pending</h3>
-                  <ol className="mt-2 list-decimal space-y-1 pl-4">
-                    <li>On the Church Street register, press and hold the <strong>{item.name}</strong> menu tile. Check the Allergens section against the Square catalog tags above.</li>
-                    <li>Compare the tile’s direct allergen details with signed recipe r{formula.revision} and the supplier labels above. Check exact names separately. GLUTEN leaves the grain unspecified, and TREE_NUTS leaves the nut unspecified. Use the label to confirm names such as wheat, walnut or pistachio. {item.allergens.status === "empty" && "Treat an empty field as an unchecked disclosure."}</li>
-                    <li>Use the separate supplier cross-contact statements and kitchen procedures. Bring missing tags or mismatches to the person in charge before relying on the tile.</li>
-                    <li>Use Square’s item editor where it supports the verified tag. After a catalog change, check that the item description is intact. Recheck the register tile and each public menu against the same signed recipe and supplier labels.</li>
-                  </ol>
+                  {canRehearse && (
+                    <>
+                      <h3 className="text-sm font-semibold text-[var(--ink)]">Register checklist</h3>
+                      <ol className="mt-2 list-decimal space-y-1 pl-4">
+                        <li>On the Church Street register, press and hold the <strong>{item.name}</strong> menu tile. Check the Allergens section against the Square catalog tags above.</li>
+                        <li>Compare the tile’s direct allergen details with signed recipe r{formula.revision} and the supplier labels above. Check exact names separately. GLUTEN leaves the grain unspecified, and TREE_NUTS leaves the nut unspecified. Use the label to confirm names such as wheat, walnut or pistachio. {item.allergens.status === "empty" && "Treat an empty field as an unchecked disclosure."}</li>
+                        <li>Use the separate supplier cross-contact statements and kitchen procedures. Bring missing tags or mismatches to the person in charge before relying on the tile.</li>
+                        <li>Use Square’s item editor where it supports the verified tag. After a catalog change, check that the item description is intact. Recheck the register tile and each public menu against the same signed recipe and supplier labels.</li>
+                      </ol>
+                    </>
+                  )}
+                  {!catalogVersion && <p className="mt-2">Square did not return a catalog version for this item. Recheck the catalog before recording.</p>}
+                  {catalogVersion && registerChecks !== null && (
+                    <RegisterCheckForm key={`${formula.revision}:${item.itemId}:${catalogVersion}:${item.allergens.status}`}
+                      name={name} catalogAllergens={item.allergens.status}
+                      recordCheck={({ outcome, device, reference }) => recordCheck({
+                        recipeKey: key, formulaRevision: formula.revision, squareItemId: item.itemId,
+                        squareCatalogVersion: catalogVersion, outcome, device, reference,
+                      })} />
+                  )}
                 </div>
               )}
             </details>

@@ -18,6 +18,7 @@ import { canRecordChurchBatchLabels, loadChurchBatchLabels, loadChurchBatchQueue
 import { loadChurchCateringPrep } from "@/data/read-models/church-catering-prep.server";
 import { buildChurchSandwichAvailability } from "@/data/read-models/church-sandwich-availability.server";
 import { currentChurchAvailabilityRecipes, loadChurchSandwichFormulas } from "@/data/read-models/church-sandwich-formula.server";
+import { loadChurchSandwichRegisterChecks } from "@/data/read-models/church-sandwich-register-check.server";
 import { canRecordChurchSandwichTiming, loadChurchSandwichTimingRuns } from "@/data/read-models/church-sandwich-timing.server";
 import { loadLivePrep } from "@/data/read-models/prep";
 import { type WorkspaceContextValue } from "@/lib/auth/workspace-context";
@@ -61,13 +62,14 @@ async function ChurchBatchLabels({ workspace, evidence, labels, queue }: {
     asOf={new Date().toISOString()} canRecord={canRecordChurchBatchLabels(workspace)} />;
 }
 
-async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas }: {
+async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas, registerChecks }: {
   workspace: WorkspaceContextValue;
   evidence: ReturnType<typeof loadChurchIngredientEvidence>;
   catering: ReturnType<typeof loadChurchCateringPrep>;
   formulas: ReturnType<typeof loadChurchSandwichFormulas>;
+  registerChecks: ReturnType<typeof loadChurchSandwichRegisterChecks>;
 }) {
-  const [ingredientEvidenceResult, cateringPrepResult, formulaResult] = await Promise.all([evidence, catering, formulas]);
+  const [ingredientEvidenceResult, cateringPrepResult, formulaResult, registerResult] = await Promise.all([evidence, catering, formulas, registerChecks]);
   const availability = buildChurchSandwichAvailability(workspace, { ingredientEvidenceResult, cateringPrepResult, formulaResult });
   const location = workspace.activeLocation.id;
   const canManage = workspace.capabilities.includes("recipe.manage");
@@ -78,7 +80,8 @@ async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas 
           formulas={formulaResult.data} canManage={canManage} />
       )}
       {canManage && formulaResult?.ok && ingredientEvidenceResult?.ok && (
-        <ChurchSquareAllergenPanel key={location} evidence={ingredientEvidenceResult.data} formulas={formulaResult.data} />
+        <ChurchSquareAllergenPanel key={location} evidence={ingredientEvidenceResult.data} formulas={formulaResult.data}
+          registerChecks={registerResult?.ok ? registerResult.data : null} />
       )}
       {availability && (availability.ok ? (
         <ChurchSandwichAvailabilityPanel key={`${location}:${availability.data.serviceDate}`} {...availability.data} />
@@ -110,6 +113,7 @@ export default async function KitchenPage() {
   const cateringPrep = loadChurchCateringPrep(resolution.context);
   const sandwichFormulas = loadChurchSandwichFormulas(resolution.context);
   const sandwichTiming = loadChurchSandwichTimingRuns(resolution.context);
+  const sandwichRegisterChecks = loadChurchSandwichRegisterChecks(resolution.context);
   const batchLabels = loadChurchBatchLabels(resolution.context);
   const batchQueue = loadChurchBatchQueue(resolution.context);
   const approvedRecipes = Promise.all([sandwichFormulas, ingredientEvidence]).then(([formulas, evidence]) =>
@@ -126,7 +130,7 @@ export default async function KitchenPage() {
         <Suspense fallback={null}><ChurchCateringPrep data={cateringPrep} approvedRecipes={approvedRecipes} /></Suspense>
         <Suspense fallback={null}><ChurchSupplierEvidence workspace={resolution.context} data={ingredientEvidence} formulas={sandwichFormulas} /></Suspense>
         <Suspense fallback={null}><ChurchBatchLabels workspace={resolution.context} evidence={ingredientEvidence} labels={batchLabels} queue={batchQueue} /></Suspense>
-        <Suspense fallback={null}><ChurchSandwichPlanning workspace={resolution.context} evidence={ingredientEvidence} catering={cateringPrep} formulas={sandwichFormulas} /></Suspense>
+        <Suspense fallback={null}><ChurchSandwichPlanning workspace={resolution.context} evidence={ingredientEvidence} catering={cateringPrep} formulas={sandwichFormulas} registerChecks={sandwichRegisterChecks} /></Suspense>
         <Suspense fallback={null}><ChurchSandwichTiming workspace={resolution.context} formulas={sandwichFormulas} timing={sandwichTiming} /></Suspense>
         <LivePrepWorkspace
           key={`prep-${resolution.context.activeLocation.id}`}

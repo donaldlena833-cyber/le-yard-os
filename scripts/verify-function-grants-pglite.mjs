@@ -124,6 +124,7 @@ const approvedAuthenticatedFunctions = new Set([
   "list_church_ingredient_batches",
   "list_church_ingredient_batch_queue",
   "list_church_sandwich_formulas",
+  "list_church_sandwich_register_checks",
   "list_church_sandwich_timing_runs",
   "list_church_square_reconciliation",
   "list_church_square_order_watch",
@@ -243,6 +244,8 @@ const approvedAuthenticatedFunctions = new Set([
 
 const requiredServiceFunctions = new Set([
   "service_claim_church_square_count",
+  "get_church_sandwich_register_check_receipt",
+  "record_church_sandwich_register_check",
   "service_configure_church_square_count_item",
   "service_finish_church_square_count",
   "service_mark_church_square_count_dispatched",

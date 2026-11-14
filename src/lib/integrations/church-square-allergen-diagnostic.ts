@@ -16,7 +16,7 @@ export type ChurchSquareAllergenDiagnosticItem = {
   key: ChurchSandwichRecipeKey;
   name: string;
 } & (
-  | { status: "matched"; itemId: string; variationIds: string[]; allergens: ChurchSquareCatalogAllergens }
+  | { status: "matched"; itemId: string; catalogVersion: string | null; variationIds: string[]; allergens: ChurchSquareCatalogAllergens }
   | { status: "missing" | "ambiguous"; itemId: null; variationIds: []; allergens: null }
 );
 

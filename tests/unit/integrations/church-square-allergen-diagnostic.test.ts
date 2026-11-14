@@ -28,7 +28,7 @@ const workspace = {
 };
 const tags = { status: "configured", standard: ["MILK"], custom: ["Wheat"] };
 const catalog = churchSandwichBenchRecipes.map(({ name, key }) => key === "parisien"
-  ? { name, itemId: "PARISIEN", status: "matched", variations: [{ id: "REGULAR", name: "Private variation fields" }],
+  ? { name, itemId: "PARISIEN", catalogVersion: "1794643600001", status: "matched", variations: [{ id: "REGULAR", name: "Private variation fields" }],
     allergens: { ...tags, unrelated: "non-allergen fields" } }
   : { name, itemId: null, status: key === "bleu" ? "ambiguous" : "missing", variations: [] });
 
@@ -48,7 +48,7 @@ it("checks live native fields for an authorized chef and exposes only scoped cat
   const result = await getChurchSquareAllergenDiagnosticAction();
   expect(result).toMatchObject({ ok: true, persisted: false, data: {
     checkedAt: expect.any(String), items: [
-      { key: "parisien", name: "Le Parisien", status: "matched", itemId: "PARISIEN", variationIds: ["REGULAR"], allergens: tags },
+      { key: "parisien", name: "Le Parisien", status: "matched", itemId: "PARISIEN", catalogVersion: "1794643600001", variationIds: ["REGULAR"], allergens: tags },
       { key: "verger", allergens: null, status: "missing" },
       { key: "bellecour", allergens: null, status: "missing" },
       { key: "bleu", allergens: null, status: "ambiguous" },

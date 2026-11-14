@@ -32,6 +32,7 @@ import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-squa
 import { churchSandwichBenchRecipes, churchSandwichBread, churchSandwichComponents } from "@/lib/kitchen/church-sandwich-bench";
 
 const ownerId = "10000000-0000-4000-8000-000000000001";
+const secondOwnerId = "10000000-0000-4000-8000-000000000002";
 const otherTenantUser = "10000000-0000-4000-8000-000000000006";
 const prepUserId = "10000000-0000-4000-8000-000000000005";
 const invoiceId = "inv:local-replay-invoice";
@@ -104,7 +105,11 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     await db.exec(await readFile(new URL("../../supabase/seed.sql", import.meta.url), "utf8"));
 
     await asRole(db, "service_role");
-    const roster = [{ user_id: ownerId, role: "owner" }, { user_id: prepUserId, role: "employee", job_code: "PREP" }];
+    const roster = [
+      { user_id: ownerId, role: "owner" },
+      { user_id: secondOwnerId, role: "owner" },
+      { user_id: prepUserId, role: "employee", job_code: "PREP" },
+    ];
     const { rows: [provisioned] } = await db.query("select public.service_provision_church_street($1::jsonb) as result", [
       JSON.stringify(roster),
     ]);
@@ -632,16 +637,90 @@ it("replays the observed Sandbox catering deposit and a pickup fixture through t
     await expect(saveFormula(1, measurements)).rejects.toMatchObject({ code: "42501" });
     await asRole(db, "service_role");
     await expect(readFormulas()).rejects.toMatchObject({ code: "42501" });
+
+    const listRegisterChecks = async () => (await db.query(
+      "select public.list_church_sandwich_register_checks($1::uuid) as result", [workspaceLocationId],
+    )).rows[0].result;
+    const registerReceipt = async (request, actor = ownerId) => (await db.query(
+      "select public.get_church_sandwich_register_check_receipt($1::uuid,$2::uuid,$3::uuid) as result",
+      [actor, workspaceLocationId, request],
+    )).rows[0].result;
+    const saveRegisterCheck = async ({
+      request = randomUUID(), actor = ownerId, workspace = workspaceLocationId, recipe = "parisien", revision = 1,
+      item = "POS-FIXTURE-ITEM", version = "999999999999999999", outcome = "matched",
+      device = "Training register", reference = "Isolated rehearsal ref 01",
+    } = {}) => (await db.query(`
+      select public.record_church_sandwich_register_check(
+        $1::uuid,$2::uuid,$3::uuid,$4,$5::integer,$6,$7,$8,$9,$10
+      ) as result
+    `, [actor, workspace, request, recipe, revision, item, version, outcome, device, reference])).rows[0].result;
+    const registerRequest = randomUUID();
     await asRole(db, "authenticated", ownerId);
+    expect(await listRegisterChecks()).toEqual([]);
+    await expect(saveRegisterCheck({ request: registerRequest })).rejects.toMatchObject({ code: "42501" });
+    await expect(registerReceipt(registerRequest)).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "service_role");
+    await expect(listRegisterChecks()).rejects.toMatchObject({ code: "42501" });
+    await expect(db.query("select * from private.church_sandwich_register_checks")).rejects.toMatchObject({ code: "42501" });
+    await expect(saveRegisterCheck({ actor: prepUserId })).rejects.toMatchObject({ code: "42501" });
+    await expect(saveRegisterCheck({ actor: otherTenantUser })).rejects.toMatchObject({ code: "42501" });
+    await expect(saveRegisterCheck({ workspace: "30000000-0000-4000-8000-000000000001" })).rejects.toMatchObject({ code: "42501" });
+    await expect(registerReceipt(registerRequest, prepUserId)).rejects.toMatchObject({ code: "42501" });
+    await expect(saveRegisterCheck({ recipe: "figaro" })).rejects.toMatchObject({ code: "PT409" });
+    await expect(saveRegisterCheck({ outcome: "approved_for_service" })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveRegisterCheck({ device: "Line\nRegister" })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveRegisterCheck({ reference: "   " })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveRegisterCheck({ item: "invalid item identifier" })).rejects.toMatchObject({ code: "22023" });
+    await expect(saveRegisterCheck({ version: "01" })).rejects.toMatchObject({ code: "22023" });
+    expect(await registerReceipt(registerRequest)).toBeNull();
+    const matchedRegister = await saveRegisterCheck({ request: registerRequest });
+    expect(matchedRegister).toEqual({
+      id: registerRequest, recipeKey: "parisien", formulaRevision: 1, squareItemId: "POS-FIXTURE-ITEM",
+      squareCatalogVersion: "999999999999999999", outcome: "matched", device: "Training register",
+      reference: "Isolated rehearsal ref 01", recordedAt: expect.any(String), recordedByName: "Donald Demo",
+    });
+    expect(await saveRegisterCheck({ request: registerRequest, device: " Training register " })).toEqual(matchedRegister);
+    expect(await registerReceipt(registerRequest)).toEqual(matchedRegister);
+    await expect(registerReceipt(registerRequest, secondOwnerId)).rejects.toMatchObject({ code: "PT409" });
+    await expect(saveRegisterCheck({ request: registerRequest, actor: secondOwnerId })).rejects.toMatchObject({ code: "PT409" });
+    await expect(saveRegisterCheck({ request: registerRequest, version: "999999999999999998" })).rejects.toMatchObject({ code: "PT409" });
+    const mismatchRegister = await saveRegisterCheck({ outcome: "mismatch", reference: "Isolated rehearsal ref 02" });
+    expect(mismatchRegister).toMatchObject({ outcome: "mismatch", formulaRevision: 1 });
+    await asRole(db, "authenticated", prepUserId);
+    await expect(listRegisterChecks()).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", otherTenantUser);
+    await expect(listRegisterChecks()).rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", ownerId);
+    expect(await listRegisterChecks()).toEqual([mismatchRegister]);
     await saveEvidence("French-style ham", 1, "hold");
     expect(await readFormulas()).toEqual([{ ...formula, current: false }]);
     expect(await saveFormula(0, measurements, formulaRequest)).toEqual({ ...formula, current: false });
+    await asRole(db, "service_role");
+    await expect(saveRegisterCheck()).rejects.toMatchObject({ code: "PT409" });
+    expect(await registerReceipt(registerRequest)).toEqual(matchedRegister);
+    expect(await saveRegisterCheck({ request: registerRequest })).toEqual(matchedRegister);
+    await asRole(db, "authenticated", ownerId);
+    expect(await listRegisterChecks()).toEqual([mismatchRegister]);
     await saveEvidence("French-style ham", 2, "reviewed", { ...review, supplierSku: "HQ-HAM-02" });
     expect(await readFormulas()).toEqual([{ ...formula, current: false }]);
     const updated = await saveFormula(1, { ...measurements, "French-style ham": { ...weighed, evidenceRevision: 3 } });
     expect(updated).toMatchObject({ recipeKey: "parisien", revision: 2, current: true });
     expect(await readFormulas()).toEqual([updated]);
     expect(await saveFormula(0, measurements, formulaRequest)).toEqual({ ...formula, current: false });
+    await asRole(db, "service_role");
+    await expect(saveRegisterCheck()).rejects.toMatchObject({ code: "PT409" });
+    const latestRegister = await saveRegisterCheck({ revision: 2, outcome: "unavailable", reference: "Isolated rehearsal ref 03" });
+    expect(latestRegister).toMatchObject({ outcome: "unavailable", formulaRevision: 2 });
+    await asRole(db, "authenticated", ownerId);
+    expect(await listRegisterChecks()).toEqual([latestRegister]);
+    await db.exec("reset role");
+    const registerAudit = await db.query(`
+      select id::text, recorded_by::text as actor from private.church_sandwich_register_checks order by check_sequence
+    `);
+    expect(registerAudit.rows).toEqual([matchedRegister, mismatchRegister, latestRegister].map(({ id }) => ({ id, actor: ownerId })));
+    await expect(db.query("update private.church_sandwich_register_checks set outcome = 'matched'"))
+      .rejects.toMatchObject({ code: "42501" });
+    await asRole(db, "authenticated", ownerId);
 
     const listTiming = async () => (await db.query(
       "select public.list_church_sandwich_timing_runs($1::uuid) as result", [workspaceLocationId],
