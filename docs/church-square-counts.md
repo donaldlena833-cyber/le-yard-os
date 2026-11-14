@@ -42,7 +42,7 @@ Record the Square payout reference, signed amount, and provider status. Compare 
 
 ## Rehearse sandwich availability in Kitchen
 
-In **Kitchen → Sandwich portion feasibility**, count whole baguettes and weigh ready-to-use fillings. Include usable ingredients still set aside for today's published catering so the planner deducts them once. Check already assembled or issued portions against the catering plan before using the estimate. An uncounted ingredient stays unknown. Enter zero only after checking that the ingredient is unavailable.
+In **Kitchen → Sandwich portion feasibility**, count whole baguettes and weigh ready-to-use fillings. Include loose usable ingredients set aside for sandwiches **Still to build** on the selected catering date so the planner deducts them once. Refresh Kitchen and recount usable stock after catering packing or a correction. An uncounted ingredient stays unknown. Enter zero only after checking that the ingredient is unavailable.
 
 Use the stand-alone limits to look for a bottleneck and the combined mix to check competing demand for the same ingredient. The current Church Street builds are available in **Bench rehearsal** for trial planning. The planner keeps inputs on the page and does not post inventory or change Square item status. Use the exact Square variation and the normal manager count or availability workflow after independently verifying sellable units. [Square physical count](https://developer.squareup.com/reference/square/objects/InventoryPhysicalCount) · [Square availability controls](https://squareup.com/help/us/en/article/8495-beta-item-availability)
 
@@ -51,6 +51,8 @@ In **Kitchen → Chef signoff for sandwich recipes**, sign one recipe using the 
 ## Record an opened or prepped batch
 
 In **Kitchen → Batch labels**, select the exact reviewed supplier product. Enter the lot from the pack, a unique batch code, the actual opened or prepped time, and the earliest discard time approved for that batch. Carry forward the earliest applicable limit from the pack, opening or prep rule, and any source batch. Transferring it to another container leaves its clock in place. Match the physical container label to the saved record.
+
+In **Open batches by discard time**, use **Measure remaining** on a current, unexpired batch. Count the whole baguettes or weigh usable filling in grams without the container. Confirm the Eastern observation time and save. Check physically before entering zero. Record **Used up** or **Discarded** separately when the batch ends. Before using the planner, check other usable batches and sealed stock as well.
 
 The log is separate from stock and prep completion. If a record is incorrect, void it with a reason and remove or correct the physical label. Record the corrected label with a fresh batch code. Review any active batch whose supplier evidence changes before serving from it. [NYC Health Code Article 81](https://www.nyc.gov/assets/doh/downloads/pdf/about/healthcode/health-code-article81.pdf)
 

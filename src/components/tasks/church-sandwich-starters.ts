@@ -69,7 +69,7 @@ export const churchSandwichIndividualTraining = {
   name: "Church Street individual sandwich training",
   checklistType: "custom",
   actionLabel: "Draft individual sandwich training",
-  items: `Trainee, coach and guide | text | required | Assign this run to one trainee. Record the trainee name and station role, coach and rehearsal date (ET). Use Kitchen’s Sandwich station training guide v0.16 and record the version actually used.
+  items: `Trainee, coach and guide | text | required | Assign this run to one trainee. Record the trainee name and station role, coach and rehearsal date (ET). Open the current Sandwich station training guide in Kitchen and record its version.
 Coached builds and pack-out | text | required | Record each sandwich practiced, attempts, builds accepted, corrections and worksheet or Kitchen timing-run reference. Observe portion, build order, wrap and ticket match. Mark any untested build pending.
 Mock allergy drill | text | required | Record the simulated allergy, whether the trainee stopped before assembly and who they called. Record which supplier evidence and cross-contact instructions the lead checked, the mock guest response, and pass or repeat. Use a mock ticket and leave out guest details.
 Station readiness | text | required | Have the coach or shift lead record their name, date and a decision for the observed station duties. Use READY FOR OBSERVED DUTIES, SUPERVISED PRACTICE or HOLD. List any limits. Use current chef-signed recipes and reviewed supplier labels for service.

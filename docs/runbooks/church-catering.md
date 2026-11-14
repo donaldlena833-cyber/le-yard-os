@@ -15,7 +15,13 @@ Set the six sandwich quantities on the catering job. Save a draft while the coun
 
 In **Kitchen → Supplier label evidence**, check the current supplier SKU and reference for each ingredient in the recipe. Record the storage condition and the approved use-by rule for opened and prepared product separately. Use the prep batch and its lot labels to establish the actual discard time. Put an ingredient on hold when the pack differs or a rule is unresolved. **Sandwich evidence by recipe** shows which builds share the held ingredient. A reviewed row records the ingredient evidence. The chef’s signed matrix and a separate POS and storefront check determine what staff can publish or tell guests.
 
-Editing quantities, the service date or the confirmed stage can withdraw the worksheet handoff. Verify the new quantities and publish again after a change. The handoff records planned demand. Staff still count and adjust real inventory through the usual workflow.
+Editing quantities, the service date or the confirmed stage can withdraw the handoff before packing starts. Verify the new quantities and publish again after a change. A plan locks once it has packed portions.
+
+## Record packed portions on the service date
+
+On the confirmed job in Catering, open **Record packed portions**. Enter the cumulative checked counts by recipe for the packs set aside for the job. Add the internal **Pack-list reference**, then select **Save packed totals**. To correct a recorded count, compare the physical packs with the pack list and enter the corrected cumulative quantities and reason. Record pickup or delivery separately.
+
+Refresh the Kitchen service date to compare **Published**, **Packed** and **Still to build**. Recount usable ingredients after packing or a correction. Include loose stock reserved for sandwiches still to build. The worksheet deducts the remaining commitment from that stock once. Use the normal inventory workflow for Square stock updates.
 
 Creating or linking a job in Operations does not send an invoice, collect payment or reserve kitchen capacity. The next seven-day summary on **Today** counts quoted and confirmed jobs by Church Street calendar dates. It can report partial counts when the displayed workspace list reaches its 100-job limit.
 

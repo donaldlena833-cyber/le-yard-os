@@ -335,7 +335,7 @@ describe("connected Operations review interactions", () => {
     expect(createChecklistTemplateVersionAction).toHaveBeenCalledWith(expect.objectContaining({
       locationId: workspace.activeLocation.id, name: "Church Street individual sandwich training", checklistType: "custom",
       items: [
-        expect.objectContaining({ label: "Trainee, coach and guide", required: true, instructions: expect.stringMatching(/Assign this run to one trainee.*v0\.16/) }),
+        expect.objectContaining({ label: "Trainee, coach and guide", required: true, instructions: expect.stringMatching(/Assign this run to one trainee.*current Sandwich station training guide.*record its version/) }),
         expect.objectContaining({ label: "Coached builds and pack-out", required: true, instructions: expect.stringMatching(/builds accepted.*Kitchen timing-run reference/) }),
         expect.objectContaining({ label: "Mock allergy drill", required: true, instructions: expect.stringMatching(/stopped before assembly.*Use a mock ticket/) }),
         expect.objectContaining({ label: "Station readiness", required: true, instructions: expect.stringMatching(/SUPERVISED PRACTICE or HOLD.*chef-signed recipes/) }),
