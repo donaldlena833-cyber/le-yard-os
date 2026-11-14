@@ -6,6 +6,17 @@ import { Button } from "@/components/ui/button";
 import type { ChurchSquareMenuDiagnostic as Diagnostic } from "@/lib/integrations/church-square-menu-diagnostic";
 
 type Variation = Diagnostic["items"][number]["variations"][number];
+type MatchedItem = Extract<Diagnostic["items"][number], { status: "matched" }>;
+const descriptionLabel: Record<MatchedItem["presentation"]["description"], string> = {
+  present: "Present",
+  missing: "Missing",
+  unverified: "Unverified",
+};
+const sellabilityLabel: Record<Variation["presentation"]["sellability"], string> = {
+  sellable: "Yes",
+  not_sellable: "No",
+  unspecified: "Unspecified",
+};
 const trackingLabel: Record<Variation["tracking"], string> = {
   tracked: "Tracked",
   untracked: "Tracking off",
@@ -61,7 +72,7 @@ export function ChurchSquareMenuDiagnostic() {
       {snapshot && (
         <>
           <p className="mt-2 text-xs text-[var(--ink-soft)]">
-            Last checked <time dateTime={snapshot.checkedAt}>{time.format(new Date(snapshot.checkedAt))} ET</time>. Count history refers to Operations entries. Use the tracked item setup below to verify eligibility for physical counts.
+            Last checked <time dateTime={snapshot.checkedAt}>{time.format(new Date(snapshot.checkedAt))} ET</time>. Photo counts are Square catalog references. Verify the actual photos and descriptions on the register and guest menu. Count history refers to Operations entries. Use the tracked item setup below to verify eligibility for physical counts.
           </p>
           <ul className="mt-2 divide-y divide-[var(--line)]">
             {snapshot.items.map((item) => (
@@ -76,6 +87,12 @@ export function ChurchSquareMenuDiagnostic() {
                 </div>
                 {item.status === "missing" && <p className="text-sm text-[var(--ink-soft)]">No exact item at the Church Street location.</p>}
                 {item.status === "ambiguous" && <p className="text-sm text-[var(--warning)]">Multiple exact item matches. Resolve the duplicate in Square before setting up counts.</p>}
+                {item.status === "matched" && (
+                  <dl className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--ink-soft)]">
+                    <div><dt className="inline font-medium">Item photos </dt><dd className="inline tabular-nums">{item.presentation.itemPhotoCount ?? "Unverified"}</dd></div>
+                    <div><dt className="inline font-medium">Description </dt><dd className="inline">{descriptionLabel[item.presentation.description]}</dd></div>
+                  </dl>
+                )}
                 {item.status === "matched" && item.variations.length === 0 && <p className="text-sm text-[var(--ink-soft)]">Square returned no matching variations for this item at Church Street.</p>}
                 {item.variations.length > 0 && (
                   <ul className="grid gap-2 sm:grid-cols-2">
@@ -85,6 +102,8 @@ export function ChurchSquareMenuDiagnostic() {
                         <dl className="mt-1 space-y-1 text-[var(--ink-soft)]">
                           <div><dt className="inline font-medium">Variation ID </dt><dd className="inline break-all font-mono">{variation.id}</dd></div>
                           <div><dt className="inline font-medium">SKU </dt><dd className="inline break-all font-mono">{variation.sku ?? "Not provided"}</dd></div>
+                          <div><dt className="inline font-medium">Variation photos </dt><dd className="inline tabular-nums">{variation.presentation.photoCount ?? "Unverified"}</dd></div>
+                          <div><dt className="inline font-medium">Square sellable flag </dt><dd className="inline">{sellabilityLabel[variation.presentation.sellability]}</dd></div>
                         </dl>
                         <p className="mt-2">{trackingLabel[variation.tracking]} · {mappingLabel[variation.mapping]}</p>
                         <p className="mt-1 text-[var(--ink-soft)]">{physicalCountLabel[variation.openingCount]}</p>

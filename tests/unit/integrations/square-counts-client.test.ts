@@ -292,6 +292,47 @@ describe("Church sandwich catalog evidence", () => {
     expect(request.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
   });
 
+  it("projects only requested parent and variation presentation evidence without extra Square reads", async () => {
+    const item = (id: string, name: string, data: object = {}, variations: unknown[] = [], assignment?: object) => ({
+      id, type: "ITEM", ...assignment, item_data: { name, variations, ...data },
+    });
+    const request = mockSquare({ catalog: () => respond({ objects: [
+      item("PARISIEN", "Le Parisien", { image_ids: ["PARENT_PHOTO_A", "PARENT_PHOTO_B"], description_plaintext: "  Text  ",
+        description_html: "<b>Text</b>", product_type: "FOOD_AND_BEV", food_and_beverage_details: { ingredients: [] } }, [
+        child("P_MAIN", "Regular", { image_ids: ["VARIATION_PHOTO"], sellable: true, track_inventory: true }),
+        child("P_ALT", "Test", { image_ids: ["DUPLICATE", "DUPLICATE"], sellable: false }),
+        child("P_OTHER", "Other location", { image_ids: ["OTHER_PHOTO"], sellable: true }, { absent_at_location_ids: [config.locationId] }),
+        child("P_UNKNOWN", "Unknown", { sellable: "not boolean" }),
+      ]),
+      item("VERGER", "Le Verger", { description: "Legacy", description_plaintext: " ", image_ids: [] }),
+      item("BELLECOUR", "Le Bellecour", { description_html: "<p>Only HTML</p>", image_ids: ["DUPLICATE", "DUPLICATE"] }),
+      item("BLEU", "Le Bleu", { description_plaintext: 0, image_ids: ["malformed id"] }),
+      item("RUSTIQUE", "Le Rustique", { description_html: " ", description_plaintext: "" }),
+      item("FIGARO", "Le Figaro", { description_plaintext: "Private description from another site", image_ids: ["OTHER_PHOTO"] }, [],
+        { absent_at_location_ids: [config.locationId] }),
+    ] }) });
+    const result = await new SquareCountClient(config, request).verifyChurchSandwichCatalog({ includePresentation: true, includeAllergens: true });
+    expect(result.map((row) => row.status === "matched" ? row.presentation : row.status)).toEqual([
+      { itemPhotoCount: 2, description: "present" },
+      { itemPhotoCount: 0, description: "present" },
+      { itemPhotoCount: null, description: "unverified" },
+      { itemPhotoCount: null, description: "unverified" },
+      { itemPhotoCount: 0, description: "missing" },
+      "missing",
+    ]);
+    expect(result[0]).toMatchObject({
+      allergens: { status: "empty" },
+      variations: [
+        { id: "P_MAIN", tracking: "tracked", presentation: { photoCount: 1, sellability: "sellable" } },
+        { id: "P_ALT", presentation: { photoCount: null, sellability: "not_sellable" } },
+        { id: "P_UNKNOWN", presentation: { photoCount: 0, sellability: "unspecified" } },
+      ],
+    });
+    expect(JSON.stringify(result)).not.toMatch(/PHOTO|Only HTML|Private description/);
+    expect(request.mock.calls).toHaveLength(3);
+    expect(request.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
+  });
+
   it.each([
     ["mismatched parent", [child("V1", "Regular", { item_id: "OTHER_PARENT" })], "scope_mismatch"],
     ["repeated variation ID", [child("V1", "Regular"), child("V1", "Large")], "scope_mismatch"],

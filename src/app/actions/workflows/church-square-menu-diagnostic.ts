@@ -40,7 +40,7 @@ async function menuDiagnostic(context: WorkflowContext): Promise<ChurchSquareMen
   const config = churchSquareCountConfiguration();
   assertCondition(config, "conflict", "Square stock counts are waiting for the café API connection.");
   try {
-    const catalog = await new SquareCountClient(config).verifyChurchSandwichCatalog();
+    const catalog = await new SquareCountClient(config).verifyChurchSandwichCatalog({ includePresentation: true });
     const checkedAt = new Date().toISOString();
     const byName = new Map(catalog.map((item) => [item.name, item]));
     const items: ChurchSquareMenuDiagnosticItem[] = churchSandwichBenchRecipes.map(({ key, name }) => {
@@ -50,10 +50,18 @@ async function menuDiagnostic(context: WorkflowContext): Promise<ChurchSquareMen
 
       return {
         key, name, status: item.status, itemId: item.itemId,
+        presentation: {
+          itemPhotoCount: item.presentation?.itemPhotoCount ?? null,
+          description: item.presentation?.description ?? "unverified",
+        },
         variations: item.variations.map((variation): ChurchSquareMenuDiagnosticVariation => {
           const mapping = mappingById?.get(stockItemId(locationId, variation.id));
           return {
             id: variation.id, name: variation.name, sku: variation.sku, tracking: variation.tracking,
+            presentation: {
+              photoCount: variation.presentation?.photoCount ?? null,
+              sellability: variation.presentation?.sellability ?? "unspecified",
+            },
             mapping: mappingById ? (mapping ? "mapped" : "unmapped") : "unknown",
             openingCount: mappingById ? (mapping?.lastConfirmedObservedAt ? "confirmed" : "unrecorded") : "unknown",
           };

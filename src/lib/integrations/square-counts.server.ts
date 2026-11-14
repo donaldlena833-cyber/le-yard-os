@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 import { churchSandwichBenchRecipes } from "../kitchen/church-sandwich-bench";
 import { squareCustomIngredient, squareStandardIngredient, type ChurchSquareCatalogAllergens } from "./church-square-allergen-diagnostic";
+import type { ChurchSquareItemPresentation, ChurchSquareVariationPresentation } from "./church-square-menu-diagnostic";
 import { SQUARE_API_VERSION } from "./square-source";
 
 const squareId = z.string().regex(/^[A-Za-z0-9_-]{1,100}$/);
@@ -96,6 +97,20 @@ const exactVariationSchema = variationSchema.extend({
       !overrides || new Set(overrides.map(({ location_id }) => location_id)).size === overrides.length),
   }),
 });
+const parentPresentationSchema = exactParentSchema.extend({
+  item_data: exactParentSchema.shape.item_data.extend({
+    image_ids: z.unknown().optional(),
+    description: z.unknown().optional(),
+    description_html: z.unknown().optional(),
+    description_plaintext: z.unknown().optional(),
+  }),
+});
+const variationPresentationSchema = exactVariationSchema.extend({
+  item_variation_data: exactVariationSchema.shape.item_variation_data.extend({
+    image_ids: z.unknown().optional(),
+    sellable: z.unknown().optional(),
+  }),
+});
 const physicalCountSchema = z.object({
   id: squareId,
   reference_id: z.string().max(255).optional(),
@@ -148,10 +163,14 @@ export interface SquareChurchSandwichCatalogVariation {
   name: string;
   sku: string | null;
   tracking: "tracked" | "untracked" | "default_off";
+  presentation?: ChurchSquareVariationPresentation;
 }
 export type SquareChurchSandwichCatalogItem =
   | { name: string; status: "missing" | "ambiguous"; itemId: null; variations: [] }
-  | { name: string; status: "matched"; itemId: string; variations: SquareChurchSandwichCatalogVariation[]; allergens?: ChurchSquareCatalogAllergens };
+  | {
+    name: string; status: "matched"; itemId: string; variations: SquareChurchSandwichCatalogVariation[];
+    allergens?: ChurchSquareCatalogAllergens; presentation?: ChurchSquareItemPresentation;
+  };
 export interface SquarePhysicalCountReceipt {
   status: "confirmed";
   variationId: string;
@@ -221,6 +240,30 @@ function squareAllergenTags(item: z.infer<typeof exactParentSchema>): ChurchSqua
   const standard = [...new Set(ingredients.flatMap((tag) => tag.type === "STANDARD" ? [tag.standard_name] : []))];
   const custom = [...new Set(ingredients.flatMap((tag) => tag.type === "CUSTOM" ? [tag.custom_name] : []))];
   return { status: standard.length || custom.length ? "configured" : "empty", standard, custom };
+}
+
+const catalogPhotoReferences = z.array(squareId).max(250);
+
+function photoCount(value: unknown): number | null {
+  if (value === undefined) return 0;
+  const references = catalogPhotoReferences.safeParse(value);
+  if (!references.success || new Set(references.data).size !== references.data.length) return null;
+  return references.data.length;
+}
+
+function itemPresentation({ image_ids, description_plaintext, description, description_html }: z.infer<typeof parentPresentationSchema>["item_data"]): ChurchSquareItemPresentation {
+  const fields = [
+    [description_plaintext, 65_535], [description, 4_096], [description_html, 65_535],
+  ] as const;
+  const readable = fields.map(([value, maximum]) => {
+    if (value === undefined) return "";
+    return typeof value === "string" && Array.from(value).length <= maximum ? value.trim() : null;
+  });
+  const [plain, legacy, html] = readable;
+  return {
+    itemPhotoCount: photoCount(image_ids),
+    description: plain || legacy ? "present" : html === "" && !readable.includes(null) ? "missing" : "unverified",
+  };
 }
 
 function canCountVariation(
@@ -384,7 +427,10 @@ export class SquareCountClient {
       || first.variationId.localeCompare(second.variationId));
   }
 
-  async verifyChurchSandwichCatalog({ includeAllergens = false }: { includeAllergens?: boolean } = {}): Promise<SquareChurchSandwichCatalogItem[]> {
+  async verifyChurchSandwichCatalog({ includeAllergens = false, includePresentation = false }: {
+    includeAllergens?: boolean;
+    includePresentation?: boolean;
+  } = {}): Promise<SquareChurchSandwichCatalogItem[]> {
     const deadline = AbortSignal.timeout(22_000);
     await this.verifyScope(deadline);
     const { locationId } = this.configuration;
@@ -394,7 +440,7 @@ export class SquareCountClient {
     const catalogIds = new Set<string>();
     let variationCount = 0;
     for await (const object of this.catalogItems(deadline)) {
-      const item = parseProvider(exactParentSchema, object);
+      const item = includePresentation ? parseProvider(parentPresentationSchema, object) : parseProvider(exactParentSchema, object);
       const name = item.item_data.name;
       if (catalogIds.has(item.id)) {
         throw new SquareCountError("Square returned a duplicate catalog ID.", "scope_mismatch");
@@ -405,7 +451,7 @@ export class SquareCountClient {
 
       const variations: SquareChurchSandwichCatalogVariation[] = [];
       for (const raw of item.item_data.variations ?? []) {
-        const variation = parseProvider(exactVariationSchema, raw);
+        const variation = includePresentation ? parseProvider(variationPresentationSchema, raw) : parseProvider(exactVariationSchema, raw);
         const data = variation.item_variation_data;
         if (data.item_id !== item.id || catalogIds.has(variation.id)) {
           throw new SquareCountError("Square returned an inconsistent or duplicate catalog variation.", "scope_mismatch");
@@ -423,6 +469,10 @@ export class SquareCountClient {
           sku: data.sku?.trim() ? data.sku : null,
           // Square disables tracking when neither the variation nor its location sets it.
           tracking: tracked === undefined ? "default_off" : tracked ? "tracked" : "untracked",
+          ...(includePresentation ? { presentation: {
+            photoCount: photoCount("image_ids" in data ? data.image_ids : undefined),
+            sellability: data.sellable === true ? "sellable" : data.sellable === false ? "not_sellable" : "unspecified",
+          } } : {}),
         });
       }
 
@@ -430,6 +480,7 @@ export class SquareCountClient {
         name, status: "matched", itemId: item.id, variations: variations.sort((first, second) =>
           first.name.localeCompare(second.name, "en-US") || first.id.localeCompare(second.id)),
         ...(includeAllergens ? { allergens: squareAllergenTags(item) } : {}),
+        ...(includePresentation ? { presentation: itemPresentation(item.item_data) } : {}),
       } : { name, status: "ambiguous", itemId: null, variations: [] });
     }
     return [...items.values()];

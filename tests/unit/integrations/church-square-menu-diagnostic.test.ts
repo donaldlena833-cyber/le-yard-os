@@ -35,8 +35,8 @@ const workspace = {
 const regularId = "SQUARE-PARISIEN-REGULAR";
 const date = "2026-11-14T16:00:00Z";
 const menu = churchSandwichBenchRecipes.map(({ name, key }) => key === "parisien"
-  ? { name, itemId: "PARISIEN", status: "matched", variations: [
-    { id: regularId, name: "Regular", sku: "SKU-1", tracking: "tracked", excluded: "private-extras" },
+  ? { name, itemId: "PARISIEN", status: "matched", presentation: { itemPhotoCount: 2, description: "present", html: "private-extras" }, variations: [
+    { id: regularId, name: "Regular", sku: "SKU-1", tracking: "tracked", presentation: { photoCount: 0, sellability: "sellable", urls: "private-extras" } },
     { id: "SQUARE-PARISIEN-TEST", name: "Second portion", sku: null, tracking: "untracked" },
   ] }
   : { name, itemId: null, status: key === "bleu" ? "ambiguous" : "missing", variations: [] });
@@ -62,9 +62,9 @@ describe("Church Square sandwich menu diagnostic", () => {
     expect(result).toMatchObject({
       ok: true, persisted: false,
       data: { items: [
-        { key: "parisien", status: "matched", itemId: "PARISIEN", variations: [
-          { id: regularId, name: "Regular", sku: "SKU-1", tracking: "tracked", mapping: "mapped", openingCount: "confirmed" },
-          { id: "SQUARE-PARISIEN-TEST", tracking: "untracked", mapping: "unmapped", openingCount: "unrecorded" },
+        { key: "parisien", status: "matched", itemId: "PARISIEN", presentation: { itemPhotoCount: 2, description: "present" }, variations: [
+          { id: regularId, name: "Regular", sku: "SKU-1", tracking: "tracked", mapping: "mapped", openingCount: "confirmed", presentation: { photoCount: 0, sellability: "sellable" } },
+          { id: "SQUARE-PARISIEN-TEST", tracking: "untracked", mapping: "unmapped", openingCount: "unrecorded", presentation: { photoCount: null, sellability: "unspecified" } },
         ] },
         { key: "verger", status: "missing", variations: [] },
         { key: "bellecour", status: "missing", variations: [] },
@@ -74,7 +74,7 @@ describe("Church Square sandwich menu diagnostic", () => {
       ] },
     });
     expect(mocks.rpc.mock.calls).toEqual([["list_church_square_count_items", { p_location_id: "church" }]]);
-    expect(mocks.catalog).toHaveBeenCalledExactlyOnceWith();
+    expect(mocks.catalog).toHaveBeenCalledExactlyOnceWith({ includePresentation: true });
     expect(JSON.stringify(result)).not.toMatch(/7"|lastConfirmedQuantity|private-extras/);
   });
 
@@ -92,8 +92,8 @@ describe("Church Square sandwich menu diagnostic", () => {
     mocks.rpc.mockReturnValueOnce(response({ unexpected: true }));
     expect(await getChurchSquareMenuDiagnosticAction()).toMatchObject({
       ok: true,
-      data: { items: expect.arrayContaining([{ key: "parisien", name: "Le Parisien", status: "matched", itemId: "PARISIEN",
-        variations: expect.arrayContaining([expect.objectContaining({ mapping: "unknown", openingCount: "unknown" })]) }]) },
+      data: { items: expect.arrayContaining([expect.objectContaining({ key: "parisien", name: "Le Parisien", status: "matched", itemId: "PARISIEN",
+        variations: expect.arrayContaining([expect.objectContaining({ mapping: "unknown", openingCount: "unknown" })]) })]) },
     });
     mocks.catalog.mockResolvedValueOnce(menu.slice(0, -1));
     expect(await getChurchSquareMenuDiagnosticAction()).toMatchObject({ ok: false });

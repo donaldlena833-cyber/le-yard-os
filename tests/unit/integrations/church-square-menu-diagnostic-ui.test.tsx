@@ -20,16 +20,26 @@ const checkedAt = "2026-11-14T18:30:00Z";
 const facts: ChurchSquareMenuDiagnostic = {
   checkedAt,
   items: [
-    { key: "parisien", name: "Le Parisien", status: "matched", itemId: "parent-parisien", variations: [
-      { id: "variation-regular", name: "Regular", sku: "LY-PARISIEN", tracking: "tracked", mapping: "mapped", openingCount: "confirmed" },
-      { id: "variation-mini", name: "Mini", sku: null, tracking: "untracked", mapping: "unmapped", openingCount: "unrecorded" },
-    ] },
+    {
+      key: "parisien", name: "Le Parisien", status: "matched", itemId: "parent-parisien",
+      presentation: { itemPhotoCount: 2, description: "present" }, variations: [
+        { id: "variation-regular", name: "Regular", sku: "LY-PARISIEN", tracking: "tracked", mapping: "mapped", openingCount: "confirmed",
+          presentation: { photoCount: 1, sellability: "sellable" } },
+        { id: "variation-mini", name: "Mini", sku: null, tracking: "untracked", mapping: "unmapped", openingCount: "unrecorded",
+          presentation: { photoCount: 0, sellability: "not_sellable" } },
+      ],
+    },
     { key: "verger", name: "Le Verger", status: "missing", itemId: null, variations: [] },
     { key: "bellecour", name: "Le Bellecour", status: "ambiguous", itemId: null, variations: [] },
-    { key: "bleu", name: "Le Bleu", status: "matched", itemId: "parent-bleu", variations: [] },
-    { key: "rustique", name: "Le Rustique", status: "matched", itemId: "parent-rustique", variations: [
-      { id: "variation-rustique", name: "Regular", sku: null, tracking: "default_off", mapping: "unknown", openingCount: "unknown" },
-    ] },
+    { key: "bleu", name: "Le Bleu", status: "matched", itemId: "parent-bleu",
+      presentation: { itemPhotoCount: 0, description: "missing" }, variations: [] },
+    {
+      key: "rustique", name: "Le Rustique", status: "matched", itemId: "parent-rustique",
+      presentation: { itemPhotoCount: null, description: "unverified" }, variations: [
+        { id: "variation-rustique", name: "Regular", sku: null, tracking: "default_off", mapping: "unknown", openingCount: "unknown",
+          presentation: { photoCount: null, sellability: "unspecified" } },
+      ],
+    },
     { key: "figaro", name: "Le Figaro", status: "missing", itemId: null, variations: [] },
   ],
 };
@@ -74,6 +84,25 @@ it("shows the exact parent and variation evidence and removes prior data when a 
   expect(diagnosticPanel.getByText(/have the manager or chef count the finished units/i)).toBeTruthy();
   expect(diagnosticPanel.getByText(/last checked/i).querySelector("time")?.dateTime).toBe(checkedAt);
   expect(diagnosticPanel.getAllByRole("heading")).toHaveLength(6);
+  expect(diagnosticPanel.getByText(/photo counts are square catalog references/i)).toBeTruthy();
+  expect(diagnosticPanel.getByText(/verify the actual photos and descriptions on the register and guest menu/i)).toBeTruthy();
+  const parisien = within(parent.closest("li")!);
+  expect(parisien.getByText("Item photos").nextElementSibling?.textContent).toBe("2");
+  expect(parisien.getByText("Description").nextElementSibling?.textContent).toBe("Present");
+  const regular = within(parisien.getByText("variation-regular").closest("li")!);
+  expect(regular.getByText("Variation photos").nextElementSibling?.textContent).toBe("1");
+  expect(regular.getByText("Square sellable flag").nextElementSibling?.textContent).toBe("Yes");
+  const mini = within(parisien.getByText("variation-mini").closest("li")!);
+  expect(mini.getByText("Variation photos").nextElementSibling?.textContent).toBe("0");
+  expect(mini.getByText("Square sellable flag").nextElementSibling?.textContent).toBe("No");
+  const bleu = within(diagnosticPanel.getByRole("heading", { name: "Le Bleu" }).closest("li")!);
+  expect(bleu.getByText("Item photos").nextElementSibling?.textContent).toBe("0");
+  expect(bleu.getByText("Description").nextElementSibling?.textContent).toBe("Missing");
+  const rustique = within(diagnosticPanel.getByRole("heading", { name: "Le Rustique" }).closest("li")!);
+  expect(rustique.getByText("Item photos").nextElementSibling?.textContent).toBe("Unverified");
+  expect(rustique.getByText("Description").nextElementSibling?.textContent).toBe("Unverified");
+  expect(rustique.getByText("Variation photos").nextElementSibling?.textContent).toBe("Unverified");
+  expect(rustique.getByText("Square sellable flag").nextElementSibling?.textContent).toBe("Unspecified");
 
   fireEvent.click(diagnosticPanel.getByRole("button", { name: "Check again" }));
   await diagnosticPanel.findByText("Church Street owner access is required.");
