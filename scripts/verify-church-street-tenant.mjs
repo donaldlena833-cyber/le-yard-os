@@ -221,6 +221,54 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   process.stdout.write("PASS Church Street webhook replay, stale exclusion, and low-stock alert rearming\n");
 }
 
+async function verifyChurchSquareReceiptProcessing(db, locationId) {
+  const read = async (sql, args = []) => (await db.query(sql, args)).rows[0]?.result;
+  const list = () => read("select public.list_church_square_reconciliation($1::uuid) as result", [locationId]);
+  const add = (event, type, resource) => read(`
+    select public.service_record_church_square_webhook(
+      'M_TEST', 'L_TEST', $1, $2, now(), $3, '[]'::jsonb
+    ) as result`, [event, type, resource]);
+  const claim = () => read("select public.service_claim_church_square_receipts('M_TEST','L_TEST') as result");
+  const complete = ({ eventId, lease }, facts, failure = null) => read(`
+    select public.service_complete_church_square_receipt('M_TEST','L_TEST',$1,$2::uuid,$3::jsonb,$4) as result
+  `, [eventId, lease, facts ? JSON.stringify(facts) : null, failure]);
+
+  await claims(db, undefined, "service_role");
+  await add("invoice-newer", "invoice.payment_made", "invoice:1");
+  await add("invoice-earlier", "invoice.updated", "invoice:1");
+  await add("refund-temp", "refund.created", "refund:1");
+  await add("order-needs-review", "order.updated", "order:1");
+  const jobs = await claim();
+  assert.equal(jobs.length, 4, "Only non-inventory receipts are leased");
+  assert.deepEqual(await claim(), [], "A second worker cannot take active leases");
+  const job = (eventId) => jobs.find((candidate) => candidate.eventId === eventId);
+  const facts = {
+    kind: "invoice", id: "invoice:1", locationId: "L_TEST", currency: "USD", version: 2,
+    updatedAt: new Date().toISOString(), status: "PARTIALLY_PAID", orderId: "order:catering",
+    deposit: { state: "satisfied", dueCents: 5000, completedCents: 5000 },
+  };
+  assert.equal(await complete({ ...job("invoice-newer"), lease: randomUUID() }, facts), false);
+  assert.equal(await complete(job("invoice-newer"), facts), true);
+  assert.equal(await complete(job("invoice-earlier"), { ...facts, version: 1, status: "UNPAID" }), true);
+  assert.equal(await complete(job("refund-temp"), null, "square_unavailable"), true);
+  assert.equal(await complete(job("order-needs-review"), null, "scope_mismatch"), true);
+  assert.deepEqual(await claim(), [], "Transient failures back off; scope mismatches require review");
+  await claims(db, ownerId);
+  const summary = await list();
+  assert.equal(summary.pending, 1);
+  assert.equal(summary.needsReview, 1);
+  assert.equal(summary.resources.length, 1);
+  assert.equal(summary.resources[0].status, "PARTIALLY_PAID", "An older invoice version cannot overwrite a paid deposit");
+  assert.equal(summary.resources[0].depositCompletedCents, 5000);
+  await claims(db, churchEmployeeId);
+  await expectDenial(db, `select public.list_church_square_reconciliation('${locationId}')`, "42501",
+    "Kitchen count permission does not confer Square reconciliation access");
+  await claims(db, restaurantEmployeeId);
+  await expectDenial(db, `select public.list_church_square_reconciliation('${locationId}')`, "42501",
+    "The other tenant cannot read Church Street financial records");
+  process.stdout.write("PASS Church Street receipts claim, retry, version order, and reconciliation permissions\n");
+}
+
 export async function verifyChurchStreetTenant(db) {
   const roster = [
     { user_id: ownerId, role: "owner" },
@@ -353,6 +401,7 @@ export async function verifyChurchStreetTenant(db) {
 
     await verifyChurchSquareCountLedger(db, churchId, churchLocationId);
     await verifyChurchSquareWebhookProjection(db, churchLocationId);
+    await verifyChurchSquareReceiptProcessing(db, churchLocationId);
 
     await claims(db, undefined, "service_role");
     assert.equal((await get(`select public.service_set_church_street_active('${churchId}', false) as result`)).result.status, "suspended");

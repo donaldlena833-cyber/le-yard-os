@@ -10535,6 +10535,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "list_church_square_reconciliation": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
+      };
       "list_church_square_stock_alerts": {
         Args: {
           "p_location_id": string | null
@@ -11493,6 +11499,13 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_claim_church_square_receipts": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+        }
+        Returns: Json
+      };
       "service_claim_identity_delivery": {
         Args: {
           "p_worker_id": string | null
@@ -11545,6 +11558,17 @@ export type Database = {
           "p_source_sid": string | null
         }
         Returns: Json
+      };
+      "service_complete_church_square_receipt": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_event_id": string | null
+          "p_lease": string | null
+          "p_facts"?: Json | null
+          "p_failure"?: string | null
+        }
+        Returns: boolean
       };
       "service_complete_identity_delivery": {
         Args: {
@@ -12670,6 +12694,7 @@ export const DatabaseObjectNames = {
       "is_self_employee",
       "jwt_aal",
       "list_church_square_count_items",
+      "list_church_square_reconciliation",
       "list_church_square_stock_alerts",
       "list_church_square_webhook_receipts",
       "manage_location_release_control",
@@ -12763,12 +12788,14 @@ export const DatabaseObjectNames = {
       "service_capture_guest_interest",
       "service_claim_booking_rate_limit",
       "service_claim_church_square_count",
+      "service_claim_church_square_receipts",
       "service_claim_identity_delivery",
       "service_claim_integration_sync_job",
       "service_claim_owner_sms_alert",
       "service_claim_reservation_message_outbox",
       "service_claim_reservation_push_deliveries",
       "service_claim_sms_ai_run",
+      "service_complete_church_square_receipt",
       "service_complete_identity_delivery",
       "service_complete_integration_sync_job",
       "service_complete_reservation_delivery_run",

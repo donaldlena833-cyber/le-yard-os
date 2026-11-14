@@ -1,10 +1,12 @@
+import { after } from "next/server";
 import { z } from "zod";
 import { churchSquareWebhookConfiguration, churchSquareWebhookUrl, prepareChurchSquareWebhook } from "@/lib/integrations/church-square-webhook.server";
+import { processChurchSquareReceipts } from "@/lib/integrations/church-square-event-worker.server";
 import { verifySquareWebhookSignature } from "@/lib/integrations/square-read.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
-export const maxDuration = 10;
+export const maxDuration = 60;
 
 const maxBodyBytes = 1_048_576;
 const signaturePattern = /^[A-Za-z0-9+/]{43}=$/;
@@ -66,7 +68,9 @@ export async function POST(request: Request) {
       p_related_order_id: receipt.relatedOrderId,
       p_inventory: receipt.inventory,
     }).abortSignal(AbortSignal.timeout(6_000));
-    return respond(error ? 503 : 204);
+    if (error) return respond(503);
+    if (receipt.eventType !== "inventory.count.updated") after(processChurchSquareReceipts);
+    return respond(204);
   } catch (error) {
     if (error instanceof z.ZodError || error instanceof SyntaxError) return respond(400);
     return respond(503);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ChurchSquareReconciliation } from "@/components/today/church-square-reconciliation";
 import { Button } from "@/components/ui/button";
 import {
   churchSquareOrderWindowHours,
@@ -121,6 +122,7 @@ export function ChurchSquareOrderWindow() {
           </table>
         </div>
       )}
+      <ChurchSquareReconciliation />
     </section>
   );
 }
