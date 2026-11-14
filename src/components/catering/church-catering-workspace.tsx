@@ -11,6 +11,7 @@ import {
   updateChurchSquareCateringJobAction,
 } from "@/app/actions/workflows/church-square-catering-jobs";
 import { lookupChurchSquareCateringInvoiceAction } from "@/app/actions/workflows/church-square-catering";
+import { ChurchCateringIntake } from "@/components/catering/church-catering-intake";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/ui/confirm-action-dialog";
 import { localDateKey } from "@/data/read-models/local-time";
@@ -424,7 +425,7 @@ function CateringJobCard({ job, onSaved, refreshing }: { job: CateringJob; onSav
   );
 }
 
-export function ChurchCateringWorkspace({ initialJobs }: { initialJobs: CateringJob[] | null }) {
+export function ChurchCateringWorkspace({ initialJobs, showIntake = false }: { initialJobs: CateringJob[] | null; showIntake?: boolean }) {
   const [jobs, setJobs] = useState(initialJobs);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const localSaveVersion = useRef(0);
@@ -469,6 +470,10 @@ export function ChurchCateringWorkspace({ initialJobs }: { initialJobs: Catering
 
   return (
     <div className="mx-auto max-w-[1050px] space-y-5">
+      {showIntake && <ChurchCateringIntake onConverted={(job) => {
+        saveJob(job);
+        if (jobs === null) void refresh();
+      }} />}
       <NewCateringJob onSaved={saveJob} disabled={jobs === null || refreshing} />
       <section className="space-y-3" aria-labelledby="catering-jobs">
         <div className="flex flex-wrap items-center justify-between gap-3">

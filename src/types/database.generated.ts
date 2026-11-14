@@ -9971,6 +9971,16 @@ export type Database = {
         }
         Returns: Json
       };
+      "convert_church_catering_inquiry": {
+        Args: {
+          "p_request_id": string | null
+          "p_location_id": string | null
+          "p_inquiry_id": string | null
+          "p_title": string | null
+          "p_service_date": string | null
+        }
+        Returns: Json
+      };
       "correct_prep_completion": {
         Args: {
           "p_request_id": string | null
@@ -10256,6 +10266,13 @@ export type Database = {
           "p_is_employee_visible"?: boolean | null
         }
         Returns: Database["public"]["Tables"]["employee_documents"]["Row"]
+      };
+      "get_church_catering_inquiry": {
+        Args: {
+          "p_location_id": string | null
+          "p_inquiry_id": string | null
+        }
+        Returns: Json
       };
       "get_pos_labor_sync_status": {
         Args: {
@@ -10546,6 +10563,12 @@ export type Database = {
       "jwt_aal": {
         Args: Record<PropertyKey, never>
         Returns: string
+      };
+      "list_church_catering_inquiries": {
+        Args: {
+          "p_location_id": string | null
+        }
+        Returns: Json
       };
       "list_church_catering_jobs": {
         Args: {
@@ -11559,6 +11582,12 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_authenticate_catering_client": {
+        Args: {
+          "p_key_hash": string | null
+        }
+        Returns: Json
+      };
       "service_availability_subjects": {
         Args: {
           "p_organization_id": string | null
@@ -11632,6 +11661,14 @@ export type Database = {
           "p_location_id": string | null
           "p_manage_token_hash": string | null
           "p_reason": string | null
+        }
+        Returns: Json
+      };
+      "service_capture_catering_inquiry": {
+        Args: {
+          "p_client_id": string | null
+          "p_request_id": string | null
+          "p_payload": Json | null
         }
         Returns: Json
       };
@@ -12834,6 +12871,7 @@ export const DatabaseObjectNames = {
       "configure_square_source_connection",
       "configure_tip_pool_policy",
       "configure_user_capability_override",
+      "convert_church_catering_inquiry",
       "correct_prep_completion",
       "correct_reservation_status",
       "create_chat_channel",
@@ -12863,6 +12901,7 @@ export const DatabaseObjectNames = {
       "execute_owner_intelligence_task_proposal",
       "fail_owner_intelligence_run",
       "finalize_employee_document",
+      "get_church_catering_inquiry",
       "get_pos_labor_sync_status",
       "guard_active_owner_count",
       "guard_cash_movement_append_only",
@@ -12921,6 +12960,7 @@ export const DatabaseObjectNames = {
       "is_owner_pending_mfa",
       "is_self_employee",
       "jwt_aal",
+      "list_church_catering_inquiries",
       "list_church_catering_jobs",
       "list_church_catering_prep",
       "list_church_ingredient_batch_queue",
@@ -13022,6 +13062,7 @@ export const DatabaseObjectNames = {
       "serialize_tip_labor_evidence",
       "service_add_guest_note",
       "service_attach_church_catering_invoice",
+      "service_authenticate_catering_client",
       "service_availability_subjects",
       "service_begin_reservation_delivery_run",
       "service_begin_reservation_message_delivery",
@@ -13029,6 +13070,7 @@ export const DatabaseObjectNames = {
       "service_book_public_reservation",
       "service_book_public_reservation_release_legacy",
       "service_cancel_public_reservation",
+      "service_capture_catering_inquiry",
       "service_capture_guest_interest",
       "service_claim_booking_rate_limit",
       "service_claim_church_square_count",

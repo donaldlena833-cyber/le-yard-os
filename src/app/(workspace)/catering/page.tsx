@@ -16,8 +16,9 @@ export default async function CateringPage() {
   const result = await listChurchSquareCateringJobsAction();
   return (
     <ChurchCateringWorkspace
-      key={`${workspace.organization.id}:${workspace.activeLocation.id}`}
+      key={`${workspace.identity.userId}:${workspace.organization.id}:${workspace.activeLocation.id}`}
       initialJobs={result.ok && result.mode === "live" ? result.data : null}
+      showIntake
     />
   );
 }
