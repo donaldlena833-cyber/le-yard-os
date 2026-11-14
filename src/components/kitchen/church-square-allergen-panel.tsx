@@ -46,8 +46,8 @@ function SquareCatalogTags({ item }: { item: ChurchSquareAllergenDiagnosticItem 
     <>
       {allergens.status === "configured" ? (
         <dl className="space-y-1">
-          {allergens.standard.length > 0 && <div><dt className="font-medium">Standard tags</dt><dd>{allergens.standard.join(", ")}</dd></div>}
-          {allergens.custom.length > 0 && <div><dt className="font-medium">Custom tags</dt><dd>{allergens.custom.join(", ")}</dd></div>}
+          {allergens.standard.length > 0 && <div><dt className="font-medium">Standard Square categories</dt><dd>{allergens.standard.join(", ")}</dd></div>}
+          {allergens.custom.length > 0 && <div><dt className="font-medium">Exact custom ingredient names</dt><dd>{allergens.custom.join(", ")}</dd></div>}
         </dl>
       ) : <p>{squareDetail[allergens.status]}</p>}
       {item.variationIds.length === 0 && <p className="mt-2">Square returned no active matching Church Street variations.</p>}
@@ -142,8 +142,9 @@ export function ChurchSquareAllergenPanel({ formulas, evidence }: Props) {
                   <h3 className="text-sm font-semibold text-[var(--ink)]">Register checklist · verification pending</h3>
                   <ol className="mt-2 list-decimal space-y-1 pl-4">
                     <li>On the Church Street register, press and hold the <strong>{item.name}</strong> menu tile. Check the Allergens section against the Square catalog tags above.</li>
-                    <li>Compare the tile’s direct allergen tags with signed recipe r{formula.revision} and the supplier labels above. {item.allergens.status === "empty" && "Treat an empty field as an unchecked disclosure."}</li>
+                    <li>Compare the tile’s direct allergen details with signed recipe r{formula.revision} and the supplier labels above. Check exact names separately. GLUTEN leaves the grain unspecified, and TREE_NUTS leaves the nut unspecified. Use the label to confirm names such as wheat, walnut or pistachio. {item.allergens.status === "empty" && "Treat an empty field as an unchecked disclosure."}</li>
                     <li>Use the separate supplier cross-contact statements and kitchen procedures. Bring missing tags or mismatches to the person in charge before relying on the tile.</li>
+                    <li>Use Square’s item editor where it supports the verified tag. After a catalog change, check that the item description is intact. Recheck the register tile and each public menu against the same signed recipe and supplier labels.</li>
                   </ol>
                 </div>
               )}

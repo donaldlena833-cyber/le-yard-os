@@ -31,7 +31,7 @@ const formula: ChurchSandwichFormula = {
 };
 
 const snapshot: ChurchSquareAllergenDiagnostic = { checkedAt, items: [
-  { key: "parisien", name: "Le Parisien", status: "matched", itemId: "square-parisien", variationIds: ["variation"], allergens: { status: "configured", standard: ["WHEAT"], custom: ["Chèvre"] } },
+  { key: "parisien", name: "Le Parisien", status: "matched", itemId: "square-parisien", variationIds: ["variation"], allergens: { status: "configured", standard: ["GLUTEN", "TREE_NUTS"], custom: ["Walnut"] } },
   { key: "verger", name: "Le Verger", status: "matched", itemId: "square-verger", variationIds: [], allergens: { status: "empty", standard: [], custom: [] } },
   { key: "bellecour", name: "Le Bellecour", status: "missing", itemId: null, variationIds: [], allergens: null },
   { key: "bleu", name: "Le Bleu", status: "ambiguous", itemId: null, variationIds: [], allergens: null },
@@ -58,9 +58,12 @@ it("checks Square only on request and preserves the six distinct catalog outcome
   expect(screen.getByText(/POS tile and online display checks are pending/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Check Square allergen tags" }));
   const parisien = openRow("Le Parisien");
-  expect(await parisien.findByText("WHEAT")).toBeTruthy();
-  expect(parisien.getByText("Chèvre")).toBeTruthy();
-  expect(screen.getByText("2 native tags").closest("summary")).toBeTruthy();
+  const categories = await parisien.findByText("Standard Square categories");
+  expect(within(categories.parentElement!).getByText("GLUTEN, TREE_NUTS")).toBeTruthy();
+  const names = parisien.getByText("Exact custom ingredient names");
+  expect(within(names.parentElement!).getByText("Walnut")).toBeTruthy();
+  expect(within(names.parentElement!).queryByText(/wheat|pistachio/i)).toBeNull();
+  expect(screen.getByText("3 native tags").closest("summary")).toBeTruthy();
   expect(screen.getByText("No native tags").closest("summary")).toBeTruthy();
   expect(screen.getByText("Field unavailable").closest("summary")).toBeTruthy();
   expect(parisien.getByRole("link", { name: /Open Le Parisien/ }).getAttribute("href")).toMatch(/square-parisien$/);
@@ -95,10 +98,10 @@ it("clears old native tags when a repeat lookup cannot be completed", async () =
   render(<ChurchSquareAllergenPanel formulas={[]} evidence={[]} />);
   const parisien = openRow("Le Parisien");
   fireEvent.click(screen.getByRole("button", { name: "Check Square allergen tags" }));
-  expect(await parisien.findByText("WHEAT")).toBeTruthy();
+  expect(await parisien.findByText("GLUTEN, TREE_NUTS")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Check Square tags again" }));
   expect(await parisien.findByText("Square tags are unavailable for this check.")).toBeTruthy();
-  expect(parisien.queryByText("WHEAT")).toBeNull();
+  expect(parisien.queryByText("GLUTEN, TREE_NUTS")).toBeNull();
 });
 
 it("shows a read-only register checklist for that exact item and current supplier review", async () => {
@@ -116,8 +119,9 @@ it("shows a read-only register checklist for that exact item and current supplie
   const checklist = await parisien.findByRole("heading", { name: "Register checklist · verification pending" });
   const steps = within(checklist.parentElement!).getAllByRole("listitem").map((step) => step.textContent);
   expect(steps[0]).toMatch(/Church Street register, press and hold the Le Parisien menu tile/);
-  expect(steps[1]).toMatch(/direct allergen tags with signed recipe r2.*empty field/);
+  expect(steps[1]).toMatch(/direct allergen details with signed recipe r2.*GLUTEN leaves the grain unspecified.*TREE_NUTS leaves the nut unspecified.*empty field/);
   expect(steps[2]).toMatch(/separate supplier cross-contact.*person in charge/);
+  expect(steps[3]).toMatch(/Square’s item editor.*item description is intact.*register tile and each public menu.*same signed recipe and supplier labels/);
   expect(parisien.getByText(/10-inch baguette · label r1/)).toBeTruthy();
   expect(parisien.getByText(/French-style ham · label r2/)).toBeTruthy();
   expect(parisien.getByText(/cultured butter · label r3/)).toBeTruthy();
