@@ -16,11 +16,14 @@ const fulfillment = (overrides: Partial<Fulfillment>): Fulfillment => ({
 });
 const snapshot: ChurchSquareOrderWatch = {
   checkedAt, orderCoverageThrough: "2026-11-14T17:47:59.000Z", hasMore: true,
+  catering: { status: "ready", published: 12, stillToBuild: 7 },
   orders: [{ reference: "counter-1", source: "SQUARE_ONLINE", status: "OPEN", updatedAt: checkedAt, fulfillments: [
     fulfillment({ promisedAt: checkedAt, readyAt }),
     fulfillment({ type: "DELIVERY", promisedAt: "2026-11-14T17:58:00.000Z" }),
     fulfillment({ type: "DELIVERY", status: "PREPARED", promisedAt: "2026-11-14T18:15:00.000Z" }),
     fulfillment({ promisedAt: "2026-11-14T18:15:00.001Z" }),
+    fulfillment({ type: "DELIVERY", promisedAt: "2026-11-14T19:00:00.000Z" }),
+    fulfillment({ promisedAt: "2026-11-14T19:00:00.001Z" }),
   ] }, { reference: "market-2", source: "UNKNOWN", status: "OPEN", updatedAt: checkedAt, fulfillments: [
     fulfillment({ type: "DELIVERY", status: "PROPOSED" }),
   ] }],
@@ -33,7 +36,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("shows started, next 15 minute and missing windows with actions tied to actual readiness", async () => {
+it("shows the next hour by fulfillment type and readiness alongside today's remaining catering", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date(checkedAt));
   const request = vi.fn().mockResolvedValue(Response.json(snapshot));
@@ -42,6 +45,18 @@ it("shows started, next 15 minute and missing windows with actions tied to actua
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
   expect(request).toHaveBeenCalledExactlyOnceWith(`${churchSquareOrderWatchPath}?locationId=${locationId}`, expect.objectContaining({ cache: "no-store", credentials: "same-origin" }));
   const region = within(screen.getByRole("region", { name: "Square pickup and delivery watch" }));
+  const workload = within(region.getByRole("table", { name: "Next-hour workload" }));
+  for (const [name, counts] of [
+    ["Window started", ["0 / 1", "1 / 0"]],
+    ["Next 15 minutes", ["0 / 0", "0 / 1"]],
+    ["15–30 minutes", ["1 / 0", "0 / 0"]],
+    ["30–60 minutes", ["0 / 0", "1 / 0"]],
+    ["No window time", ["0 / 0", "1 / 0"]],
+  ] as const) {
+    const row = within(workload.getByRole("rowheader", { name }).closest("tr")!);
+    expect(row.getAllByRole("cell").map((cell) => cell.textContent)).toEqual(counts);
+  }
+  expect(region.getByText("7 portions still to build").textContent).toBeTruthy();
   const started = within(region.getByRole("heading", { name: "Window started · 2" }).parentElement!);
   expect(started.getByText("Marked ready · Check pickup status")).toBeTruthy();
   expect(started.getByText("Check prep status")).toBeTruthy();
@@ -92,5 +107,5 @@ it("pauses while hidden, catches up on visibility, and labels an empty snapshot 
   await act(async () => { document.dispatchEvent(new Event("visibilitychange")); });
   expect(request).toHaveBeenCalledOnce();
   expect(screen.getByText(/recovery coverage is unavailable/)).toBeTruthy();
-  expect(screen.getByText(/The available records contain no open fulfillments/)).toBeTruthy();
+  expect(screen.getByText(/The available records contain no open pickup or delivery fulfillments/)).toBeTruthy();
 });

@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   canRequest: vi.fn(),
+  catering: vi.fn(),
   rpc: vi.fn(),
   abortSignal: vi.fn(),
 }));
@@ -11,6 +12,7 @@ vi.mock("@/lib/auth/workspace-session", () => ({ resolveWorkspaceSession: mocks.
 vi.mock("@/data/read-models/church-square-order-window.server", () => ({
   canRequestChurchSquareOrderWindow: mocks.canRequest,
 }));
+vi.mock("@/data/read-models/church-catering-prep.server", () => ({ loadChurchCateringPrep: mocks.catering }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ rpc: mocks.rpc }) }));
 
 import { GET } from "@/app/api/workspace/church-square-order-watch/route";
@@ -50,9 +52,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.session.mockResolvedValue({ status: "ready", context });
   mocks.canRequest.mockReturnValue(true);
+  mocks.catering.mockResolvedValue(null);
   mocks.rpc.mockReturnValue({ abortSignal: mocks.abortSignal });
   mocks.abortSignal.mockResolvedValue({ data: snapshot, error: null });
 });
+afterEach(() => vi.useRealTimers());
 
 describe("Church Square order watch route", () => {
   it("requires the current authenticated management workspace on every poll", async () => {
@@ -64,6 +68,7 @@ describe("Church Square order watch route", () => {
     expect((await GET(request())).status).toBe(403);
     expect(mocks.canRequest).toHaveBeenCalledWith(context);
     expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.catering).not.toHaveBeenCalled();
   });
 
   it("rejects malformed and cross-site reads before resolving a session", async () => {
@@ -86,7 +91,30 @@ describe("Church Square order watch route", () => {
     expect(response.headers.get("cache-control")).toContain("private, no-store");
     expect(response.headers.get("vary")).toBe("Cookie");
     expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith("list_church_square_order_watch", { p_location_id: locationId });
-    expect(await response.json()).toEqual(snapshot);
+    expect(await response.json()).toEqual({ ...snapshot, catering: null });
+  });
+
+  it("returns only today's New York catering totals and keeps the order watch available on a catering read failure", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-15T04:35:00Z"));
+    const checkedAt = "2026-11-15T04:35:00Z";
+    mocks.abortSignal.mockResolvedValue({ data: { ...snapshot, checkedAt }, error: null });
+    const portions = { parisien: 8, verger: 6, bellecour: 0, bleu: 0, rustique: 0, figaro: 0 };
+    const day = { serviceDate: "2026-11-14", portions, remainingPortions: { ...portions, verger: 1 } };
+    mocks.catering.mockResolvedValueOnce({ state: "ready", days: [
+      day, { ...day, serviceDate: "2026-11-15", portions: { ...portions, parisien: 100 } },
+    ] });
+    expect(await (await GET(request())).json()).toMatchObject({
+      catering: { status: "ready", published: 14, stillToBuild: 9 }, orders: snapshot.orders,
+    });
+    expect(mocks.catering).toHaveBeenCalledWith(context);
+    mocks.catering.mockResolvedValueOnce({ state: "unavailable" });
+    expect(await (await GET(request())).json()).toMatchObject({ catering: { status: "unavailable" }, orders: snapshot.orders });
+    mocks.catering.mockResolvedValueOnce({ state: "ready", days: [{ ...day, serviceDate: "2026-11-15" }] });
+    expect(await (await GET(request())).json()).toMatchObject({ catering: { status: "ready", published: 0, stillToBuild: 0 } });
+    vi.setSystemTime(new Date("2026-11-15T05:00:01Z"));
+    mocks.catering.mockResolvedValueOnce({ state: "ready", days: [] });
+    expect(await (await GET(request())).json()).toMatchObject({ catering: { status: "unavailable" } });
   });
 
   it("fails closed on authorization changes or malformed saved facts", async () => {

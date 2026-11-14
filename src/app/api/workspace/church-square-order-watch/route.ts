@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { loadChurchCateringPrep } from "@/data/read-models/church-catering-prep.server";
 import { canRequestChurchSquareOrderWindow } from "@/data/read-models/church-square-order-window.server";
+import { localDateKey } from "@/data/read-models/local-time";
 import { appSurface } from "@/lib/app-surface";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { churchSquareOrderWatchResponse } from "@/lib/integrations/church-square-order-watch";
@@ -35,13 +37,29 @@ export async function GET(request: Request) {
         || !canRequestChurchSquareOrderWindow(session.context)) return emptyResponse(403);
 
     const client = await createClient();
-    const { data, error } = await client.rpc("list_church_square_order_watch", {
-      p_location_id: session.context.activeLocation.id,
-    }).abortSignal(AbortSignal.timeout(6_000));
+    const cateringReadDate = localDateKey(new Date(), "America/New_York");
+    const [{ data, error }, catering] = await Promise.all([
+      client.rpc("list_church_square_order_watch", {
+        p_location_id: session.context.activeLocation.id,
+      }).abortSignal(AbortSignal.timeout(6_000)),
+      loadChurchCateringPrep(session.context),
+    ]);
     if (error) return emptyResponse(error.code === "42501" ? 403 : 503);
 
     const parsed = churchSquareOrderWatchResponse.safeParse(data);
-    return parsed.success ? Response.json(parsed.data, { headers }) : emptyResponse(503);
+    if (!parsed.success) return emptyResponse(503);
+
+    const serviceDate = localDateKey(parsed.data.checkedAt, "America/New_York");
+    const day = catering?.state === "ready" ? catering.days.find((entry) => entry.serviceDate === serviceDate) : undefined;
+    return Response.json({
+      ...parsed.data,
+      catering: catering?.state === "ready" && serviceDate === cateringReadDate &&
+        localDateKey(new Date(), "America/New_York") === serviceDate ? {
+        status: "ready",
+        published: Object.values(day?.portions ?? {}).reduce((sum, count) => sum + count, 0),
+        stillToBuild: Object.values(day?.remainingPortions ?? {}).reduce((sum, count) => sum + count, 0),
+      } : catering && { status: "unavailable" },
+    }, { headers });
   } catch {
     return emptyResponse(503);
   }
