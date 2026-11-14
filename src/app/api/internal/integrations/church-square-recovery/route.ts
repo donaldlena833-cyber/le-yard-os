@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { processChurchSquareReceipts } from "@/lib/integrations/church-square-event-worker.server";
 import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
 import { churchSquareOrderConfiguration } from "@/lib/integrations/church-square-orders.server";
+import { processChurchSquareStockRecovery } from "@/lib/integrations/church-square-stock-recovery.server";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
   try {
     if (!await hasNoInput(request)) return respond(400);
     after(async () => {
-      await Promise.allSettled([processChurchSquareReceipts(), processChurchSquareOrderBackfill()]);
+      await Promise.allSettled([processChurchSquareReceipts(), processChurchSquareOrderBackfill(), processChurchSquareStockRecovery()]);
     });
     return respond(202);
   } catch {

@@ -12011,6 +12011,13 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_list_church_square_stock_mappings": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+        }
+        Returns: Json
+      };
       "service_mark_church_square_count_dispatched": {
         Args: {
           "p_request_id": string | null
@@ -12067,6 +12074,14 @@ export type Database = {
         Args: {
           "p_request_id": string | null
           "p_action_url": string | null
+        }
+        Returns: Json
+      };
+      "service_reconcile_church_square_stock": {
+        Args: {
+          "p_merchant_id": string | null
+          "p_square_location_id": string | null
+          "p_inventory": Json | null
         }
         Returns: Json
       };
@@ -13006,6 +13021,7 @@ export const DatabaseObjectNames = {
       "service_ingest_pos_time_entry",
       "service_ingest_square_production_source_window",
       "service_ingest_square_source_window",
+      "service_list_church_square_stock_mappings",
       "service_mark_church_square_count_dispatched",
       "service_merge_guests",
       "service_modify_public_reservation",
@@ -13013,6 +13029,7 @@ export const DatabaseObjectNames = {
       "service_provision_user_invitation_request",
       "service_public_release_state",
       "service_queue_user_invitation_delivery",
+      "service_reconcile_church_square_stock",
       "service_reconcile_user_invitation_auth",
       "service_record_church_square_webhook",
       "service_record_guest_consent",

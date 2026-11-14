@@ -116,6 +116,13 @@ const currentCountSchema = z.object({
   calculated_at: timestamp,
   is_estimated: z.boolean().optional(),
 });
+const maximumMappedCountIds = 200;
+const mappedCountIds = z.array(squareId).max(maximumMappedCountIds).refine((ids) => new Set(ids).size === ids.length);
+const mappedCountRows = z.array(currentCountSchema.extend({
+  quantity: z.string().regex(/^-?\d{1,12}(?:\.\d{1,5})?$/),
+  calculated_at: timestamp.regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/),
+})).max(100).optional();
+const currentCountsPath = "/v2/inventory/counts/batch-retrieve";
 const envelopeSchema = z.object({
   cursor: z.string().max(4096).optional(),
   errors: z.array(z.unknown()).optional(),
@@ -153,6 +160,11 @@ export interface SquarePhysicalCountReceipt {
   occurredAt: string;
   physicalCountId: string;
   currentQuantity: string;
+  calculatedAt: string;
+}
+export interface SquareMappedCurrentCount {
+  variationId: string;
+  quantity: string;
   calculatedAt: string;
 }
 
@@ -567,7 +579,7 @@ export class SquareCountClient {
     const seen = new Set<string>();
     let matching: z.infer<typeof currentCountSchema> | undefined;
     for (let page = 0; page < MAX_PAGES; page++) {
-      const response = await this.call("/v2/inventory/counts/batch-retrieve", {
+      const response = await this.call(currentCountsPath, {
         body: { catalog_object_ids: [input.variationId], location_ids: [this.configuration.locationId],
           states: ["IN_STOCK"], ...(cursor ? { cursor } : {}) },
       });
@@ -580,6 +592,56 @@ export class SquareCountClient {
       seen.add(cursor);
     }
     throw new SquareCountError("Square current inventory pagination could not be completed.", "unconfirmed");
+  }
+
+  /** Read only the current Square-observed counts for the caller's active variation mappings. */
+  async retrieveMappedCurrentCounts(variationIds: readonly string[]): Promise<SquareMappedCurrentCount[]> {
+    const ids = mappedCountIds.safeParse(variationIds);
+    if (!ids.success) {
+      throw new SquareCountError("Supply up to 200 distinct Square variation IDs.", "invalid_input");
+    }
+    if (!ids.data.length) return [];
+
+    const deadline = AbortSignal.timeout(15_000);
+    await this.verifyScope(deadline);
+    const locationId = this.configuration.locationId;
+    const requested = new Set(ids.data);
+    const observations = new Map<string, SquareMappedCurrentCount>();
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const response = await this.call(currentCountsPath, { body: {
+        catalog_object_ids: ids.data,
+        location_ids: [locationId],
+        states: ["IN_STOCK"],
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      } }, deadline);
+      const rows = parseProvider(mappedCountRows, response.counts) ?? [];
+      const maximumCalculatedAt = Date.now() + 60_000;
+      for (const row of rows) {
+        const variationId = row.catalog_object_id;
+        if (!requested.has(variationId) || row.location_id !== locationId || row.state !== "IN_STOCK") {
+          throw new SquareCountError("Square returned inventory outside the approved variations, location or state.", "scope_mismatch");
+        }
+        const calculatedAt = Date.parse(row.calculated_at);
+        if (!Number.isFinite(calculatedAt) || calculatedAt > maximumCalculatedAt) {
+          throw new SquareCountError("Square returned an invalid inventory calculation time.", "provider_unavailable");
+        }
+        if (row.is_estimated) continue;
+        if (observations.has(variationId)) {
+          throw new SquareCountError("Square returned duplicate current inventory counts.", "scope_mismatch");
+        }
+        observations.set(variationId, { variationId, quantity: row.quantity, calculatedAt: row.calculated_at });
+      }
+
+      cursor = response.cursor;
+      if (!cursor) return [...observations.values()];
+      if (seenCursors.has(cursor)) break;
+      seenCursors.add(cursor);
+    }
+    throw new SquareCountError("Square current inventory pagination could not be completed.", "provider_unavailable");
   }
 
   /** Read-only reconciliation for an earlier submission, including after the write window closes. */

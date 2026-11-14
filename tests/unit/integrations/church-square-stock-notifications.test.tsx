@@ -191,4 +191,41 @@ describe("Church Street Square low stock notification", () => {
     expect(screen.getByText("Low stock · 5 in stock")).toBeTruthy();
     expect(screen.getByRole("complementary", { name: "Square low stock notification" })).toBeTruthy();
   });
+
+  it("distinguishes Operations check time, Square count time, and the physical observation", async () => {
+    vi.useFakeTimers();
+    const readAt = "2026-11-14T13:05:00.000Z";
+    const observedAt = "2026-11-14T10:50:00Z";
+    vi.setSystemTime(new Date(readAt));
+    const request = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...scope, userId, alerts: [alert] }) })
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ ...scope, userId, alerts: [] }) })
+      .mockResolvedValueOnce({ ok: false, status: 403 });
+    vi.stubGlobal("fetch", request);
+    render(<ChurchSquareStockNotifications {...scope} userId={userId} alerts={[alert]}>
+      <ChurchSquareStockCounts scope={scope} items={[{ id: alert.id, label: alert.label, lastConfirmedQuantity: 0, lastConfirmedObservedAt: observedAt }]}
+        alerts={[alert]} alertUserId={userId} enabled canConfigure={false} />
+    </ChurchSquareStockNotifications>);
+    const inventory = within(screen.getByRole("region", { name: "Square stock counts" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(inventory.getByText(/Last Operations alert check/).querySelector("time")?.dateTime).toBe(readAt);
+    expect(inventory.getByText(/Square calculated this count/).querySelector("time")?.dateTime).toBe(alert.calculatedAt);
+    expect(inventory.getByText(/Last confirmed physical count · 0/).querySelector("time")?.dateTime).toBe(observedAt);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(inventory.getByText(/Could not refresh Operations stock alerts.*last available alert view/)).toBeTruthy();
+    expect(inventory.getByText(/Last Operations alert check/).querySelector("time")?.dateTime).toBe(readAt);
+    expect(inventory.getByText("Low stock · 5 in stock")).toBeTruthy();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(inventory.queryByText(/Could not refresh/)).toBeNull();
+    expect(inventory.queryByText(/Square calculated this count/)).toBeNull();
+    expect(inventory.getByText(/Last Operations alert check/).querySelector("time")?.dateTime).toBe("2026-11-14T13:05:20.000Z");
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+    expect(inventory.getByText(/Operations stock alert access is unavailable/)).toBeTruthy();
+    expect(inventory.queryByText(/Last Operations alert check/)).toBeNull();
+    expect(inventory.getByText(/Last confirmed physical count · 0/)).toBeTruthy();
+  });
 });

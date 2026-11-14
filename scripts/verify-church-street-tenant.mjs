@@ -248,6 +248,84 @@ async function verifyChurchSquareWebhookProjection(db, locationId) {
   process.stdout.write("PASS Church Street webhook replay, stale exclusion, low-stock alert rearming, and shared acknowledgment\n");
 }
 
+async function verifyChurchSquareStockRecovery(db, locationId) {
+  const read = async (sql, args = []) => (await db.query(sql, args)).rows[0]?.result;
+  const list = () => read("select public.list_church_square_stock_alerts($1::uuid) as result", [locationId]);
+  const mappings = (merchant = "M_TEST", squareLocation = "L_TEST") => read(
+    "select public.service_list_church_square_stock_mappings($1,$2) as result", [merchant, squareLocation],
+  );
+  const reconcile = (observations, merchant = "M_TEST", squareLocation = "L_TEST") => read(
+    "select public.service_reconcile_church_square_stock($1,$2,$3::jsonb) as result", [merchant, squareLocation, JSON.stringify(observations)],
+  );
+  const countRows = () => read(`
+    select jsonb_build_array((select count(*) from private.church_square_webhook_receipts),
+      (select count(*) from private.church_square_count_requests)) as result
+  `);
+  const asService = () => claims(db, undefined, "service_role");
+  const observation = (quantity, second, variationId = "V_TEST") => ({ variationId, quantity, calculatedAt: `2026-11-14T12:00:${second}Z` });
+
+  await db.exec("reset role");
+  const before = await countRows();
+  await claims(db, churchEmployeeId);
+  const [initial] = await list();
+  assert.equal(initial.quantity, "0");
+  assert.equal(await read(`select has_function_privilege(current_user,
+    'public.service_reconcile_church_square_stock(text,text,jsonb)','EXECUTE') as result`), false);
+  assert.equal(await read(`select has_function_privilege(current_user,
+    'public.service_list_church_square_stock_mappings(text,text)','EXECUTE') as result`), false);
+  await read(`select public.acknowledge_church_square_stock_alert($1::uuid,$2::uuid,$3::uuid) as result`,
+    [locationId, initial.id, initial.episode]);
+
+  await asService();
+  assert.deepEqual(await mappings(), ["V_TEST"]);
+  await assert.rejects(mappings("OTHER"), { code: "42501" });
+  await assert.rejects(reconcile([], "M_TEST", "OTHER"), { code: "42501" });
+  assert.deepEqual(await reconcile([]), { applied: 0, ignored: 0 });
+  assert.deepEqual(await reconcile([observation("100", "01")]), { applied: 0, ignored: 1 });
+  await assert.rejects(reconcile([observation("100", "20"), observation("0", "20")]), { code: "22023" });
+  await assert.rejects(reconcile([observation("100", "20"), observation("100", "20", "OTHER")]), { code: "PT409" });
+  await assert.rejects(reconcile([42]), { code: "22023" });
+  await assert.rejects(reconcile([{ ...observation("100", "20"), calculatedAt: "infinity" }]), { code: "22023" });
+  await assert.rejects(reconcile([{ ...observation("100", "20"), calculatedAt: "2026-02-30T00:00:00Z" }]), { code: "22023" });
+  await assert.rejects(reconcile([observation("100", "20"), { ...observation("100", "21", "DIFFERENT"), extra: "junk" }]), { code: "22023" });
+  await claims(db, churchEmployeeId);
+  const [afterInvalid] = await list();
+  assert.equal(afterInvalid.episode, initial.episode);
+  assert.ok(afterInvalid.acknowledgedAt);
+  await asService();
+  assert.deepEqual(await reconcile([observation("-0.12500", "20")]), { applied: 1, ignored: 0 });
+  await claims(db, churchEmployeeId);
+  const [stillLow] = await list();
+  assert.equal(stillLow.quantity, "-0.125");
+  assert.equal(stillLow.episode, initial.episode);
+  assert.equal(stillLow.acknowledgedAt, afterInvalid.acknowledgedAt);
+
+  await asService();
+  assert.deepEqual(await reconcile([observation("100", "21")]), { applied: 1, ignored: 0 });
+  assert.deepEqual(await reconcile([observation("1", "21")]), { applied: 0, ignored: 1 });
+  await claims(db, churchEmployeeId);
+  assert.deepEqual(await list(), []);
+  await asService();
+  assert.deepEqual(await reconcile([observation("0", "22")]), { applied: 1, ignored: 0 });
+  await claims(db, churchEmployeeId);
+  const [rearmed] = await list();
+  assert.equal(rearmed.quantity, "0");
+  assert.notEqual(rearmed.episode, initial.episode);
+  assert.equal(rearmed.acknowledgedAt, null);
+
+  await db.exec("reset role");
+  assert.deepEqual(await countRows(), before, "Snapshot does not create webhook or physical-count receipts");
+  await asService();
+  assert.equal(await read(`select public.service_record_church_square_webhook('M_TEST','L_TEST','stock-recovery-race-webhook',
+    'inventory.count.updated','2026-11-14T12:00:24Z','inventory-event-object',$1::jsonb) as result`,
+  [JSON.stringify([observation("110", "24")])]), true);
+  assert.deepEqual(await reconcile([observation("1", "23")]), { applied: 0, ignored: 1 });
+  await db.exec("reset role");
+  const latest = await read("select trim_scale(quantity)::text as result from private.church_square_stock_state where item_id=$1", [initial.id]);
+  assert.equal(latest, "110", "Newer webhook wins the recovery race");
+  process.stdout.write("PASS Church Street mapped stock recovery, scope, monotonic ordering, revision safety, and independent receipt counts\n");
+}
+
 async function verifyChurchSquareReceiptProcessing(db, locationId) {
   const read = async (sql, args = []) => (await db.query(sql, args)).rows[0]?.result;
   const list = () => read("select public.list_church_square_reconciliation($1::uuid) as result", [locationId]);
@@ -429,6 +507,7 @@ export async function verifyChurchStreetTenant(db) {
     await verifyChurchSquareCountLedger(db, churchId, churchLocationId);
     await verifyChurchSquareWebhookProjection(db, churchLocationId);
     await verifyChurchSquareReceiptProcessing(db, churchLocationId);
+    await verifyChurchSquareStockRecovery(db, churchLocationId);
 
     await claims(db, undefined, "service_role");
     assert.equal((await get(`select public.service_set_church_street_active('${churchId}', false) as result`)).result.status, "suspended");

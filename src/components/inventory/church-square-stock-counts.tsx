@@ -15,6 +15,16 @@ import { useLiveChurchSquareStockAlerts } from "./church-square-stock-notificati
 
 type LocationScope = { organizationId: string; locationId: string };
 
+const easternTime = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short",
+});
+
+function StockTime({ value }: { value: string }) {
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return null;
+  return <time dateTime={value}>{easternTime.format(time)} ET</time>;
+}
+
 function CountItem({ item, scope, enabled, alert, alertScope }: {
   item: ChurchSquareCountItem; scope: LocationScope; enabled: boolean; alert?: ChurchSquareStockAlert; alertScope?: string;
 }) {
@@ -77,11 +87,17 @@ function CountItem({ item, scope, enabled, alert, alertScope }: {
           </StatusPill>
         ) : null}
       </div>
+      {alert && <p className="mt-1 text-xs text-[var(--ink-soft)]">Square calculated this count <StockTime value={alert.calculatedAt} />.</p>}
       {alert && (receipt ? <StockAcknowledgmentReceipt receipt={receipt} /> : alertScope ? (
         <div className="mt-2"><AcknowledgeStockAlertButton alert={alert} scopeKey={alertScope} key={alert.episode} /></div>
       ) : null)}
       {item.lastConfirmedQuantity != null ? (
-        <p className="mt-1 text-xs text-[var(--ink-faint)]">Last confirmed physical count: {item.lastConfirmedQuantity}</p>
+        <p className="mt-1 text-xs text-[var(--ink-soft)]">
+          Last confirmed physical count · {item.lastConfirmedQuantity}
+          {item.lastConfirmedObservedAt && !Number.isNaN(Date.parse(item.lastConfirmedObservedAt)) && (
+            <> · observed in Operations <StockTime value={item.lastConfirmedObservedAt} /></>
+          )}
+        </p>
       ) : null}
       <form onSubmit={(event) => void submit(event)} className="mt-3 grid gap-2 sm:grid-cols-[8rem_1fr_auto] sm:items-end">
         {pending ? (
@@ -117,7 +133,8 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
   const [message, setMessage] = useState("");
   const [variations, setVariations] = useState<{ id: string; label: string }[]>();
   const alertScope = alertUserId ? stockAcknowledgmentScope(scope.organizationId, scope.locationId, alertUserId) : undefined;
-  const currentAlerts = useLiveChurchSquareStockAlerts(alertScope) ?? alerts;
+  const liveAlerts = useLiveChurchSquareStockAlerts(alertScope);
+  const currentAlerts = liveAlerts?.alerts ?? alerts;
   const alertsByItem = new Map(currentAlerts?.map((alert) => [alert.id, alert]));
 
   async function loadVariations() {
@@ -163,6 +180,15 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
       <div className="rounded-[20px] border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
         <h2 id="church-square-stock-heading" className="text-lg font-medium">Square stock counts</h2>
         <p className="mt-1 text-sm text-[var(--ink-faint)]">Count sellable units now. A confirmed zero can mark a tracked item sold out. For temporary holds or modifiers, use Square’s availability controls.</p>
+        {liveAlerts && (
+          <div className="mt-2 space-y-1 text-xs text-[var(--ink-soft)]">
+            {liveAlerts.state === "denied" && <p>Operations stock alert access is unavailable.</p>}
+            {liveAlerts.state === "unavailable" && (
+              <p>Could not refresh Operations stock alerts.{currentAlerts && " Showing the last available alert view."}</p>
+            )}
+            {liveAlerts.lastCheckedAt && <p>Last Operations alert check <StockTime value={liveAlerts.lastCheckedAt} />.</p>}
+          </div>
+        )}
         {!enabled ? <p className="mt-2 text-sm">Waiting for the Church Street Square connection.</p> : null}
         {items.length ? <ul className="mt-2 divide-y divide-[var(--line)]">
           {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} alert={alertsByItem.get(item.id)} alertScope={alertScope} />)}

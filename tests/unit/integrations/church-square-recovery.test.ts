@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/internal/integrations/church-square-recovery/route";
 import { processChurchSquareReceipts } from "@/lib/integrations/church-square-event-worker.server";
 import { processChurchSquareOrderBackfill } from "@/lib/integrations/church-square-order-backfill.server";
+import { processChurchSquareStockRecovery } from "@/lib/integrations/church-square-stock-recovery.server";
 
 const schedule = vi.hoisted(() => vi.fn());
 vi.mock("next/server", () => ({ after: schedule }));
@@ -11,6 +12,9 @@ vi.mock("@/lib/integrations/church-square-event-worker.server", () => ({
 }));
 vi.mock("@/lib/integrations/church-square-order-backfill.server", () => ({
   processChurchSquareOrderBackfill: vi.fn(),
+}));
+vi.mock("@/lib/integrations/church-square-stock-recovery.server", () => ({
+  processChurchSquareStockRecovery: vi.fn(),
 }));
 
 const url = "https://operations.leyardny.com/api/internal/integrations/church-square-recovery";
@@ -51,7 +55,7 @@ afterEach(() => {
 });
 
 describe("internal Church Street Square recovery trigger", () => {
-  it.each([undefined, "{}"])("queues both recovery workers for an authorized request with %s body", async (body) => {
+  it.each([undefined, "{}"])("queues the recovery workers for an authorized request with %s body", async (body) => {
     const response = await POST(request(body));
     expect(response.status).toBe(202);
     expect(await response.text()).toBe("");
@@ -59,9 +63,11 @@ describe("internal Church Street Square recovery trigger", () => {
     expect(schedule).toHaveBeenCalledOnce();
     expect(processChurchSquareReceipts).not.toHaveBeenCalled();
     expect(processChurchSquareOrderBackfill).not.toHaveBeenCalled();
+    expect(processChurchSquareStockRecovery).not.toHaveBeenCalled();
     await schedule.mock.calls[0]?.[0]();
     expect(processChurchSquareReceipts).toHaveBeenCalledOnce();
     expect(processChurchSquareOrderBackfill).toHaveBeenCalledOnce();
+    expect(processChurchSquareStockRecovery).toHaveBeenCalledOnce();
   });
 
   it("rejects a missing, malformed, incorrect, or expired signature", async () => {

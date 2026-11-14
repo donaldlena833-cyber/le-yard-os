@@ -97,6 +97,94 @@ function requestsTo(mock: ReturnType<typeof mockSquare>, path: string) {
 beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }).setSystemTime(new Date(now)));
 afterEach(() => vi.useRealTimers());
 
+describe("Church Square mapped current count snapshot", () => {
+  it("reads scoped, paginated observations without converting an absent or estimated row to zero", async () => {
+    const ids = [input.variationId, "ZERO", "MISSING", "ESTIMATED_ONLY"];
+    const exactTime = "2026-11-14T09:49:03.123456-05:00";
+    const request = mockSquare({ current: (options) => {
+      const body = JSON.parse(String(options?.body));
+      expect(options).toMatchObject({ method: "POST", cache: "no-store", redirect: "error" });
+      expect(body).toEqual({
+        catalog_object_ids: ids, location_ids: [config.locationId], states: ["IN_STOCK"], limit: 100,
+        ...(body.cursor ? { cursor: "next page" } : {}),
+      });
+      return body.cursor ? respond({ counts: [
+        { ...currentCount, catalog_object_type: undefined, catalog_object_id: "ZERO", quantity: "0.00000", calculated_at: exactTime },
+      ], cursor: "" }) : respond({ counts: [
+        { ...currentCount, quantity: "-1.25000" },
+        { ...currentCount, catalog_object_id: "ESTIMATED_ONLY", quantity: "2", is_estimated: true },
+      ], cursor: "next page" });
+    } });
+
+    await expect(new SquareCountClient(config, request).retrieveMappedCurrentCounts(Object.freeze(ids))).resolves.toEqual([
+      { variationId: input.variationId, quantity: "-1.25000", calculatedAt: currentCount.calculated_at },
+      { variationId: "ZERO", quantity: "0.00000", calculatedAt: exactTime },
+    ]);
+    expect(requestsTo(request, urls.current)).toHaveLength(2);
+    expect(requestsTo(request, urls.history)).toHaveLength(0);
+    expect(requestsTo(request, urls.write)).toHaveLength(0);
+  });
+
+  it("returns an empty snapshot without an unfiltered Square request and enforces the distinct 200-ID input bound", async () => {
+    const request = mockSquare({ current: () => respond({}) });
+    const client = new SquareCountClient(config, request);
+    await expect(client.retrieveMappedCurrentCounts([])).resolves.toEqual([]);
+    for (const invalid of [[""], ["VARIATION", "VARIATION"], Array.from({ length: 201 }, (_, index) => `ID_${index}`)]) {
+      await expect(client.retrieveMappedCurrentCounts(invalid)).rejects.toMatchObject({ code: "invalid_input" });
+    }
+    expect(request).not.toHaveBeenCalled();
+    const maximum = Array.from({ length: 200 }, (_, index) => `ID_${index}`);
+    await expect(client.retrieveMappedCurrentCounts(maximum)).resolves.toEqual([]);
+    expect(JSON.parse(String(requestsTo(request, urls.current)[0][1]?.body)).catalog_object_ids).toEqual(maximum);
+  });
+
+  it("proves current active Church location scope before requesting variation stock", async () => {
+    const request = mockSquare({ location: { ...baseLocation, merchant_id: "OTHER_MERCHANT" } });
+    await expect(new SquareCountClient(config, request).retrieveMappedCurrentCounts([input.variationId]))
+      .rejects.toMatchObject({ code: "scope_mismatch" });
+    expect(requestsTo(request, urls.current)).toHaveLength(0);
+  });
+
+  it.each([
+    ["location", { location_id: "OTHER_LOCATION" }, "scope_mismatch"],
+    ["variation", { catalog_object_id: "UNREQUESTED_VARIATION", is_estimated: true }, "scope_mismatch"],
+    ["inventory state", { state: "RESERVED_FOR_SALE" }, "scope_mismatch"],
+    ["object type", { catalog_object_type: "ITEM" }, "provider_unavailable"],
+    ["malformed date", { calculated_at: "2026-02-31T14:49:00Z" }, "provider_unavailable"],
+    ["future date", { calculated_at: "2026-11-14T14:51:01Z" }, "provider_unavailable"],
+    ["ambiguous date", { calculated_at: "2026-11-14T14:49:00" }, "provider_unavailable"],
+    ["missing timestamp seconds", { calculated_at: "2026-11-14T14:49Z" }, "provider_unavailable"],
+    ["quantity precision", { quantity: "1.123456" }, "provider_unavailable"],
+    ["quantity range", { quantity: "1000000000000" }, "provider_unavailable"],
+  ])("fails closed on an invalid %s without emitting provider details", async (_label, changed, code) => {
+    const request = mockSquare({ current: () => respond({ counts: [{ ...currentCount, ...changed }] }) });
+    const result = new SquareCountClient(config, request).retrieveMappedCurrentCounts([input.variationId]);
+    await expect(result).rejects.toMatchObject({ code });
+    await expect(result).rejects.not.toThrow(/TOKEN_NOT_IN_ERRORS|UNREQUESTED_VARIATION|OTHER_LOCATION/);
+  });
+
+  it("rejects duplicate non-estimated rows across pages regardless of their values", async () => {
+    const request = mockSquare({ current: (options) => {
+      const { cursor } = JSON.parse(String(options?.body));
+      return cursor
+        ? respond({ counts: [{ ...currentCount, quantity: "3" }] })
+        : respond({ counts: [currentCount], cursor: "next" });
+    } });
+    await expect(new SquareCountClient(config, request).retrieveMappedCurrentCounts([input.variationId]))
+      .rejects.toMatchObject({ code: "scope_mismatch" });
+  });
+
+  it.each(["repeated", "unbounded"])("fails without returning a partial snapshot when pagination is %s", async (mode) => {
+    const request = mockSquare({ current: (options) => {
+      const { cursor } = JSON.parse(String(options?.body));
+      return respond({ counts: cursor ? [] : [currentCount], cursor: mode === "repeated" ? "same" : `${cursor ?? ""}next` });
+    } });
+    await expect(new SquareCountClient(config, request).retrieveMappedCurrentCounts([input.variationId]))
+      .rejects.toMatchObject({ code: "provider_unavailable" });
+    expect(requestsTo(request, urls.current)).toHaveLength(mode === "repeated" ? 2 : 10);
+  });
+});
+
 describe("Church sandwich catalog evidence", () => {
   const sandwich = (id: string, name: string, variations: unknown[] = [], assignment?: object) => ({
     id, type: "ITEM", ...assignment, item_data: { name, variations },

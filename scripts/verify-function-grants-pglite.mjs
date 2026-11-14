@@ -237,6 +237,8 @@ const requiredServiceFunctions = new Set([
   "service_finish_church_square_count",
   "service_mark_church_square_count_dispatched",
   "service_record_church_square_webhook",
+  "service_list_church_square_stock_mappings",
+  "service_reconcile_church_square_stock",
   "service_claim_church_square_receipts",
   "service_attach_church_catering_invoice",
   "service_claim_church_square_order_backfill",

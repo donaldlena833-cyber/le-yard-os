@@ -29,11 +29,18 @@ type AlertStatus = {
   alerts: ChurchSquareStockAlert[];
 };
 
-const StockAlertSnapshotContext = createContext<{ scopeKey: string; alerts: ChurchSquareStockAlert[] } | undefined>(undefined);
+type StockAlertSnapshot = {
+  scopeKey: string;
+  alerts?: ChurchSquareStockAlert[];
+  state: "ready" | "unavailable" | "denied";
+  lastCheckedAt?: string;
+};
+
+const StockAlertSnapshotContext = createContext<StockAlertSnapshot | undefined>(undefined);
 
 export function useLiveChurchSquareStockAlerts(scopeKey: string | undefined) {
   const snapshot = useContext(StockAlertSnapshotContext);
-  return snapshot && snapshot.scopeKey === scopeKey ? snapshot.alerts : undefined;
+  return snapshot && snapshot.scopeKey === scopeKey ? snapshot : undefined;
 }
 
 function subscribeToDismissals(notify: () => void) {
@@ -75,7 +82,7 @@ export function ChurchSquareStockNotifications({
   const receipts = useStockAcknowledgments(scopeKey);
   const activeRequest = useRef<AbortController | null>(null);
   const renderedAlerts = useRef<readonly ChurchSquareStockAlert[] | null>(alerts);
-  const [snapshot, setSnapshot] = useState<{ scopeKey: string; alerts: ChurchSquareStockAlert[] }>();
+  const [snapshot, setSnapshot] = useState<StockAlertSnapshot>();
   const currentSnapshot = snapshot?.scopeKey === scopeKey ? snapshot : undefined;
   const currentAlerts = currentSnapshot?.alerts ?? alerts;
 
@@ -85,13 +92,22 @@ export function ChurchSquareStockNotifications({
     if (activeRequest.current || document.hidden || !navigator.onLine) return;
     const controller = new AbortController();
     activeRequest.current = controller;
-    const timeout = window.setTimeout(() => controller.abort(), 8_000);
-    function applyAlerts(next: ChurchSquareStockAlert[]) {
+    function unavailable() {
+      setSnapshot((previous) => {
+        if (previous?.scopeKey !== scopeKey) return { scopeKey, state: "unavailable" };
+        return previous.state === "ready" ? { ...previous, state: "unavailable" } : previous;
+      });
+    }
+    const timeout = window.setTimeout(() => {
+      unavailable();
+      controller.abort();
+    }, 8_000);
+    function applyAlerts(next: ChurchSquareStockAlert[], state: "ready" | "denied") {
       const nextKey = JSON.stringify(next);
       const changed = nextKey !== JSON.stringify(renderedAlerts.current);
       renderedAlerts.current = next;
-      setSnapshot((previous) => previous?.scopeKey === scopeKey && JSON.stringify(previous.alerts) === nextKey
-        ? previous : { scopeKey, alerts: next });
+      const lastCheckedAt = state === "ready" ? new Date().toISOString() : undefined;
+      setSnapshot({ scopeKey, alerts: next, state, lastCheckedAt });
       if (changed) refresh();
     }
     try {
@@ -102,19 +118,27 @@ export function ChurchSquareStockNotifications({
       });
       if (controller.signal.aborted) return;
       if (response.status === 401 || response.status === 403) {
-        applyAlerts([]);
+        applyAlerts([], "denied");
         return;
       }
-      if (!response.ok) return;
+      if (!response.ok) {
+        unavailable();
+        return;
+      }
       const result = await response.json() as AlertStatus;
       if (controller.signal.aborted) return;
       if (result.organizationId !== organizationId || result.locationId !== locationId || result.userId !== userId) {
-        applyAlerts([]);
+        applyAlerts([], "denied");
         return;
       }
-      applyAlerts(result.alerts);
+      if (!Array.isArray(result.alerts)) {
+        unavailable();
+        return;
+      }
+      applyAlerts(result.alerts, "ready");
     } catch {
       // Keep the last confirmed state and retry on the next foreground check.
+      if (!controller.signal.aborted) unavailable();
     } finally {
       window.clearTimeout(timeout);
       if (activeRequest.current === controller) activeRequest.current = null;
