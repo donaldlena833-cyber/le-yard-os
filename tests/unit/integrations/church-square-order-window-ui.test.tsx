@@ -135,18 +135,23 @@ it("withholds recovery without access or an available comparison and drops stale
   render(<ChurchSquareOrderWindow />);
   const lookup = within(screen.getByText("Check an exact Square order").closest("details")!);
   fireEvent.click(lookup.getByText("Check an exact Square order"));
-  function check() {
-    fireEvent.change(lookup.getByLabelText("Exact Square order ID"), { target: { value: "ORDER-123" } });
-    fireEvent.click(lookup.getByRole("button", { name: "Check order" }));
+  async function check() {
+    const input = lookup.getByLabelText("Exact Square order ID") as HTMLInputElement;
+    const button = lookup.getByRole("button", { name: "Check order" }) as HTMLButtonElement;
+    await waitFor(() => expect(input.disabled || button.disabled).toBe(false));
+    fireEvent.change(input, { target: { value: "ORDER-123" } });
+    fireEvent.click(button);
   }
-  check();
+  await check();
   expect(await lookup.findByText("Operations has no record for this order.")).toBeTruthy();
   expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
-  check();
+  await check();
   expect(await lookup.findByText("The Operations order record could not be checked.")).toBeTruthy();
   expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
-  check();
-  fireEvent.click(await lookup.findByRole("button", { name: "Recover order into Operations" }));
+  await check();
+  const recover = await lookup.findByRole("button", { name: "Recover order into Operations" }) as HTMLButtonElement;
+  await waitFor(() => expect(recover.disabled).toBe(false));
+  fireEvent.click(recover);
   expect(await lookup.findByText("Square updated this order. Check it again before recovering.")).toBeTruthy();
   expect(lookup.queryByRole("button", { name: "Recover order into Operations" })).toBeNull();
   expect(lookup.queryByRole("button", { name: "Copy order evidence" })).toBeNull();
