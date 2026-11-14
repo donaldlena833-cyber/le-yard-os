@@ -258,6 +258,38 @@ describe("connected Operations review interactions", () => {
     })));
   });
 
+  it("creates one Church Street safety draft with exact ingredient and POS checks", async () => {
+    render(
+      <LiveTasksWorkspace workspace={managementWorkspace("manager")}
+        result={{ ok: true, data: { ...managementModel, churchStreet: true } }} />,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /Checklists/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Draft supplier label and allergen checklist" }));
+    const dialog = screen.getByRole("dialog", { name: "Author checklist version" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create draft version" }));
+    const payload = await waitFor(() => {
+      expect(createChecklistTemplateVersionAction).toHaveBeenCalled();
+      return vi.mocked(createChecklistTemplateVersionAction).mock.lastCall?.[0] as {
+        locationId: string; name: string; checklistType: string;
+        items: Array<{ label: string; instructions: string; required: boolean; responseType: string }>;
+      };
+    });
+    expect(payload).toMatchObject({
+      locationId: workspace.activeLocation.id,
+      name: "Church Street supplier labels and allergens",
+      checklistType: "safety",
+    });
+    const supplierItems = payload.items.filter((item) => item.label.startsWith("Supplier label · "));
+    const posItems = payload.items.filter((item) => item.label.startsWith("POS allergen review · "));
+    expect(supplierItems).toHaveLength(16);
+    expect(supplierItems[0]).toMatchObject({
+      label: "Supplier label · 10-inch baguette", required: true, instructions: expect.stringContaining("UNSET"),
+    });
+    expect(posItems).toHaveLength(6);
+    expect(posItems.find((item) => item.label.endsWith("Le Bleu"))?.instructions).toContain("pistachios");
+    expect(payload.items.find((item) => item.responseType === "photo")?.required).toBe(false);
+  });
+
   it.each([
     { role: "manager", churchStreet: false },
     { role: "employee", churchStreet: true },

@@ -32,7 +32,7 @@ import type { LiveInventoryCatalog, LiveInventoryModel } from "@/data/read-model
 import { localDateTimeParts, zonedLocalToIso } from "@/data/read-models/local-time";
 import type { WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { parseInventoryMoneyToCents, parseInventoryQuantity } from "@/lib/inventory/input-parsing";
-import { type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
+import { churchSandwichBread, type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
 import { hasCapability } from "@/lib/permissions/capabilities";
 import { cn, formatMoney } from "@/lib/utils";
 import { InventoryModalFrame } from "./inventory-modal-frame";
@@ -479,7 +479,7 @@ export function RecipeEditorDialog({
               <h4 className="text-sm font-semibold">Bench portions per sandwich</h4>
               <p className="mt-1 text-[13px] text-[var(--ink-faint)]">Use verified inventory items and compatible units when entering the trial formula.</p>
               <dl className="mt-3 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm">
-                <dt>10-inch baguette</dt><dd>1 each</dd>
+                <dt>{churchSandwichBread}</dt><dd>1 each</dd>
                 {benchRecipe.portions.map(({ ingredient, grams }) => (
                   <div key={ingredient} className="contents"><dt>{ingredient}</dt><dd>{grams} g</dd></div>
                 ))}

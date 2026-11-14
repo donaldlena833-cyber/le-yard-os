@@ -1,4 +1,10 @@
-import { churchSandwichBenchRecipes, sandwichFillingGrams, sandwichGramsText } from "@/lib/kitchen/church-sandwich-bench";
+import {
+  churchSandwichBenchRecipes,
+  churchSandwichBread,
+  churchSandwichComponents,
+  sandwichFillingGrams,
+  sandwichGramsText,
+} from "@/lib/kitchen/church-sandwich-bench";
 
 const benchRecipeText = churchSandwichBenchRecipes.map((recipe) =>
   `${recipe.name} · ${sandwichFillingGrams(recipe)} g filling\n${sandwichGramsText(recipe)}.\n${recipe.accent}. ${recipe.build}`,
@@ -16,7 +22,7 @@ export const churchSandwichSop = {
 140 Church Street · Chef: ____ · Reviewed on: ____ · Rehearsal run: ____
 
 CLASSIC BUILDS WITH A NEW YORK DELI TOUCH · BENCH TRIAL
-Use one 10-inch baguette per sandwich. Weights are net, ready-to-build grams and exclude the bread. These are trial portions using the ingredients described on the current café menu.
+Use one ${churchSandwichBread} per sandwich. Weights are net, ready-to-build grams and exclude the bread. These are trial portions using the ingredients described on the current café menu.
 
 ${benchRecipeText}
 
@@ -29,6 +35,7 @@ BATCH LABEL · TEST WITH THE REAL CONTAINER
 Product or component / batch ID / prepared date and time / preparer / use-by or discard date and time / storage location / allergen reference and revision. Link each batch to supplier product and lot where available. Confirm a second person can trace a rehearsal unit back to its components and read the label at the station. Use the approved food-safety plan to set the label fields and limits for service.
 
 ALLERGEN REVIEW · CHEF AND MANAGER SIGNOFF
+Use Checklists → Church Street supplier labels and allergens to record the exact products, use-by rules and POS verification evidence. Product-specific opened and prepared use-by limits start UNSET and require review of the supplier evidence by the person in charge (PIC). Until then, record the affected product as pending or on hold and escalate it to the PIC.
 Collect the current supplier labels and ingredient sheets for the baguette, meats, dairy, dressings, preserves and other packaged ingredients. Confirm ingredient allergens, shared equipment and cross-contact for each item against the exact products actually used. First look at the baguette, dairy, pistachios and walnuts, and review supplier sub-ingredients and the Dijon. These are review prompts. Record confirmed results, ingredient source, cross-contact controls, substitutions, reviewer, and date in the final matrix.
 At the counter, involve the chef or manager when a guest reports an allergy. Check the approved matrix and confirm what the station can accommodate before accepting the order. Bring any unresolved item or substitution back to the chef. Manager handoff: verify signed-off information on the Square Restaurants POS item tile by pressing and holding it. Check the allergy notice on onsite and online menus and test how Square and each marketplace pass an allergy notification to the café where applicable. Check the NYC Health notice and sign requirements before opening.
 Chef signoff and date: ____ · Manager and date: ____ · Approved matrix revision: ____
@@ -47,6 +54,7 @@ https://www.nyc.gov/site/doh/business/food-operators/required-signs.page`,
 
 export const churchSandwichRehearsal = {
   name: "Church Street sandwich rehearsal",
+  checklistType: "custom",
   items: `Run details | text | required | Record date, lead, team, setup and practice channels. Ticket-to-verified-ready rehearsal target for one sandwich is ≤3 min.
 Batch prep times and yield | text | required | Prep for six units. Record product, batch ID, prep start and stop, seconds, and usable yield and waste for every component tested.
 Batch label and trace | text | required | Enter one example label and component lot references. Record whether a second person could trace the rehearsal unit.
@@ -55,4 +63,23 @@ Mock pickup and delivery bag | text | required | Record identification, wrapping
 Mock allergy handoff | text | required | Record how the alert reached the chef, which sources were consulted, how the mock guest was updated, and any gap. Use rehearsal data.
 Slowest step and changes | text | required | Record the bottleneck, one change for the next pass, owner and due date.
 Chef and manager review | text | required | Record accepted timing and portions or pending retest, allergen matrix revision or pending checks, reviewers and date.`,
+};
+
+const supplierReviewItems = churchSandwichComponents.map((ingredient) =>
+  `Supplier label · ${ingredient} | text | required | Record supplier and brand; exact SKU; ingredient and allergen label or spec reference and revision; pack lot and printed date/type; storage condition; opened/prepped use-by rule (UNSET until the PIC approves from verified evidence); PIC disposition and date (PENDING, HOLD, or APPROVED FOR SERVICE). Record each SKU separately in this response.`,
+).join("\n");
+
+const posReviewItems = churchSandwichBenchRecipes.map((recipe) =>
+  `POS allergen review · ${recipe.name} | text | required | Check ${[churchSandwichBread, ...recipe.portions.map(({ ingredient }) => ingredient)].join(", ")} against the signed matrix, including cross-contact. Record matrix revision; Square tile observation (VERIFIED, BLOCKED, or UNAVAILABLE); current menu/cart notice by channel; allergy test route and result; reviewer and date. Keep unverified customer-facing declarations pending.`,
+).join("\n");
+
+export const churchSandwichSupplierReview = {
+  name: "Church Street supplier labels and allergens",
+  checklistType: "safety",
+  items: `Review scope | text | required | Record this run date, PIC and manager, the covered ordering channels, and any supplier, SKU, process or menu change prompting review.
+${supplierReviewItems}
+Representative supplier label photo | photo | optional | Attach a representative pack label and link the exact SKU and other source evidence in each supplier entry.
+${posReviewItems}
+PIC use-by review | text | required | Record PIC, date, approved rules and references, held ingredients and the next check. Record UNSET where a product-specific rule remains unverified.
+Manager menu and POS review | text | required | Record manager and date, latest matrix revision, menu and POS verification by channel, any blocked item, and who owns the follow-up.`,
 };

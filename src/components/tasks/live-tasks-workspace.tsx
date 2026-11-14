@@ -59,7 +59,11 @@ import { createPrivateFileDownloadUrlAction } from "@/app/actions/workflows/file
 import { ObjectActionBar } from "@/components/actions/object-action-bar";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { isWorkspaceRouteAccessible } from "@/components/shell/navigation";
-import { churchSandwichRehearsal, churchSandwichSop } from "@/components/tasks/church-sandwich-starters";
+import {
+  churchSandwichRehearsal,
+  churchSandwichSop,
+  churchSandwichSupplierReview,
+} from "@/components/tasks/church-sandwich-starters";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
 import { ReadState } from "@/components/ui/read-state";
@@ -103,6 +107,10 @@ type RunAction = (
   operation: () => Promise<ActionResult>,
   onSuccess?: () => void,
 ) => void;
+const churchChecklistStarters = {
+  rehearsal: { ...churchSandwichRehearsal, actionLabel: "Draft sandwich rehearsal checklist" },
+  supplierReview: { ...churchSandwichSupplierReview, actionLabel: "Draft supplier label and allergen checklist" },
+};
 type DialogState =
   | { kind: "task-create" }
   | {
@@ -111,7 +119,7 @@ type DialogState =
       suggestedStatus?: LiveTaskStatus;
     }
   | { kind: "checklist-start" }
-  | { kind: "checklist-author"; sandwichStarter?: true }
+  | { kind: "checklist-author"; starter?: keyof typeof churchChecklistStarters }
   | { kind: "sop-create"; sandwichStarter?: true }
   | { kind: "sop-edit"; sop: LiveSopDocument }
   | { kind: "sop-version"; sop: LiveSopDocument }
@@ -957,6 +965,11 @@ function ChecklistPanel({
   const requiredComplete = selected
     ? selected.requiredResponseCount === selected.requiredCount
     : false;
+  const availableChurchStarters = canManage && model.churchStreet
+    ? (Object.keys(churchChecklistStarters) as Array<keyof typeof churchChecklistStarters>).filter(
+        (id) => !model.checklistTemplates.some((template) => template.name === churchChecklistStarters[id].name),
+      )
+    : [];
 
   return (
     <section className="mt-5 grid gap-7 lg:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
@@ -992,12 +1005,14 @@ function ChecklistPanel({
             </div>
           }
         />
-        {canManage && model.churchStreet && !model.checklistTemplates.some((template) => template.name === churchSandwichRehearsal.name) ? (
-          <div className="mb-4">
-            <Button variant="quiet" size="sm" disabled={busy}
-              onClick={() => onDialog({ kind: "checklist-author", sandwichStarter: true })}>
-              Draft sandwich rehearsal checklist
-            </Button>
+        {availableChurchStarters.length ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {availableChurchStarters.map((id) => (
+              <Button key={id} variant="quiet" size="sm" disabled={busy}
+                onClick={() => onDialog({ kind: "checklist-author", starter: id })}>
+                {churchChecklistStarters[id].actionLabel}
+              </Button>
+            ))}
           </div>
         ) : null}
         {model.checklistRuns.length ? (
@@ -2203,7 +2218,7 @@ function OperationDialog({
   }
 
   if (dialog.kind === "checklist-author") {
-    const starter = model.churchStreet && dialog.sandwichStarter ? churchSandwichRehearsal : undefined;
+    const starter = model.churchStreet && dialog.starter ? churchChecklistStarters[dialog.starter] : undefined;
     return (
       <ModalFrame
         title="Author checklist version"
@@ -2254,7 +2269,7 @@ function OperationDialog({
               <FieldLabel label="Routine type">
                 <select
                   name="checklistType"
-                  defaultValue="custom"
+                  defaultValue={starter?.checklistType ?? "custom"}
                   className={fieldClass}
                 >
                   <option value="opening">Opening</option>

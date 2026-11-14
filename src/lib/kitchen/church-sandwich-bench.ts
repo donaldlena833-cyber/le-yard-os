@@ -6,6 +6,8 @@ export type ChurchSandwichBenchRecipe = {
   seconds: number;
 };
 
+export const churchSandwichBread = "10-inch baguette";
+
 export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = [
   {
     name: "Le Parisien",
@@ -79,6 +81,13 @@ export const churchSandwichBenchRecipes: readonly ChurchSandwichBenchRecipe[] = 
     build: "Spread fig preserves, layer Brie and loose prosciutto folds, then tuck the arugula inside.",
     seconds: 90,
   },
+];
+
+export const churchSandwichComponents = [
+  churchSandwichBread,
+  ...new Set(churchSandwichBenchRecipes.flatMap((recipe) =>
+    recipe.portions.map(({ ingredient }) => ingredient),
+  )),
 ];
 
 export function sandwichFillingGrams(recipe: ChurchSandwichBenchRecipe): number {
