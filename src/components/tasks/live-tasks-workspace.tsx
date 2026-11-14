@@ -63,6 +63,7 @@ import {
   churchSandwichRehearsal,
   churchSandwichSop,
   churchSandwichSupplierReview,
+  churchSquareFirstShiftRehearsal,
 } from "@/components/tasks/church-sandwich-starters";
 import { Button } from "@/components/ui/button";
 import { Metric, PageFrame, SectionHeading } from "@/components/ui/page-frame";
@@ -110,6 +111,7 @@ type RunAction = (
 const churchChecklistStarters = {
   rehearsal: { ...churchSandwichRehearsal, actionLabel: "Draft sandwich rehearsal checklist" },
   supplierReview: { ...churchSandwichSupplierReview, actionLabel: "Draft supplier label and allergen checklist" },
+  firstShiftSquare: churchSquareFirstShiftRehearsal,
 };
 type DialogState =
   | { kind: "task-create" }

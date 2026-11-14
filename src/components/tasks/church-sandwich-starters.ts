@@ -83,3 +83,20 @@ ${posReviewItems}
 PIC use-by review | text | required | Record PIC, date, approved rules and references, held ingredients and the next check. Record UNSET where a product-specific rule remains unverified.
 Manager menu and POS review | text | required | Record manager and date, latest matrix revision, menu and POS verification by channel, any blocked item, and who owns the follow-up.`,
 };
+
+export const churchSquareFirstShiftRehearsal = {
+  name: "Church Street first-shift Square rehearsal",
+  checklistType: "custom",
+  actionLabel: "Draft first-shift Square rehearsal",
+  items: `Shift scope and lead | text | required | Record date, lead, Church Street register and kitchen ticket destination. Mark each check VERIFIED, PENDING or HOLD, with its evidence or gap, owner and next test. Use references only. Leave out guest details, card or bank data and screenshots of live orders.
+Counter ticket and Operations | text | required | Compare one genuine counter ticket already received with Today’s Square orders and reconciliation. Record the order reference and what matched. For a dry run, record setup and mark live transport PENDING.
+Register and kitchen ticket | text | required | Use Kitchen’s Square allergen check for the exact item. Record the signed recipe and supplier label revisions and the register tile result, or mark the check PENDING. Record device and ticket reference, and whether the full ticket reached the staffed kitchen screen or printer before assembly.
+Direct Square pickup note | text | required | Use an agreed mock phrase in an approved test or preview. On an actual test, match the same Square order reference and phrase in Order Manager and on the staffed kitchen surface. If only checkout is previewed, mark ticket delivery PENDING. This checklist does not authorize a live charge.
+DoorDash | text | required | Record store and launch status. If a genuine or approved test ticket is available, match its order reference, promised time and handoff to the kitchen and Operations. Otherwise record PENDING or HOLD with owner and next test. Verify any settlement against DoorDash’s statement separately.
+Uber Eats | text | required | Record store and launch status. If a genuine or approved test ticket is available, match its order reference, promised time and handoff to the kitchen and Operations. Otherwise record PENDING or HOLD with owner and next test. Verify any settlement against Uber Eats’ statement separately.
+Grubhub | text | required | Record store and launch status. If a genuine or approved test ticket is available, match its order reference, promised time and handoff to the kitchen and Operations. Otherwise record PENDING or HOLD with owner and next test. Verify any settlement against Grubhub’s statement separately.
+Physical count and alert | text | required | Record the exact first sellable variation, verified whole units, time and counter. Compare Square on-hand and available stock. Exercise the five-unit alert, shared acknowledgment and restock only on the isolated rehearsal item. Record any pending mapping or confirmation.
+Square payout and bank | text | required | Compare the payout ID and signed transfer amount with Square entries, then match the bank statement posting. Record match, difference or PENDING using references only. A Square entry match does not verify bank receipt.
+Genuine catering handoff | text | required | Use an existing genuine Church Street invoice. Verify the exact invoice and service date, deposit and confirmed portions in Catering and Kitchen. If none is available, record PENDING with owner and next test. Do not create a live invoice or charge for this rehearsal.
+Handoff decision | text | required | Record GO or HOLD for each tested workflow or channel, with the gap, owner, next verification and due date. Keep unresolved routes pending until the next check shows evidence.`,
+};

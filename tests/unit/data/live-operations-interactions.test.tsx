@@ -290,6 +290,37 @@ describe("connected Operations review interactions", () => {
     expect(payload.items.find((item) => item.responseType === "photo")?.required).toBe(false);
   });
 
+  it("uses the inactive authoring flow for the Church Street Square first-shift evidence", async () => {
+    render(<LiveTasksWorkspace workspace={managementWorkspace("manager")}
+      result={{ ok: true, data: { ...managementModel, churchStreet: true } }} />);
+    fireEvent.click(screen.getByRole("tab", { name: /Checklists/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Draft first-shift Square rehearsal" }));
+    const dialog = within(screen.getByRole("dialog", { name: "Author checklist version" }));
+    expect(dialog.getByText(/complete inactive version/i)).toBeTruthy();
+    expect(createChecklistTemplateVersionAction).not.toHaveBeenCalled();
+    fireEvent.click(dialog.getByRole("button", { name: "Create draft version" }));
+    const payload = await waitFor(() => {
+      expect(createChecklistTemplateVersionAction).toHaveBeenCalledOnce();
+      return vi.mocked(createChecklistTemplateVersionAction).mock.lastCall?.[0] as {
+        locationId: string; name: string; checklistType: string;
+        items: Array<{ label: string; instructions: string; required: boolean; responseType: string }>;
+      };
+    });
+    expect(payload).toMatchObject({
+      locationId: workspace.activeLocation.id, name: "Church Street first-shift Square rehearsal", checklistType: "custom",
+    });
+    expect(payload.items).toHaveLength(11);
+    expect(payload.items.every((item) => item.required && item.responseType === "text")).toBe(true);
+    for (const label of ["DoorDash", "Uber Eats", "Grubhub"]) {
+      expect(payload.items.find((item) => item.label === label)?.instructions).toMatch(/launch status.*PENDING or HOLD.*next test/);
+    }
+    expect(payload.items.find((item) => item.label === "Direct Square pickup note")?.instructions).toMatch(/Order Manager.*ticket delivery PENDING.*live charge/);
+    expect(payload.items.find((item) => item.label === "Register and kitchen ticket")?.instructions).toMatch(/Square allergen check.*signed recipe and supplier label revisions.*register tile result/);
+    expect(payload.items.find((item) => item.label === "Physical count and alert")?.instructions).toMatch(/verified whole units.*isolated rehearsal item/);
+    expect(payload.items.find((item) => item.label === "Square payout and bank")?.instructions).toMatch(/bank statement.*does not verify bank receipt/);
+    expect(payload.items.find((item) => item.label === "Genuine catering handoff")?.instructions).toMatch(/existing genuine.*PENDING.*Do not create a live invoice/);
+  });
+
   it.each([
     { role: "manager", churchStreet: false },
     { role: "employee", churchStreet: true },
@@ -301,6 +332,9 @@ describe("connected Operations review interactions", () => {
     fireEvent.click(screen.getByRole("tab", { name: /SOPs/ }));
     await screen.findByRole("heading", { name: "Procedures" });
     expect(screen.queryByRole("button", { name: "Draft sandwich station playbook" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /Checklists/ }));
+    await screen.findByRole("heading", { name: "Checklist runs" });
+    expect(screen.queryByRole("button", { name: "Draft first-shift Square rehearsal" })).toBeNull();
   });
 
   it("reveals task evidence on demand and opens the selected named transition", async () => {
