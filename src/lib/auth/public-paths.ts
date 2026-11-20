@@ -37,6 +37,7 @@ const publicPaths = new Set([
   "/invite",
   "/api/health",
   "/api/health/email",
+  "/api/health/loyalty",
   "/api/internal/reservation-push",
   "/api/internal/reservation-messages",
   "/api/internal/integrations/toast-labor",

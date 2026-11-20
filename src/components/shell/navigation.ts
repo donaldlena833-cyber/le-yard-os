@@ -68,6 +68,7 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/time-clock", label: "Time Clock", icon: Timer, mobile: true },
       { href: "/messages", label: "Groups", icon: MessageCircleMore, mobile: true, surfaces: ["operations", "phone"] },
       { href: "/phone", label: "Phone", icon: Phone, roles: ["owner", "admin"], surfaces: ["operations", "phone"] },
+      { href: "/loyalty", label: "Loyalty", icon: WalletCards, roles: ["owner", "admin"] },
     ],
   },
   {
@@ -127,6 +128,7 @@ export const allNavItems = [
 
 export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue, canOpenChurchCatering = false): boolean {
   if (!(item.surfaces ?? ["operations"]).includes(appSurface)) return false;
+  if (item.href === "/loyalty" && workspace.serviceSettings?.serviceModel !== "counter") return false;
   if (!isTenantRouteEnabled(workspace, item.href)) return false;
   if (item.requiresChurchCatering && !canOpenChurchCatering) return false;
   if (item.personas && (!workspace.persona || !item.personas.includes(workspace.persona))) return false;
@@ -183,6 +185,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/receipts": { title: "Invoices", detail: "Document intake and review" },
   "/inventory": { title: "Inventory", detail: "Stock, counts, and purchasing" },
   "/guests": { title: "Guests", detail: "Hospitality CRM" },
+  "/loyalty": { title: "Loyalty", detail: "Square members, rewards and Apple Wallet" },
   "/tasks": { title: "Operations", detail: "Tasks, SOPs, maintenance, and incidents" },
   "/reports": { title: "Insights", detail: "Operational reporting" },
   "/assistant": { title: "Ask Le Yard", detail: "Cited operational intelligence" },
