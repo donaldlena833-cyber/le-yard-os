@@ -63,13 +63,6 @@ describe("music encrypted file custody", () => {
     await expect(saveMusicGrant(scope, clientId, "encrypted-two", first)).rejects.toThrow(/changed/);
     expect([...state.files.values()]).toEqual(["encrypted-one"]);
   });
-  it("does not overwrite a different custom provider in the existing integration slot", async () => {
-    state.row = { id: "other", organization_id: "org", location_id: "room", provider: "other", adapter_version: "unrelated-v1" };
-    await expect(saveMusicGrant(scope, clientId, "encrypted-one")).rejects.toThrow(/Another custom integration/);
-    expect(state.files.size).toBe(0);
-    await expect(disconnectMusic(scope)).rejects.toThrow(/another integration/);
-    expect(state.row?.id).toBe("other");
-  });
   it("holds one refresh lease and safely releases it", async () => {
     await saveMusicGrant(scope, clientId, "encrypted-one");
     const lease = await claimMusicRefresh(scope, (await readMusicConnection(scope))!);

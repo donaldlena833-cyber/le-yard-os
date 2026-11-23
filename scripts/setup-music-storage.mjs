@@ -25,8 +25,7 @@ try {
   const anonymous = createClient(url, publishable, options);
   const forbidden = await anonymous.storage.from(bucket).download(fixturePath);
   if (!forbidden.error || forbidden.data) throw new Error("Music storage unexpectedly allowed anonymous access.");
-  const metadata = await admin.from("integration_connections").select("id").eq("provider", "other")
-    .eq("adapter_version", "spotify-music-v1").eq("configuration", JSON.stringify({ clientId: "readiness-only" })).limit(1);
+  const metadata = await admin.from("music_connections").select("id").eq("configuration", JSON.stringify({ clientId: "readiness-only" })).limit(1);
   if (metadata.error) throw new Error("Music metadata compare-and-set filter is unavailable.");
   console.log(JSON.stringify({ privateBucket: true, fileSizeLimit: 20000, serviceReadWrite: true, anonymousReadDenied: true, metadataFilter: true }));
 } finally {
