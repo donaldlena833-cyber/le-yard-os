@@ -71,7 +71,8 @@ export async function spotifyMusicRequest(token: string, path: string, method = 
             : "Spotify did not confirm the request. Refresh status before trying again.";
     throw new MusicError(message, response.status === 401);
   }
-  return response.status === 204 ? null : await response.json();
+  // Playback writes acknowledge delivery; their response body is not state.
+  return method !== "GET" || response.status === 204 ? null : await response.json();
 }
 async function readPlayer(token: string) {
   const [devices, playback] = await Promise.all([spotifyMusicRequest(token, "/devices"), spotifyMusicRequest(token, "")]);
@@ -132,6 +133,10 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
     return { status: "connected", clientId, checkedAt: new Date().toISOString(), ...player, message, result };
   } catch (error) {
     const known = error instanceof MusicError || error instanceof MusicStoreError;
+    if (!known) console.warn("music_request_failed", { action: input.action,
+      kind: error instanceof z.ZodError ? "provider_shape" : error instanceof SyntaxError ? "provider_json" : "transport_or_validation",
+      ...(error instanceof z.ZodError ? { fields: error.issues.map((issue) => issue.path.join(".")).slice(0, 8) } : {}),
+    });
     return emptySnapshot(error instanceof MusicError && error.reconnect ? "reconnect" : "unavailable",
       known ? error.message : "Music status could not be verified. Refresh before sending another command.", clientId);
   }

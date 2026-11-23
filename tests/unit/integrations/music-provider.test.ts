@@ -40,10 +40,10 @@ describe("music provider command safety", () => {
     expect((await runMusicRequest(scope, { action: "pause" })).message).toContain("restricted");
     expect(fetcher.mock.calls.every(([, init]) => init.method === "GET")).toBe(true);
   });
-  it("targets the freshly discovered speaker and confirms reported volume", async () => {
+  it.each([200, 204])("checks reported state after a bodyless %i command response", async (status) => {
     let changed = false;
     fetcher.mockImplementation((url: string, init: RequestInit) => {
-      if (init.method === "PUT") { changed = true; return new Response(null, { status: 204 }); }
+      if (init.method === "PUT") { changed = true; return new Response(null, { status }); }
       return player(changed ? 85 : 70)(url, init);
     });
     const result = await runMusicRequest(scope, { action: "volume", volume: 85 });
