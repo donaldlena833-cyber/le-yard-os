@@ -1,8 +1,8 @@
 import "server-only";
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { musicEncryptionReady, openMusicValue, sealMusicValue } from "./music-crypto.server";
 import { projectMusicPlayback, targetMusicDevice, type MusicRequest, type MusicSnapshot } from "./music";
+import { claimMusicRefresh, disconnectMusic, MusicStoreError, readMusicConnection, readMusicGrant, releaseMusicRefresh, saveMusicGrant } from "./music-store.server";
 
 export type MusicScope = { organizationId: string; locationId: string; userId: string };
 const deviceSchema = z.object({
@@ -22,13 +22,6 @@ export const MUSIC_SCOPES = SCOPES.join(" ");
 export class MusicError extends Error {
   constructor(message: string, readonly reconnect = false) { super(message); }
 }
-function db() { return createAdminClient().from("music_connections"); }
-async function connection(scope: MusicScope) {
-  const result = await db().select("client_id, encrypted_grant, refresh_lease_until")
-    .eq("organization_id", scope.organizationId).eq("location_id", scope.locationId).maybeSingle();
-  if (result.error) throw new MusicError("Music connection could not be loaded. Try again.");
-  return result.data;
-}
 async function tokenRequest(body: URLSearchParams) {
   const response = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body,
@@ -45,37 +38,23 @@ export async function saveMusicAuthorization(scope: MusicScope, clientId: string
     throw new MusicError("Spotify did not grant the requested playback permissions.");
   }
   const grant: Grant = { accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt: Date.now() + token.expires_in * 1000 };
-  const result = await db().upsert({ organization_id: scope.organizationId, location_id: scope.locationId,
-    client_id: clientId, encrypted_grant: sealMusicValue(grant, purpose(scope)), refresh_lease_until: null,
-    connected_by: scope.userId, connected_at: new Date().toISOString() });
-  if (result.error) throw new MusicError("Spotify authorization could not be saved. Try connecting again.");
+  await saveMusicGrant(scope, clientId, sealMusicValue(grant, purpose(scope)));
 }
 
 async function accessToken(scope: MusicScope) {
-  const row = await connection(scope);
+  const row = await readMusicConnection(scope);
   if (!row) return null;
-  const oldGrant = grantSchema.parse(openMusicValue(row.encrypted_grant, purpose(scope)));
+  const oldGrant = grantSchema.parse(openMusicValue(await readMusicGrant(scope, row), purpose(scope)));
   if (oldGrant.expiresAt > Date.now() + 60_000) return oldGrant.accessToken;
   // A compare-and-set lease prevents two server instances rotating the same grant.
-  const now = new Date();
-  const leaseUntil = new Date(now.getTime() + 20_000).toISOString();
-  const lease = await db().update({ refresh_lease_until: leaseUntil })
-    .eq("organization_id", scope.organizationId).eq("location_id", scope.locationId)
-    .eq("encrypted_grant", row.encrypted_grant)
-    .or(`refresh_lease_until.is.null,refresh_lease_until.lt.${now.toISOString()}`)
-    .select("organization_id").maybeSingle();
-  if (lease.error || !lease.data) throw new MusicError("Spotify connection is refreshing. Try again shortly.");
+  const lease = await claimMusicRefresh(scope, row);
   try {
-    const token = await tokenRequest(new URLSearchParams({ grant_type: "refresh_token", refresh_token: oldGrant.refreshToken, client_id: row.client_id }));
+    const token = await tokenRequest(new URLSearchParams({ grant_type: "refresh_token", refresh_token: oldGrant.refreshToken, client_id: row.configuration.clientId }));
     const grant: Grant = { accessToken: token.access_token, refreshToken: token.refresh_token ?? oldGrant.refreshToken, expiresAt: Date.now() + token.expires_in * 1000 };
-    const saved = await db().update({ encrypted_grant: sealMusicValue(grant, purpose(scope)), refresh_lease_until: null })
-      .eq("organization_id", scope.organizationId).eq("location_id", scope.locationId)
-      .eq("encrypted_grant", row.encrypted_grant).eq("refresh_lease_until", leaseUntil).select("organization_id").maybeSingle();
-    if (saved.error || !saved.data) throw new MusicError("Spotify connection changed. Refresh Music before continuing.");
+    await saveMusicGrant(scope, row.configuration.clientId, sealMusicValue(grant, purpose(scope)), lease);
     return grant.accessToken;
   } finally {
-    await db().update({ refresh_lease_until: null }).eq("organization_id", scope.organizationId)
-      .eq("location_id", scope.locationId).eq("refresh_lease_until", leaseUntil);
+    await releaseMusicRefresh(scope, lease);
   }
 }
 
@@ -107,14 +86,13 @@ function emptySnapshot(status: MusicSnapshot["status"], message: string, clientI
 export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicRequest, { action: "connect" }>): Promise<MusicSnapshot> {
   if (!musicEncryptionReady()) return emptySnapshot("setup_needed", "The secure music connection is being prepared.");
   if (input.action === "disconnect") {
-    const deleted = await db().delete().eq("organization_id", scope.organizationId).eq("location_id", scope.locationId);
-    if (deleted.error) throw new MusicError("Spotify could not be disconnected. Try again.");
+    await disconnectMusic(scope);
     return emptySnapshot("disconnected", "Spotify disconnected from Operations. Alexa and the existing Codex schedule are managed separately.");
   }
   let clientId: string | null = null;
   try {
-    const row = await connection(scope);
-    clientId = row?.client_id ?? null;
+    const row = await readMusicConnection(scope);
+    clientId = row?.configuration.clientId ?? null;
     const token = await accessToken(scope);
     if (!token) return emptySnapshot("disconnected", "Connect Spotify to check and control the Le Yard speaker.");
     const before = await readPlayer(token);
@@ -153,8 +131,8 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
     }
     return { status: "connected", clientId, checkedAt: new Date().toISOString(), ...player, message, result };
   } catch (error) {
-    const known = error instanceof MusicError;
-    return emptySnapshot(known && error.reconnect ? "reconnect" : "unavailable",
+    const known = error instanceof MusicError || error instanceof MusicStoreError;
+    return emptySnapshot(error instanceof MusicError && error.reconnect ? "reconnect" : "unavailable",
       known ? error.message : "Music status could not be verified. Refresh before sending another command.", clientId);
   }
 }

@@ -1,14 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ row: null as unknown, lease: null as unknown, updates: vi.fn() }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ from: () => {
-  let mutation = false;
-  const query: Record<string, unknown> = {};
-  for (const method of ["select", "eq", "or", "upsert", "delete"]) query[method] = () => query;
-  query.update = (value: unknown) => { mutation = true; mocks.updates(value); return query; };
-  query.maybeSingle = async () => ({ data: mutation ? mocks.lease : mocks.row, error: null });
-  query.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(resolve);
-  return query;
-} }) }));
+const mocks = vi.hoisted(() => ({ read: vi.fn(), grant: vi.fn(), claim: vi.fn(), save: vi.fn(), release: vi.fn(), disconnect: vi.fn() }));
+vi.mock("@/lib/integrations/music-store.server", () => ({
+  readMusicConnection: mocks.read, readMusicGrant: mocks.grant, claimMusicRefresh: mocks.claim,
+  saveMusicGrant: mocks.save, releaseMusicRefresh: mocks.release, disconnectMusic: mocks.disconnect,
+  MusicStoreError: class MusicStoreError extends Error {},
+}));
+import { MusicStoreError } from "@/lib/integrations/music-store.server";
 import { runMusicRequest } from "@/lib/integrations/music.server";
 import { sealMusicValue } from "@/lib/integrations/music-crypto.server";
 const scope = { organizationId: "org", locationId: "room", userId: "actor" };
@@ -25,8 +22,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("MUSIC_TOKEN_ENCRYPTION_KEY", Buffer.alloc(32, 3).toString("base64"));
   vi.stubGlobal("fetch", fetcher);
-  mocks.row = { client_id: "a".repeat(32), encrypted_grant: sealMusicValue({ accessToken: "test-token", refreshToken: "test-refresh", expiresAt: Date.now() + 3600_000 }, "org:room") };
-  mocks.lease = null;
+  mocks.read.mockResolvedValue({ id: "connection", configuration: { clientId: "a".repeat(32) } });
+  mocks.grant.mockResolvedValue(sealMusicValue({ accessToken: "test-token", refreshToken: "test-refresh", expiresAt: Date.now() + 3600_000 }, "org:room"));
+  mocks.claim.mockRejectedValue(new MusicStoreError("Spotify connection is refreshing. Try again shortly."));
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -58,7 +56,7 @@ describe("music provider command safety", () => {
     expect(result.result).toBe("accepted"); expect(result.device.volume).toBe(70);
   });
   it("fails closed when another server holds the token refresh lease", async () => {
-    mocks.row = { client_id: "a".repeat(32), encrypted_grant: sealMusicValue({ accessToken: "expired", refreshToken: "test-refresh", expiresAt: 1 }, "org:room") };
+    mocks.grant.mockResolvedValue(sealMusicValue({ accessToken: "expired", refreshToken: "test-refresh", expiresAt: 1 }, "org:room"));
     const result = await runMusicRequest(scope, { action: "status" });
     expect(result.message).toContain("refreshing"); expect(fetcher).not.toHaveBeenCalled();
   });
