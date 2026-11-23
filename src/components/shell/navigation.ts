@@ -12,6 +12,7 @@ import {
   HandCoins,
   LayoutDashboard,
   MessageCircleMore,
+  Music2,
   PlugZap,
   Phone,
   ReceiptText,
@@ -69,6 +70,7 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/messages", label: "Groups", icon: MessageCircleMore, mobile: true, surfaces: ["operations", "phone"] },
       { href: "/phone", label: "Phone", icon: Phone, roles: ["owner", "admin"], surfaces: ["operations", "phone"] },
       { href: "/loyalty", label: "Loyalty", icon: WalletCards, roles: ["owner", "admin"] },
+      { href: "/music", label: "Music", icon: Music2, roles: ["owner", "admin"] },
     ],
   },
   {
@@ -129,6 +131,7 @@ export const allNavItems = [
 export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue, canOpenChurchCatering = false): boolean {
   if (!(item.surfaces ?? ["operations"]).includes(appSurface)) return false;
   if (item.href === "/loyalty" && workspace.serviceSettings?.serviceModel !== "counter") return false;
+  if (item.href === "/music" && (workspace.mode !== "live" || workspace.serviceSettings?.serviceModel !== "counter")) return false;
   if (!isTenantRouteEnabled(workspace, item.href)) return false;
   if (item.requiresChurchCatering && !canOpenChurchCatering) return false;
   if (item.personas && (!workspace.persona || !item.personas.includes(workspace.persona))) return false;
@@ -167,6 +170,7 @@ export function isWorkspaceRouteAccessible(
 }
 
 export const routeMeta: Record<string, { title: string; detail: string }> = {
+  "/music": { title: "Music", detail: "Speaker, playback and daily schedule" },
   "/today": { title: "Today", detail: "Current service" },
   "/reservations": { title: "Reservations", detail: "Book, seat, pace, and know every guest" },
   "/reservations/setup": { title: "Reservation controls", detail: "Floor, service rules, exceptions, and public booking approval" },

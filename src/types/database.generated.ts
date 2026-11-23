@@ -4434,6 +4434,49 @@ export type Database = {
           },
         ]
       };
+      "music_connections": {
+        Row: {
+          "organization_id": string
+          "location_id": string
+          "client_id": string
+          "encrypted_grant": string
+          "refresh_lease_until": string | null
+          "connected_by": string
+          "connected_at": string
+        }
+        Insert: {
+          "organization_id": string
+          "location_id": string
+          "client_id": string
+          "encrypted_grant": string
+          "refresh_lease_until"?: string | null
+          "connected_by": string
+          "connected_at"?: string
+        }
+        Update: {
+          "organization_id"?: string
+          "location_id"?: string
+          "client_id"?: string
+          "encrypted_grant"?: string
+          "refresh_lease_until"?: string | null
+          "connected_by"?: string
+          "connected_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "music_connections_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "music_connections_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
       "notification_preferences": {
         Row: {
           "id": string
@@ -12892,6 +12935,7 @@ export const DatabaseObjectNames = {
       "manager_log_entries",
       "manager_log_versions",
       "measurement_units",
+      "music_connections",
       "notification_preferences",
       "notifications",
       "organization_memberships",
