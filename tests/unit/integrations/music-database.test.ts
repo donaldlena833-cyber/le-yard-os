@@ -28,6 +28,7 @@ describe("music metadata storage", () => {
       }
       const permission = await db.query<{ rls: boolean; forced: boolean }>("select relrowsecurity as rls, relforcerowsecurity as forced from pg_class where oid = 'public.music_connections'::regclass");
       expect(permission.rows[0]).toEqual({ rls: true, forced: true });
+      expect((await db.query("select policyname from pg_policies where tablename = 'music_connections' and qual = 'false' and with_check = 'false'")).rows).toEqual([{ policyname: "music_server_only" }]);
       expect((await db.query<{ migration_head: string }>("select migration_head from private.runtime_schema_contract_expected")).rows[0].migration_head).toBe("20261123190628");
       await db.exec(`insert into organizations values ('00000000-0000-4000-8000-000000000001'), ('00000000-0000-4000-8000-000000000002');
         insert into locations values ('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002');

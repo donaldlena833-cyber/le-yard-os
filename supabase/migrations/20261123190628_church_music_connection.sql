@@ -13,6 +13,7 @@ create table public.music_connections (
 );
 alter table public.music_connections enable row level security;
 alter table public.music_connections force row level security;
+create policy music_server_only on public.music_connections for all to anon, authenticated using (false) with check (false);
 revoke all on public.music_connections from public, anon, authenticated;
 grant select, insert, update, delete on public.music_connections to service_role;
 create index music_connections_created_by_idx on public.music_connections(created_by);
