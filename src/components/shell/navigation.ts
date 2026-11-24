@@ -165,6 +165,10 @@ export function getMobileNavItems(workspace: WorkspaceContextValue): NavItem[] {
       .filter((item) => isNavItemVisible(item, workspace))
       .map((item) => [item.href, item]),
   );
+  if (workspace.serviceSettings?.serviceModel === "counter") {
+    return ["/today", "/checklists", visibleByHref.has("/kitchen") ? "/kitchen" : "/tasks", "/learning"]
+      .map(href => visibleByHref.get(href)).filter((item):item is NavItem => Boolean(item));
+  }
   return preferredRoutes
     .map((href) => visibleByHref.get(href))
     .filter((item): item is NavItem => Boolean(item));
@@ -183,7 +187,7 @@ export function isWorkspaceRouteAccessible(
 
 export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/learning": {title:"Training", detail:"Lessons, practice, and team progress"},
-  "/checklists": {title:"Opening & closing", detail:"Today’s shared shift checklists"},
+  "/checklists": {title:"Checklists", detail:"Today’s shared shift checklists"},
   "/music": { title: "Music", detail: "Speaker, playback and daily schedule" },
   "/today": { title: "Today", detail: "Current service" },
   "/reservations": { title: "Reservations", detail: "Book, seat, pace, and know every guest" },

@@ -678,7 +678,7 @@ function ShellContent({ children, canOpenChurchCatering }: { children: ReactNode
             >
               <Search className="size-4" />
             </Button>
-            <Button
+            <span className="hidden sm:contents"><Button
               variant="quiet"
               size="icon"
               aria-label={theme === "dark" ? "Use light theme" : "Use dark theme"}
@@ -687,8 +687,9 @@ function ShellContent({ children, canOpenChurchCatering }: { children: ReactNode
             >
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
+            </span>
             <NotificationsControl workspace={workspace} />
-            <EmergencyContactControl workspace={workspace} />
+            <span className="hidden sm:contents"><EmergencyContactControl workspace={workspace} /></span>
             {workspace.mode === "demo" && !isHostSurface ? (
               <Button
                 variant="primary"
