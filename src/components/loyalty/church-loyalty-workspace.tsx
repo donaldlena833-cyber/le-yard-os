@@ -4,6 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { ArrowUpRight, RefreshCw, WalletCards } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { loyaltySnapshot, type LoyaltySnapshot } from "@/lib/integrations/church-square-loyalty";
+import { RegularsStreakPanel } from "./regulars-streak-panel";
 
 const statusCopy: Record<LoyaltySnapshot["status"], { label: string; detail: string }> = {
   active: { label: "Square program active", detail: "Points and rewards below are read directly from Square." },
@@ -134,7 +135,7 @@ export function ChurchLoyaltyWorkspace() {
               <caption className="sr-only">Square loyalty accounts, page {page + 1}</caption>
               <thead className="text-xs uppercase tracking-wide text-[var(--ink-soft)]"><tr>{["Member", snapshot.program?.pointsLabel || "Points", "Next reward", "Birthday"].map(label => <th key={label} scope="col" className="border-b border-[var(--line)] py-3 pr-4 font-medium">{label}</th>)}</tr></thead>
               <tbody>{snapshot.members.map(member => <tr key={member.id} className="border-b border-[var(--line)]">
-                <td className="py-4 pr-4"><p className="font-semibold">{member.name}</p><p className="mt-1 text-xs text-[var(--ink-soft)]">Phone ending {member.phoneSuffix}{!member.enrolledAt ? " · Enrollment not confirmed" : ""}</p></td>
+                <td className="py-4 pr-4"><p className="font-semibold">{member.name}</p><p className="mt-1 text-xs text-[var(--ink-soft)]">Phone ending {member.phoneSuffix}{!member.enrolledAt ? " · Enrollment not confirmed" : ""}</p><RegularsStreakPanel accountId={member.id} /></td>
                 <td className="py-4 pr-4 font-semibold tabular-nums">{member.points}</td>
                 <td className="py-4 pr-4">{member.nextReward ? <><p>{member.nextReward.name}</p><p className="mt-1 text-xs text-[var(--ink-soft)]">{member.nextReward.pointsRemaining === 0 ? "Point threshold reached · redeem in Square" : `${member.nextReward.pointsRemaining} more ${snapshot.program?.pointsLabel || "points"}`}</p></> : "—"}</td>
                 <td className="py-4 pr-4">{member.profileAvailable ? birthdayLabel(member.birthday) : "Profile unavailable"}</td>
