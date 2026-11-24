@@ -71,6 +71,7 @@ export default async function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${interTight.variable}`}
       data-scroll-behavior="smooth"
+      data-app-surface={isPhoneSurface ? "phone" : isHostSurface ? "host" : "operations"}
       suppressHydrationWarning
     >
       <head>

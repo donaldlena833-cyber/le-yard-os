@@ -54,7 +54,7 @@ export function SignInForm({
         <span className="mb-2 flex items-center justify-between text-xs font-semibold text-[var(--ink-soft)]">
           Password
           <span className="font-normal text-[var(--ink-faint)]">
-            {playgroundMode ? "Temporary preview access" : "Managed securely"}
+            {playgroundMode ? "Preview" : ""}
           </span>
         </span>
         <span className="relative block">
@@ -94,8 +94,7 @@ export function SignInForm({
               Keep me logged in for 30 days
             </span>
             <span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">
-              Use this only on a private device. Otherwise, this device signs
-              out after 8 hours.
+              For your private device.
             </span>
           </span>
         </label>

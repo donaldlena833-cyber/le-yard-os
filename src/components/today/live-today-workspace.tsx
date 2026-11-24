@@ -246,6 +246,14 @@ function ServiceStatusSummary({ result }: { result: LiveReadResult<LiveServiceCo
   return <section className="mt-5 flex flex-wrap items-center gap-3 rounded-[20px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)] px-4 py-3.5"><span className="flex size-10 items-center justify-center rounded-xl bg-[var(--warning-soft)] text-[var(--warning)]"><AlertCircle className="size-4" /></span><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">Service status</span><span className="mt-1 block text-xs leading-5 text-[var(--ink-faint)]">{unavailable.length ? unavailable.map((item) => `${item.subjectLabel}: ${item.status === "eighty_sixed" ? "86" : "running low"}`).join(" · ") : "No current 86 items"}{published ? ` · ${published.servicePeriod.replaceAll("_", " ")} pre-shift published` : ""}</span></span><Link href="/service" className="focus-ring inline-flex min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]">Open service</Link></section>;
 }
 
+function ShiftQuickLinks() {
+  return <nav aria-label="Shift essentials" className="my-5 flex flex-wrap gap-2 border-b border-[var(--line)] pb-5">
+    <Link href="/checklists" className={buttonVariants({variant:"primary"})}><ClipboardCheck className="size-4"/>Opening & closing</Link>
+    <Link href="/learning" className={buttonVariants({variant:"secondary"})}>Training <ArrowRight className="size-4"/></Link>
+    <Link href="/tasks" className={buttonVariants({variant:"quiet"})}>Tasks</Link>
+  </nav>;
+}
+
 function dollars(cents: number, currencyCode: string): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -314,12 +322,15 @@ function EmployeeTodayWorkspace({
           </div>
         </div>
       </section>
+      <details className="mt-3 text-xs text-[var(--ink-faint)]"><summary className="cursor-pointer py-2">Update details</summary>
       <SnapshotStatus
         snapshot={snapshot}
         realtimeSupported={workspace.mode === "live"}
         showIntegrations={isTenantFeatureEnabled(workspace, "providerIntegrations")}
       />
       <RealtimeSyncStatus {...realtime} />
+      </details>
+      <ShiftQuickLinks />
       <ServiceStatusSummary result={snapshot.serviceControl} />
       <ReservationNowResult snapshot={snapshot} />
 
@@ -429,12 +440,15 @@ function ChefTodayWorkspace({
           <div className="border-t border-white/10 pt-5 lg:border-0 lg:pt-0 lg:text-right"><p className="text-xs tracking-[0.14em] text-white/50 uppercase">Kitchen shifts today</p><p className="numeric mt-2 text-xl font-medium">{kitchenShifts.length}</p><p className="mt-1 text-xs text-white/45">Published schedule</p></div>
         </div>
       </section>
+      <details className="mt-3 text-xs text-[var(--ink-faint)]"><summary className="cursor-pointer py-2">Update details</summary>
       <SnapshotStatus
         snapshot={snapshot}
         realtimeSupported={workspace.mode === "live"}
         showIntegrations={isTenantFeatureEnabled(workspace, "providerIntegrations")}
       />
       <RealtimeSyncStatus {...realtime} />
+      </details>
+      <ShiftQuickLinks />
       <ServiceStatusSummary result={snapshot.serviceControl} />
       <ReservationNowResult snapshot={snapshot} />
 
@@ -525,12 +539,15 @@ export function LiveTodayWorkspace({
           </div>
         </div>
       </section>
+      <details className="mt-3 text-xs text-[var(--ink-faint)]"><summary className="cursor-pointer py-2">Update details</summary>
       <SnapshotStatus
         snapshot={snapshot.data}
         realtimeSupported={workspace.mode === "live"}
         showIntegrations={isTenantFeatureEnabled(workspace, "providerIntegrations")}
       />
       <RealtimeSyncStatus {...realtime} />
+      </details>
+      <ShiftQuickLinks />
       <ServiceStatusSummary result={snapshot.data.serviceControl} />
       <ReservationNowResult snapshot={snapshot.data} />
 
@@ -550,8 +567,8 @@ export function LiveTodayWorkspace({
         <section>
           <SectionHeading
             eyebrow="Live service"
-            title="Who’s on today"
-            detail="Latest published schedule for this business week"
+            title="Today’s team"
+            detail="Published schedule"
             action={<Link href="/schedule" className="focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold text-[var(--ink-soft)] hover:bg-[var(--canvas-strong)]">Open schedule <ArrowRight className="size-3" /></Link>}
           />
           <div className="overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
@@ -582,7 +599,7 @@ export function LiveTodayWorkspace({
           </div>
 
           <section className="mt-9">
-            <SectionHeading eyebrow="Accountability" title="Open tasks" detail="" />
+            <SectionHeading title="Open tasks" detail="" />
             <div className="divide-y divide-[var(--line)] overflow-hidden rounded-[22px] bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
               {data.tasks.map((task) => (
                 <div key={task.id} className="flex items-start gap-3 px-2 py-4">
@@ -622,7 +639,7 @@ export function LiveTodayWorkspace({
           </section>
 
           <section>
-            <SectionHeading eyebrow="Control points" title="Closeout & inventory" />
+            <SectionHeading title="Closeout & inventory" />
             <div className="space-y-3">
               <div className="rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
                 <div className="flex items-center gap-3"><ClipboardCheck className="size-4 text-[var(--accent-strong)]" /><p className="text-xs font-semibold">Today’s closeout</p></div>
@@ -630,7 +647,7 @@ export function LiveTodayWorkspace({
               </div>
               <div className="rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)] p-4">
                 <div className="flex items-center gap-3"><PackageSearch className="size-4 text-[var(--accent-strong)]" /><p className="text-xs font-semibold">Inventory review</p></div>
-                <p className="mt-3 text-xs leading-4 text-[var(--ink-faint)]">{data.pendingInventoryCounts ? `${data.pendingInventoryCounts} count${data.pendingInventoryCounts === 1 ? "" : "s"} await review.` : "No inventory counts await review."} {data.configuredParLevels ? `${data.configuredParLevels} inventory item${data.configuredParLevels === 1 ? " has" : "s have"} a current par configuration.` : "No par records are visible; below-par status cannot be calculated."}</p>
+                <p className="mt-3 text-xs leading-4 text-[var(--ink-faint)]">{data.pendingInventoryCounts ? `${data.pendingInventoryCounts} count${data.pendingInventoryCounts === 1 ? "" : "s"} await review.` : "No inventory counts await review."} {data.configuredParLevels ? `${data.configuredParLevels} inventory item${data.configuredParLevels === 1 ? " has" : "s have"} a current par configuration.` : "Set stock targets in Inventory."}</p>
               </div>
               {!data.openShiftCount && !data.pendingInventoryCounts ? (
                 <div className="flex items-start gap-2 rounded-2xl bg-[var(--positive-soft)] px-4 py-3 text-xs leading-4 text-[var(--positive)]"><CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />No visible staffing or inventory-review exceptions.</div>

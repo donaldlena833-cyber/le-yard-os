@@ -44,7 +44,7 @@ import { ActionOmnibox } from "@/components/shell/action-omnibox";
 import {
   allNavItems,
   getMobileNavItems,
-  navigationSections,
+  getNavigationSections,
   isNavItemVisible,
   routeMeta,
   settingsItem,
@@ -389,16 +389,16 @@ function Sidebar({
       <WorkspaceSwitcher key={workspace.activeLocation.id} className="mx-3 mb-5" />
 
       <nav aria-label="Primary navigation" className={styles.nav}>
-        {navigationSections.map((section) => {
+        {getNavigationSections().map((section) => {
           const visibleItems = section.items.filter((item) =>
             isNavItemVisible(item, workspace, canOpenChurchCatering),
           );
           if (!visibleItems.length) return null;
           return (
-            <div key={section.label} className={styles.navGroup}>
-              <p className={styles.groupLabel}>
+            <details key={section.label} className={styles.navGroup} open={section.label !== "More" || visibleItems.some(item => pathname === item.href)}>
+              <summary className={styles.groupLabel}>
                 {section.label}
-              </p>
+              </summary>
               <div className="space-y-0.5">
                 {visibleItems.map((item) => (
                   <NavigationLink
@@ -409,7 +409,7 @@ function Sidebar({
                   />
                 ))}
               </div>
-            </div>
+            </details>
           );
         })}
       </nav>
@@ -492,16 +492,16 @@ function MobileDrawer({
               onSelected={onClose}
             />
             <nav className="flex-1 overflow-y-auto" aria-label="Mobile navigation">
-              {navigationSections.map((section) => {
+              {getNavigationSections().map((section) => {
                 const visibleItems = section.items.filter((item) =>
                   isNavItemVisible(item, workspace, canOpenChurchCatering),
                 );
                 if (!visibleItems.length) return null;
                 return (
-                  <div key={section.label} className={styles.navGroup}>
-                    <p className={styles.groupLabel}>
+                  <details key={section.label} className={styles.navGroup} open={section.label !== "More" || visibleItems.some(item => pathname === item.href)}>
+                    <summary className={styles.groupLabel}>
                       {section.label}
-                    </p>
+                    </summary>
                     {visibleItems.map((item) => (
                       <NavigationLink
                         key={item.href}
@@ -511,7 +511,7 @@ function MobileDrawer({
                         showBadges={workspace.mode === "demo"}
                       />
                     ))}
-                  </div>
+                  </details>
                 );
               })}
               <div className={styles.drawerDivider}>
@@ -637,10 +637,10 @@ function ShellContent({ children, canOpenChurchCatering }: { children: ReactNode
                     <span className="pulse-dot size-1.5 rounded-full bg-[var(--positive)]" />
                     Live
                   </span>
-                ) : workspace.mode === "live" ? (
-                  <span className={cn("hidden items-center gap-1.5 text-xs font-semibold sm:flex", connectivity.state === "online" ? "text-[var(--positive)]" : "text-[var(--warning)]")}>
-                    <span className={cn("size-1.5 rounded-full", connectivity.state === "online" ? "bg-[var(--positive)]" : "bg-[var(--warning)]")} />
-                    {connectivity.state === "online" ? "Connected" : connectivity.state === "offline" ? "Offline" : "Reconnecting"}
+                ) : workspace.mode === "live" && connectivity.state !== "online" ? (
+                  <span className={cn("hidden items-center gap-1.5 text-xs font-semibold sm:flex", "text-[var(--warning)]")}>
+                    <span className={cn("size-1.5 rounded-full", "bg-[var(--warning)]")} />
+                    {connectivity.state === "offline" ? "Offline" : "Reconnecting"}
                   </span>
                 ) : null}
               </div>

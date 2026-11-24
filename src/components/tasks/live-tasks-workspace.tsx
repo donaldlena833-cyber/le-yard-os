@@ -2995,18 +2995,17 @@ export function LiveTasksWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill tone="neutral">Live</StatusPill>
             <StatusPill tone={canManage ? "positive" : "neutral"}>
-              {canManage ? "Management controls" : "Staff controls"}
+              {canManage ? "Team tasks" : "Your tasks"}
             </StatusPill>
             <span className="text-xs text-[var(--ink-faint)]">
               Live · {workspace.activeLocation.name}
             </span>
           </div>
           <h2 className="mt-3 text-2xl font-medium tracking-[-0.045em]">
-            Tasks & SOPs
+            Tasks & guides
           </h2>
           <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
-            Routines, handoffs, maintenance, and exception records in one
-            location-scoped workspace.
+            Daily tasks, team guides, and handoffs.
           </p>
         </div>
         {canManage ? (

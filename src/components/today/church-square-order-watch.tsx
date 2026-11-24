@@ -218,8 +218,8 @@ export function ChurchSquareOrderWatchPanel({ locationId }: { locationId: string
 
   return (
     <section aria-labelledby="church-square-order-watch-title" className="mt-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-      <h3 id="church-square-order-watch-title" className="text-lg font-semibold">Square pickup and delivery watch</h3>
-      <p className="mt-1 text-xs text-[var(--ink-soft)]">Open fulfillments in up to {churchSquareOrderWatchLimit} orders updated in the past 24 hours. Square supplies the customer window and channel. For delivery, confirm courier pickup timing on the staffed ticket.</p>
+      <h3 id="church-square-order-watch-title" className="text-lg font-semibold">Pickup & delivery</h3>
+      <p className="mt-1 text-xs text-[var(--ink-soft)]">Pending pickups and deliveries · Last 24 hours · Up to {churchSquareOrderWatchLimit} orders</p>
       <div role="status" className="mt-2 space-y-1 text-xs text-[var(--ink-soft)]">
         {!current && "Checking Operations for pending orders."}
         {current?.status === "unavailable" && <p>Could not refresh the order watch.{data && " Showing the last available records."}</p>}
@@ -229,7 +229,7 @@ export function ChurchSquareOrderWatchPanel({ locationId }: { locationId: string
         <>
           <div className="mt-2 space-y-1 text-xs text-[var(--ink-soft)]">
             <p>Operations checked <Time value={data.checkedAt} />.</p>
-            {data.orderCoverageThrough ? <p>Square order recovery through <Time value={data.orderCoverageThrough} />.</p> : <p>Square order recovery coverage is unavailable.</p>}
+            {!data.orderCoverageThrough && <p>Order sync time unavailable. Check Square for the latest queue.</p>}
             {Number.isFinite(lag) && lag > coverageLagMs && <p className="text-[var(--warning)]">Square order recovery was more than 12 minutes behind at the last check. Check the register for newer orders.</p>}
             {data.hasMore && <p>Partial results. Additional open orders may be outside this view.</p>}
           </div>

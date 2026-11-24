@@ -8055,6 +8055,52 @@ export type Database = {
           },
         ]
       };
+      "team_learning_records": {
+        Row: {
+          "id": string
+          "organization_id": string
+          "location_id": string
+          "kind": string
+          "record_key": string
+          "payload": Json
+          "updated_by": string
+          "updated_at": string
+        }
+        Insert: {
+          "id"?: string
+          "organization_id": string
+          "location_id": string
+          "kind": string
+          "record_key": string
+          "payload": Json
+          "updated_by": string
+          "updated_at"?: string
+        }
+        Update: {
+          "id"?: string
+          "organization_id"?: string
+          "location_id"?: string
+          "kind"?: string
+          "record_key"?: string
+          "payload"?: Json
+          "updated_by"?: string
+          "updated_at"?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_learning_records_organization_id_fkey"
+            columns: ["organization_id"]
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_learning_records_organization_id_location_id_fkey"
+            columns: ["organization_id","location_id"]
+            referencedRelation: "locations"
+            referencedColumns: ["organization_id","id"]
+          },
+        ]
+      };
       "time_breaks": {
         Row: {
           "id": string
@@ -12997,6 +13043,7 @@ export const DatabaseObjectNames = {
       "startup_workspaces",
       "table_status_events",
       "tasks",
+      "team_learning_records",
       "time_breaks",
       "time_entries",
       "time_entry_corrections",

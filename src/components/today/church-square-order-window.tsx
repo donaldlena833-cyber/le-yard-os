@@ -358,7 +358,7 @@ export function ChurchSquareOrderWindow() {
     <section aria-labelledby="church-square-orders-title" className="mt-9 border-y border-[var(--line)] py-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 id="church-square-orders-title" className="text-xl font-semibold">Church Street Square orders</h3>
+          <h3 id="church-square-orders-title" className="text-xl font-semibold">Recent Square orders</h3>
           <p id="church-square-orders-bounds" className="mt-1 text-sm text-[var(--ink-soft)]">Manual check of up to {churchSquareOrderWindowLimit} orders updated in the previous {churchSquareOrderWindowHours} hours.</p>
         </div>
         <Button variant="secondary" size="sm" disabled={state.status === "loading"} onClick={load}>
@@ -378,9 +378,11 @@ export function ChurchSquareOrderWindow() {
         )}
       </div>
       {state.status === "ready" && <SquareFulfillmentDemand window={state.window} />}
+      <details className="mt-4"><summary className="cursor-pointer text-sm font-medium">Timing & source analysis</summary>
       {state.status === "ready" && <SquareReadinessTiming window={state.window} />}
       {state.status === "ready" && state.window.orders.length > 0 && <SquareSourceActivity window={state.window} />}
       {state.status === "ready" && <SquareSandwichMix window={state.window} />}
+      </details>
       {state.status === "ready" && state.window.orders.length > 0 && (
         <div className="mt-3 overflow-x-auto rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
           <table className="w-full text-left text-xs">
@@ -413,9 +415,11 @@ export function ChurchSquareOrderWindow() {
           </table>
         </div>
       )}
+      <details className="mt-5 border-t border-[var(--line)] pt-4"><summary className="cursor-pointer text-sm font-medium">Reconciliation & connection details</summary>
       <ChurchSquareOrderEvidence />
       <ChurchSquareReconciliation />
       <ChurchSquareCateringInvoice />
+      </details>
     </section>
   );
 }

@@ -189,3 +189,18 @@
   .header { min-height: 76px; padding-block: 14px; border-bottom: 1px solid var(--line); }
   .content { min-height: calc(100svh - 76px); }
 }
+
+:global([data-app-surface="operations"]) .shell {font-family:var(--font-geist-sans),sans-serif;letter-spacing:0;line-height:1.5;}
+:global([data-app-surface="operations"]) .sidebar {inset:0 auto 0 0;width:var(--sidebar-width);border-radius:0;border-width:0 1px 0 0;background:var(--paper);}
+:global([data-app-surface="operations"]) .navLink {border-radius:7px;min-height:38px;}
+:global([data-app-surface="operations"]) .navLink[aria-current="page"] {background:var(--canvas-strong);color:var(--primary);box-shadow:none;}
+:global([data-app-surface="operations"]) .activeNav {display:none;}
+:global([data-app-surface="operations"]) .navLink[aria-current="page"] .navIcon > svg {color:var(--primary);}
+:global([data-app-surface="operations"]) .groupLabel {cursor:pointer;list-style:none;font-size:10px;letter-spacing:.09em;text-transform:uppercase;padding-top:7px;}
+:global([data-app-surface="operations"]) .groupLabel::after {content:'−';float:right;}
+:global([data-app-surface="operations"]) .navGroup:not([open]) .groupLabel::after {content:'+';}
+:global([data-app-surface="operations"]) .searchTrigger {border:1px solid var(--line);border-radius:8px;background:var(--paper);}
+:global([data-app-surface="operations"]) .iconButton {border-radius:8px;background:transparent;}
+:global([data-app-surface="operations"]) .iconButton:hover {background:var(--canvas-strong);}
+:global([data-app-surface="operations"]) .switcher {border-radius:8px;border:1px solid var(--line);background:transparent;}
+:global([data-app-surface="operations"]) .header {background:var(--canvas);backdrop-filter:none;}

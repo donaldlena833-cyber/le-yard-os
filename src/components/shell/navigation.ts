@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BookOpen,
   Boxes,
   BriefcaseBusiness,
   CalendarDays,
@@ -104,7 +105,7 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
   },
   {
     label: "Operations",
-    items: [{ href: "/tasks", label: "Tasks & SOPs", icon: CheckSquare2 }],
+    items: [{ href: "/tasks", label: "Tasks", icon: CheckSquare2 }, { href: "/checklists", label: "Opening & closing", icon: CheckSquare2 }, { href: "/learning", label: "Training", icon: BookOpen }],
   },
   {
     label: "Insights",
@@ -115,6 +116,17 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
 ];
+
+export function getNavigationSections() {
+  const byHref = new Map(navigationSections.flatMap(section => section.items).map(item => [item.href,item]));
+  const groups = [
+    {label: "Daily work", routes: ["/today", "/checklists", "/tasks", "/kitchen", "/inventory", "/catering"]},
+    {label: "Team", routes: ["/schedule", "/time-clock", "/team", "/learning"]},
+    {label: "Business", routes: ["/income", "/closeout", "/receipts", "/vendors"]},
+    {label: "More", routes: ["/reservations", "/reservations/setup", "/service", "/messages", "/phone", "/loyalty", "/music", "/earnings", "/guests", "/reports", "/assistant", "/integrations"]},
+  ];
+  return groups.map(group => ({label:group.label,items:group.routes.map(route=>byHref.get(route)!).filter(Boolean)}));
+}
 
 export const settingsItem: NavItem = {
   href: "/settings",
@@ -170,6 +182,8 @@ export function isWorkspaceRouteAccessible(
 }
 
 export const routeMeta: Record<string, { title: string; detail: string }> = {
+  "/learning": {title:"Training", detail:"Lessons, practice, and team progress"},
+  "/checklists": {title:"Opening & closing", detail:"Today’s shared shift checklists"},
   "/music": { title: "Music", detail: "Speaker, playback and daily schedule" },
   "/today": { title: "Today", detail: "Current service" },
   "/reservations": { title: "Reservations", detail: "Book, seat, pace, and know every guest" },
@@ -190,9 +204,9 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/inventory": { title: "Inventory", detail: "Stock, counts, and purchasing" },
   "/guests": { title: "Guests", detail: "Hospitality CRM" },
   "/loyalty": { title: "Loyalty", detail: "Square members, rewards and Apple Wallet" },
-  "/tasks": { title: "Operations", detail: "Tasks, SOPs, maintenance, and incidents" },
+  "/tasks": { title: "Operations", detail: "Tasks, guides, and handoffs" },
   "/reports": { title: "Insights", detail: "Operational reporting" },
   "/assistant": { title: "Ask Le Yard", detail: "Cited operational intelligence" },
   "/integrations": { title: "Integrations", detail: "Imports and sync health" },
-  "/settings": { title: "Settings", detail: "Organization, capabilities, and security" },
+  "/settings": { title: "Settings", detail: "Workspace preferences" },
 };

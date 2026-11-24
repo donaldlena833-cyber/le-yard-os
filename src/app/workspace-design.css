@@ -399,3 +399,56 @@
   .workspace-design [role="tablist"] { flex-wrap: nowrap; width: 100%; overflow-x: auto; }
   .workspace-design [data-slot="page-header"] > :first-child { flex-basis: auto; }
 }
+
+/* Operations uses a quiet, flat workspace; Phone and Host keep their own treatment. */
+[data-app-surface="operations"] .workspace-design {
+  --canvas: #f8f9f7;
+  --canvas-strong: #eef1ed;
+  --paper: #ffffff;
+  --paper-strong: #ffffff;
+  --primary: #405941;
+  --primary-hover: #304632;
+  --accent-strong: #405941;
+  --accent-soft: #e7eee5;
+  --focus: #405941;
+  --track: #242d2414;
+  --line-strong: #242d2429;
+  --shadow-button: none;
+  --shadow-primary: none;
+  --shadow-card: none;
+  --shadow-raised: 0 8px 32px #1725170d;
+  --shadow-inset: none;
+  --font-sans: var(--font-geist-sans);
+  font-family: var(--font-geist-sans),sans-serif;
+  letter-spacing: 0;
+  line-height: 1.5;
+}
+[data-app-surface="operations"].dark .workspace-design {
+  --canvas: #151915;
+  --canvas-strong: #252d25;
+  --paper: #1c231d;
+  --paper-strong: #202821;
+  --primary: #95bb91;
+  --primary-hover: #aacba6;
+  --on-primary: #162216;
+  --accent-strong: #b1d0aa;
+  --accent-soft: #2c3c2c;
+  --focus: #aacba6;
+  --track: #dae8d51a;
+  --line-strong: #dae8d533;
+}
+[data-app-surface="operations"] .workspace-greeting {
+  background: transparent;
+  color: var(--ink);
+  padding: 0 0 22px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+}
+[data-app-surface="operations"] .workspace-greeting h2 { margin-top: 12px; font-size: 30px; line-height: 1.2; }
+[data-app-surface="operations"] .workspace-greeting p,
+[data-app-surface="operations"] .workspace-greeting .text-white\/55,
+[data-app-surface="operations"] .workspace-greeting .text-white\/50,
+[data-app-surface="operations"] .workspace-greeting .text-white\/45 { color: var(--ink-faint); }
+[data-app-surface="operations"] .workspace-greeting .bg-white\/\[0\.08\] {color:var(--ink-soft); background:var(--canvas-strong);}
+[data-app-surface="operations"] .workspace-design :where(input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),select,textarea) { border:1px solid var(--line-strong); border-radius:8px; }
+[data-app-surface="operations"] .workspace-design [data-slot="page-header"] {border-bottom:1px solid var(--line);}

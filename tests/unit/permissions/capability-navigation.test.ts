@@ -94,7 +94,7 @@ describe("capability-aware navigation", () => {
   it("keeps an ordinary employee on personal and team workflows", () => {
     const employeeWorkspace = workspace("employee", []);
     const labels = visibleLabels(employeeWorkspace);
-    expect(labels).toEqual(expect.arrayContaining(["Today", "Schedule", "Time Clock", "Service Control", "Groups", "Earnings", "Tasks & SOPs"]));
+    expect(labels).toEqual(expect.arrayContaining(["Today", "Schedule", "Time Clock", "Service Control", "Groups", "Earnings", "Tasks"]));
     expect(labels).not.toContain("Inventory");
     expect(labels).not.toContain("Guests");
     expect(labels).not.toContain("Settings");
@@ -190,7 +190,7 @@ describe("capability-aware navigation", () => {
     expect(getMobileNavItems(unprivilegedBoh).map((item) => item.label)).toEqual([
       "Today",
       "Time Clock",
-      "Tasks & SOPs",
+      "Tasks",
       "Groups",
     ]);
     expect(isWorkspaceRouteAccessible("/kitchen", kitchenEmployee)).toBe(true);

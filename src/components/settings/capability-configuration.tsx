@@ -94,8 +94,8 @@ export function CapabilityConfiguration({
     <div className="space-y-8">
       <section>
         <SectionHeading
-          title="Job-role capabilities"
-          detail="Operational permissions are effective-dated and scoped independently from organization administration."
+          title="Team access"
+          detail="Choose what each role can do."
         />
         <div className="grid gap-3 rounded-[18px] bg-[var(--paper)] shadow-[var(--shadow-card)] p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <label>
@@ -123,7 +123,7 @@ export function CapabilityConfiguration({
               const active = assignment?.active === true;
               return (
                 <div key={definition.key} className="flex items-center gap-3 py-3.5">
-                  <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">{definition.label}</span><span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">{definition.description}</span><code className="mt-1.5 block text-xs text-[var(--ink-faint)]">{definition.key}</code></span>
+                  <span className="min-w-0 flex-1"><span className="block text-[13px] font-semibold">{definition.label}</span><span className="mt-1 block text-xs leading-4 text-[var(--ink-faint)]">{definition.description}</span></span>
                   <StatusPill tone={active ? "positive" : "neutral"}>{active ? "Assigned" : "Off"}</StatusPill>
                   <Button variant={active ? "quiet" : "secondary"} size="sm" disabled={pending || !selectedRole.active} onClick={() => toggle(definition.key)}>
                     {pending ? <LoaderCircle className="size-3 animate-spin" /> : active ? null : <Check className="size-3" />}
@@ -137,7 +137,7 @@ export function CapabilityConfiguration({
       )) : <p className="rounded-[18px] border border-dashed border-[var(--line-strong)] p-8 text-center text-xs text-[var(--ink-faint)]">Create a job role before assigning operational capabilities.</p>}
 
       {message ? <p role="status" aria-live="polite" className="rounded-xl bg-[var(--canvas)] px-4 py-3 text-xs">{message}</p> : null}
-      <p className="flex items-start gap-2 rounded-[16px] bg-[var(--accent-soft)]/50 p-4 text-xs leading-4 text-[var(--accent-strong)]"><ShieldCheck className="mt-0.5 size-4 shrink-0" />Owners and Admins retain their existing administrative boundary. A job-role capability never grants user management, credentials, security settings, or owner approval powers.</p>
+
     </div>
   );
 }
