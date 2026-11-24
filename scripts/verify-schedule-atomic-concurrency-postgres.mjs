@@ -949,10 +949,10 @@ try {
     },
   );
 
-  // SHARE barriers are mutually compatible. Two publishers for one draft can
-  // both pass the table barrier; only the parent row serializes them. The
-  // winner writes publication evidence and the follower returns that committed
-  // result without a second transition or any 40P01 deadlock.
+  // The current staffing contract serializes publishers at the organization
+  // assignment-scope row before the SHARE table barrier. Prove the follower is
+  // blocked by the winner there, then still require exact committed replay and
+  // no duplicate publication or 40P01 deadlock.
   const publishNoteA = `Concurrent publisher A ${runId.slice(0, 8)}`;
   const publishNoteB = `Concurrent publisher B ${runId.slice(0, 8)}`;
   await first.query("begin");
@@ -995,18 +995,26 @@ try {
   );
   const concurrentPublisherLocks = (
     await setup.query(
-      `select count(distinct lock.pid)::integer share_holders
+      `select count(distinct lock.pid) filter (
+          where lock.relation='public.shifts'::regclass
+            and lock.mode='ShareLock' and lock.granted)::integer share_holders,
+        coalesce(bool_or(lock.pid=$2 and lock.relation='public.shifts'::regclass
+          and lock.mode='ShareLock' and lock.granted),false) winner_share_granted,
+        coalesce(bool_or(lock.pid=$3 and lock.relation='private.schedule_assignment_scopes'::regclass
+          and lock.mode='RowExclusiveLock' and lock.granted),false) follower_scope_access,
+        $2=any(pg_blocking_pids($3)) follower_blocked_by_winner
        from pg_locks lock
-       where lock.relation = 'public.shifts'::regclass
-         and lock.pid = any($1::integer[])
-         and lock.mode = 'ShareLock'
-         and lock.granted`,
-      [[first.processID, second.processID]],
+       where lock.pid = any($1::integer[])`,
+      [[first.processID, second.processID], concurrentPublisherWinner.client.processID,
+        concurrentPublisherFollower.client.processID],
     )
   ).rows[0];
   assert(
-    concurrentPublisherLocks.share_holders === 2,
-    "Concurrent publishers did not both pass the compatible SHARE barrier.",
+    concurrentPublisherLocks.share_holders === 1 &&
+      concurrentPublisherLocks.winner_share_granted === true &&
+      concurrentPublisherLocks.follower_scope_access === true &&
+      concurrentPublisherLocks.follower_blocked_by_winner === true,
+    "Concurrent publishers did not serialize at the current assignment-scope barrier.",
     {
       ...concurrentPublisherLocks,
       waitEvent: concurrentPublishSerialization.waitEvent,
@@ -1052,7 +1060,7 @@ try {
 
   await setup.query(`drop schema ${quoteIdentifier(markerSchema)} cascade`);
   process.stdout.write(
-    "PASS actual migrated PostgreSQL schedule gate: create/create versions, same-name template serialization, forced simultaneous publish/direct-update ordering, publisher-first rejection, and compatible publish/publish serialization without 40P01\n",
+    "PASS actual migrated PostgreSQL schedule gate: create/create versions, same-name template serialization, forced simultaneous publish/direct-update ordering, publisher-first rejection, and organization-scope publish/publish serialization without 40P01\n",
   );
 } finally {
   await Promise.all([rollbackQuietly(first), rollbackQuietly(second)]);

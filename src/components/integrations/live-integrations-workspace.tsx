@@ -19,11 +19,13 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
+  configureSquareProductionSourceAction,
   createManualCsvUploadUrlAction,
   finalizeManualCsvImportAction,
   retryIntegrationSyncAction,
+  syncSquareProductionSourceAction,
 } from "@/app/actions/workflows/integrations";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button } from "@/components/ui/button";
@@ -354,15 +356,104 @@ function AuditLedger({ events }: { events: LiveIntegrationAuditEvent[] }) {
   );
 }
 
+function SquareSetup({
+  state, organizationId, locationId, canSync, onSaved,
+}: {
+  state: "ready" | "missing-credential"; organizationId: string; locationId: string; canSync: boolean; onSaved: () => void;
+}) {
+  const { requestIdFor, rotateRequestId } = useStableRequestIds();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const pendingImport = useRef<{ requestId: string; cutoff: string } | null>(null);
+
+  async function configure(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const form = new FormData(event.currentTarget);
+    const payload = { organizationId, locationId,
+      merchantId: String(form.get("merchantId") ?? "").trim(),
+      squareLocationId: String(form.get("squareLocationId") ?? "").trim() };
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await configureSquareProductionSourceAction({ ...payload, requestId: requestIdFor("square", payload) });
+      if (result.ok && result.mode === "live") {
+        setMessage("Square location verified and saved. A first import still needs to run.");
+        rotateRequestId("square");
+        onSaved();
+      } else {
+        setMessage(result.ok ? result.message : result.code === "validation" ? "Enter the exact Square merchant and location IDs." : result.message);
+      }
+    } catch {
+      setMessage("Could not confirm whether the location was saved. Retry with the same IDs.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runImport() {
+    if (busy) return;
+    const attempt = pendingImport.current ?? {
+      requestId: crypto.randomUUID(), cutoff: new Date(Math.floor(Date.now() / 1000) * 1000).toISOString().replace(".000Z", "Z"),
+    };
+    pendingImport.current = attempt;
+    setBusy(true);
+    setMessage("");
+    try {
+      const result = await syncSquareProductionSourceAction({ organizationId, locationId, ...attempt });
+      pendingImport.current = null;
+      if (result.ok && result.mode === "live") {
+        const { orders, payments, refunds } = result.data.sourceCounts;
+        setMessage(`Read ${orders} orders, ${payments} payments, and ${refunds} refunds. Reconciliation is pending.`);
+      } else {
+        setMessage(result.message);
+      }
+      onSaved();
+    } catch {
+      setMessage("The import result could not be confirmed. Retry to check the same import.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-7 border-b border-[var(--line)] pb-5">
+      <SectionHeading title="Connect Ninth Avenue" />
+      {state === "missing-credential" ? (
+        <p className="mt-2 text-xs text-[var(--ink-faint)]">Add the Square API credential to the Operations server to unlock setup.</p>
+      ) : (
+        <form className="mt-3 grid gap-3" onSubmit={(event) => void configure(event)}>
+          <p className="text-xs text-[var(--ink-faint)]">Use the production Square IDs for this restaurant.</p>
+          {[["merchantId", "Square merchant ID"], ["squareLocationId", "Square location ID"]].map(([name, label]) => (
+            <label key={name} className="grid gap-1 text-xs font-semibold">
+              {label}
+              <input name={name} required maxLength={192} autoComplete="off" spellCheck={false}
+                className="focus-ring rounded-lg border border-[var(--line)] bg-[var(--paper-strong)] px-3 py-2 font-normal" />
+            </label>
+          ))}
+          <Button type="submit" variant="accent" disabled={busy}>{busy ? "Verifying…" : "Verify and save location"}</Button>
+        </form>
+      )}
+      {canSync ? (
+        <Button type="button" variant="quiet" disabled={busy} className="mt-3"
+          onClick={() => void runImport()}>Import last 24 hours</Button>
+      ) : null}
+      <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{message}</p>
+    </section>
+  );
+}
+
 function AdapterDrawer({
   provider,
   connections,
+  squareSetup,
   canImport,
   onImport,
   onClose,
 }: {
   provider: IntegrationProvider | null;
   connections: LiveIntegrationConnection[];
+  squareSetup?: ReactNode;
   canImport: boolean;
   onImport: () => void;
   onClose: () => void;
@@ -398,6 +489,8 @@ function AdapterDrawer({
             <p className="mt-2 text-xs leading-4 text-[var(--ink-faint)]">{adapter.accessNote}</p>
           </div>
         </section>
+
+        {provider === "square" ? squareSetup : null}
 
         <section className="mt-7">
           <SectionHeading title="Recorded connections" detail="Only current tenant and location scope is shown." />
@@ -614,10 +707,14 @@ function ImportDialog({
 export function LiveIntegrationsWorkspace({
   workspace,
   result,
+  squareSetup,
+  squareSyncEnabled = false,
   manualCsvProcessorEnabled = true,
 }: {
   workspace: WorkspaceContextValue;
   result: LiveReadResult<LiveIntegrationsModel>;
+  squareSetup?: "ready" | "missing-credential";
+  squareSyncEnabled?: boolean;
   manualCsvProcessorEnabled?: boolean;
 }) {
   const router = useRouter();
@@ -1019,12 +1116,17 @@ export function LiveIntegrationsWorkspace({
         </div>
         <div className="flex items-start gap-3 rounded-[16px] bg-[var(--warning-soft)] px-4 py-3 text-xs leading-4 text-[var(--warning)]">
           <CircleAlert className="mt-0.5 size-4 shrink-0" />
-          Square is limited to Sandbox source evidence. Operating use requires approved access, verified mappings and financial reconciliation.
+          Square imports are for review. They do not post sales to income, close a shift, or update tips or payroll.
         </div>
       </div>
 
       <AdapterDrawer
         provider={selectedProvider}
+        squareSetup={squareSetup && canMutate ? <SquareSetup state={squareSetup}
+          organizationId={workspace.organization.id} locationId={model.locationId}
+          canSync={squareSyncEnabled && (connectionGroups.get("square") ?? []).some((connection) =>
+            connection.locationId === model.locationId && ["pending", "connected", "degraded"].includes(connection.status))}
+          onSaved={() => router.refresh()} /> : undefined}
         connections={
           selectedProvider
             ? connectionGroups.get(selectedProvider) ?? []

@@ -32,6 +32,7 @@ interface RealtimeInvalidationOptions {
   locationId: string;
   coalesceMs?: number;
   staleWhileHiddenMs?: number;
+  onInvalidate?: () => void;
 }
 
 const defaultInvalidationEvents = ["INSERT", "UPDATE"] as const;
@@ -70,6 +71,7 @@ export function useRealtimeInvalidation({
   locationId,
   coalesceMs = 300,
   staleWhileHiddenMs = 30_000,
+  onInvalidate,
 }: RealtimeInvalidationOptions): RealtimeInvalidationResult {
   const router = useRouter();
   const [connection, setConnection] = useState<{
@@ -120,7 +122,8 @@ export function useRealtimeInvalidation({
           updateState("offline");
           return;
         }
-        startRefreshTransition(() => router.refresh());
+        if (onInvalidate) onInvalidate();
+        else startRefreshTransition(() => router.refresh());
       }, coalesceMs);
     };
 
@@ -286,6 +289,7 @@ export function useRealtimeInvalidation({
     coalesceMs,
     enabled,
     locationId,
+    onInvalidate,
     organizationId,
     privateChannel,
     router,

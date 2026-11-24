@@ -8,8 +8,9 @@ import { defaultWorkspacePath } from "@/lib/app-surface";
 export function requireWorkspaceRouteAccess(
   pathname: string,
   workspace: WorkspaceContextValue,
+  canOpenChurchCatering = false,
 ): void {
-  if (!isWorkspaceRouteAccessible(pathname, workspace)) {
+  if (!isWorkspaceRouteAccessible(pathname, workspace, canOpenChurchCatering)) {
     // A denied default route must terminate, never redirect back to itself.
     if (pathname === defaultWorkspacePath) notFound();
     redirect(defaultWorkspacePath);

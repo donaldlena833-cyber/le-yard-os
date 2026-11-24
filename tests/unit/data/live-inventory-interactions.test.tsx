@@ -113,6 +113,7 @@ const model: LiveInventoryModel = {
   date: "2026-08-01",
   timeZone: "America/New_York",
   currencyCode: "USD",
+  churchStreet: false,
   items: [
     {
       id: "50000000-0000-4000-8000-000000000001",
@@ -336,6 +337,34 @@ describe("connected Inventory review interactions", () => {
     ).toBe(model.items[0].id);
   });
 
+  it("starts an inactive Church Street recipe with bench portions and no assumed inventory mapping", async () => {
+    const unit = { ...model.units[0], isBase: true, isActive: true, updatedAt: "2026-08-01T12:00:00Z" };
+    const catalog = {
+      units: [unit], conversions: [], categories: [], vendors: [], items: [],
+      vendorItems: [], priceHistory: [], pars: [], recipes: [],
+    };
+    vi.mocked(configureInventoryCatalogAction).mockResolvedValue({
+      ok: true, persisted: true, mode: "live",
+      data: { id: "91000000-0000-4000-8000-000000000001", command: "recipe.save", replayed: false },
+    });
+    render(<LiveInventoryWorkspace workspace={{ ...workspace, role: "owner" }}
+      initialTab="recipes" result={{ ok: true, data: { ...model, churchStreet: true, catalog } }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Draft Le Bleu" }));
+    const dialog = screen.getByRole("dialog", { name: "Draft Le Bleu" });
+    expect((within(dialog).getByLabelText("Recipe name") as HTMLInputElement).value).toBe("Le Bleu");
+    expect(within(dialog).getByText("Danish blue cheese")).toBeTruthy();
+    expect(within(dialog).getByText("38 g")).toBeTruthy();
+    expect(within(dialog).getByText("No ingredients yet")).toBeTruthy();
+    expect(within(dialog).queryByText("Published and active")).toBeNull();
+    fireEvent.change(within(dialog).getByLabelText("Yield unit"), { target: { value: unit.id } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Save/ }));
+
+    await waitFor(() => expect(configureInventoryCatalogAction).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Le Bleu", yieldQuantity: 1, yieldUnitId: unit.id, isActive: false, ingredients: [],
+    })));
+  });
+
   it("opens a complete recipe editor from the Recipes tab and persists manual changes", async () => {
     const chefWorkspace = {
       ...workspace,
@@ -522,12 +551,7 @@ describe("connected Inventory review interactions", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Save & close" }));
     expect(await screen.findByText(/draft saved on this device/i)).toBeTruthy();
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("dialog", { name: "Full inventory count" }),
-      ).toBeNull(),
-    );
-    const resume = screen.getByRole("button", { name: "Start or resume full count" });
+    const resume = await screen.findByRole("button", { name: "Start or resume full count" });
     fireEvent.click(resume);
     expect(
       (

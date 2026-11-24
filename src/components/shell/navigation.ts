@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Boxes,
+  BriefcaseBusiness,
   CalendarDays,
   ChartNoAxesCombined,
   CheckSquare2,
@@ -11,6 +12,7 @@ import {
   HandCoins,
   LayoutDashboard,
   MessageCircleMore,
+  Music2,
   PlugZap,
   Phone,
   ReceiptText,
@@ -48,6 +50,7 @@ export type NavItem = {
   personas?: readonly "chef"[];
   hiddenPersonas?: readonly "chef"[];
   surfaces?: readonly AppSurface[];
+  requiresChurchCatering?: boolean;
 };
 
 export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
@@ -62,9 +65,12 @@ export const navigationSections: Array<{ label: string; items: NavItem[] }> = [
       { href: "/reservations/setup", label: "Reservation controls", icon: Settings2, roles: ["owner", "admin"], anyCapabilities: ["reservations.configure", "reservations.override"], surfaces: ["operations", "host"] },
       { href: "/schedule", label: "Schedule", icon: CalendarDays, mobile: true },
       { href: "/service", label: "Service Control", icon: RadioTower },
+      { href: "/catering", label: "Catering", icon: BriefcaseBusiness, requiresChurchCatering: true },
       { href: "/time-clock", label: "Time Clock", icon: Timer, mobile: true },
       { href: "/messages", label: "Groups", icon: MessageCircleMore, mobile: true, surfaces: ["operations", "phone"] },
       { href: "/phone", label: "Phone", icon: Phone, roles: ["owner", "admin"], surfaces: ["operations", "phone"] },
+      { href: "/loyalty", label: "Loyalty", icon: WalletCards, roles: ["owner", "admin"] },
+      { href: "/music", label: "Music", icon: Music2, roles: ["owner", "admin"] },
     ],
   },
   {
@@ -122,11 +128,15 @@ export const allNavItems = [
   settingsItem,
 ];
 
-export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue): boolean {
+export function isNavItemVisible(item: NavItem, workspace: WorkspaceContextValue, canOpenChurchCatering = false): boolean {
   if (!(item.surfaces ?? ["operations"]).includes(appSurface)) return false;
+  if (item.href === "/loyalty" && workspace.serviceSettings?.serviceModel !== "counter") return false;
+  if (item.href === "/music" && (workspace.mode !== "live" || workspace.serviceSettings?.serviceModel !== "counter")) return false;
   if (!isTenantRouteEnabled(workspace, item.href)) return false;
+  if (item.requiresChurchCatering && !canOpenChurchCatering) return false;
   if (item.personas && (!workspace.persona || !item.personas.includes(workspace.persona))) return false;
   if (item.hiddenPersonas?.includes(workspace.persona as "chef")) return false;
+  if (item.href === "/inventory" && workspace.serviceSettings?.serviceModel === "counter" && workspace.role === "manager") return true;
   if (!item.roles && !item.anyCapabilities) return true;
   return Boolean(
     item.roles?.includes(workspace.role)
@@ -151,19 +161,22 @@ export function getMobileNavItems(workspace: WorkspaceContextValue): NavItem[] {
 export function isWorkspaceRouteAccessible(
   pathname: string,
   workspace: WorkspaceContextValue,
+  canOpenChurchCatering = false,
 ): boolean {
   if (!isDestinationAllowedForAppSurface(pathname)) return false;
   if (!isTenantRouteEnabled(workspace, pathname)) return false;
   const item = allNavItems.find((candidate) => candidate.href === pathname);
-  return item ? isNavItemVisible(item, workspace) : true;
+  return item ? isNavItemVisible(item, workspace, canOpenChurchCatering) : true;
 }
 
 export const routeMeta: Record<string, { title: string; detail: string }> = {
+  "/music": { title: "Music", detail: "Speaker, playback and daily schedule" },
   "/today": { title: "Today", detail: "Current service" },
   "/reservations": { title: "Reservations", detail: "Book, seat, pace, and know every guest" },
   "/reservations/setup": { title: "Reservation controls", detail: "Floor, service rules, exceptions, and public booking approval" },
   "/schedule": { title: "Service", detail: "Schedule and availability" },
   "/service": { title: "Service Control", detail: "Availability, pre-shift, and handoff" },
+  "/catering": { title: "Catering", detail: "Catering jobs and Square invoices" },
   "/time-clock": { title: "Time Clock", detail: "Attendance records and source setup" },
   "/team": { title: "Team", detail: "People and job roles" },
   "/vendors": { title: "Vendors", detail: "Prices and purchasing" },
@@ -176,6 +189,7 @@ export const routeMeta: Record<string, { title: string; detail: string }> = {
   "/receipts": { title: "Invoices", detail: "Document intake and review" },
   "/inventory": { title: "Inventory", detail: "Stock, counts, and purchasing" },
   "/guests": { title: "Guests", detail: "Hospitality CRM" },
+  "/loyalty": { title: "Loyalty", detail: "Square members, rewards and Apple Wallet" },
   "/tasks": { title: "Operations", detail: "Tasks, SOPs, maintenance, and incidents" },
   "/reports": { title: "Insights", detail: "Operational reporting" },
   "/assistant": { title: "Ask Le Yard", detail: "Cited operational intelligence" },

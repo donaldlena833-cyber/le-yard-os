@@ -276,6 +276,7 @@ export interface LiveInventoryModel {
   date: string;
   timeZone: string;
   currencyCode: string;
+  churchStreet: boolean;
   items: LiveInventoryItem[];
   units: LiveInventoryUnit[];
   locations: Array<{ id: string; name: string }>;
@@ -308,13 +309,13 @@ export async function loadLiveInventory(
     const [locationResult, organizationResult] = await Promise.all([
       supabase
         .from("locations")
-        .select("timezone")
+        .select("timezone, code, is_active")
         .eq("organization_id", organizationId)
         .eq("id", locationId)
         .single(),
       supabase
         .from("organizations")
-        .select("currency_code")
+        .select("currency_code, slug, status")
         .eq("id", organizationId)
         .single(),
     ]);
@@ -709,6 +710,9 @@ export async function loadLiveInventory(
       date,
       timeZone: location.timezone,
       currencyCode: organization.currency_code,
+      churchStreet: workspace.serviceSettings?.serviceModel === "counter"
+        && organization.slug === "le-yard-church-street" && organization.status === "active"
+        && location.code === "CHURCH" && location.is_active,
       items: (itemResult.data ?? [])
         .filter((item) => item.is_active && item.track_inventory)
         .map((item) => {

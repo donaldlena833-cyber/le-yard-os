@@ -6,10 +6,16 @@ import type {
   RetryIntegrationSyncInput,
 } from "../schemas";
 import type { WorkflowContext } from "../execute";
+import { z } from "zod";
 import { assertCondition, assertFound, throwDatabaseError } from "../errors";
 import { requireOrganizationOperations } from "../policy";
 import { requireAccessibleLocation } from "../resources";
 import { decodeAndValidateManualCsv } from "@/lib/integrations/csv-import";
+import { SquareReadClient } from "@/lib/integrations/square-read.server";
+import { squareProductionAccessToken, squareProductionSyncConfiguration } from "@/lib/integrations/square-production.server";
+import { runSquareSourceSync, SquareSourceSyncError } from "@/lib/integrations/square-sync.server";
+import { resolveRestaurantLocation } from "@/lib/restaurant-location.server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { sha256Hex } from "@/lib/storage/file-integrity";
 import {
   buildPrivateObjectPath,
@@ -35,6 +41,70 @@ function requireManualCsvProcessor() {
     "conflict",
     "Manual CSV import is unavailable until the server-side processor is deployed and verified.",
   );
+}
+
+async function requireSquarePilotOwner(
+  context: WorkflowContext,
+  input: { organizationId: string; locationId: string },
+) {
+  const location = await requireAccessibleLocation(context.supabase, context.actor, input.locationId);
+  assertCondition(location.organizationId === input.organizationId, "forbidden", "Switch to the workspace that owns this location.");
+  const membership = requireOrganizationOperations(context.actor, location.organizationId);
+  assertCondition(membership.role === "owner" || membership.role === "admin", "forbidden", "Only an Owner or Admin can configure Square.");
+  const restaurant = await resolveRestaurantLocation().catch(() => null);
+  assertCondition(restaurant?.organizationId === location.organizationId && restaurant.locationId === location.id,
+    "forbidden", "The Square pilot is available only at the Ninth Avenue restaurant.");
+  return restaurant;
+}
+
+export async function configureSquareProductionSource(
+  context: WorkflowContext,
+  input: { requestId: string; organizationId: string; locationId: string; merchantId: string; squareLocationId: string },
+) {
+  const restaurant = await requireSquarePilotOwner(context, input);
+  const accessToken = squareProductionAccessToken();
+  assertCondition(accessToken, "conflict", "Add the production Square credential to the Operations server first.");
+  try {
+    await new SquareReadClient({
+      environment: "production", accessToken, merchantId: input.merchantId,
+      locationId: input.squareLocationId, currency: "USD", timeZone: restaurant.timezone,
+    }).verifyScope();
+  } catch {
+    assertCondition(false, "conflict", "Square could not verify the Ninth Avenue location. Check the IDs, street address, currency, time zone and API access.");
+  }
+  const { data, error } = await context.supabase.rpc("configure_square_production_source_connection", {
+    p_request_id: input.requestId, p_location_id: restaurant.locationId,
+    p_merchant_id: input.merchantId, p_square_location_id: input.squareLocationId, p_enabled: true,
+  });
+  if (error) throwDatabaseError(error, "The Square location could not be saved.");
+  return z.object({ id: z.uuid(), status: z.string() }).parse(data);
+}
+
+export async function syncSquareProductionSource(
+  context: WorkflowContext,
+  input: { requestId: string; organizationId: string; locationId: string; cutoff: string },
+) {
+  const restaurant = await requireSquarePilotOwner(context, input);
+  const config = squareProductionSyncConfiguration();
+  assertCondition(config, "conflict", "The Square pilot import has not been enabled.");
+  const cutoff = Date.parse(input.cutoff);
+  assertCondition(Date.now() - cutoff <= 2 * 86_400_000 && cutoff <= Date.now(),
+    "validation", "Choose a recent import window and try again.");
+  const { data: connection, error: connectionError } = await context.supabase.from("integration_connections")
+    .select("id").eq("organization_id", restaurant.organizationId).eq("location_id", restaurant.locationId)
+    .eq("provider", "square").maybeSingle();
+  if (connectionError) throwDatabaseError(connectionError, "The Square connection could not be verified.");
+  assertCondition(connection, "conflict", "Verify and save the Ninth Avenue Square location first.");
+  try {
+    return await runSquareSourceSync({
+      requestId: input.requestId,
+      windowFrom: new Date(cutoff - 86_400_000).toISOString(),
+      windowTo: input.cutoff,
+    }, { ...config, connectionId: connection.id, admin: createAdminClient() });
+  } catch (error) {
+    assertCondition(false, "conflict", error instanceof SquareSourceSyncError ? error.message
+      : "Square did not complete the import. Check the sync history before running it again.");
+  }
 }
 
 function expectedImportPath({

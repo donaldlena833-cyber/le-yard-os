@@ -1,6 +1,7 @@
 export const REALTIME_OPERATIONAL_TABLES = [
   "checklist_responses",
   "checklist_runs",
+  "church_square_stock_invalidation_signals",
   "closeout_attachments",
   "deliveries",
   "delivery_lines",

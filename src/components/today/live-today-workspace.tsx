@@ -13,6 +13,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Avatar } from "@/components/ui/avatar";
 import { buttonVariants } from "@/components/ui/button";
@@ -463,9 +464,11 @@ function ChefTodayWorkspace({
 export function LiveTodayWorkspace({
   workspace,
   snapshot,
+  additionalSection,
 }: {
   workspace: WorkspaceContextValue;
   snapshot: LiveReadResult<ServiceDaySnapshot>;
+  additionalSection?: ReactNode;
 }) {
   const operationalRealtime = useRealtimeInvalidation({
     enabled: workspace.mode === "live" && snapshot.ok,
@@ -636,6 +639,7 @@ export function LiveTodayWorkspace({
           </section>
         </aside>
       </div>
+      {additionalSection}
     </PageFrame>
   );
 }

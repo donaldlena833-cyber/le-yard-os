@@ -11,10 +11,10 @@ const migrationFiles = (await readdir(migrationsDirectory))
   .filter((file) => file.endsWith(".sql"))
   .sort();
 const db = new PGlite({ extensions: { pgcrypto, pg_trgm, btree_gist } });
-const businessDate = new Date().toISOString().slice(0, 10);
-const nextBusinessDate = new Date(Date.parse(`${businessDate}T00:00:00Z`) + 86_400_000)
+const followingDate = (date) => new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000)
   .toISOString()
   .slice(0, 10);
+const minutesAfter = (instant, minutes) => new Date(instant.valueOf() + minutes * 60_000).toISOString();
 
 const ids = {
   organization: "20000000-0000-4000-8000-000000000001",
@@ -97,6 +97,21 @@ try {
     await db.exec(await readFile(join(migrationsDirectory, file), "utf8"));
   }
   await db.exec(await readFile(join(root, "supabase", "seed.sql"), "utf8"));
+  // Snapshot reads accept the site's current local date through 400 days out.
+  // Choose one date safely inside each offset period independent of the runner's season.
+  const { today, timezone } = (await db.query(
+    `select (statement_timestamp() at time zone timezone)::date::text today, timezone
+     from public.locations where id = $1::uuid`,
+    [ids.location],
+  )).rows[0];
+  if (timezone !== "America/New_York") throw new Error(`Unexpected fixture timezone: ${timezone}`);
+  const upcomingDate = (monthDay) => {
+    const year = Number(today.slice(0, 4));
+    const thisYear = `${year}-${monthDay}`;
+    return thisYear >= today ? thisYear : `${year + 1}-${monthDay}`;
+  };
+  const businessDate = upcomingDate("01-15");
+  const summerDate = upcomingDate("07-15");
   await db.query(
     `insert into public.reservation_service_periods (
       id, organization_id, location_id, name, days_of_week,
@@ -107,69 +122,68 @@ try {
     ) values (
       $1::uuid, $2::uuid, $3::uuid, 'Night service', array[0,1,2,3,4,5,6],
       time '17:00', time '03:00', 90, 15, 20, 1, 10,
-      date '${businessDate}', true, true, '${businessDate}T12:00:00Z', $4::uuid
+      $5::date, true, true, statement_timestamp(), $4::uuid
     )`,
-    [ids.period, ids.organization, ids.location, ids.owner],
+    [ids.period, ids.organization, ids.location, ids.owner, [businessDate, summerDate].sort()[0]],
   );
 
   await assume(ids.owner);
   await db.exec("set role authenticated");
-  const initial = (
-    await db.query(
-      `select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '${businessDate}')`,
-      [ids.organization, ids.location],
-    )
-  ).rows;
-  if (
-    initial.length !== 1 || initial[0].servicePeriodId !== ids.period ||
-    initial[0].startsAt.toISOString() !== `${businessDate}T21:00:00.000Z` ||
-    initial[0].endsAt.toISOString() !== `${nextBusinessDate}T07:00:00.000Z`
-  ) {
-    throw new Error(`Overnight materialization is wrong: ${JSON.stringify(initial)}`);
+  const readSnapshot = (date) => db.query(
+    "select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,$3::date)",
+    [ids.organization, ids.location, date],
+  );
+  let winterShift;
+  for (const { season, date, startUtc, endUtc } of [
+    { season: "winter", date: businessDate, startUtc: "22:00", endUtc: "08:00" },
+    { season: "summer", date: summerDate, startUtc: "21:00", endUtc: "07:00" },
+  ]) {
+    const { rows } = await readSnapshot(date);
+    if (
+      rows.length !== 1 || rows[0].servicePeriodId !== ids.period ||
+      rows[0].startsAt.toISOString() !== `${date}T${startUtc}:00.000Z` ||
+      rows[0].endsAt.toISOString() !== `${followingDate(date)}T${endUtc}:00.000Z`
+    ) {
+      throw new Error(`Overnight ${season} materialization is wrong: ${JSON.stringify(rows)}`);
+    }
+    if (season === "winter") winterShift = rows[0];
   }
-  const shiftId = initial[0].shiftId;
+  const { shiftId, startsAt, endsAt } = winterShift;
+  const closureStarts = minutesAfter(startsAt, 120);
+  const pacingStarts = minutesAfter(startsAt, 180);
+  const closedSlot = minutesAfter(startsAt, 135);
+  const reducedPacingSlot = minutesAfter(startsAt, 195);
 
   await db.query(
     `select public.configure_service_shift_exception(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,'closure',
-      '${businessDate}T23:00:00Z','${nextBusinessDate}T00:00:00Z',
+      $5::timestamptz,$6::timestamptz,
       null,null,null,null,'Private event closure',true
     )`,
-    [ids.closure, ids.organization, ids.location, shiftId],
+    [ids.closure, ids.organization, ids.location, shiftId, closureStarts, pacingStarts],
   );
   await db.query(
     `select public.configure_service_shift_exception(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,'pacing_override',
-      '${nextBusinessDate}T00:00:00Z','${nextBusinessDate}T01:00:00Z',
+      $5::timestamptz,$6::timestamptz,
       30,2,null,null,'Reduced kitchen pacing',true
     )`,
-    [ids.pacing, ids.organization, ids.location, shiftId],
+    [ids.pacing, ids.organization, ids.location, shiftId, pacingStarts, minutesAfter(startsAt, 240)],
   );
-  const bufferResult = await db.query(
+  const configureBuffer = () => db.query(
     `select public.configure_service_shift_exception(
       $1::uuid,$2::uuid,$3::uuid,$4::uuid,'buffer_override',
-      '${businessDate}T21:00:00Z','${nextBusinessDate}T07:00:00Z',
+      $5::timestamptz,$6::timestamptz,
       null,null,30,45,'Opening and close buffers',true
     ) result`,
-    [ids.buffer, ids.organization, ids.location, shiftId],
+    [ids.buffer, ids.organization, ids.location, shiftId, startsAt.toISOString(), endsAt.toISOString()],
   );
-  const replay = await db.query(
-    `select public.configure_service_shift_exception(
-      $1::uuid,$2::uuid,$3::uuid,$4::uuid,'buffer_override',
-      '${businessDate}T21:00:00Z','${nextBusinessDate}T07:00:00Z',
-      null,null,30,45,'Opening and close buffers',true
-    ) result`,
-    [ids.buffer, ids.organization, ids.location, shiftId],
-  );
+  const bufferResult = await configureBuffer();
+  const replay = await configureBuffer();
   if (bufferResult.rows[0].result.replayed || !replay.rows[0].result.replayed) {
     throw new Error("Service-shift exception replay evidence is wrong");
   }
-  const snapshot = (
-    await db.query(
-      `select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '${businessDate}')`,
-      [ids.organization, ids.location],
-    )
-  ).rows[0];
+  const snapshot = (await readSnapshot(businessDate)).rows[0];
   if (snapshot.exceptions.length !== 3) {
     throw new Error(`Active exceptions are incomplete: ${JSON.stringify(snapshot)}`);
   }
@@ -177,8 +191,8 @@ try {
   await db.exec("reset role");
   await expectError(
     () => db.query(
-      `select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'${businessDate}T23:15:00Z',90,2)`,
-      [ids.organization, ids.location],
+      "select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,$3::timestamptz,90,2)",
+      [ids.organization, ids.location, closedSlot],
     ),
     "23514",
     "closed slot",
@@ -193,21 +207,21 @@ try {
   }
   await db.exec("reset role");
   await db.query(
-    `select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'${businessDate}T23:15:00Z',90,2)`,
-    [ids.organization, ids.location],
+    "select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,$3::timestamptz,90,2)",
+    [ids.organization, ids.location, closedSlot],
   );
   await expectError(
     () => db.query(
-      `select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,'${businessDate}T21:00:00Z',90,2)`,
-      [ids.organization, ids.location],
+      "select private.assert_public_reservation_slot_contract($1::uuid,$2::uuid,$3::timestamptz,90,2)",
+      [ids.organization, ids.location, startsAt.toISOString()],
     ),
     "23514",
     "opening buffer",
   );
   await expectError(
     () => db.query(
-      `select private.assert_reservation_pacing($1::uuid,$2::uuid,'${nextBusinessDate}T00:15:00Z',3,null,null)`,
-      [ids.organization, ids.location],
+      "select private.assert_reservation_pacing($1::uuid,$2::uuid,$3::timestamptz,3,null,null)",
+      [ids.organization, ids.location, reducedPacingSlot],
     ),
     "23P01",
     "reduced pacing",
@@ -219,10 +233,7 @@ try {
   );
   await db.exec("set role authenticated");
   await expectError(
-    () => db.query(
-      `select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '${businessDate}')`,
-      [ids.organization, ids.location],
-    ),
+    () => readSnapshot(businessDate),
     "23514",
     "configuration drift across active exception evidence",
   );
@@ -235,10 +246,7 @@ try {
   await assume(ids.otherOwner);
   await db.exec("set role authenticated");
   await expectError(
-    () => db.query(
-      `select * from public.service_reservation_shift_snapshot($1::uuid,$2::uuid,date '${businessDate}')`,
-      [ids.organization, ids.location],
-    ),
+    () => readSnapshot(businessDate),
     "42501",
     "cross-tenant snapshot",
   );
@@ -269,7 +277,7 @@ try {
   }
 
   process.stdout.write(
-    "PASS materialized service shifts, overnight boundaries, closures, pacing, buffers, replay, and tenant scope\n",
+    "PASS materialized service shifts, winter and summer overnight boundaries, closures, pacing, buffers, replay, and tenant scope\n",
   );
 } finally {
   await db.close();

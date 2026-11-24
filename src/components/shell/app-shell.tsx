@@ -366,9 +366,11 @@ function NavigationLink({
 function Sidebar({
   pathname,
   workspace,
+  canOpenChurchCatering,
 }: {
   pathname: string;
   workspace: WorkspaceContextValue;
+  canOpenChurchCatering: boolean;
 }) {
   return (
     <aside className={styles.sidebar}>
@@ -389,7 +391,7 @@ function Sidebar({
       <nav aria-label="Primary navigation" className={styles.nav}>
         {navigationSections.map((section) => {
           const visibleItems = section.items.filter((item) =>
-            isNavItemVisible(item, workspace),
+            isNavItemVisible(item, workspace, canOpenChurchCatering),
           );
           if (!visibleItems.length) return null;
           return (
@@ -452,11 +454,13 @@ function MobileDrawer({
   pathname,
   onClose,
   workspace,
+  canOpenChurchCatering,
 }: {
   open: boolean;
   pathname: string;
   onClose: () => void;
   workspace: WorkspaceContextValue;
+  canOpenChurchCatering: boolean;
 }) {
   return (
     <Drawer
@@ -490,7 +494,7 @@ function MobileDrawer({
             <nav className="flex-1 overflow-y-auto" aria-label="Mobile navigation">
               {navigationSections.map((section) => {
                 const visibleItems = section.items.filter((item) =>
-                  isNavItemVisible(item, workspace),
+                  isNavItemVisible(item, workspace, canOpenChurchCatering),
                 );
                 if (!visibleItems.length) return null;
                 return (
@@ -576,7 +580,7 @@ function MobileNavigationControl({
   );
 }
 
-function ShellContent({ children }: { children: ReactNode }) {
+function ShellContent({ children, canOpenChurchCatering }: { children: ReactNode; canOpenChurchCatering: boolean }) {
   const pathname = usePathname();
   const workspace = useWorkspaceContext();
   const visibleMobileNavItems = getMobileNavItems(workspace);
@@ -617,7 +621,7 @@ function ShellContent({ children }: { children: ReactNode }) {
 
   return (
     <div className={styles.shell}>
-      <Sidebar pathname={pathname} workspace={workspace} />
+      <Sidebar pathname={pathname} workspace={workspace} canOpenChurchCatering={canOpenChurchCatering} />
 
       <div className={styles.frame}>
         <header className={styles.header}>
@@ -752,17 +756,18 @@ function ShellContent({ children }: { children: ReactNode }) {
         open={drawerOpen}
         pathname={pathname}
         workspace={workspace}
+        canOpenChurchCatering={canOpenChurchCatering}
         onClose={() => setDrawerOpen(false)}
       />
     </div>
   );
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, canOpenChurchCatering = false }: { children: ReactNode; canOpenChurchCatering?: boolean }) {
   return (
     <ThemeProvider>
       <ConnectivityProvider>
-        <ShellContent>{children}</ShellContent>
+        <ShellContent canOpenChurchCatering={canOpenChurchCatering}>{children}</ShellContent>
       </ConnectivityProvider>
     </ThemeProvider>
   );

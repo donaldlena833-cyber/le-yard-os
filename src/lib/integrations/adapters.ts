@@ -21,7 +21,7 @@ export const integrationAdapters: Record<IntegrationProvider, IntegrationAdapter
     provider: "square",
     label: "Square",
     description: "Orders, payments and refunds retained as read-only source evidence.",
-    accessNote: "Sandbox rehearsal only. Account access, mapping verification and financial reconciliation are required before operating use.",
+    accessNote: "A read-only pilot needs a verified Square location and server credentials. Reconcile the imported records before using them for closeout.",
     capabilities: [{ id: "read_source_evidence", label: "Read source evidence", direction: "read", requiresApproval: true }],
     supportsManualImport: false,
   },
