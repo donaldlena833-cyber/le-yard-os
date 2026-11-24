@@ -15,7 +15,7 @@ export function useLearning(){
     const body = await response.json();
     if(!response.ok) throw new Error(body.message || 'Could not load.');
     setRecords(body.records);setDate(body.date);setError('');
-  },[workspace.mode]);
+  },[workspace.mode,workspace.organization.id,workspace.activeLocation.id,workspace.identity.userId]);
   useEffect(()=>{let active=true; const kickoff=setTimeout(()=>{void refresh().catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});},0);const interval=setInterval(()=>{if(document.visibilityState==='visible')void refresh().catch(()=>{});},30000);return()=>{active=false;clearTimeout(kickoff);clearInterval(interval);};},[refresh]);
   const save = async(input:Record<string,unknown>)=>{
     setError('');
