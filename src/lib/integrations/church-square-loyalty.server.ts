@@ -5,6 +5,7 @@ import { churchSquareCountConfiguration } from "./church-square-configuration.se
 import { emptyLoyaltySnapshot, loyaltyBirthday, loyaltyPageSize, type LoyaltySnapshot } from "./church-square-loyalty";
 import { SquareCountClient, type SquareCountConfiguration } from "./square-counts.server";
 import { SQUARE_API_VERSION } from "./square-source";
+import { regularsLocalDay, type RegularsVisit } from "./church-regulars-streak";
 
 const id = z.string().regex(/^[A-Za-z0-9_:-]{1,192}$/);
 const programSchema = z.object({
@@ -92,6 +93,82 @@ export class ChurchSquareLoyaltyClient {
 
   async readiness(): Promise<"active" | "inactive"> {
     return (await this.program()).status === "ACTIVE" ? "active" : "inactive";
+  }
+
+  /** Read purchase evidence, never infer days from a points balance or manual adjustment. */
+  async regularsVisits(accountId: string): Promise<RegularsVisit[]> {
+    id.parse(accountId);
+    const program = await this.program();
+    if (program.status !== "ACTIVE") throw new LoyaltyReadError("not_configured");
+    const account = accountSchema.parse((await this.call(`/v2/loyalty/accounts/${encodeURIComponent(accountId)}`)).loyalty_account);
+    if (account.id !== accountId || account.program_id !== program.id) throw new LoyaltyReadError("unavailable");
+    const orders = new Set<string>();
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    let complete = false;
+    for (let page = 0; page < 60; page++) {
+      const payload = await this.call("/v2/loyalty/events/search", {
+        limit: 30, ...(cursor ? { cursor } : {}),
+        query: { filter: { loyalty_account_filter: { loyalty_account_id: accountId },
+          date_time_filter: { created_at: { start_at: "2026-11-24T05:00:00Z" } } } },
+      });
+      const events = z.array(z.object({
+        id, type: z.string(), loyalty_account_id: id, location_id: id.optional(),
+        accumulate_points: z.object({ loyalty_program_id: id, points: z.number().int(), order_id: id.optional() }).optional(),
+      })).max(30).parse(payload.events ?? []);
+      for (const event of events) {
+        if (event.loyalty_account_id !== accountId) throw new LoyaltyReadError("unavailable");
+        if (event.type === "ACCUMULATE_POINTS" && event.location_id === this.config.locationId
+          && event.accumulate_points?.loyalty_program_id === program.id
+          && event.accumulate_points.points > 0 && event.accumulate_points.order_id) orders.add(event.accumulate_points.order_id);
+      }
+      const next = z.string().min(1).max(4096).optional().parse(payload.cursor);
+      if (!next) { complete = true; break; }
+      if (seenCursors.has(next)) throw new LoyaltyReadError("unavailable");
+      seenCursors.add(next); cursor = next;
+    }
+    if (!complete) throw new LoyaltyReadError("unavailable");
+    const money = z.object({ amount: z.number().int().safe().nonnegative(), currency: z.literal("USD") });
+    const orderSchema = z.object({
+      id, location_id: id, state: z.string(), closed_at: z.iso.datetime({ offset: true }).optional(),
+      line_items: z.array(z.object({ catalog_object_id: id.optional(), item_type: z.string().optional() })).optional(),
+      tenders: z.array(z.object({ id: id.optional(), payment_id: id.optional() })).optional(),
+    });
+    const paymentSchema = z.object({ id, location_id: id, order_id: id, status: z.string(),
+      amount_money: money, refunded_money: money.optional() });
+    const visits: RegularsVisit[] = [];
+    const ids = [...orders];
+    for (let index = 0; index < ids.length; index += 25) {
+      const batch = ids.slice(index, index + 25);
+      const response = await this.call("/v2/orders/batch-retrieve", { location_id: this.config.locationId, order_ids: batch });
+      const loaded = z.array(orderSchema).max(25).parse(response.orders ?? []);
+      if (loaded.length !== batch.length || new Set(loaded.map(order => order.id)).size !== batch.length
+        || loaded.some(order => !batch.includes(order.id) || order.location_id !== this.config.locationId)) throw new LoyaltyReadError("unavailable");
+      // Bound parallel provider reads. Payments are checked independently because
+      // the original order's sale amounts alone do not prove refund status.
+      for (let offset = 0; offset < loaded.length; offset += 6) {
+        const results = await Promise.all(loaded.slice(offset, offset + 6).map(async order => {
+          if (order.state !== "COMPLETED" || !order.closed_at) return null;
+          if (order.line_items?.length && order.line_items.every(item => item.item_type === "GIFT_CARD"
+            || Boolean(this.config.testVariationId && item.catalog_object_id === this.config.testVariationId))) return null;
+          if (!order.tenders?.length) throw new LoyaltyReadError("unavailable");
+          let paid = 0;
+          const paymentIds = new Set<string>();
+          for (const tender of order.tenders) {
+            const paymentId = tender.payment_id ?? tender.id;
+            if (!paymentId || paymentIds.has(paymentId)) throw new LoyaltyReadError("unavailable");
+            paymentIds.add(paymentId);
+            const payment = paymentSchema.parse((await this.call(`/v2/payments/${encodeURIComponent(paymentId)}`)).payment);
+            if (payment.id !== paymentId || payment.order_id !== order.id || payment.location_id !== this.config.locationId) throw new LoyaltyReadError("unavailable");
+            if ((payment.refunded_money?.amount ?? 0) > payment.amount_money.amount) throw new LoyaltyReadError("unavailable");
+            if (payment.status === "COMPLETED") paid += Math.max(0, payment.amount_money.amount - (payment.refunded_money?.amount ?? 0));
+          }
+          return paid > 0 ? { day: regularsLocalDay(new Date(order.closed_at)), orderId: order.id } : null;
+        }));
+        for (const result of results) if (result) visits.push(result);
+      }
+    }
+    return visits;
   }
 
   async read(input: { phone?: string; cursor?: string } = {}): Promise<LoyaltySnapshot> {

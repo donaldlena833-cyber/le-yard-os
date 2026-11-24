@@ -295,6 +295,7 @@ const requiredServiceFunctions = new Set([
   "service_claim_booking_rate_limit",
   "service_claim_church_square_stock_push",
   "service_complete_church_square_stock_push",
+  "service_church_regulars_treat",
   "service_claim_reservation_message_outbox",
   "service_claim_reservation_push_deliveries",
   "service_complete_reservation_message_outbox",
