@@ -48,3 +48,11 @@
 @keyframes arrive { from { opacity:.3; transform:translateY(4px); } to {opacity:1;transform:translateY(0);} }
 @media(max-width:760px) { .page {padding:20px 18px 40px;} .heading {align-items:flex-start;flex-direction:column;} .layout {grid-template-columns:1fr;gap:24px;} .steps {display:flex;overflow-x:auto;gap:8px;margin:16px 0 0;} .step {width:auto;white-space:nowrap;padding:10px;} .rail .course {display:inline-block;} .story {font-size:15px;} }
 @media(prefers-reduced-motion:reduce) { .article {animation:none;} .progress span,.course,.step {transition:none;} }
+
+.outlineToggle {display:none;}
+@media(max-width:760px) {
+ .outlineToggle {display:flex;align-items:center;justify-content:space-between;width:100%;padding:14px 0;border-bottom:1px solid var(--line);text-align:left;font-size:13px;font-weight:550;}
+ .outlineToggle span {color:var(--ink-faint);}
+ .railBody {display:none;padding-top:18px;}
+ .railBody.outlineOpen {display:block;}
+}

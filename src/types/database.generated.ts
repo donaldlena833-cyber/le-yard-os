@@ -11918,6 +11918,16 @@ export type Database = {
         }
         Returns: Json
       };
+      "service_church_regulars_treat": {
+        Args: {
+          "p_actor_id": string | null
+          "p_location_id": string | null
+          "p_account_id": string | null
+          "p_action": string | null
+          "p_payload"?: Json | null
+        }
+        Returns: Json
+      };
       "service_claim_booking_rate_limit": {
         Args: {
           "p_bucket_hash": string | null
@@ -13353,6 +13363,7 @@ export const DatabaseObjectNames = {
       "service_cancel_public_reservation",
       "service_capture_catering_inquiry",
       "service_capture_guest_interest",
+      "service_church_regulars_treat",
       "service_claim_booking_rate_limit",
       "service_claim_church_square_count",
       "service_claim_church_square_order_backfill",
