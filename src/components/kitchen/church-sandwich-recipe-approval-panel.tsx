@@ -5,7 +5,7 @@ import { saveChurchSandwichFormulaAction } from "@/app/actions/workflows/church-
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
-import { churchSandwichBenchRecipes, churchSandwichBread, sandwichFillingGrams, type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
+import { churchSandwichBenchRecipes, churchSandwichBread, type ChurchSandwichBenchRecipe } from "@/lib/kitchen/church-sandwich-bench";
 import type { ChurchSandwichFormula } from "@/lib/kitchen/church-sandwich-formula";
 import { matchesChurchSandwichFormulaEvidence } from "@/lib/kitchen/church-sandwich-formula-evidence";
 import type { ChurchIngredientEvidence } from "@/lib/kitchen/church-sandwich-ingredient-evidence";
@@ -32,9 +32,9 @@ const localDate = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
 const percent = new Intl.NumberFormat("en-US", { style: "percent", maximumFractionDigits: 1 });
 const signoffStatus = {
-  current: { label: "Current signoff", tone: "positive" },
+  current: { label: "Yield verified", tone: "positive" },
   outdated: { label: "Recheck required", tone: "warning" },
-  pending: { label: "Pending signoff", tone: "neutral" },
+  pending: { label: "Yield pending", tone: "neutral" },
 } as const;
 
 function readMeasurement(raw: string, whole: boolean, max: number) {
@@ -101,14 +101,14 @@ function RecipeSignoffForm({ recipe, ingredients, revision, onSave }: {
   }
 
   const ready = ingredients.every(({ evidence }) => evidence?.status === "reviewed" && evidence.supplierSku && evidence.sourceReference);
-  if (!ready) return <p className="mt-3 text-xs text-[var(--ink-soft)]">Finish the required supplier label reviews to start signoff.</p>;
+  if (!ready) return <p className="mt-3 text-xs text-[var(--ink-soft)]">Review supplier labels before recording yield.</p>;
 
   const formPrefix = `recipe-signoff-${recipe.key}`;
   return (
     <form aria-label={`${recipe.name} recipe signoff`} className="mt-4" onSubmit={(event) => void save(event)} noValidate>
       <fieldset disabled={saving} className="space-y-3">
-        <legend className="text-sm font-semibold">{revision ? "Measure and sign a new revision" : "Measure and sign the recipe"}</legend>
-        <p className="text-xs text-[var(--ink-soft)]">Use whole counts for bread and grams for fillings. Measure each ingredient before and after prep from the same batch. Enter the ready-to-build portion separately.</p>
+        <legend className="text-sm font-semibold">{revision ? "Record a new yield revision" : "Record prep yield"}</legend>
+        <p className="text-xs text-[var(--ink-soft)]">Record bread counts and filling weights from the same batch before and after prep.</p>
         {ingredients.map(({ name }, index) => {
           const bread = name === churchSandwichBread;
           const unit = bread ? "each" : "g";
@@ -147,7 +147,7 @@ function RecipeSignoffForm({ recipe, ingredients, revision, onSave }: {
           <span>I confirm these measurements and the reviewed supplier label references shown above.</span>
         </label>
         {errors.confirmed && <p id={`${formPrefix}-confirm-error`} className="text-xs text-[var(--danger)]">{errors.confirmed}</p>}
-        <Button type="submit" size="sm">{saving ? "Signing…" : "Sign measured recipe"}</Button>
+        <Button type="submit" size="sm">{saving ? "Signing…" : "Save measured yield"}</Button>
       </fieldset>
       <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{message}</p>
     </form>
@@ -168,7 +168,6 @@ function RecipeApprovalRow({ recipe, formula, evidence, canManage, onSave }: {
   const current = matchesChurchSandwichFormulaEvidence(formula, evidence);
   const status = signoffStatus[current ? "current" : formula ? "outdated" : "pending"];
   const formKey = [formula?.revision ?? 0, ...ingredients.map(({ evidence }) => `${evidence?.status ?? "pending"}:${evidence?.revision ?? 0}`)].join(";");
-  const tastingPortion = recipe.portions.find(({ ingredient }) => ingredient === recipe.tasting?.ingredient);
 
   return (
     <details className="py-2">
@@ -177,14 +176,6 @@ function RecipeApprovalRow({ recipe, formula, evidence, canManage, onSave }: {
           {recipe.name}<StatusPill tone={status.tone} size="sm">{status.label}</StatusPill>
         </span>
       </summary>
-      <div className="mt-3 space-y-1 rounded-lg border border-[var(--line)] px-3 py-2 text-xs text-[var(--ink-soft)]">
-        <h3 className="text-sm font-semibold text-[var(--ink)]">Bench build · {sandwichFillingGrams(recipe)} g filling</h3>
-        <p className="font-medium">{recipe.accent}.</p>
-        <p>{recipe.build}</p>
-        {recipe.tasting && tastingPortion && (
-          <p><strong>Tasting:</strong> Compare {tastingPortion.grams} g and {recipe.tasting.alternateGrams} g of {tastingPortion.ingredient}. {recipe.tasting.compare}</p>
-        )}
-      </div>
       {savedRevision && <p role="status" className="my-2 text-xs text-[var(--positive)]">Recipe revision {savedRevision} signed.</p>}
       {formula && (
         <div className="my-2 space-y-1 break-words text-xs text-[var(--ink-soft)]">
@@ -202,7 +193,7 @@ function RecipeApprovalRow({ recipe, formula, evidence, canManage, onSave }: {
           const changed = signed && (evidence?.status !== "reviewed" || evidence.revision !== signed.evidenceRevision);
           return (
             <li key={name} className="break-words border-l border-[var(--line)] pl-3 text-xs text-[var(--ink-soft)]">
-              <p className="font-semibold first-letter:uppercase">{name} <span className="font-normal">· Bench reference {benchQuantity} {unit}</span></p>
+              <p className="font-semibold first-letter:uppercase">{name} <span className="font-normal">· Portion standard {benchQuantity} {unit}</span></p>
               <p>{evidenceLabel}{evidence?.supplierSku ? ` · ${evidence.supplierSku}` : ""}{evidence?.sourceReference ? ` · ${evidence.sourceReference}` : ""}</p>
               {signed && <p>Signed {number.format(signed.quantity)} {unit} per sandwich · {number.format(signed.measuredUsable)} of {number.format(signed.measuredInput)} {unit} usable ({percent.format(signed.measuredUsable / signed.measuredInput)}) · label r{signed.evidenceRevision}{changed ? " · Recheck this ingredient" : ""}.</p>}
             </li>
@@ -228,16 +219,15 @@ export function ChurchSandwichRecipeApprovalPanel({ formulas, evidence, canManag
   const byIngredient = new Map(evidence.map((row) => [row.ingredientKey, row]));
 
   return (
-    <section aria-labelledby="sandwich-approval-title" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-      <h2 id="sandwich-approval-title" className="text-lg font-semibold">Chef signoff for sandwich recipes</h2>
-      <p className="mt-2 text-sm text-[var(--ink-soft)]">Use the bench builds for tasting. Kitchen planning uses the signed measurements. Review the actual product, lot and discard rules in Supplier label evidence before signoff.</p>
-      {!canManage && <p className="mt-2 text-xs text-[var(--ink-soft)]">Recipe management access is required to sign a measured recipe.</p>}
+    <details className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
+      <summary id="sandwich-approval-title" className="focus-ring cursor-pointer scroll-mt-24 rounded-md text-base font-semibold">Supplier labels and measured yield</summary>
+      <p className="mt-2 text-sm text-[var(--ink-soft)]">Record actual prep yield after reviewing supplier labels.</p>
       <div className="mt-3 divide-y divide-[var(--line)] border-t border-[var(--line)]">
         {churchSandwichBenchRecipes.map((recipe) => (
           <RecipeApprovalRow key={recipe.key} recipe={recipe} formula={byRecipe.get(recipe.key)} evidence={byIngredient} canManage={canManage}
             onSave={(saved) => setLocalSignoffs((previous) => ({ ...previous, [saved.recipeKey]: saved }))} />
         ))}
       </div>
-    </section>
+    </details>
   );
 }

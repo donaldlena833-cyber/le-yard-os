@@ -38,8 +38,8 @@ const fieldClass = "focus-ring mt-1 block w-full rounded-lg border border-[var(-
 const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 });
 const dateLabel = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" });
 const blockerLabels: Record<Blocker["reason"], string> = {
-  recipe_pending: "Approved recipe and yield needed",
-  recipe_for_catering_pending: "Approved recipe and yield needed for a published catering job",
+  recipe_pending: "Measured yield needed",
+  recipe_for_catering_pending: "Measured yield needed for published catering",
   supplier_pending: "Supplier evidence needs review",
   supplier_hold: "Supplier evidence on hold",
   count_needed: "Usable count needed",
@@ -131,7 +131,7 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, rec
         <legend className="mb-2 text-xs font-semibold">Calculation basis</legend>
         <label className="inline-flex items-center gap-2">
           <input type="radio" name="sandwich-availability-mode" checked={!isRehearsal} onChange={() => setMode("approved")} />
-          Approved recipes
+          Measured recipes
         </label>
         <label className="inline-flex items-center gap-2">
           <input type="radio" name="sandwich-availability-mode" checked={isRehearsal} onChange={() => setMode("bench")} />
@@ -139,10 +139,10 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, rec
         </label>
       </fieldset>
       <p className="mt-2 text-xs text-[var(--ink-soft)]">
-        {approvedRecipes.length === 0 && "No approved recipes are available. "}
+        {approvedRecipes.length === 0 && "Measured yields are pending. "}
         {isRehearsal
-          ? "Rehearsal uses draft recipes. Review the chef’s approved recipe before planning service. Ingredients on hold stay blocked."
-          : "Each approved recipe needs a documented yield, reviewed supplier evidence and usable counts."}
+          ? "Rehearsal quantities use the portion standards. Service availability uses measured yields. Ingredients on hold stay blocked."
+          : "Use reviewed supplier labels and current stock counts."}
       </p>
 
       <details className="mt-4 border-t border-[var(--line)] pt-3">

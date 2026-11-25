@@ -40,7 +40,7 @@ it("shows only measured quantities in the open recipe worksheet and keeps trial 
   expect(view.first.querySelector("summary")?.textContent).toMatch(/3 published · 1 packed · 2 still to build · 2 jobs/);
   expect(view.day.getByRole("row", { name: "Le Parisien 2 1 1" })).toBeTruthy();
   expect(view.day.getByRole("row", { name: "Le Verger 1 0 1" })).toBeTruthy();
-  const signed = within(view.day.getByText("Signed usable ingredient totals").parentElement!);
+  const signed = within(view.day.getByText("Measured usable ingredient totals").parentElement!);
   expect(signed.getByText("66.125 g French-style ham")).toBeTruthy();
   expect(signed.getByText("2 × 10-inch baguettes")).toBeTruthy();
   expect(signed.queryByText("72 g French-style ham")).toBeNull();
@@ -50,16 +50,16 @@ it("shows only measured quantities in the open recipe worksheet and keeps trial 
 
 it("names pending sandwich signoffs and withholds partial signed totals", async () => {
   const view = await showWorksheet([parisien]);
-  const signed = within(view.day.getByText("Signed usable ingredient totals").parentElement!);
-  expect(signed.getByText(/Chef signoff pending for Le Verger/)).toBeTruthy();
+  const signed = within(view.day.getByText("Measured usable ingredient totals").parentElement!);
+  expect(signed.getByText(/Measured yield pending for Le Verger/)).toBeTruthy();
   expect(signed.queryByText(/66.125 g|72 g|baguettes/)).toBeNull();
   expect(view.trial.getByText(/Rehearsal only/)).toBeTruthy();
 });
 
 it("keeps service counts visible when the signed recipe read is unavailable", async () => {
   const view = await showWorksheet(null);
-  const signed = within(view.day.getByText("Signed usable ingredient totals").parentElement!);
-  expect(signed.getByText(/Signed recipe totals are unavailable/)).toBeTruthy();
+  const signed = within(view.day.getByText("Measured usable ingredient totals").parentElement!);
+  expect(signed.getByText(/Measured totals could not be loaded/)).toBeTruthy();
   expect(view.day.getByRole("row", { name: "Le Parisien 2 1 1" })).toBeTruthy();
   expect(view.bench.open).toBe(false);
 });

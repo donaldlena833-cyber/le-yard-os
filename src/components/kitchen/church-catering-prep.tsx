@@ -38,7 +38,7 @@ export async function ChurchCateringPrep({ data, approvedRecipes }: {
         <p className="mt-2 text-sm text-[var(--ink-soft)]">No reviewed catering portions are scheduled.</p>
       ) : (
         <>
-          <p className="my-2 text-sm text-[var(--ink-soft)]">Check batch labels before starting prep. Ingredient totals cover sandwiches still to build and require current chef signoff for those recipes.</p>
+          <p className="my-2 text-sm text-[var(--ink-soft)]">Check batch labels before prep. Measured totals cover sandwiches still to build.</p>
           <div className="divide-y divide-[var(--line)]">
             {result.days.map((day, index) => {
               const { sandwiches, published, packed, baguettes, assemblySeconds, ingredients, signed } = calculateChurchCateringPrep(day, { recipes });
@@ -77,13 +77,13 @@ export async function ChurchCateringPrep({ data, approvedRecipes }: {
                         <p className="text-[var(--ink-soft)]">All published sandwiches are packed. No ingredient quantities remain for this day.</p>
                       ) : (
                         <>
-                          <h3 className="font-semibold">Signed usable ingredient totals</h3>
+                          <h3 className="font-semibold">Measured usable ingredient totals</h3>
                           {signed.status === "ready" && <IngredientTotals baguettes={baguettes} ingredients={signed.ingredients} />}
                           {signed.status === "pending" && (
-                            <p className="text-[var(--ink-soft)]">Chef signoff pending for {signed.pendingNames.join(", ")}. Check the chef signoff panel before starting prep.</p>
+                            <p className="text-[var(--ink-soft)]">Measured yield pending for {signed.pendingNames.join(", ")}.</p>
                           )}
                           {signed.status === "unavailable" && (
-                            <p className="text-[var(--ink-soft)]">Signed recipe totals are unavailable. Reload Kitchen and check chef signoff before starting prep.</p>
+                            <p className="text-[var(--ink-soft)]">Measured totals could not be loaded.</p>
                           )}
                         </>
                       )}

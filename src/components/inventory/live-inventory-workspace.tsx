@@ -3352,10 +3352,10 @@ export function LiveInventoryWorkspace({
                 />
                 {model.churchStreet && canManageRecipes && model.catalog ? (
                   <div className="mb-5 rounded-2xl border border-[var(--line)] p-4">
-                    <h4 className="text-sm font-semibold">Church Street sandwich trials</h4>
+                    <h4 className="text-sm font-semibold">Church Street inventory recipe drafts</h4>
                     <p className="mt-1 text-[13px] text-[var(--ink-faint)]">
                       {model.catalog.units.some((unit) => unit.isActive && unit.dimension === "count")
-                        ? "Review the bench portions and save an editable draft. Match each ingredient to the verified catalog item before scheduling prep."
+                        ? "Link each ingredient to a verified inventory item before scheduling prep."
                         : "Add an active count unit such as Each in Costs & stock to save a one-sandwich draft."}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">

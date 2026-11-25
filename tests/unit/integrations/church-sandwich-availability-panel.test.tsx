@@ -40,7 +40,7 @@ afterEach(() => {
 it("keeps six limits pending until observed counts are entered and preserves a confirmed zero", () => {
   render(<ChurchSandwichAvailabilityPanel {...fixture} />);
   expect((screen.getByRole("radio", { name: "Bench rehearsal" }) as HTMLInputElement).checked).toBe(true);
-  expect(screen.getByText(/No approved recipes are available.*draft recipes/)).toBeTruthy();
+  expect(screen.getByText(/Measured yields are pending.*portion standards/)).toBeTruthy();
   expect(within(screen.getByRole("table")).getAllByText("Pending")).toHaveLength(6);
   fireEvent.click(screen.getByText("Enter usable stock"));
   expect((screen.getByRole("textbox", { name: /10-inch baguette/ }) as HTMLInputElement).value).toBe("");
@@ -53,8 +53,8 @@ it("keeps six limits pending until observed counts are entered and preserves a c
   enterStock(/10-inch baguette/, "1.5");
   expect(parisien.getByText("Pending")).toBeTruthy();
   expect(screen.getByText("Enter a whole count from 0 to 1,000,000.")).toBeTruthy();
-  fireEvent.click(screen.getByRole("radio", { name: "Approved recipes" }));
-  expect(parisien.getByText("Approved recipe and yield needed.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("radio", { name: "Measured recipes" }));
+  expect(parisien.getByText("Measured yield needed.")).toBeTruthy();
 });
 
 it("subtracts only outstanding catering once and checks shared stock across extra café portions", () => {
@@ -118,7 +118,7 @@ it("requires supplier review in approved mode and carries supplier holds into re
     approvedRecipes={[churchAvailabilityBenchRecipes[0]]}
     evidence={{ "French-style ham": "hold", "10-inch baguette": "reviewed" }}
   />);
-  expect((screen.getByRole("radio", { name: "Approved recipes" }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole("radio", { name: "Measured recipes" }) as HTMLInputElement).checked).toBe(true);
   const parisien = findLimit("Le Parisien");
   expect(parisien.getByText(/Supplier evidence on hold · French-style ham/)).toBeTruthy();
   expect(parisien.getByText(/Supplier evidence needs review · cultured butter/)).toBeTruthy();
@@ -141,7 +141,7 @@ it("clears both draft counts and extra portions when the calculation mode or evi
 
   // The first signed recipe switches the default from bench to approved.
   view.rerender(<ChurchSandwichAvailabilityPanel {...approved} />);
-  expect((screen.getByRole("radio", { name: "Approved recipes" }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole("radio", { name: "Measured recipes" }) as HTMLInputElement).checked).toBe(true);
   expect(baguettes.value).toBe("");
   expect(extras.value).toBe("");
 
@@ -156,7 +156,7 @@ it("clears both draft counts and extra portions when the calculation mode or evi
   expect(extras.value).toBe("");
   enterStock(/10-inch baguette/, "7");
   enterExtras("Le Parisien", "3");
-  fireEvent.click(screen.getByRole("radio", { name: "Approved recipes" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Measured recipes" }));
   expect(baguettes.value).toBe("");
   expect(extras.value).toBe("");
 

@@ -122,16 +122,15 @@ export function ChurchSandwichCostingPanel({ formulas, evidence, costs, canRecor
     cost.ingredientKey === ingredientKey && cost.evidenceRevision === revision && cost.supplierSku === supplierSku));
 
   return (
-    <section aria-labelledby="church-sandwich-costing-title" className="my-4 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-4 sm:p-5">
-      <h2 id="church-sandwich-costing-title" className="text-base font-semibold">Sandwich ingredient costs</h2>
-      <p className="mt-1 text-xs text-[var(--ink-soft)]">Per sandwich, from the current signed recipe, measured usable yield and invoice pack costs.</p>
+    <details className="my-4 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-4 sm:p-5">
+      <summary className="focus-ring cursor-pointer rounded-md text-base font-semibold">Invoice-backed costs</summary>
       {summaries ? (
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">
           {summaries.map(({ key, name, status, totalCents, missingIngredients }) => (
             <li key={key} className="rounded-lg border border-[var(--line)] px-3 py-2 text-sm">
               <p className="font-semibold">{name}</p>
               {status === "costed" && totalCents !== null && <p className="tabular-nums">{usd.format(totalCents / 100)} per sandwich</p>}
-              {status === "needs_recipe" && <p className="text-xs text-[var(--ink-soft)]">Needs a current signed recipe</p>}
+              {status === "needs_recipe" && <p className="text-xs text-[var(--ink-soft)]">Measured yield pending</p>}
               {status === "needs_costs" && <p className="text-xs text-[var(--ink-soft)]">Missing invoice costs for {missingIngredients.join(", ")}</p>}
               {status === "unavailable" && <p className="text-xs text-[var(--ink-soft)]">Check pack quantities and prices</p>}
             </li>
@@ -154,6 +153,6 @@ export function ChurchSandwichCostingPanel({ formulas, evidence, costs, canRecor
           </ul>
         </details>
       )}
-    </section>
+    </details>
   );
 }

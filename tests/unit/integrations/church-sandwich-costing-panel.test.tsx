@@ -41,10 +41,10 @@ afterEach(() => {
 it("shows pending, incomplete, and yield-adjusted costs without using a stale supplier invoice", () => {
   const { rerender } = render(<ChurchSandwichCostingPanel formulas={[formula]} evidence={evidence} costs={null} />);
   expect(screen.getByText(/Invoice pack costs could not be loaded/)).toBeTruthy();
-  expect(screen.queryByText("Needs a current signed recipe")).toBeNull();
+  expect(screen.queryByText("Measured yield pending")).toBeNull();
 
   rerender(<ChurchSandwichCostingPanel formulas={[formula]} evidence={evidence} costs={[bread, { ...ham, supplierSku: "Previous-SKU" }, butter]} />);
-  expect(screen.getAllByText("Needs a current signed recipe")).toHaveLength(5);
+  expect(screen.getAllByText("Measured yield pending")).toHaveLength(5);
   expect(screen.getByText("Le Parisien")).toBeTruthy();
   expect(screen.getByText("Missing invoice costs for French-style ham")).toBeTruthy();
   fireEvent.click(screen.getByText("Current supplier pack costs"));

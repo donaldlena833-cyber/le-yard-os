@@ -7,7 +7,7 @@ import {
 } from "@/lib/kitchen/church-sandwich-bench";
 
 const benchRecipeText = churchSandwichBenchRecipes.map((recipe) =>
-  `${recipe.name} · ${sandwichFillingGrams(recipe)} g filling\n${sandwichGramsText(recipe)}.\n${recipe.accent}. ${recipe.build}`,
+  `${recipe.name} · ${sandwichFillingGrams(recipe)} g filling\n${sandwichGramsText(recipe)}.\n${recipe.build}`,
 ).join("\n\n");
 
 const recipeRehearsalItems = churchSandwichBenchRecipes.map(({ name, seconds }) =>
@@ -17,32 +17,32 @@ const recipeRehearsalItems = churchSandwichBenchRecipes.map(({ name, seconds }) 
 export const churchSandwichSop = {
   title: "Church Street sandwich station",
   category: "Kitchen",
-  changeSummary: "First chef review. Verify portions, measured prep times, batch labels and allergens before publishing for service.",
+  changeSummary: "Follow the approved portions. Verify prep times, batch labels and allergens.",
   body: `CHURCH STREET SANDWICH STATION · WORKING DRAFT
-140 Church Street · Chef: ____ · Reviewed on: ____ · Rehearsal run: ____
+140 Church Street · Lead: ____ · Date: ____
 
-CLASSIC BUILDS WITH A NEW YORK DELI TOUCH · BENCH TRIAL
-Use one ${churchSandwichBread} per sandwich. Weights are net, ready-to-build grams and exclude the bread. These are trial portions using the ingredients described on the current café menu.
+10-INCH BUILDS
+Use one ${churchSandwichBread} per sandwich. For breakfast, follow the 6-inch weights in Kitchen → Sandwich recipes.
 
 ${benchRecipeText}
 
-CHEF TO COMPLETE · PRODUCT SPEC, TIMING AND HOLDING
-Weigh edible component portions before assembly. Start with the bench recipes above, record the measured batch yield, and test the paper-wrapped sandwich at the counter and in a mock delivery bag. Record any changes and approve the exact supplier product, portion and build order per item. Record the approved opening quantity, refill trigger and batch size after the rehearsal.
-In Kitchen → Chef signoff for sandwich recipes, enter the measured quantities and worksheet reference after the exact supplier labels are reviewed. Post the signed revision at the station. Create prep tasks for service in Kitchen → Prep board. Record practice results in Checklists → Church Street sandwich rehearsal.
+PRODUCT, TIMING AND HOLDING
+Weigh edible component portions before assembly. Use the approved portions. Record batch yield and test the wrapped sandwich at the counter and in a mock delivery bag. Record the approved opening quantity, refill trigger and batch size after the rehearsal.
+In Kitchen → Supplier labels and measured yield, record batch observations after verifying supplier labels. Create prep tasks for service in Kitchen → Prep board. Record practice results in Checklists → Church Street sandwich rehearsal.
 For each prepared component, record the storage method, holding conditions, use-by/discard rule and reset steps for the next batch. Use the approved kitchen food-safety procedures to set these rules. Record the owner and approval date for each rule.
 
 BATCH LABEL · TEST WITH THE REAL CONTAINER
 Product or component / batch ID / prepared date and time / preparer / use-by or discard date and time / storage location / allergen reference and revision. Link each batch to supplier product and lot where available. Confirm a second person can trace a rehearsal unit back to its components and read the label at the station. Use the approved food-safety plan to set the label fields and limits for service.
 
-ALLERGEN REVIEW · CHEF AND MANAGER SIGNOFF
+ALLERGEN REVIEW
 In Kitchen → Supplier label evidence, record each exact product and SKU, its label reference, allergen and cross-contact statements, storage instructions and approved discard rules. Keep the product pending or on hold until the person in charge (PIC) verifies the evidence and approves its opened and prepared discard rules. Record the supplier lot and the approved discard deadline for each opened or prepared batch in Kitchen → Batch labels.
 Collect the current supplier labels and ingredient sheets for the baguette, meats, dairy, dressings, preserves and other packaged ingredients. Confirm ingredient allergens, shared equipment and cross-contact for each item against the exact products actually used. First look at the baguette, dairy, pistachios and walnuts, and review supplier sub-ingredients and the Dijon. These are review prompts. Record confirmed results, ingredient source, cross-contact controls, substitutions, reviewer, and date in the final matrix.
-At the counter, involve the chef or manager when a guest reports an allergy. Check the approved matrix and confirm what the station can accommodate before accepting the order. Bring any unresolved item or substitution back to the chef. In Kitchen → Square allergen check, compare the current Square tags with the signed recipe and reviewed supplier labels. Press and hold the exact item tile on the Church Street register. Use Save register check to record what the tile showed, the device and an evidence reference. Repeat the check after a recipe, supplier label or Square item version changes.
+When a guest reports an allergy, stop and contact the person in charge. Check the approved matrix before accepting the order. In Kitchen → Square allergen check, compare the current Square tags with the signed recipe and reviewed supplier labels. Press and hold the exact item tile on the Church Street register. Use Save register check to record what the tile showed, the device and an evidence reference. Repeat the check after a recipe, supplier label or Square item version changes.
 In Checklists → Church Street first-shift Square rehearsal, record the guest menu display and whether a mock allergy note reached the kitchen before assembly for each tested channel. Check the NYC Health notice and sign requirements before opening.
-Chef signoff and date: ____ · Manager and date: ____ · Approved matrix revision: ____
+Reviewer and date: ____ · Matrix revision: ____
 
 TIMED REHEARSAL
-Use Checklists → Church Street sandwich rehearsal. Start from a clean station. Prep for six units and record the net yield, waste, prep time and batch label. Time three clean builds per sandwich. On a stocked bench, trial targets are 60 seconds or less for Le Parisien and 90 seconds or less for each other sandwich from build start to wrapped and checked. For a single-sandwich drill, aim for three minutes or less from ticket arrival to verified ready. Record each result, median, slowest and rework. Run a fresh pass after changing the layout or recipe. Include one dry-run allergy escalation, one mock delivery bag and a mixed-ticket pass with coffee. The chef reviews actual results before approving times for service.
+Use Checklists → Church Street sandwich rehearsal. Start from a clean station. Prep for six units and record the net yield, waste, prep time and batch label. Time three clean builds per sandwich. On a stocked bench, trial targets are 60 seconds or less for Le Parisien and 90 seconds or less for each other sandwich from build start to wrapped and checked. For a single-sandwich drill, aim for three minutes or less from ticket arrival to verified ready. Record each result, median, slowest and rework. Run a fresh pass after changing the layout or recipe. Include one dry-run allergy escalation, one mock delivery bag and a mixed-ticket pass with coffee. Have the shift lead review the results.
 
 SHIFT HANDOFF
 At open, verify the six item builds, labels, counts and open issues. During service, use Square availability for an item you cannot fulfill. For a product tracked as sellable units, record a physical count in Operations Inventory using the quantity actually ready to sell. Record missing product, waste, remakes and corrective actions in the shift handoff.
@@ -61,9 +61,9 @@ Batch prep times and yield | text | required | Prep for six units. Record produc
 Batch label and trace | text | required | Enter one example label and component lot references. Record whether a second person could trace the rehearsal unit.
 ${recipeRehearsalItems}
 Mock pickup and delivery bag | text | required | Record identification, wrapping, order label, handoff seconds and any mix-up.
-Mock allergy handoff | text | required | Record how the alert reached the chef, which sources were consulted, how the mock guest was updated, and any gap. Use rehearsal data.
+Mock allergy handoff | text | required | Record how the alert reached the person in charge, which sources were consulted, how the mock guest was updated, and any gap. Use rehearsal data.
 Slowest step and changes | text | required | Record the bottleneck, one change for the next pass, owner and due date.
-Chef and manager review | text | required | Record accepted timing and portions or pending retest, allergen matrix revision or pending checks, reviewers and date.`,
+Lead review | text | required | Record timing, retests, allergen matrix revision, reviewer and date.`,
 };
 
 export const churchSandwichIndividualTraining = {
@@ -73,7 +73,7 @@ export const churchSandwichIndividualTraining = {
   items: `Trainee, coach and guide | text | required | Assign this run to one trainee. Record the trainee name and station role, coach and rehearsal date (ET). Open the current Sandwich station training guide in Kitchen and record its version.
 Coached builds and pack-out | text | required | Record each sandwich practiced, attempts, builds accepted, corrections and worksheet or Kitchen timing-run reference. Observe portion, build order, wrap and ticket match. Mark any untested build pending.
 Mock allergy drill | text | required | Record whether the trainee stopped before assembly and who they called. Use a mock ticket: mustard allergy, no Dijon, on Le Bellecour or Le Rustique. The trial cornichon spec lists mustard seeds. Check both labels and cross-contact controls with the lead, then record the mock guest response and pass or repeat. Leave out guest details.
-Station readiness | text | required | Have the coach or shift lead record their name, date and a decision for the observed station duties. Use READY FOR OBSERVED DUTIES, SUPERVISED PRACTICE or HOLD. List any limits. Use current chef-signed recipes and reviewed supplier labels for service.
+Station readiness | text | required | Have the coach or shift lead record their name, date and a decision for the observed station duties. Use READY FOR OBSERVED DUTIES, SUPERVISED PRACTICE or HOLD. List any limits. Use the current Kitchen recipes and reviewed supplier labels.
 Follow-up and repeat date | text | required | Record what to repeat, the owner and next check date, or record no repeat needed for the observed duties. Have the lead review the evidence before completing the run.`,
 };
 

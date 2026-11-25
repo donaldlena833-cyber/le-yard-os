@@ -229,7 +229,7 @@ describe("connected Operations review interactions", () => {
     expect(body.value).toContain("Danish blue cheese 38 g, apple 42 g, arugula 10 g, honey 8 g, pistachios 13 g");
     expect(body.value).toContain("ALLERGEN REVIEW");
     expect(body.value).toContain("Kitchen → Supplier label evidence");
-    expect(body.value).toContain("Kitchen → Chef signoff for sandwich recipes");
+    expect(body.value).toContain("Kitchen → Supplier labels and measured yield");
     expect(body.value).toContain("Use Save register check");
     expect(body.value).toContain("In Checklists → Church Street first-shift Square rehearsal");
     fireEvent.change(body, { target: { value: `${body.value}\nChef review scheduled` } });
@@ -257,7 +257,7 @@ describe("connected Operations review interactions", () => {
         expect.objectContaining({ label: "Batch label and trace", required: true }),
         expect.objectContaining({ label: "Le Parisien build and pack", responseType: "text", instructions: expect.stringContaining("≤60s") }),
         expect.objectContaining({ label: "Le Bleu build and pack", responseType: "text", instructions: expect.stringContaining("≤90s") }),
-        expect.objectContaining({ label: "Chef and manager review", required: true }),
+        expect.objectContaining({ label: "Lead review", required: true }),
       ]),
     })));
   });
@@ -342,7 +342,7 @@ describe("connected Operations review interactions", () => {
         expect.objectContaining({ label: "Trainee, coach and guide", required: true, instructions: expect.stringMatching(/Assign this run to one trainee.*current Sandwich station training guide.*record its version/) }),
         expect.objectContaining({ label: "Coached builds and pack-out", required: true, instructions: expect.stringMatching(/builds accepted.*Kitchen timing-run reference/) }),
         expect.objectContaining({ label: "Mock allergy drill", required: true, instructions: expect.stringMatching(/stopped before assembly.*mustard allergy, no Dijon.*cornichon spec lists mustard seeds/) }),
-        expect.objectContaining({ label: "Station readiness", required: true, instructions: expect.stringMatching(/SUPERVISED PRACTICE or HOLD.*chef-signed recipes/) }),
+        expect.objectContaining({ label: "Station readiness", required: true, instructions: expect.stringMatching(/SUPERVISED PRACTICE or HOLD.*current Kitchen recipes/) }),
         expect.objectContaining({ label: "Follow-up and repeat date", required: true, instructions: expect.stringMatching(/owner and next check date/) }),
       ],
     }));

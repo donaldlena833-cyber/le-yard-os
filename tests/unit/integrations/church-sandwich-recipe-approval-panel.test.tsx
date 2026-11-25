@@ -28,6 +28,7 @@ const signed: ChurchSandwichFormula = {
 
 function openParisien() {
   const name = screen.getByText("Le Parisien", { exact: true });
+  name.closest("details")!.parentElement!.closest("details")!.open = true;
   fireEvent.click(name);
   return within(name.closest("details")!);
 }
@@ -43,12 +44,12 @@ afterEach(() => {
 
 it("renders six pending recipes and withholds signoff until label review and recipe permission", () => {
   const { rerender } = render(<ChurchSandwichRecipeApprovalPanel formulas={[]} evidence={[]} canManage />);
-  expect(screen.getAllByText("Pending signoff")).toHaveLength(6);
+  expect(screen.getAllByText("Yield pending")).toHaveLength(6);
   const row = openParisien();
-  expect(row.getByText("Finish the required supplier label reviews to start signoff.")).toBeTruthy();
+  expect(row.getByText("Review supplier labels before recording yield.")).toBeTruthy();
   expect(row.queryByRole("form")).toBeNull();
   rerender(<ChurchSandwichRecipeApprovalPanel formulas={[signed]} evidence={parisienEvidence} canManage={false} />);
-  expect(row.getByText("Current signoff")).toBeTruthy();
+  expect(row.getByText("Yield verified")).toBeTruthy();
   expect(row.getByText(/Kitchen bench 14-B/)).toBeTruthy();
   expect(row.queryByRole("form")).toBeNull();
 });
@@ -61,7 +62,7 @@ it("keeps measured inputs blank, validates batch yield, and signs against exact 
   const ham = within(form.getByRole("group", { name: "French-style ham" }));
   const butter = within(form.getByRole("group", { name: "cultured butter" }));
   const bread = within(form.getByRole("group", { name: "10-inch baguette" }));
-  expect(row.getByText("· Bench reference 72 g")).toBeTruthy();
+  expect(row.getByText("· Portion standard 72 g")).toBeTruthy();
   expect((ham.getByLabelText("Per sandwich (g)") as HTMLInputElement).value).toBe("");
   expect((bread.getByLabelText("As received (each)") as HTMLInputElement).value).toBe("");
   expect(form.queryByRole("textbox", { name: "Per sandwich (each)" })).toBeNull();
@@ -76,14 +77,14 @@ it("keeps measured inputs blank, validates batch yield, and signs against exact 
   change(butter, /As received/, "240");
   change(butter, /Usable after prep/, "240");
   change(form, /Worksheet or measured batch reference/, " Kitchen bench 14-B ");
-  fireEvent.click(form.getByRole("button", { name: "Sign measured recipe" }));
+  fireEvent.click(form.getByRole("button", { name: "Save measured yield" }));
   expect(form.getByText(/Confirm the measurements and supplier references/)).toBeTruthy();
   expect(ham.getByText(/Usable quantity must cover/)).toBeTruthy();
   expect(saveChurchSandwichFormulaAction).not.toHaveBeenCalled();
   change(ham, /Usable after prep/, "400");
   expect(ham.getByText("Measured usable yield 80%")).toBeTruthy();
   fireEvent.click(form.getByRole("checkbox"));
-  fireEvent.click(form.getByRole("button", { name: "Sign measured recipe" }));
+  fireEvent.click(form.getByRole("button", { name: "Save measured yield" }));
   expect(await row.findByText("Recipe revision 1 signed.")).toBeTruthy();
   expect(saveChurchSandwichFormulaAction).toHaveBeenCalledExactlyOnceWith({
     requestId: expect.any(String), recipeKey: "parisien", expectedRevision: 0, reviewReference: "Kitchen bench 14-B", measurements,

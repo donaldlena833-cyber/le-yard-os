@@ -5,6 +5,7 @@ import { ChurchBatchBoard } from "@/components/kitchen/church-batch-board";
 import { ChurchSandwichAvailabilityPanel } from "@/components/kitchen/church-sandwich-availability-panel";
 import { ChurchSandwichCostingPanel } from "@/components/kitchen/church-sandwich-costing-panel";
 import { ChurchSandwichRecipeApprovalPanel } from "@/components/kitchen/church-sandwich-recipe-approval-panel";
+import { ChurchSandwichQuotedCosts, ChurchSandwichStandardPanel } from "@/components/kitchen/church-sandwich-standard-panel";
 import { ChurchSandwichStaffResources } from "@/components/kitchen/church-sandwich-staff-resources";
 import { ChurchSandwichTimingPanel } from "@/components/kitchen/church-sandwich-timing-panel";
 import { ChurchSquareAllergenPanel } from "@/components/kitchen/church-square-allergen-panel";
@@ -14,15 +15,16 @@ import { LiveInventoryWorkspace } from "@/components/inventory/live-inventory-wo
 import { LivePrepWorkspace } from "@/components/prep/live-prep-workspace";
 import { PageFrame } from "@/components/ui/page-frame";
 import { loadLiveInventory } from "@/data/read-models/inventory";
-import { loadChurchIngredientEvidence } from "@/data/read-models/church-ingredient-evidence.server";
+import { canReadChurchIngredientEvidence, loadChurchIngredientEvidence } from "@/data/read-models/church-ingredient-evidence.server";
 import { canRecordChurchBatchLabels, loadChurchBatchLabels, loadChurchBatchQueue } from "@/data/read-models/church-ingredient-batches.server";
 import { loadChurchCateringPrep } from "@/data/read-models/church-catering-prep.server";
 import { buildChurchSandwichAvailability } from "@/data/read-models/church-sandwich-availability.server";
-import { loadChurchSandwichPackCosts } from "@/data/read-models/church-sandwich-costing.server";
+import { canManageChurchSandwichCosts, loadChurchSandwichPackCosts } from "@/data/read-models/church-sandwich-costing.server";
 import { currentChurchAvailabilityRecipes, loadChurchSandwichFormulas } from "@/data/read-models/church-sandwich-formula.server";
 import { loadChurchSandwichRegisterChecks } from "@/data/read-models/church-sandwich-register-check.server";
 import { canRecordChurchSandwichTiming, loadChurchSandwichTimingRuns } from "@/data/read-models/church-sandwich-timing.server";
 import { loadLivePrep } from "@/data/read-models/prep";
+import { churchSandwichStandard } from "@/lib/kitchen/church-sandwich-standard";
 import { type WorkspaceContextValue } from "@/lib/auth/workspace-context";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.server";
@@ -91,7 +93,7 @@ async function ChurchSandwichPlanning({ workspace, evidence, catering, formulas,
       {packCostResult && (formulaResult?.ok && ingredientEvidenceResult?.ok ? (
         <ChurchSandwichCostingPanel key={location} formulas={formulaResult.data} evidence={ingredientEvidenceResult.data}
           costs={packCostResult.ok ? packCostResult.data : null} canRecord={packCostResult.ok} />
-      ) : <p className="my-4 text-sm text-[var(--ink-soft)]">Signed recipes and supplier labels could not be loaded for costing.</p>)}
+      ) : <p className="my-4 text-sm text-[var(--ink-soft)]">Invoice costing needs measured portions and supplier labels.</p>)}
       {canManage && formulaResult?.ok && ingredientEvidenceResult?.ok && (
         <ChurchSquareAllergenPanel key={location} evidence={ingredientEvidenceResult.data} formulas={formulaResult.data}
           registerChecks={registerResult?.ok ? registerResult.data : null} />
@@ -122,6 +124,8 @@ export default async function KitchenPage() {
   if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/kitchen", resolution.context);
   if (resolution.context.mode === "demo") return <KitchenWorkspace />;
+  const showSandwichStandard = resolution.context.activeLocation.id === churchSandwichStandard.locationId
+    && canReadChurchIngredientEvidence(resolution.context);
   const batchCheckedAt = new Date().toISOString();
   const ingredientEvidence = loadChurchIngredientEvidence(resolution.context);
   const cateringPrep = loadChurchCateringPrep(resolution.context);
@@ -141,6 +145,8 @@ export default async function KitchenPage() {
   return (
     <>
       <PageFrame width="full" className="max-w-[1400px] pb-0">
+        {showSandwichStandard && <ChurchSandwichStandardPanel />}
+        {showSandwichStandard && canManageChurchSandwichCosts(resolution.context) && <ChurchSandwichQuotedCosts />}
         <Suspense fallback={null}><ChurchStaffResources evidence={ingredientEvidence} /></Suspense>
         <Suspense fallback={null}><ChurchCateringPrep data={cateringPrep} approvedRecipes={approvedRecipes} /></Suspense>
         <Suspense fallback={null}><ChurchSupplierEvidence workspace={resolution.context} data={ingredientEvidence} formulas={sandwichFormulas} /></Suspense>

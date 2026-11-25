@@ -17,7 +17,7 @@ it("propagates shared ingredient revisions and holds to the affected sandwiches"
   expect(verger.getByText("1 of 5 ingredient records reviewed")).toBeTruthy();
   expect(verger.getByText("Hold · walnuts")).toBeTruthy();
   expect(verger.getByText(/Pending · Brie, apple, honey/)).toBeTruthy();
-  expect(verger.getByText("Chef sign-off pending")).toBeTruthy();
+  expect(verger.getByText("Yield pending")).toBeTruthy();
 
   const rustique = within(screen.getByText("Le Rustique").parentElement!);
   expect(rustique.getByText("2 of 6 ingredient records reviewed")).toBeTruthy();
@@ -45,23 +45,23 @@ it("requires the signed recipe and exact current label revisions to agree", () =
   ] as const;
   const ui = render(<ChurchSandwichEvidenceOverview rows={rows} formulas={[formula]} canManage />);
   const parisien = () => within(screen.getByText("Le Parisien").parentElement!);
-  expect(parisien().getByText("Current signed recipe r3")).toBeTruthy();
+  expect(parisien().getByText("Yield verified r3")).toBeTruthy();
   expect(screen.getByRole("link", { name: "Square allergen check" }).getAttribute("href")).toBe("#square-allergen-panel-title");
 
   ui.rerender(<ChurchSandwichEvidenceOverview rows={[{ ...rows[0], revision: 3 }, rows[1], rows[2]]} formulas={[formula]} canManage />);
-  expect(parisien().getByText("Recipe needs re-signoff")).toBeTruthy();
-  expect(parisien().queryByText(/Current signed recipe/)).toBeNull();
+  expect(parisien().getByText("Yield needs review")).toBeTruthy();
+  expect(parisien().queryByText(/Yield verified/)).toBeNull();
 
   ui.rerender(<ChurchSandwichEvidenceOverview rows={[{ ...rows[0], status: "hold" }, rows[1], rows[2]]} formulas={[formula]} canManage />);
   expect(parisien().getByText("Hold · 10-inch baguette")).toBeTruthy();
-  expect(parisien().getByText("Recipe needs re-signoff")).toBeTruthy();
+  expect(parisien().getByText("Yield needs review")).toBeTruthy();
 
   ui.rerender(<ChurchSandwichEvidenceOverview rows={rows} formulas={[{ ...formula, current: false }]} canManage />);
-  expect(parisien().getByText("Recipe needs re-signoff")).toBeTruthy();
+  expect(parisien().getByText("Yield needs review")).toBeTruthy();
 
   ui.rerender(<ChurchSandwichEvidenceOverview rows={rows} formulas={null} canManage />);
-  expect(screen.getByRole("status").textContent).toContain("Recipe sign-offs are unavailable.");
-  expect(parisien().queryByText("Chef sign-off pending")).toBeNull();
+  expect(screen.getByRole("status").textContent).toContain("Measured yields could not be loaded.");
+  expect(parisien().queryByText("Yield pending")).toBeNull();
   expect(parisien().getByText("3 of 3 ingredient records reviewed")).toBeTruthy();
-  expect(screen.queryByRole("link", { name: "Chef sign-off" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Measured yield" })).toBeNull();
 });
