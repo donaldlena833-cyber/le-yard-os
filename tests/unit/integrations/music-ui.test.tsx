@@ -13,6 +13,8 @@ describe("dashboard music", () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(snapshot)));
     render(<MusicWorkspace />);
     expect(await screen.findByText("Test Track")).toBeTruthy();
+    expect(screen.queryByLabelText("Start time")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Music settings" }));
     expect(screen.getByText(/Reported: 85%/)).toBeTruthy();
     expect(screen.getByLabelText("Start time")).toHaveProperty("value", "06:30");
     expect(screen.getByLabelText("End time")).toHaveProperty("value", "17:00");
@@ -21,6 +23,7 @@ describe("dashboard music", () => {
   it("clears stale music and disables controls after access is lost", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json(snapshot)).mockResolvedValueOnce(Response.json({ message: "Forbidden" }, { status: 403 })));
     render(<MusicWorkspace />); await screen.findByText("Test Track");
+    fireEvent.click(screen.getByRole("button", { name: "Music settings" }));
     fireEvent.click(screen.getByRole("button", { name: "Refresh status" }));
     await waitFor(() => expect(screen.queryByText("Test Track")).toBeNull());
     expect(screen.getByRole("button", { name: "Play music" })).toHaveProperty("disabled", true);
@@ -38,12 +41,14 @@ describe("dashboard music", () => {
     vi.stubGlobal("fetch", fetch); render(<MusicWorkspace />); await screen.findByText("Test Track");
     fireEvent.change(screen.getByLabelText("Volume (%)"), { target: { value: "60" } });
     fireEvent.click(screen.getByRole("button", { name: "Set volume" }));
+    fireEvent.click(screen.getByRole("button", { name: "Music settings" }));
     expect(await screen.findByText(/Reported: 60%/)).toBeTruthy();
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ action: "volume", volume: 60 });
   });
   it("preserves unsaved hours across refresh and persists only on Save", async () => {
     const fetch = vi.fn(async () => Response.json(snapshot)); vi.stubGlobal("fetch", fetch);
     render(<MusicWorkspace />); await screen.findByText("Test Track");
+    fireEvent.click(screen.getByRole("button", { name: "Music settings" }));
     fireEvent.change(screen.getByLabelText("Start time"), { target: { value: "07:00" } });
     fireEvent.click(screen.getByRole("button", { name: "Refresh status" }));
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));

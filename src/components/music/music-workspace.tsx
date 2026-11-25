@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Check, Clock3, Music2, Pause, Play, RefreshCw, Settings2, Volume2 } from "lucide-react";
+import { ArrowUpRight, Check, Clock3, Music2, Pause, Play, RefreshCw, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MUSIC_DEVICE_NAME, musicSnapshot, type MusicRequest, type MusicSnapshot } from "@/lib/integrations/music";
 import { defaultMusicSchedule, MUSIC_TIME_ZONE, musicScheduleSettings, playlistUri, type MusicScheduleSettings } from "@/lib/integrations/music-schedule";
@@ -12,6 +12,7 @@ const timeLabel = (value: string) => new Intl.DateTimeFormat("en-US", { hour: "n
 const checkedLabel = (value: string) => new Intl.DateTimeFormat("en-US", { timeZone: MUSIC_TIME_ZONE, hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
 export function MusicWorkspace({ notice }: { notice?: string }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<MusicSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,36 +94,31 @@ export function MusicWorkspace({ notice }: { notice?: string }) {
   }
 
   return (
-    <section id="music" aria-labelledby="music-title" className="mt-6 scroll-mt-24 overflow-hidden rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 sm:px-6">
-        <div className="flex items-center gap-2.5"><Music2 className="size-4 text-[var(--accent-strong)]" aria-hidden="true" /><h2 id="music-title" className="text-base font-semibold">Music</h2><span className="text-xs text-[var(--ink-faint)]">{MUSIC_DEVICE_NAME}</span></div>
-        <div className="flex items-center gap-3"><span role="status" className="flex items-center gap-2 text-xs text-[var(--ink-soft)]"><span className={`size-1.5 rounded-full ${snapshot?.playing ? "bg-[var(--accent-strong)]" : "bg-[var(--ink-faint)]"}`} />{status}</span><Button size="icon" variant="quiet" aria-label="Refresh status" disabled={busy} onClick={() => void request({ action: "status" })}><RefreshCw className={`size-4 ${busy ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" /></Button></div>
-      </div>
-      <div className="grid gap-5 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" aria-busy={busy}>
-        <div className="min-w-0">
-          <h3 className="truncate text-xl font-semibold tracking-tight">{snapshot?.track?.name ?? (snapshot?.playing ? "Music is playing" : "No track reported")}</h3>
-          <p className="mt-1 text-sm text-[var(--ink-soft)]">{snapshot?.track?.artist || "Play the last session or choose a playlist below."}</p>
-          {snapshot?.track?.url ? <a href={snapshot.track.url} target="_blank" rel="noopener noreferrer" className="focus-ring mt-2 inline-flex min-h-8 items-center gap-1 rounded text-xs text-[var(--ink-soft)] underline underline-offset-4">Open in Spotify<ArrowUpRight className="size-3" aria-hidden="true" /></a> : null}
+    <section id="music" aria-labelledby="music-title" className="mt-3 w-full max-w-md scroll-mt-24">
+      <h2 id="music-title" className="sr-only">Music</h2>
+      <div className="flex h-11 min-w-0 items-center gap-2 text-xs" aria-busy={busy}>
+        <Music2 className={`size-3.5 shrink-0 ${snapshot?.playing ? "text-[var(--accent-strong)]" : "text-[var(--ink-faint)]"}`} aria-hidden="true" />
+        <span role="status" className="sr-only">{MUSIC_DEVICE_NAME}: {status}</span>
+        <div className="min-w-0 flex-1 truncate" title={`${status}${snapshot?.track?.artist ? ` · ${snapshot.track.artist}` : ""}`}>
+          {snapshot?.track?.url ? <a href={snapshot.track.url} target="_blank" rel="noopener noreferrer" className="focus-ring rounded text-[var(--ink-soft)] hover:text-[var(--ink)]">{snapshot.track.name}</a> : <span className="text-[var(--ink-soft)]">{snapshot?.track?.name ?? status}</span>}
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <Button disabled={!controls || snapshot?.otherDevicePlaying} aria-label={snapshot?.playing ? "Pause music" : "Play music"} onClick={() => void request({ action: snapshot?.playing ? "pause" : "play" })}>{snapshot?.playing ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}{snapshot?.playing ? "Pause" : "Play"}</Button>
-          <form className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none" onSubmit={(event) => { event.preventDefault(); void request({ action: "volume", volume }); }}>
-            <label htmlFor="music-volume" className="sr-only">Volume (%)</label><Volume2 className="size-4 shrink-0 text-[var(--ink-faint)]" aria-hidden="true" />
-            <input id="music-volume" type="range" min="0" max="100" step="1" value={volume} disabled={!controls} onChange={(event) => { volumeEdited.current = true; setVolume(Number(event.target.value)); }} className="focus-ring min-h-11 w-24 min-w-12 flex-1 accent-[var(--accent-strong)] sm:w-28 sm:flex-none" />
-            <output htmlFor="music-volume" className="w-9 text-right text-xs tabular-nums">{volume}%</output><Button variant="quiet" type="submit" size="icon" aria-label="Set volume" disabled={!controls || snapshot?.device.volume === volume}><Check className="size-4" aria-hidden="true" /></Button>
-          </form>
-        </div>
+        <Button variant="quiet" size="icon" className="!size-8 !min-h-8 shadow-none" title={snapshot?.playing ? "Pause" : "Play"} disabled={!controls || snapshot?.otherDevicePlaying} aria-label={snapshot?.playing ? "Pause music" : "Play music"} onClick={() => void request({ action: snapshot?.playing ? "pause" : "play" })}>{snapshot?.playing ? <Pause className="size-3.5" aria-hidden="true" /> : <Play className="size-3.5" aria-hidden="true" />}</Button>
+        <form className="flex shrink-0 items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); void request({ action: "volume", volume }); }}>
+          <label htmlFor="music-volume" className="sr-only">Volume (%)</label>
+          <input id="music-volume" type="range" min="0" max="100" step="1" value={volume} disabled={!controls} onChange={(event) => { volumeEdited.current = true; setVolume(Number(event.target.value)); }} className="focus-ring h-8 w-16 accent-[var(--accent-strong)]" />
+          <output htmlFor="music-volume" className="w-7 text-right text-[10px] tabular-nums text-[var(--ink-faint)]">{volume}%</output>
+          {snapshot?.device.volume !== volume ? <Button variant="quiet" type="submit" size="icon" className="!size-7 !min-h-7 shadow-none" aria-label="Set volume" disabled={!controls}><Check className="size-3" aria-hidden="true" /></Button> : null}
+        </form>
+        <Button variant="quiet" size="icon" className="!size-8 !min-h-8 shadow-none" aria-label="Music settings" aria-expanded={settingsOpen} aria-controls="music-settings" onClick={() => setSettingsOpen((open) => !open)}><Settings2 className="size-3.5" aria-hidden="true" /></Button>
       </div>
-      <div className="space-y-1 px-5 pb-4 text-xs leading-5 text-[var(--ink-soft)] sm:px-6">
-        {notice ? <p role="status">{notice}</p> : null}
-        {error ? <p role="alert" className="text-[var(--danger)]">{error}</p> : null}
-        {feedback ? <p role="status">{feedback}</p> : null}
-        {snapshot && snapshot.status !== "connected" || snapshot?.device.restricted || snapshot?.otherDevicePlaying || connected && !snapshot.device.available ? <p>{snapshot?.message}</p> : null}
-        <p>{snapshot?.device.volume != null ? `Reported: ${snapshot.device.volume}%` : "Volume not reported"}{snapshot?.checkedAt ? ` · Checked ${checkedLabel(snapshot.checkedAt)}` : ""}</p>
-      </div>
-      <details className="group border-t border-[var(--line)]">
-        <summary className="focus-ring flex min-h-14 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-5 text-sm sm:px-6"><span className="flex items-center gap-2"><Clock3 className="size-4 text-[var(--ink-faint)]" aria-hidden="true" />{saved?.settings.enabled ? `${timeLabel(saved.settings.start)} – ${timeLabel(saved.settings.stop)}` : "Automatic playback off"}<span className="text-xs text-[var(--ink-faint)]">New York</span></span><span className="flex items-center gap-2 text-xs text-[var(--ink-soft)]">Edit schedule<Settings2 className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" /></span></summary>
-        <form onSubmit={saveSchedule} className="space-y-5 px-5 pb-6 pt-2 sm:px-6">
+      {error ? <p role="alert" className="truncate text-xs text-[var(--danger)]" title={error}>{error}</p> : null}
+      {settingsOpen ? <div id="music-settings" className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--paper-strong)]">
+        <div className="flex items-center justify-between gap-3 px-4 py-2 text-xs text-[var(--ink-soft)]"><span>{status} · {snapshot?.device.volume != null ? `Reported: ${snapshot.device.volume}%` : "Volume not reported"}</span><Button size="icon" variant="quiet" className="!size-8 !min-h-8 shadow-none" aria-label="Refresh status" disabled={busy} onClick={() => void request({ action: "status" })}><RefreshCw className={`size-3.5 ${busy ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" /></Button></div>
+        {notice || feedback ? <p role="status" className="px-4 pb-3 text-xs text-[var(--ink-soft)]">{feedback ?? notice}</p> : null}
+        {snapshot && snapshot.status !== "connected" || snapshot?.device.restricted || snapshot?.otherDevicePlaying || connected && !snapshot.device.available ? <p className="px-4 pb-3 text-xs text-[var(--ink-soft)]">{snapshot?.message}</p> : null}
+      <details open className="group border-t border-[var(--line)]">
+        <summary className="focus-ring flex min-h-11 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 text-xs"><span className="flex items-center gap-2"><Clock3 className="size-4 text-[var(--ink-faint)]" aria-hidden="true" />{saved?.settings.enabled ? `${timeLabel(saved.settings.start)} – ${timeLabel(saved.settings.stop)}` : "Automatic playback off"}<span className="text-xs text-[var(--ink-faint)]">New York</span></span><span className="flex items-center gap-2 text-xs text-[var(--ink-soft)]">Edit schedule<Settings2 className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" /></span></summary>
+        <form onSubmit={saveSchedule} className="space-y-4 px-4 pb-4 pt-2">
           <label className="flex min-h-11 items-center gap-3 text-sm font-medium"><input type="checkbox" checked={settings.enabled} onChange={(event) => setSettings({ ...settings, enabled: event.target.checked })} className="size-4 accent-[var(--accent-strong)]" />Start and stop automatically</label>
           <div className="grid gap-4 sm:grid-cols-3"><label className="space-y-2 text-xs font-medium"><span>Start time</span><input type="time" required value={settings.start} onChange={(event) => setSettings({ ...settings, start: event.target.value })} className={field} /></label><label className="space-y-2 text-xs font-medium"><span>End time</span><input type="time" required value={settings.stop} onChange={(event) => setSettings({ ...settings, stop: event.target.value })} className={field} /></label><label className="space-y-2 text-xs font-medium"><span>Starting volume (%)</span><input type="number" required min="0" max="100" step="1" value={Number.isNaN(settings.volume) ? "" : settings.volume} onChange={(event) => setSettings({ ...settings, volume: event.target.valueAsNumber })} className={field} /></label></div>
           <fieldset><legend className="mb-2 text-xs font-medium">Days</legend><div className="flex flex-wrap gap-1.5">{days.map((day, index) => <button key={day} type="button" aria-pressed={settings.days.includes(index)} onClick={() => setSettings({ ...settings, days: settings.days.includes(index) ? settings.days.filter((value) => value !== index) : [...settings.days, index].sort() })} className={`focus-ring min-h-11 min-w-11 rounded-xl px-3 text-xs font-medium transition-colors ${settings.days.includes(index) ? "bg-[var(--accent-strong)] text-white" : "bg-[var(--paper)] text-[var(--ink-soft)]"}`}>{day}</button>)}</div></fieldset>
@@ -132,14 +128,15 @@ export function MusicWorkspace({ notice }: { notice?: string }) {
         </form>
       </details>
       <details open={needsConnection || undefined} className="border-t border-[var(--line)]">
-        <summary className="focus-ring flex min-h-12 cursor-pointer items-center justify-between px-5 text-xs text-[var(--ink-soft)] sm:px-6"><span>Spotify connection</span><span>{connected ? "Connected" : "Manage"}</span></summary>
-        <div className="space-y-3 px-5 pb-5 sm:px-6">
+        <summary className="focus-ring flex min-h-11 cursor-pointer items-center justify-between px-4 text-xs text-[var(--ink-soft)]"><span>Spotify connection</span><span>{connected ? "Connected" : "Manage"}</span></summary>
+        <div className="space-y-3 px-4 pb-4">
           {!connected ? <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); void request({ action: "connect", clientId: clientId.trim() }); }}><label className="flex-1 space-y-2 text-xs font-medium"><span>Spotify app client ID</span><input value={clientId} required pattern="[a-f0-9]{32}" maxLength={32} autoComplete="off" spellCheck={false} onChange={(event) => setClientId(event.target.value)} className={field} /></label><Button type="submit" disabled={busy || snapshot?.status === "setup_needed"}>{snapshot?.clientId ? "Reconnect Spotify" : "Connect Spotify"}<ArrowUpRight className="size-4" aria-hidden="true" /></Button></form> : null}
           {snapshot?.clientId ? <Button variant="quiet" size="sm" disabled={busy} onClick={() => void request({ action: "disconnect" })}>Disconnect Spotify and remove schedule</Button> : null}
           <p className="text-xs leading-5 text-[var(--ink-soft)]">Only the Le Yard speaker is controlled. Music playing on another device is left alone.</p>
           <p className="text-xs leading-5 text-[var(--ink-faint)]">{!clientId ? <>Register the Operations callback in <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Spotify Developer Dashboard</a>: <span className="break-all">https://operations.leyardny.com/api/workspace/music/callback</span>. </> : null}<a href="https://support.spotify.com/us/article/spotify-public-commercial-use/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Spotify usage policy</a></p>
         </div>
       </details>
+      </div> : null}
     </section>
   );
 }
