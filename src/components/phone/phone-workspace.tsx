@@ -924,7 +924,7 @@ export function PhoneWorkspace({
                         <strong>{displayNumber(phone)}</strong>
                         <span>
                           {m.direction === "outbound" ? "You: " : ""}
-                          {m.body || "Attachment"}
+                          {m.direction === "inbound" && m.errorCode === 30038 ? "Verification code blocked by Twilio" : m.body || "Attachment"}
                         </span>
                       </span>
                       <time
@@ -1005,6 +1005,15 @@ export function PhoneWorkspace({
                           >
                             <div className={s.bubble}>
                               <p>{m.body}</p>
+                              {m.direction === "inbound" && m.errorCode === 30038 ? (
+                                <p role="status">
+                                  <strong>Verification code blocked by Twilio</strong>
+                                  <br />
+                                  Twilio removed the code before delivering this message.
+                                  Le Yard cannot recover it. Ask the sender to verify by
+                                  voice call, email, or a mobile number instead.
+                                </p>
+                              ) : null}
                               {Array.from(
                                 { length: Math.min(m.mediaCount, 10) },
                                 (_, i) => (

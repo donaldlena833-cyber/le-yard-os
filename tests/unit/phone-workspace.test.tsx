@@ -280,3 +280,25 @@ it("keeps preview mode read-only even when a valid destination is entered", () =
   ).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
 });
+
+
+it("explains carrier-redacted OTPs and preserves complete verification messages", async () => {
+  const messages = [
+    { sid: "SMfiltered", from: "+12125550123", to: model.business,
+      body: "**Your verification code is**", status: "failed", direction: "inbound",
+      at: "2026-11-25T18:16:00Z", mediaCount: 0, errorCode: 30038 },
+    { sid: "SMcomplete", from: "+12125550123", to: model.business,
+      body: "Your verification code is 123456.\nExpires in 10 minutes.", status: "received", direction: "inbound",
+      at: "2026-11-25T18:26:00Z", mediaCount: 0, errorCode: null },
+  ];
+  vi.mocked(fetch).mockImplementation(async () => Response.json({ ...model, messages }));
+  render(<PhoneWorkspace live defaultStaff="donald" />);
+  await waitFor(() => expect(screen.getByText(/Updated/)).toBeTruthy());
+  fireEvent.click(screen.getByRole("button", { name: "Messages" }));
+  fireEvent.click(within(screen.getByLabelText("Conversations")).getByRole("button", { name: /Your verification code is 123456/ }));
+  const thread = within(screen.getByLabelText("Selected conversation"));
+  expect(await thread.findByText("Verification code blocked by Twilio")).toBeTruthy();
+  expect(thread.getByText(/Twilio removed the code/).textContent).toContain("voice call, email, or a mobile number");
+  expect(thread.getByText(/Your verification code is 123456/).textContent).toBe(messages[1].body);
+  expect(thread.getAllByText("Verification code blocked by Twilio")).toHaveLength(1);
+});
