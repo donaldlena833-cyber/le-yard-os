@@ -147,7 +147,10 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
           return { ...emptySnapshot("unavailable", "Request sent to Spotify, but the result could not be checked. Refresh before retrying.", clientId), result };
         }
       }
-      if ((input.action === "play" && player.playing && (options?.volume === undefined || player.device.volume === options.volume)
+      // Echo can report 84 after accepting 85. Allow one point of device rounding
+      // for a scheduled start; explicit volume commands still require an exact match.
+      const startVolumeMatches = options?.volume === undefined || (player.device.volume !== null && Math.abs(player.device.volume - options.volume) <= 1);
+      if ((input.action === "play" && player.playing && startVolumeMatches
         && (!options?.playlist || (playback?.context?.uri === options.playlist && playback.repeat_state === "context")))
         || (input.action === "pause" && player.device.available && !player.playing)
         || (input.action === "volume" && player.device.volume === input.volume)) {

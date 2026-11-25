@@ -96,6 +96,12 @@ describe("music provider command safety", () => {
     expect(result.result).toBe("confirmed");
     expect(fetcher.mock.calls.filter(([, init]) => init.method === "PUT").map(([url]) => url)).toEqual(["https://api.spotify.com/v1/me/player/volume?device_id=speaker&volume_percent=85"]);
   });
+  it.each([[84, "confirmed"], [83, "accepted"]])("handles speaker rounding at %i without hiding the reported volume", async (reported, expected) => {
+    fetcher.mockImplementation(player(reported));
+    const result = await runMusicRequest(scope, { action: "play" }, { volume: 85, playlist });
+    expect(result.result).toBe(expected);
+    expect(result.device.volume).toBe(reported);
+  });
   it("resumes a paused selected playlist without resetting its track or position", async () => {
     let playing = false;
     fetcher.mockImplementation((url: string, init: RequestInit) => {
