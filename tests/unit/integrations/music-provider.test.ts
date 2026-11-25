@@ -73,6 +73,22 @@ describe("music provider command safety", () => {
     expect(JSON.parse(writes[0][1].body)).toEqual({ device_ids: ["speaker"], play: false });
     expect(writes[1][0]).toContain("/play?device_id=speaker");
   });
+  it("can start the selected playlist when activation has no retained playback item", async () => {
+    let active = false;
+    let playing = false;
+    fetcher.mockImplementation((url: string, init: RequestInit) => {
+      if (init.method === "PUT") {
+        if (url.endsWith("/me/player")) active = true;
+        if (url.includes("/play?")) playing = true;
+        return new Response(null, { status: 204 });
+      }
+      return Response.json(url.endsWith("/devices") ? { devices: [{ ...device, is_active: active }] }
+        : playing ? { device, is_playing: true } : {});
+    });
+    const result = await runMusicRequest(scope, { action: "play" }, { playlist: "spotify:playlist:1234567890123456789012" });
+    expect(result.result).toBe("confirmed");
+    expect(JSON.parse(fetcher.mock.calls.find(([url, init]) => init.method === "PUT" && url.includes("/play?"))![1].body)).toEqual({ context_uri: "spotify:playlist:1234567890123456789012" });
+  });
   it("does not restart the playlist when an already playing start is retried", async () => {
     fetcher.mockImplementation(player(85));
     const result = await runMusicRequest(scope, { action: "play" }, { volume: 85, playlist: "spotify:playlist:1234567890123456789012" });

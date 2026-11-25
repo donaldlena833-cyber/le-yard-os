@@ -117,7 +117,8 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
           await new Promise((resolve) => setTimeout(resolve, 650));
           const transferred = await readPlayer(token);
           player = projectMusicPlayback(transferred.devices, transferred.playback);
-          if (player.otherDevicePlaying || !player.device.active) throw new MusicError("Le Yard has not become the active speaker. Select it in Spotify and try again.");
+          const activeTarget = targetMusicDevice(transferred.devices);
+          if (player.otherDevicePlaying || (!player.device.active && !(activeTarget?.id === target.id && activeTarget.is_active))) throw new MusicError("Le Yard has not become the active speaker. Select it in Spotify and try again.");
         }
         if (input.action === "play" && options?.volume !== undefined) {
           if (target.supports_volume === false) throw new MusicError("Spotify cannot adjust this speaker’s volume.");
