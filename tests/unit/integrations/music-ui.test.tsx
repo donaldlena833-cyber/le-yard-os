@@ -45,6 +45,14 @@ describe("dashboard music", () => {
     expect(await screen.findByText(/Reported: 60%/)).toBeTruthy();
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ action: "volume", volume: 60 });
   });
+  it("offers account switching without disconnecting or deleting the saved schedule", async () => {
+    const fetch = vi.fn(async () => Response.json(snapshot)); vi.stubGlobal("fetch", fetch);
+    render(<MusicWorkspace />); await screen.findByText("Test Track");
+    fireEvent.click(screen.getByRole("button", { name: "Music settings" }));
+    expect(screen.getByText("Switch Spotify account")).toBeTruthy();
+    expect(screen.getByLabelText("Start time")).toHaveProperty("value", "06:30");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it("preserves unsaved hours across refresh and persists only on Save", async () => {
     const fetch = vi.fn(async () => Response.json(snapshot)); vi.stubGlobal("fetch", fetch);
     render(<MusicWorkspace />); await screen.findByText("Test Track");
