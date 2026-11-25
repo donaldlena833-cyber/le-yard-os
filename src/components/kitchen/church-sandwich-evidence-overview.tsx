@@ -16,9 +16,8 @@ export function ChurchSandwichEvidenceOverview({ rows, formulas, canManage }: {
   const byRecipe = new Map(formulas?.map((formula) => [formula.recipeKey, formula]));
 
   return (
-    <section aria-labelledby="church-sandwich-evidence-heading" className="mt-3 rounded-xl border border-[var(--line)] p-3 sm:p-4">
+    <section aria-labelledby="church-sandwich-evidence-heading" className="mt-3 border-t border-[var(--line)] pt-3">
       <h3 id="church-sandwich-evidence-heading" className="scroll-mt-24 text-sm font-semibold">Sandwich evidence by recipe</h3>
-      <p className="mt-1 text-sm text-[var(--ink-soft)]">Check supplier labels, batch deadlines and the register item.</p>
       {formulas === null && <p role="status" className="mt-2 text-sm text-[var(--ink-soft)]">Measured yields could not be loaded.</p>}
       <nav aria-label="Sandwich evidence checks" className="mt-2 flex flex-wrap gap-x-4 gap-y-2 text-xs">
         <a href="#church-sandwich-components" className={linkStyle}>Supplier label records</a>
@@ -36,7 +35,7 @@ export function ChurchSandwichEvidenceOverview({ rows, formulas, canManage }: {
           const held = records.filter(({ evidence }) => evidence?.status === "hold").map(({ ingredient }) => ingredient);
           const reviewed = records.filter(({ evidence }) => evidence?.status === "reviewed");
           return (
-            <div key={recipe.key} className="min-w-0 rounded-lg border border-[var(--line)] p-3">
+            <div key={recipe.key} className="min-w-0 border-l border-[var(--line)] pl-2">
               <dt className="text-sm font-semibold">{recipe.name}</dt>
               <dd className="mt-1 space-y-1 text-xs text-[var(--ink-soft)]">
                 {formula && signed ? <StatusPill tone="positive" size="sm">Yield verified r{formula.revision}</StatusPill>

@@ -631,9 +631,9 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, canPrint 
   }
 
   return (
-    <section aria-labelledby="church-batch-labels-heading" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
+    <section aria-labelledby="church-batch-labels-heading" className="scroll-mt-24">
       <h2 id="church-batch-labels-heading" className="text-lg font-semibold">Batch labels</h2>
-      <p className="mt-2 text-sm text-[var(--ink-soft)]">Record the exact supplier lot, handling time and discard time for Church Street batches. Verify the reviewed supplier label and attach the label to the physical container.</p>
+      <p className="mt-2 text-sm text-[var(--ink-soft)]">Verify the supplier label, record the lot and discard time, and label the container.</p>
       {canRecord && <RecordBatchLabel evidence={evidence} onSave={saved} />}
       {resolutionMessage && <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{resolutionMessage}</p>}
       {queue !== undefined && (
@@ -666,7 +666,7 @@ export function ChurchBatchLabelsPanel({ evidence, records, canRecord, canPrint 
         </section>
       )}
       <section className="mt-4 border-t border-[var(--line)] pt-3" aria-labelledby="church-batch-activity-heading">
-        <h3 id="church-batch-activity-heading" className="text-sm font-semibold">Recent batch label activity</h3>
+        <h3 id="church-batch-activity-heading" className="text-sm font-semibold">Recent labels</h3>
         {activity.length === 0 ? <p className="mt-2 text-xs text-[var(--ink-soft)]">No other recent batch labels.</p> : (
           <div className="mt-1 divide-y divide-[var(--line)]">
             {activityRows.map((row) => renderBatch(row, canRecord && queue !== undefined))}

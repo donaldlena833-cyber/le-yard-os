@@ -23,13 +23,13 @@ const reviewed: ChurchIngredientEvidence = {
 };
 
 function wholePanel() {
-  return within(screen.getByRole("region", { name: "Supplier label evidence" }));
+  return within(screen.getByRole("region", { name: "Supplier labels" }));
 }
 
 function openBreadForm() {
   const panel = wholePanel();
-  const register = panel.getByText("Sandwich components").closest("details")!;
-  fireEvent.click(within(register).getByText("Sandwich components"));
+  const register = panel.getByText("Ingredient records").closest("details")!;
+  fireEvent.click(within(register).getByText("Ingredient records"));
   const bread = within(register).getByText("10-inch baguette", { exact: true }).closest("details")!;
   fireEvent.click(within(bread).getByText("10-inch baguette"));
   return { bread, form: within(within(bread).getByRole("form", { name: "10-inch baguette supplier evidence" })) };
@@ -43,7 +43,7 @@ afterEach(() => {
 it("defaults the 16 component records to pending and captures an incomplete label as a draft", async () => {
   vi.mocked(saveChurchSandwichIngredientEvidenceAction).mockResolvedValue({ ok: true, mode: "live", persisted: true, data: pending });
   render(<ChurchSupplierEvidencePanel formulas={[]} initialRows={[]} canManage />);
-  const register = wholePanel().getByText("Sandwich components").closest("details")!;
+  const register = wholePanel().getByText("Ingredient records").closest("details")!;
   expect(within(register).getAllByText("Pending", { selector: "summary span" })).toHaveLength(16);
   const { form } = openBreadForm();
   fireEvent.change(form.getByLabelText("Supplier, brand and exact SKU"), { target: { value: " Bakery B-061 " } });
@@ -89,7 +89,7 @@ it("requires complete evidence for review and updates the recipe overview after 
 
 it("keeps read-only records visible and blocks saves against a changed revision", () => {
   const ui = render(<ChurchSupplierEvidencePanel formulas={[]} initialRows={[reviewed]} canManage={false} />);
-  let register = wholePanel().getByText("Sandwich components").closest("details")!;
+  let register = wholePanel().getByText("Ingredient records").closest("details")!;
   expect(within(register).queryByRole("form", { hidden: true })).toBeNull();
   expect(within(register).getByText(reviewed.sourceReference!)).toBeTruthy();
 
@@ -102,6 +102,6 @@ it("keeps read-only records visible and blocks saves against a changed revision"
   expect(saveChurchSandwichIngredientEvidenceAction).not.toHaveBeenCalled();
   fireEvent.click(form.getByRole("button", { name: "Load saved evidence" }));
   expect((form.getByLabelText("Supplier, brand and exact SKU") as HTMLInputElement).value).toBe("New lot B-062");
-  register = wholePanel().getByText("Sandwich components").closest("details")!;
+  register = wholePanel().getByText("Ingredient records").closest("details")!;
   expect(within(register).getByText("Reviewed", { selector: "summary span" })).toBeTruthy();
 });

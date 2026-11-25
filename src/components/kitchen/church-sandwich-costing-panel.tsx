@@ -122,7 +122,7 @@ export function ChurchSandwichCostingPanel({ formulas, evidence, costs, canRecor
     cost.ingredientKey === ingredientKey && cost.evidenceRevision === revision && cost.supplierSku === supplierSku));
 
   return (
-    <details className="my-4 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-4 sm:p-5">
+    <details className="mt-3 border-t border-[var(--line)] pt-3">
       <summary className="focus-ring cursor-pointer rounded-md text-base font-semibold">Invoice-backed costs</summary>
       {summaries ? (
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">

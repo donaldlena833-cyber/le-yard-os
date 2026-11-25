@@ -6,20 +6,12 @@ const pdfs = [
   { slug: "supplier-intake", label: "Supplier label intake sheet" },
   { slug: "batch-labels", label: "Printable batch labels" },
 ] as const;
-const kitchenLinks = [
-  { href: "#church-sandwich-recipes-title", label: "Current sandwich recipes" },
-  { href: "#church-sandwich-evidence-heading", label: "Sandwich evidence by recipe" },
-  { href: "#church-batch-queue-heading", label: "Open batches by discard time" },
-  { href: "#church-sandwich-timing-heading", label: "Sandwich timing runs" },
-] as const;
-const linkStyle = "focus-ring inline-block rounded font-semibold underline underline-offset-2";
+const linkStyle = "focus-ring inline-flex min-h-10 items-center rounded text-sm underline underline-offset-2";
 
 export function ChurchSandwichStaffResources() {
   return (
-    <section id="church-sandwich-staff-resources" aria-labelledby="church-sandwich-staff-resources-heading" className="mb-6 scroll-mt-20 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-      <h2 id="church-sandwich-staff-resources-heading" className="text-lg font-semibold">Sandwich station training</h2>
-      <p className="mt-2 text-sm text-[var(--ink-soft)]">Use the current sandwich recipes for portions. The training guide covers batch labels and station practice.</p>
-      <ul aria-label="Training PDFs" className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+    <section id="church-sandwich-staff-resources" aria-label="Sandwich station guides" className="scroll-mt-24">
+      <ul className="flex flex-wrap gap-x-5 gap-y-1">
         {pdfs.map(({ slug, label }) => (
           <li key={slug}>
             <a href={`${resourcePath}/${slug}`} target="_blank" rel="noopener noreferrer" className={linkStyle}>
@@ -27,13 +19,8 @@ export function ChurchSandwichStaffResources() {
             </a>
           </li>
         ))}
+        <li><Link href="/tasks?tab=checklists" className={linkStyle}>Training checklists</Link></li>
       </ul>
-      <nav aria-label="Kitchen evidence" className="mt-3 border-t border-[var(--line)] pt-3">
-        <ul className="flex flex-wrap gap-x-5 gap-y-2 text-xs">
-          {kitchenLinks.map(({ href, label }) => <li key={href}><a href={href} className={linkStyle}>{label}</a></li>)}
-          <li><Link href="/tasks?tab=checklists" className={linkStyle}>Staff training checklists</Link></li>
-        </ul>
-      </nav>
     </section>
   );
 }

@@ -211,7 +211,7 @@ it("sorts the queue by deadline, closes an exactly due batch after authenticated
   vi.mocked(resolveChurchIngredientBatchAction).mockResolvedValue({ ok: true, mode: "live", persisted: true, data: discarded });
   render(<ChurchBatchLabelsPanel evidence={[evidence]} records={[recorded, ...latest]} queue={{ batches: [recorded, due], total: 4 }} asOf={asOf} canRecord />);
   const queue = within(screen.getByRole("region", { name: "Open batches by discard time" }));
-  const history = within(screen.getByRole("region", { name: "Recent batch label activity" }));
+  const history = within(screen.getByRole("region", { name: "Recent labels" }));
   expect(queue.getByText(/4 open batches/)).toBeTruthy();
   expect(queue.getByText(/Showing 2 of 4/)).toBeTruthy();
   const queueRows = queue.getAllByText(/French-style ham · HAM-/);

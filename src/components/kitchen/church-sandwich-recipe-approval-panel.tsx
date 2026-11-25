@@ -219,8 +219,8 @@ export function ChurchSandwichRecipeApprovalPanel({ formulas, evidence, canManag
   const byIngredient = new Map(evidence.map((row) => [row.ingredientKey, row]));
 
   return (
-    <details className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-      <summary id="sandwich-approval-title" className="focus-ring cursor-pointer scroll-mt-24 rounded-md text-base font-semibold">Supplier labels and measured yield</summary>
+    <details className="border-t border-[var(--line)] pt-3">
+      <summary id="sandwich-approval-title" className="focus-ring cursor-pointer scroll-mt-24 rounded-md text-base font-semibold">Measured yield</summary>
       <p className="mt-2 text-sm text-[var(--ink-soft)]">Record actual prep yield after reviewing supplier labels.</p>
       <div className="mt-3 divide-y divide-[var(--line)] border-t border-[var(--line)]">
         {churchSandwichBenchRecipes.map((recipe) => (

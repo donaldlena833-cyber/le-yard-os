@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { churchSandwichBenchRecipes } from "@/lib/kitchen/church-sandwich-bench";
 import {
   churchSandwichPortionGrams,
@@ -12,16 +13,18 @@ const approvedDate = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", tim
 
 export function ChurchSandwichStandardPanel() {
   return (
-    <section aria-labelledby="church-sandwich-recipes-title" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-      <h2 id="church-sandwich-recipes-title" className="scroll-mt-24 text-lg font-semibold">Sandwich recipes</h2>
-      <p className="mt-1 text-sm text-[var(--ink-soft)]">
+    <div id="church-sandwich-recipes-title" className="scroll-mt-24">
+      <p className="text-xs text-[var(--ink-soft)]">
         Approved by {churchSandwichStandard.approvedBy} · <time dateTime={churchSandwichStandard.approvedOn}>{approvedDate.format(new Date(churchSandwichStandard.approvedOn))}</time>
       </p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-2 divide-y divide-[var(--line)]">
         {churchSandwichBenchRecipes.map((recipe) => (
-          <article key={recipe.key} className="min-w-0 rounded-xl border border-[var(--line)] p-3">
-            <h3 className="text-sm font-semibold">{recipe.name}</h3>
-            <table aria-label={`${recipe.name} portions`} className="mt-2 w-full text-left text-xs tabular-nums">
+          <details key={recipe.key} className="group/recipe">
+            <summary className="focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md text-sm font-medium [&::-webkit-details-marker]:hidden">
+              {recipe.name}
+              <ChevronDown aria-hidden="true" className="mr-1 size-4 shrink-0 text-[var(--ink-soft)] group-open/recipe:rotate-180" />
+            </summary>
+            <table aria-label={`${recipe.name} portions`} className="w-full max-w-[32rem] text-left text-sm tabular-nums">
               <thead className="text-[var(--ink-soft)]">
                 <tr className="border-b border-[var(--line)]">
                   <th scope="col" className="pb-1 pr-2 font-normal">Ingredient</th>
@@ -43,33 +46,43 @@ export function ChurchSandwichStandardPanel() {
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 border-t border-[var(--line)] pt-2 text-xs text-[var(--ink-soft)]">{recipe.build}</p>
-          </article>
+            <p className="mb-3 mt-2 text-sm text-[var(--ink-soft)]">{recipe.build}</p>
+          </details>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
 
 export function ChurchSandwichQuotedCosts() {
   const { bread, meat } = churchSandwichQuoteSources;
   return (
-    <section aria-labelledby="church-sandwich-costing-title" className="my-4 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-4 sm:p-5">
-      <h2 id="church-sandwich-costing-title" className="scroll-mt-24 text-base font-semibold">Sandwich costs</h2>
-      <p className="mt-1 text-xs text-[var(--ink-soft)]">Quoted subtotals per sandwich. Prep loss and unpriced ingredients are excluded.</p>
-      <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        {churchSandwichBenchRecipes.map((recipe) => {
-          const { subtotal: breakfast, missing } = estimateChurchSandwichCost(recipe, 6);
-          const { subtotal: lunch } = estimateChurchSandwichCost(recipe, 10);
-          return (
-            <li key={recipe.key} className="rounded-lg border border-[var(--line)] px-3 py-2 text-sm">
-              <p className="font-semibold">{recipe.name}</p>
-              <p className="tabular-nums">6 in {money.format(breakfast)} · 10 in {money.format(lunch)}</p>
-              {missing.length > 0 && <p className="text-xs text-[var(--ink-soft)]">Price needed for {missing.join(", ")}</p>}
-            </li>
-          );
-        })}
-      </ul>
+    <section id="church-sandwich-costing-title" aria-label="Quoted sandwich costs" className="scroll-mt-24">
+      <p className="text-xs text-[var(--ink-soft)]">Quoted subtotals before prep loss and missing prices.</p>
+      <table aria-label="Sandwich cost estimates by size" className="mt-2 w-full text-left text-sm tabular-nums">
+        <thead className="text-xs text-[var(--ink-soft)]">
+          <tr className="border-b border-[var(--line)]">
+            <th scope="col" className="py-2 pr-2 font-normal">Sandwich</th>
+            {churchSandwichSizes.map((size) => <th key={size} scope="col" className="whitespace-nowrap py-2 pl-3 text-right font-normal">{size} in</th>)}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--line)]">
+          {churchSandwichBenchRecipes.map((recipe) => {
+            const { subtotal: breakfast, missing } = estimateChurchSandwichCost(recipe, 6);
+            const { subtotal: lunch } = estimateChurchSandwichCost(recipe, 10);
+            return (
+              <tr key={recipe.key} className="align-top">
+                <th scope="row" className="py-2 pr-2 text-left font-medium">
+                  {recipe.name}
+                  {missing.length > 0 && <p className="text-xs font-normal text-[var(--ink-soft)]">Unpriced · {missing.join(", ")}</p>}
+                </th>
+                <td className="py-2 pl-3 text-right">{money.format(breakfast)}</td>
+                <td className="py-2 pl-3 text-right">{money.format(lunch)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
       <details className="mt-3 border-t border-[var(--line)] pt-3 text-xs text-[var(--ink-soft)]">
         <summary className="focus-ring cursor-pointer rounded-md text-sm font-semibold text-[var(--ink)]">Quotes and bread yield</summary>
         <ul className="mt-2 space-y-1">

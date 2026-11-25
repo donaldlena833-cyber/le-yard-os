@@ -212,9 +212,9 @@ export function ChurchSquareAllergenPanel({ formulas, evidence, registerChecks }
   }
 
   return (
-    <section aria-labelledby="square-allergen-panel-title" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
+    <section aria-labelledby="square-allergen-panel-title" className="scroll-mt-24 border-t border-[var(--line)] pt-4">
       <h2 id="square-allergen-panel-title" className="text-lg font-semibold">Square allergen check</h2>
-      <p className="mt-2 text-sm text-[var(--ink-soft)]">Review native Square item tags beside supplier notes for the current signed recipe. Use the reviewed supplier labels and kitchen procedures when answering allergy questions.</p>
+      <p className="mt-2 text-sm text-[var(--ink-soft)]">Compare Square tags with verified supplier labels.</p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button variant="secondary" size="sm" disabled={state.status === "loading"} onClick={() => void checkCatalog()}>
           {state.status === "loading" ? "Checking Square…" : state.status === "idle" ? "Check Square allergen tags" : "Check Square tags again"}
@@ -224,7 +224,7 @@ export function ChurchSquareAllergenPanel({ formulas, evidence, registerChecks }
         </p>
       </div>
       <p className="mt-3 text-xs text-[var(--ink-soft)]">
-        Register checks record what an operator saw on a specific device. Record the guest menu display and whether a mock allergy note reached the kitchen separately for each channel.{" "}
+        During rehearsal, check the register tile and allergy-note routing.{" "}
         <Link href="/tasks?tab=checklists" className="focus-ring rounded font-semibold underline underline-offset-2">Open Operations Checklists</Link>
       </p>
       {registerChecks === null && <p className="mt-2 text-sm text-[var(--ink-soft)]">Register check records could not be loaded. Reload Kitchen to try again.</p>}

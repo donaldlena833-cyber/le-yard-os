@@ -23,8 +23,8 @@ const verger: ChurchAvailabilityRecipe = {
 
 afterEach(cleanup);
 
-async function showWorksheet(approvedRecipes: readonly ChurchAvailabilityRecipe[] | null) {
-  const worksheet = await ChurchCateringPrep({ data: Promise.resolve({ state: "ready", days: [day, later] }), approvedRecipes: Promise.resolve(approvedRecipes) });
+function showWorksheet(approvedRecipes: readonly ChurchAvailabilityRecipe[] | null) {
+  const worksheet = ChurchCateringPrep({ data: { state: "ready", days: [day, later] }, approvedRecipes });
   render(worksheet);
   const first = screen.getByText("Friday, November 20, 2026").closest("details")!;
   const second = screen.getByText("Saturday, November 21, 2026").closest("details")!;
@@ -32,8 +32,8 @@ async function showWorksheet(approvedRecipes: readonly ChurchAvailabilityRecipe[
   return { first, second, bench, day: within(first), trial: within(bench) };
 }
 
-it("shows only measured quantities in the open recipe worksheet and keeps trial quantities collapsed", async () => {
-  const view = await showWorksheet([parisien, verger]);
+it("shows only measured quantities in the open recipe worksheet and keeps trial quantities collapsed", () => {
+  const view = showWorksheet([parisien, verger]);
   expect(view.first.open).toBe(true);
   expect(view.second.open).toBe(false);
   expect(view.bench.open).toBe(false);
@@ -48,29 +48,27 @@ it("shows only measured quantities in the open recipe worksheet and keeps trial 
   expect(view.trial.getByText(/Trial assembly time about 3 min/)).toBeTruthy();
 });
 
-it("names pending sandwich signoffs and withholds partial signed totals", async () => {
-  const view = await showWorksheet([parisien]);
+it("names pending sandwich signoffs and withholds partial signed totals", () => {
+  const view = showWorksheet([parisien]);
   const signed = within(view.day.getByText("Measured usable ingredient totals").parentElement!);
   expect(signed.getByText(/Measured yield pending for Le Verger/)).toBeTruthy();
   expect(signed.queryByText(/66.125 g|72 g|baguettes/)).toBeNull();
   expect(view.trial.getByText(/Rehearsal only/)).toBeTruthy();
 });
 
-it("keeps service counts visible when the signed recipe read is unavailable", async () => {
-  const view = await showWorksheet(null);
+it("keeps service counts visible when the signed recipe read is unavailable", () => {
+  const view = showWorksheet(null);
   const signed = within(view.day.getByText("Measured usable ingredient totals").parentElement!);
   expect(signed.getByText(/Measured totals could not be loaded/)).toBeTruthy();
   expect(view.day.getByRole("row", { name: "Le Parisien 2 1 1" })).toBeTruthy();
   expect(view.bench.open).toBe(false);
 });
 
-it("keeps fully packed days visible without requiring recipe data", async () => {
+it("keeps fully packed days visible without requiring recipe data", () => {
   const empty = { parisien: 0, verger: 0, bellecour: 0, bleu: 0, rustique: 0, figaro: 0 };
-  const worksheet = await ChurchCateringPrep({
-    data: Promise.resolve({
-      state: "ready", days: [{ ...day, packedPortions: day.portions, remainingPortions: empty }],
-    }),
-    approvedRecipes: Promise.resolve(null),
+  const worksheet = ChurchCateringPrep({
+    data: { state: "ready", days: [{ ...day, packedPortions: day.portions, remainingPortions: empty }] },
+    approvedRecipes: null,
   });
   render(worksheet);
   expect(screen.getByText(/3 published · 3 packed · 0 still to build/)).toBeTruthy();

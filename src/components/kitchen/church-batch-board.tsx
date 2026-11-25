@@ -117,7 +117,7 @@ export function ChurchBatchBoard({ scope: { organizationId, locationId, userId }
   return (
     <>
       <p role="status" className="mt-4 text-sm text-[var(--ink-soft)]">
-        {status === "ready" && confirmedAt && <>Batch board checked at {confirmedAt}. Refreshes every 30 seconds while Kitchen is open.</>}
+        {status === "ready" && confirmedAt && <>Batch board checked at {confirmedAt}.</>}
         {status === "ready" && !confirmedAt && "Checking the batch board…"}
         {status === "paused" && "Batch board is offline. Label printing resumes after the next check."}
         {status === "unavailable" && <>Batch board could not refresh. Label printing is paused.{confirmedAt && ` Last checked at ${confirmedAt}.`}</>}

@@ -114,11 +114,11 @@ export function ChurchSandwichAvailabilityPanel({ approvedRecipes, evidence, rec
   const mixStatus = invalidMix.size > 0 ? mixLabels.pending : mixLabels[result.mix.status];
 
   return (
-    <section aria-labelledby="sandwich-availability-title" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
+    <section aria-labelledby="sandwich-availability-title" className="scroll-mt-24">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 id="sandwich-availability-title" className="text-lg font-semibold">Sandwich portion feasibility</h2>
-          <p className="mt-2 text-sm text-[var(--ink-soft)]">Check Church Street portions against usable stock you measure. Counts are used only in this planning view.</p>
+          <h2 id="sandwich-availability-title" className="text-lg font-semibold">Portion planning</h2>
+          <p className="mt-2 text-sm text-[var(--ink-soft)]">Estimate portions from usable stock.</p>
         </div>
         <Button variant="secondary" size="sm" disabled={refreshing} onClick={() => {
           setDraft(emptyDraft);

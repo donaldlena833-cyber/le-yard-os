@@ -19,19 +19,17 @@ function IngredientTotals({ baguettes, ingredients }: {
   );
 }
 
-export async function ChurchCateringPrep({ data, approvedRecipes }: {
-  data: ReturnType<typeof loadChurchCateringPrep>;
-  approvedRecipes: Promise<readonly ChurchAvailabilityRecipe[] | null>;
+export function ChurchCateringPrep({ data: result, approvedRecipes }: {
+  data: Awaited<ReturnType<typeof loadChurchCateringPrep>>;
+  approvedRecipes: readonly ChurchAvailabilityRecipe[] | null;
 }) {
-  const result = await data;
   if (!result) return null;
   const recipes = result.state === "ready"
     && result.days.some(({ remainingPortions }) => churchSandwichRecipeKeys.some((key) => remainingPortions[key] > 0))
-    ? await approvedRecipes : null;
+    ? approvedRecipes : null;
 
   return (
-    <section aria-labelledby="catering-prep-title" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-      <h2 id="catering-prep-title" className="text-lg font-semibold">Catering prep for the next 7 days</h2>
+    <section id="catering-prep-title" aria-label="Catering prep for the next 7 days" className="scroll-mt-24">
       {result.state === "unavailable" ? (
         <p className="mt-2 text-sm text-[var(--ink-soft)]">Catering portions could not be loaded. Reload Kitchen to try again.</p>
       ) : result.days.length === 0 ? (

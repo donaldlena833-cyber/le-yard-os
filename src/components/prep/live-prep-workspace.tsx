@@ -104,9 +104,11 @@ function newDraft(model: LivePrepModel): DraftForm {
 export function LivePrepWorkspace({
   workspace,
   result,
+  embedded = false,
 }: {
   workspace: WorkspaceContextValue;
   result: LiveReadResult<LivePrepModel>;
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const canManage =
@@ -228,20 +230,29 @@ export function LivePrepWorkspace({
   const openCount = model.tasks.filter((task) => ["published", "in_progress"].includes(task.state)).length;
   const completedCount = model.tasks.filter((task) => task.state === "completed").length;
 
+  const newTask = canManage ? (
+    <Button variant="accent" size={embedded ? "sm" : undefined} onClick={() => setShowDraft((value) => !value)}>
+      <Plus className="size-4" /> {showDraft ? "Close draft" : "New prep task"}
+    </Button>
+  ) : null;
+
   return (
-    <section className="mt-8" aria-labelledby="prep-board-title">
-      <SectionHeading
-        eyebrow={`Manual plan · ${model.date}`}
-        title="Prep board"
-        detail={`${openCount} open · ${completedCount} completed · inventory posts only after completion review.`}
-        action={
-          canManage ? (
-            <Button variant="accent" onClick={() => setShowDraft((value) => !value)}>
-              <Plus className="size-4" /> {showDraft ? "Close draft" : "New prep task"}
-            </Button>
-          ) : undefined
-        }
-      />
+    <section className={embedded ? undefined : "mt-8"} aria-label="Prep board">
+      {embedded ? (
+        <div className="mb-2 flex min-h-10 flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-[var(--ink-soft)]">
+            {model.tasks.length ? `${openCount} open · ${completedCount} completed` : "No prep tasks today."}
+          </p>
+          {newTask}
+        </div>
+      ) : (
+        <SectionHeading
+          eyebrow={`Manual plan · ${model.date}`}
+          title="Prep board"
+          detail={`${openCount} open · ${completedCount} completed · inventory posts only after completion review.`}
+          action={newTask}
+        />
+      )}
 
       {notice ? (
         <p
@@ -375,9 +386,9 @@ export function LivePrepWorkspace({
             </Surface>
           ))}
         </div>
-      ) : (
+      ) : !embedded ? (
         <ReadState compact state="empty" title="No prep tasks for today" description="Create a manual plan. Nothing will be inferred from reservations or sales until forecast inputs are connected and approved." />
-      )}
+      ) : null}
 
       <ConfirmActionDialog
         open={reviewDraft}

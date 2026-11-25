@@ -174,9 +174,8 @@ export function ChurchSandwichTimingPanel({ formulas, runs, canRecord }: Props) 
   const recipes = new Map(churchSandwichBenchRecipes.map((recipe) => [recipe.key, recipe]));
 
   return (
-    <section aria-labelledby="church-sandwich-timing-heading" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
+    <section aria-labelledby="church-sandwich-timing-heading" className="mt-5 scroll-mt-24 border-t border-[var(--line)] pt-3">
       <h2 id="church-sandwich-timing-heading" className="text-lg font-semibold">Sandwich timing runs</h2>
-      <p className="mt-2 text-sm text-[var(--ink-soft)]">Record stopwatch observations for one sandwich and the crew on that run. Use the worksheet reference to repeat the setup and compare like runs.</p>
       {canRecord && <TimingRunForm formulas={formulas} onSaved={(run) => setSavedRuns((previous) => [run, ...previous.filter(({ id }) => id !== run.id)])} />}
       <div className="mt-3 border-t border-[var(--line)] pt-3">
         <h3 className="text-sm font-semibold">Recent timing runs</h3>

@@ -187,17 +187,16 @@ export function ChurchSupplierEvidencePanel({ initialRows, formulas, canManage }
   }
 
   return (
-    <section aria-labelledby="supplier-evidence-title" className="mb-6 rounded-2xl border border-[var(--line)] bg-[var(--paper-strong)] p-4 sm:p-5">
-      <h2 id="supplier-evidence-title" className="text-lg font-semibold">Supplier label evidence</h2>
+    <section aria-labelledby="supplier-evidence-title" className="scroll-mt-24">
+      <h2 id="supplier-evidence-title" className="text-lg font-semibold">Supplier labels</h2>
       {initialRows === null ? (
         <p role="status" className="mt-2 text-sm text-[var(--ink-soft)]">Supplier evidence could not be loaded. Refresh Kitchen to try again.</p>
       ) : (
         <>
-          <p className="my-2 text-sm text-[var(--ink-soft)]">Record evidence for the exact product used. Review applies to the recorded SKU and source. Manage customer-facing allergen information separately.</p>
-          {canManage && <p className="mt-1 text-xs text-[var(--ink-soft)]">Add the label or supplier document revision. If a field does not apply, record why. When a product changes, reopen the evidence for review.</p>}
+          <p className="my-2 text-sm text-[var(--ink-soft)]">Review the label for each product and SKU in use.</p>
           <ChurchSandwichEvidenceOverview rows={rows} formulas={formulas} canManage={canManage} />
           <details id="church-sandwich-components" className="mt-3 scroll-mt-24 border-t border-[var(--line)] pt-3">
-            <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">Sandwich components</summary>
+            <summary className="focus-ring cursor-pointer rounded-md py-1 text-sm font-semibold">Ingredient records</summary>
             <div className="mt-1 divide-y divide-[var(--line)]">
               {churchSandwichComponents.map((ingredientKey) => (
                 <IngredientEvidenceRow key={ingredientKey} ingredientKey={ingredientKey} row={rowsByIngredient.get(ingredientKey)} canManage={canManage} onSave={update} />

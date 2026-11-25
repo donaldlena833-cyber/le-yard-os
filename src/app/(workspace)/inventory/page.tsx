@@ -17,12 +17,13 @@ import { requireWorkspaceRouteAccess } from "@/lib/permissions/route-access.serv
 export const metadata: Metadata = { title: "Inventory" };
 export const maxDuration = 180;
 
-export default async function InventoryPage() {
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
   const resolution = await resolveWorkspaceSession();
   if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/inventory", resolution.context);
   if (resolution.context.mode === "demo") return <InventoryWorkspace />;
   const { context } = resolution;
+  const { tab } = await searchParams;
   const counter = context.serviceSettings?.serviceModel === "counter";
   const canCount = ["owner", "admin", "manager"].includes(context.role) || context.capabilities.includes("inventory.count.create");
   const canSeeSquareActivity = counter && ["owner", "admin", "manager"].includes(context.role);
@@ -44,7 +45,12 @@ export default async function InventoryPage() {
       {squareAlerts !== null ? <ChurchSquareStockPushDevice key={`${context.activeLocation.id}:${context.identity.userId}`}
         locationId={context.activeLocation.id} vapidPublicKey={churchSquareStockPushPublicKey()} /> : null}
       {canSeeSquareActivity ? <ChurchSquareActivity locationId={context.activeLocation.id} configured={alertsEnabled} /> : null}
-      {result ? <LiveInventoryWorkspace key={context.activeLocation.id} workspace={context} result={result} /> : null}
+      {result ? (
+        <div id="inventory-workspace" className="scroll-mt-24">
+          <LiveInventoryWorkspace key={`${context.activeLocation.id}:${tab === "recipes" ? "recipes" : "default"}`}
+            workspace={context} result={result} initialTab={tab === "recipes" ? "recipes" : undefined} />
+        </div>
+      ) : null}
     </>
   );
 }

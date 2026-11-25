@@ -64,7 +64,7 @@ it("checks Square only on request and preserves the six distinct catalog outcome
   render(<ChurchSquareAllergenPanel formulas={[]} evidence={[]} registerChecks={[]} />);
   expect(getChurchSquareAllergenDiagnosticAction).not.toHaveBeenCalled();
   expect(screen.getAllByText("Supplier comparison pending")).toHaveLength(6);
-  expect(screen.getByText(/guest menu display and whether a mock allergy note reached the kitchen separately/)).toBeTruthy();
+  expect(screen.getByText(/check the register tile and allergy-note routing/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Check Square allergen tags" }));
   const parisien = openRow("Le Parisien");
   const categories = await parisien.findByText("Standard Square categories");
