@@ -6,6 +6,7 @@ export const CONNECTED_ACCEPTANCE_ATTESTATION_PATH =
 const providerAuthenticatedPaths = new Set([
   "/api/integrations/square/webhook",
   "/api/internal/integrations/church-square-recovery",
+  "/api/internal/music/schedule",
   "/api/twilio/readiness",
   "/api/twilio/voice/incoming",
   "/api/twilio/voice/ai/turn",
