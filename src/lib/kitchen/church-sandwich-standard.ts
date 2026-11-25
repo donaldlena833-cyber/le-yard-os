@@ -17,7 +17,7 @@ const breadQuote = {
   vendor: "Bread Story",
   loafDollars: 2.62,
   deliveryDollars: 20,
-  assumedLoavesPerDelivery: 50,
+  assumedLoavesPerDelivery: 25,
   portionsPerLoaf: { 6: 3, 10: 2 },
 } as const;
 const meatQuote = {

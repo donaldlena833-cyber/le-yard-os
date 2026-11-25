@@ -74,7 +74,10 @@ export function ChurchSandwichQuotedCosts() {
         <summary className="focus-ring cursor-pointer rounded-md text-sm font-semibold text-[var(--ink)]">Quotes and bread yield</summary>
         <ul className="mt-2 space-y-1">
           <li>{bread.vendor} · {money.format(bread.loafDollars)} per 20-inch loaf + {money.format(bread.deliveryDollars)} per delivery.</li>
-          <li>Estimate assumes {bread.assumedLoavesPerDelivery} loaves per delivery and three 6-inch or two 10-inch portions per loaf.</li>
+          <li>
+            {bread.assumedLoavesPerDelivery} loaves in one daily delivery · {money.format(bread.loafDollars * bread.assumedLoavesPerDelivery + bread.deliveryDollars)} per day.
+            Estimated yield is three 6-inch or two 10-inch portions per loaf.
+          </li>
           <li>{meat.vendor} · {meat.quotedOn} · {Array.from(meat.dollarsPerPound, ([ingredient, rate]) =>
             `sliced ${ingredient.toLowerCase()} ${money.format(rate)}/lb`).join(" and ")}.</li>
         </ul>
