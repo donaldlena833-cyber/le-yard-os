@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ session: vi.fn(), scope: vi.fn(), run: vi.fn(), oauth: vi.fn() }));
+const mocks = vi.hoisted(() => ({ session: vi.fn(), scope: vi.fn(), run: vi.fn(), oauth: vi.fn(), schedule: vi.fn(), saveSchedule: vi.fn() }));
 vi.mock("@/lib/auth/workspace-session", () => ({ resolveWorkspaceSession: mocks.session }));
 vi.mock("@/data/read-models/church-music.server", () => ({ verifyChurchMusicScope: mocks.scope }));
 vi.mock("@/lib/integrations/music.server", () => ({ runMusicRequest: mocks.run }));
 vi.mock("@/lib/integrations/music-oauth.server", () => ({ beginMusicOAuth: mocks.oauth, MUSIC_OAUTH_COOKIE: "__Host-le-yard-music-link", musicCookieOptions: { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 600 } }));
+vi.mock("@/lib/integrations/music-schedule.server", () => ({ readMusicSchedule: mocks.schedule, saveMusicSchedule: mocks.saveSchedule }));
 import { POST } from "@/app/api/workspace/music/route";
 const origin = "https://operations.leyardny.com";
 const request = (body = '{"action":"status"}', from = origin) => new Request(`${origin}/api/workspace/music`, { method: "POST", headers: { origin: from, "Content-Type": "application/json" }, body });
 beforeEach(() => {
   vi.clearAllMocks(); mocks.scope.mockResolvedValue(true);
   mocks.session.mockResolvedValue({ status: "ready", context: { organization: { id: "org" }, activeLocation: { id: "room" }, identity: { userId: "actor" } } });
+  mocks.schedule.mockResolvedValue(undefined);
   mocks.run.mockResolvedValue({ status: "connected" });
   mocks.oauth.mockReturnValue({ url: "https://accounts.spotify.com/authorize", cookie: "encrypted-state" });
 });
@@ -33,7 +35,7 @@ describe("music route access boundary", () => {
   it("derives scope from the session and prevents caching", async () => {
     const response = await POST(request('{"action":"volume","volume":85}'));
     expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toContain("no-store");
-    expect(mocks.run).toHaveBeenCalledWith({ organizationId: "org", locationId: "room", userId: "actor" }, { action: "volume", volume: 85 });
+    expect(mocks.run).toHaveBeenCalledWith({ organizationId: "org", locationId: "room", userId: "actor" }, { action: "volume", volume: 85 }, undefined);
   });
   it("stores OAuth state only in a secure HttpOnly cookie", async () => {
     const response = await POST(request(JSON.stringify({ action: "connect", clientId: "a".repeat(32) })));

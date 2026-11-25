@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { MusicWorkspace } from "@/components/music/music-workspace";
+import { verifyChurchMusicScope } from "@/data/read-models/church-music.server";
 import { Suspense } from "react";
 import { listChurchSquareCateringJobsAction } from "@/app/actions/workflows/church-square-catering-jobs";
 import { ChurchSquareOrderWatchPanel } from "@/components/today/church-square-order-watch";
@@ -59,11 +61,18 @@ async function ChurchCateringThisWeek() {
   );
 }
 
-export default async function TodayPage() {
+async function DashboardMusic({ workspace, connection }: { workspace: WorkspaceContextValue; connection?: string }) {
+  if (!await verifyChurchMusicScope(workspace).catch(() => false)) return null;
+  const notice = connection === "linked" ? "Spotify connected to Operations." : connection === "declined" ? "Spotify connection was cancelled." : connection === "failed" ? "Spotify connection could not be completed. Try again." : undefined;
+  return <MusicWorkspace key={`${workspace.identity.userId}:${workspace.organization.id}:${workspace.activeLocation.id}`} notice={notice} />;
+}
+
+export default async function TodayPage({ searchParams }: { searchParams: Promise<{ connection?: string }> }) {
   const resolution = await resolveWorkspaceSession();
   if (resolution.status !== "ready") return null;
   requireWorkspaceRouteAccess("/today", resolution.context);
   if (resolution.context.mode === "demo") return <TodayWorkspace />;
+  const query = await searchParams;
   const workspace = resolution.context;
   const snapshot = await loadLiveServiceDaySnapshot(workspace);
 
@@ -71,6 +80,7 @@ export default async function TodayPage() {
     <LiveTodayWorkspace
       workspace={workspace}
       snapshot={snapshot}
+      musicSection={<Suspense fallback={null}><DashboardMusic workspace={workspace} connection={query.connection} /></Suspense>}
       additionalSection={<Suspense fallback={null}><ChurchSquareOrderSection workspace={workspace} /></Suspense>}
     />
   );

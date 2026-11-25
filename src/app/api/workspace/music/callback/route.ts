@@ -12,7 +12,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 export async function GET(request: NextRequest) {
   if (appSurface !== "operations") return new Response(null, { status: 404 });
-  const result = new URL("/music", musicRedirectUri());
+  const result = new URL("/today", musicRedirectUri());
+  result.hash = "music";
   result.searchParams.set("connection", "failed");
   let stage = "session";
   try {

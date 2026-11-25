@@ -479,10 +479,12 @@ export function LiveTodayWorkspace({
   workspace,
   snapshot,
   additionalSection,
+  musicSection,
 }: {
   workspace: WorkspaceContextValue;
   snapshot: LiveReadResult<ServiceDaySnapshot>;
   additionalSection?: ReactNode;
+  musicSection?: ReactNode;
 }) {
   const operationalRealtime = useRealtimeInvalidation({
     enabled: workspace.mode === "live" && snapshot.ok,
@@ -505,7 +507,7 @@ export function LiveTodayWorkspace({
     operationalRealtime,
     reservationRealtime,
   );
-  if (!snapshot.ok) return <ErrorState message={snapshot.message} />;
+  if (!snapshot.ok) return <PageFrame><ErrorState message={snapshot.message} />{musicSection}</PageFrame>;
   const data = snapshot.data.today;
   if (workspace.role === "employee") return <EmployeeTodayWorkspace workspace={workspace} snapshot={snapshot.data} realtime={realtime} />;
   if (workspace.persona === "chef") return <ChefTodayWorkspace workspace={workspace} snapshot={snapshot.data} realtime={realtime} />;
@@ -548,6 +550,7 @@ export function LiveTodayWorkspace({
       <RealtimeSyncStatus {...realtime} />
       </details>
       <ShiftQuickLinks />
+      {musicSection}
       <ServiceStatusSummary result={snapshot.data.serviceControl} />
       <ReservationNowResult snapshot={snapshot.data} />
 

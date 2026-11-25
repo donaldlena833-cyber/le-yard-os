@@ -84,11 +84,11 @@ function emptySnapshot(status: MusicSnapshot["status"], message: string, clientI
     playing: false, track: null, otherDevicePlaying: false, result: "none" };
 }
 
-export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicRequest, { action: "connect" }>): Promise<MusicSnapshot> {
+export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicRequest, { action: "connect" | "save_schedule" }>, options?: { playlist?: string; volume?: number }): Promise<MusicSnapshot> {
   if (!musicEncryptionReady()) return emptySnapshot("setup_needed", "The secure music connection is being prepared.");
   if (input.action === "disconnect") {
     await disconnectMusic(scope);
-    return emptySnapshot("disconnected", "Spotify disconnected from Operations. Alexa and the existing Codex schedule are managed separately.");
+    return emptySnapshot("disconnected", "Spotify disconnected. The saved Operations music schedule has been removed.");
   }
   let clientId: string | null = null;
   try {
@@ -110,8 +110,20 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
       const alreadyPaused = input.action === "pause" && !player.playing;
       if (!alreadyPaused) {
         const path = input.action === "volume" ? `/volume?${query}&volume_percent=${input.volume}` : `/${input.action}?${query}`;
-        // Never transfer playback, replace the music context, or address the account's default device.
-        await spotifyMusicRequest(token, path, "PUT");
+        // Activate only the unique target, and preserve the previous context unless
+        // the owner selected a playlist. Never take over another playing device.
+        if (input.action === "play" && !player.device.active) {
+          await spotifyMusicRequest(token, "", "PUT", { device_ids: [target.id], play: false });
+          await new Promise((resolve) => setTimeout(resolve, 650));
+          const transferred = await readPlayer(token);
+          player = projectMusicPlayback(transferred.devices, transferred.playback);
+          if (player.otherDevicePlaying || !player.device.active) throw new MusicError("Le Yard has not become the active speaker. Select it in Spotify and try again.");
+        }
+        if (input.action === "play" && options?.volume !== undefined) {
+          if (target.supports_volume === false) throw new MusicError("Spotify cannot adjust this speaker’s volume.");
+          await spotifyMusicRequest(token, `/volume?${query}&volume_percent=${options.volume}`, "PUT");
+        }
+        if (input.action !== "play" || !player.playing) await spotifyMusicRequest(token, path, "PUT", input.action === "play" && options?.playlist ? { context_uri: options.playlist } : undefined);
         result = "accepted";
         message = "Request sent to Spotify. Speaker confirmation is pending.";
         await new Promise((resolve) => setTimeout(resolve, 650));
@@ -122,7 +134,7 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
           return { ...emptySnapshot("unavailable", "Request sent to Spotify, but the result could not be checked. Refresh before retrying.", clientId), result };
         }
       }
-      if ((input.action === "play" && player.playing)
+      if ((input.action === "play" && player.playing && (options?.volume === undefined || player.device.volume === options.volume))
         || (input.action === "pause" && player.device.available && !player.playing)
         || (input.action === "volume" && player.device.volume === input.volume)) {
         result = "confirmed";

@@ -4,6 +4,8 @@ import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { verifyChurchMusicScope } from "@/data/read-models/church-music.server";
 import { appSurface } from "@/lib/app-surface";
 import { musicRequest } from "@/lib/integrations/music";
+import { readMusicSchedule, saveMusicSchedule } from "@/lib/integrations/music-schedule.server";
+import { MusicStoreError } from "@/lib/integrations/music-store.server";
 import { runMusicRequest } from "@/lib/integrations/music.server";
 import { beginMusicOAuth, MUSIC_OAUTH_COOKIE, musicCookieOptions } from "@/lib/integrations/music-oauth.server";
 
@@ -45,8 +47,15 @@ export async function POST(request: Request) {
       response.cookies.set(MUSIC_OAUTH_COOKIE, authorization.cookie, musicCookieOptions);
       return response;
     }
-    return NextResponse.json(await runMusicRequest(scope, input), { headers });
+    if (input.action === "save_schedule") {
+      await saveMusicSchedule(scope, input.schedule);
+      return NextResponse.json({ ...await runMusicRequest(scope, { action: "status" }), schedule: await readMusicSchedule(scope) }, { headers });
+    }
+    const schedule = input.action === "disconnect" ? undefined : await readMusicSchedule(scope);
+    const snapshot = await runMusicRequest(scope, input, input.action === "play" ? { playlist: schedule?.settings.playlist ?? undefined } : undefined);
+    return NextResponse.json({ ...snapshot, ...(schedule ? { schedule } : {}) }, { headers });
   } catch (error) {
+    if (error instanceof MusicStoreError) return respond(409, error.message);
     const invalid = error instanceof SyntaxError || error instanceof z.ZodError;
     return respond(invalid ? 400 : 503, invalid ? "Invalid music request." : "Music could not be checked. Refresh before trying again.");
   }

@@ -24,7 +24,7 @@ beforeEach(() => {
 describe("music OAuth callback", () => {
   it("saves an approved actor-bound grant and removes state from the browser", async () => {
     const response = await GET(request());
-    expect(response.headers.get("location")).toBe("https://operations.leyardny.com/music?connection=linked");
+    expect(response.headers.get("location")).toBe("https://operations.leyardny.com/today?connection=linked#music");
     expect(mocks.save).toHaveBeenCalledWith({ organizationId: "org", locationId: "room", userId: "owner" }, "a".repeat(32), "private-test-code", "private-test-verifier", "https://operations.leyardny.com/api/workspace/music/callback");
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
@@ -38,7 +38,7 @@ describe("music OAuth callback", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       const response = await GET(request());
-      expect(response.headers.get("location")).toBe("https://operations.leyardny.com/music?connection=failed");
+      expect(response.headers.get("location")).toBe("https://operations.leyardny.com/today?connection=failed#music");
       expect(warn).toHaveBeenCalledWith("music_oauth_failed", { stage: "authorization_save", reason: "Music connection changed. Try connecting again." });
       expect(JSON.stringify(warn.mock.calls)).not.toContain("private-test-code");
       expect(JSON.stringify(warn.mock.calls)).not.toContain("private-test-verifier");

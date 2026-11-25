@@ -2,10 +2,12 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { musicScheduleSettings, musicScheduleRuntime } from "./music-schedule";
 import type { MusicScope } from "./music.server";
 
 export const MUSIC_BUCKET = "music-connections";
 const metadataSchema = z.object({ clientId: z.string().regex(/^[a-f0-9]{32}$/), grantVersion: z.string().uuid(),
+  schedule: musicScheduleSettings.optional(), scheduleRuntime: musicScheduleRuntime.optional(),
   refreshLease: z.object({ id: z.string().uuid(), until: z.string().datetime() }).nullable() });
 type Metadata = z.infer<typeof metadataSchema>;
 export type MusicConnection = { id: string; configuration: Metadata };
@@ -23,7 +25,7 @@ export async function readMusicConnection(scope: MusicScope): Promise<MusicConne
   if (result.data.status === "disabled") throw new MusicStoreError("Music disconnection needs another cleanup attempt. Use Disconnect again.");
   return { id: result.data.id, configuration: metadataSchema.parse(result.data.configuration) };
 }
-async function compareAndSet(scope: MusicScope, row: MusicConnection, configuration: Metadata) {
+export async function compareAndSetMusicConnection(scope: MusicScope, row: MusicConnection, configuration: Metadata) {
   const result = await createAdminClient().from("music_connections").update({ configuration })
     .eq("id", row.id).eq("organization_id", scope.organizationId).eq("location_id", scope.locationId)
     .eq("status", "connected").eq("configuration", JSON.stringify(row.configuration))
@@ -65,10 +67,10 @@ export async function saveMusicGrant(scope: MusicScope, clientId: string, encryp
   const row = current ?? await readMusicConnection(scope);
   const version = randomUUID();
   await writeGrant(scope, encrypted, version);
-  const configuration: Metadata = { clientId, grantVersion: version, refreshLease: null };
+  const configuration: Metadata = { ...row?.configuration, clientId, grantVersion: version, refreshLease: null };
   let stored = false;
   try {
-    if (row) await compareAndSet(scope, row, configuration);
+    if (row) await compareAndSetMusicConnection(scope, row, configuration);
     else {
       const created = await createAdminClient().from("music_connections").insert({
         organization_id: scope.organizationId, location_id: scope.locationId, status: "connected",
@@ -91,11 +93,11 @@ export async function claimMusicRefresh(scope: MusicScope, row: MusicConnection)
   if (row.configuration.refreshLease && Date.parse(row.configuration.refreshLease.until) > Date.now()) {
     throw new MusicStoreError("Spotify connection is refreshing. Try again shortly.");
   }
-  return compareAndSet(scope, row, { ...row.configuration,
+  return compareAndSetMusicConnection(scope, row, { ...row.configuration,
     refreshLease: { id: randomUUID(), until: new Date(Date.now() + 20_000).toISOString() } });
 }
 export async function releaseMusicRefresh(scope: MusicScope, row: MusicConnection) {
-  try { await compareAndSet(scope, row, { ...row.configuration, refreshLease: null }); } catch { /* Already replaced or disconnected. */ }
+  try { await compareAndSetMusicConnection(scope, row, { ...row.configuration, refreshLease: null }); } catch { /* Already replaced or disconnected. */ }
 }
 export async function disconnectMusic(scope: MusicScope) {
   const result = await connections(scope).maybeSingle();

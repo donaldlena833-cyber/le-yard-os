@@ -39,7 +39,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({
         .sort((a, b) => a.name.localeCompare(b.name)).slice(options.offset, options.offset + options.limit) }),
   }) },
 }) }));
-import { claimMusicRefresh, disconnectMusic, readMusicConnection, readMusicGrant, releaseMusicRefresh, saveMusicGrant } from "@/lib/integrations/music-store.server";
+import { defaultMusicSchedule } from "@/lib/integrations/music-schedule";
+import { compareAndSetMusicConnection, claimMusicRefresh, disconnectMusic, readMusicConnection, readMusicGrant, releaseMusicRefresh, saveMusicGrant } from "@/lib/integrations/music-store.server";
 const scope = { organizationId: "org", locationId: "room", userId: "owner" };
 const clientId = "a".repeat(32);
 beforeEach(() => { state.row = null; state.files.clear(); });
@@ -55,6 +56,14 @@ describe("music encrypted file custody", () => {
     expect(state.files.size).toBe(2);
     expect(state.files.get("another-org/room/other.bin")).toBe("unrelated");
     expect(await readMusicGrant(scope, (await readMusicConnection(scope))!)).toBe("encrypted-two");
+  });
+  it("preserves saved hours through Spotify grant rotation", async () => {
+    await saveMusicGrant(scope, clientId, "encrypted-one");
+    const first = (await readMusicConnection(scope))!;
+    const scheduled = await compareAndSetMusicConnection(scope, first, { ...first.configuration, schedule: { ...defaultMusicSchedule, enabled: true, start: "07:00" } });
+    const lease = await claimMusicRefresh(scope, scheduled);
+    await saveMusicGrant(scope, clientId, "encrypted-two", lease);
+    expect((await readMusicConnection(scope))?.configuration.schedule?.start).toBe("07:00");
   });
   it("cleans an orphan upload if a concurrent metadata change defeats the compare-and-set", async () => {
     await saveMusicGrant(scope, clientId, "encrypted-one");

@@ -55,6 +55,30 @@ describe("music provider command safety", () => {
     const result = await runMusicRequest(scope, { action: "volume", volume: 85 });
     expect(result.result).toBe("accepted"); expect(result.device.volume).toBe(70);
   });
+  it("activates a visible inactive speaker before resuming its retained session", async () => {
+    let active = false;
+    let playing = false;
+    fetcher.mockImplementation((url: string, init: RequestInit) => {
+      if (init.method === "PUT") {
+        if (url.endsWith("/me/player")) active = true;
+        if (url.includes("/play?")) playing = true;
+        return new Response(null, { status: 204 });
+      }
+      return Response.json(url.endsWith("/devices") ? { devices: [{ ...device, is_active: active }] }
+        : active ? { device, is_playing: playing } : {});
+    });
+    const result = await runMusicRequest(scope, { action: "play" });
+    expect(result.result).toBe("confirmed");
+    const writes = fetcher.mock.calls.filter(([, init]) => init.method === "PUT");
+    expect(JSON.parse(writes[0][1].body)).toEqual({ device_ids: ["speaker"], play: false });
+    expect(writes[1][0]).toContain("/play?device_id=speaker");
+  });
+  it("does not restart the playlist when an already playing start is retried", async () => {
+    fetcher.mockImplementation(player(85));
+    const result = await runMusicRequest(scope, { action: "play" }, { volume: 85, playlist: "spotify:playlist:1234567890123456789012" });
+    expect(result.result).toBe("confirmed");
+    expect(fetcher.mock.calls.filter(([, init]) => init.method === "PUT").map(([url]) => url)).toEqual(["https://api.spotify.com/v1/me/player/volume?device_id=speaker&volume_percent=85"]);
+  });
   it("fails closed when another server holds the token refresh lease", async () => {
     mocks.grant.mockResolvedValue(sealMusicValue({ accessToken: "expired", refreshToken: "test-refresh", expiresAt: 1 }, "org:room"));
     const result = await runMusicRequest(scope, { action: "status" });

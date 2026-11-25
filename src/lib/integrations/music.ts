@@ -1,17 +1,14 @@
 import { z } from "zod";
+import { musicScheduleSettings, musicScheduleView } from "./music-schedule";
 
 export const MUSIC_DEVICE_NAME = "Le Yard";
-export const musicSchedule = {
-  timeZone: "America/New_York", start: "06:30", stop: "17:00", volume: 85,
-  days: "Every day", managedBy: "Codex", playlists: "To be added",
-} as const;
-
 export const musicRequest = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status") }).strict(),
   z.object({ action: z.literal("play") }).strict(),
   z.object({ action: z.literal("pause") }).strict(),
   z.object({ action: z.literal("volume"), volume: z.number().int().min(0).max(100) }).strict(),
   z.object({ action: z.literal("disconnect") }).strict(),
+  z.object({ action: z.literal("save_schedule"), schedule: musicScheduleSettings }).strict(),
   z.object({ action: z.literal("connect"), clientId: z.string().regex(/^[a-f0-9]{32}$/) }).strict(),
 ]);
 export type MusicRequest = z.infer<typeof musicRequest>;
@@ -24,6 +21,7 @@ export const musicSnapshot = z.object({
   otherDevicePlaying: z.boolean(),
   message: z.string(),
   clientId: z.string().nullable(),
+  schedule: musicScheduleView.optional(),
   result: z.enum(["confirmed", "accepted", "none"]).default("none"),
 });
 export type MusicSnapshot = z.infer<typeof musicSnapshot>;

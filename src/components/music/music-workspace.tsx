@@ -1,32 +1,44 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Clock3, Music2, Pause, Play, RefreshCw, Speaker, Volume2 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { PageFrame, PageHeader } from "@/components/ui/page-frame";
-import { MUSIC_DEVICE_NAME, musicSchedule, musicSnapshot, type MusicRequest, type MusicSnapshot } from "@/lib/integrations/music";
+import { ArrowUpRight, Check, Clock3, Music2, Pause, Play, RefreshCw, Settings2, Volume2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MUSIC_DEVICE_NAME, musicSnapshot, type MusicRequest, type MusicSnapshot } from "@/lib/integrations/music";
+import { defaultMusicSchedule, MUSIC_TIME_ZONE, musicScheduleSettings, playlistUri, type MusicScheduleSettings } from "@/lib/integrations/music-schedule";
+
+const field = "focus-ring min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--paper)] px-3 text-sm disabled:opacity-50";
+const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const timeLabel = (value: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "UTC" }).format(new Date(`2000-01-01T${value}:00Z`));
+const checkedLabel = (value: string) => new Intl.DateTimeFormat("en-US", { timeZone: MUSIC_TIME_ZONE, hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
 export function MusicWorkspace({ notice }: { notice?: string }) {
   const [snapshot, setSnapshot] = useState<MusicSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [volume, setVolume] = useState<number>(musicSchedule.volume);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [volume, setVolume] = useState(85);
+  const [settings, setSettings] = useState<MusicScheduleSettings>(defaultMusicSchedule);
+  const [playlist, setPlaylist] = useState("");
   const [clientId, setClientId] = useState("");
+  const initialized = useRef(false);
+  const volumeEdited = useRef(false);
   const inFlight = useRef(false);
+
   const request = useCallback(async (input: MusicRequest) => {
     if (inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setError(null);
+    if (input.action !== "status") setFeedback(null);
     try {
       const response = await fetch("/api/workspace/music", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
-        cache: "no-store", signal: AbortSignal.timeout(40_000),
+        cache: "no-store", signal: AbortSignal.timeout(40000),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(response.status === 401 || response.status === 403
         ? "Your access changed. Reload Operations and select Church Street."
-        : "Music could not be checked. Refresh before trying again.");
+        : typeof data.message === "string" ? data.message : "Music could not be checked. Try again.");
       if (input.action === "connect") {
         const url = new URL(data.authorizeUrl);
         if (url.origin !== "https://accounts.spotify.com" || url.pathname !== "/authorize") throw new Error("Spotify connection could not be opened.");
@@ -36,7 +48,16 @@ export function MusicWorkspace({ notice }: { notice?: string }) {
       const next = musicSnapshot.parse(data);
       setSnapshot(next);
       if (next.clientId) setClientId((current) => current || next.clientId!);
+      if (!volumeEdited.current && next.device.volume !== null) setVolume(next.device.volume);
+      if (next.schedule && (!initialized.current || input.action === "save_schedule")) {
+        setSettings(next.schedule.settings);
+        setPlaylist(next.schedule.settings.playlist ? `https://open.spotify.com/playlist/${next.schedule.settings.playlist.split(":")[2]}` : "");
+        initialized.current = true;
+      }
+      if (input.action === "save_schedule") setFeedback("Schedule saved. New hours apply from the next start or end time. Use Play to start now.");
+      else if (input.action !== "status") setFeedback(next.message);
     } catch (cause) {
+      // Do not retain a stale track or enable commands after losing access.
       setSnapshot(null);
       setError(cause instanceof Error && cause.name !== "TimeoutError" ? cause.message : "Music took too long to respond. Refresh before trying again.");
     } finally { inFlight.current = false; setBusy(false); }
@@ -44,89 +65,81 @@ export function MusicWorkspace({ notice }: { notice?: string }) {
 
   useEffect(() => {
     const initial = setTimeout(() => { void request({ action: "status" }); }, 0);
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") void request({ action: "status" });
-    }, 30_000);
-    return () => { clearTimeout(initial); clearInterval(interval); };
+    const refresh = () => { if (document.visibilityState === "visible") void request({ action: "status" }); };
+    const interval = setInterval(refresh, 30000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { clearTimeout(initial); clearInterval(interval); document.removeEventListener("visibilitychange", refresh); };
   }, [request]);
 
   const connected = snapshot?.status === "connected";
   const controls = connected && snapshot.device.available && !snapshot.device.restricted && !busy;
-  const status = !snapshot ? "Not checked" : snapshot.status === "setup_needed" ? "Setup in progress"
+  const status = !snapshot ? busy ? "Checking…" : "Not checked" : snapshot.status === "setup_needed" ? "Setup needed"
     : snapshot.status === "disconnected" ? "Connect Spotify" : snapshot.status === "reconnect" ? "Reconnect Spotify"
-      : snapshot.status === "unavailable" ? "Status unavailable" : !snapshot.device.available ? "Speaker not visible"
-        : snapshot.playing ? "Playing" : "Not playing";
-  const checkedAt = snapshot?.checkedAt ? new Intl.DateTimeFormat("en-US", { timeZone: musicSchedule.timeZone, hour: "numeric", minute: "2-digit", second: "2-digit" }).format(new Date(snapshot.checkedAt)) : null;
+      : snapshot.status === "unavailable" ? "Check connection" : !snapshot.device.available ? "Speaker unavailable"
+        : snapshot.playing ? "Playing" : "Paused";
+  const saved = snapshot?.schedule;
+  const runtime = saved?.runtime;
+  const schedulerHealthy = Boolean(runtime && Date.parse(snapshot!.checkedAt) - Date.parse(runtime.checkedAt) < 10 * 60000);
+  const needsConnection = snapshot && ["disconnected", "reconnect", "setup_needed"].includes(snapshot.status);
+  const dirty = saved && (JSON.stringify(settings) !== JSON.stringify(saved.settings) || playlist.trim() !== (saved.settings.playlist ? `https://open.spotify.com/playlist/${saved.settings.playlist.split(":")[2]}` : ""));
+
+  function saveSchedule(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      const candidate = musicScheduleSettings.safeParse({ ...settings, playlist: playlistUri(playlist) });
+      if (!candidate.success) throw new Error("Choose different start and end times, at least one day, and a volume from 0 to 100.");
+      void request({ action: "save_schedule", schedule: candidate.data });
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Check the schedule settings."); }
+  }
 
   return (
-    <PageFrame width="standard" className="space-y-8">
-      <PageHeader eyebrow="140 Church Street" title="Music" detail="Check the Le Yard speaker and control its Spotify playback."
-        actions={<Button variant="secondary" disabled={busy} onClick={() => void request({ action: "status" })}><RefreshCw className={`size-4 ${busy ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" />Refresh status</Button>} />
-      {notice ? <p role="status" className="text-sm text-[var(--ink-soft)]">{notice}</p> : null}
-      {error ? <p role="alert" className="text-sm text-[var(--danger)]">{error}</p> : null}
-
-      <section aria-labelledby="speaker-title" aria-busy={busy} className="grid gap-8 border-b border-[var(--line)] pb-8 md:grid-cols-[1fr_1.2fr]">
-        <div>
-          <Speaker className="size-8 text-[var(--primary)]" aria-hidden="true" />
-          <h2 id="speaker-title" className="mt-4 text-2xl font-semibold tracking-tight">{MUSIC_DEVICE_NAME}</h2>
-          <p className="mt-2 text-sm font-medium">{status}</p>
-          <p className="mt-2 max-w-sm text-sm leading-6 text-[var(--ink-soft)]">{snapshot?.message ?? "Refresh to check the current connection."}</p>
-          {checkedAt ? <p className="mt-3 text-xs text-[var(--ink-faint)]">Last checked {checkedAt} · New York</p> : null}
+    <section id="music" aria-labelledby="music-title" className="mt-6 scroll-mt-24 overflow-hidden rounded-2xl bg-[var(--paper-strong)] shadow-[var(--shadow-card)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 sm:px-6">
+        <div className="flex items-center gap-2.5"><Music2 className="size-4 text-[var(--accent-strong)]" aria-hidden="true" /><h2 id="music-title" className="text-base font-semibold">Music</h2><span className="text-xs text-[var(--ink-faint)]">{MUSIC_DEVICE_NAME}</span></div>
+        <div className="flex items-center gap-3"><span role="status" className="flex items-center gap-2 text-xs text-[var(--ink-soft)]"><span className={`size-1.5 rounded-full ${snapshot?.playing ? "bg-[var(--accent-strong)]" : "bg-[var(--ink-faint)]"}`} />{status}</span><Button size="icon" variant="quiet" aria-label="Refresh status" disabled={busy} onClick={() => void request({ action: "status" })}><RefreshCw className={`size-4 ${busy ? "animate-spin motion-reduce:animate-none" : ""}`} aria-hidden="true" /></Button></div>
+      </div>
+      <div className="grid gap-5 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center" aria-busy={busy}>
+        <div className="min-w-0">
+          <h3 className="truncate text-xl font-semibold tracking-tight">{snapshot?.track?.name ?? (snapshot?.playing ? "Music is playing" : "No track reported")}</h3>
+          <p className="mt-1 text-sm text-[var(--ink-soft)]">{snapshot?.track?.artist || "Play the last session or choose a playlist below."}</p>
+          {snapshot?.track?.url ? <a href={snapshot.track.url} target="_blank" rel="noopener noreferrer" className="focus-ring mt-2 inline-flex min-h-8 items-center gap-1 rounded text-xs text-[var(--ink-soft)] underline underline-offset-4">Open in Spotify<ArrowUpRight className="size-3" aria-hidden="true" /></a> : null}
         </div>
-        <div className="space-y-6">
-          <div className="min-h-20">
-            <p className="text-xs font-medium uppercase tracking-widest text-[var(--ink-faint)]">Reported by Spotify</p>
-            <h3 className="mt-2 text-xl font-semibold">{snapshot?.track?.name ?? "No track reported"}</h3>
-            {snapshot?.track?.artist ? <p className="mt-1 text-sm text-[var(--ink-soft)]">{snapshot.track.artist}</p> : null}
-            {snapshot?.track?.url ? <a href={snapshot.track.url} target="_blank" rel="noopener noreferrer" className="focus-ring mt-2 inline-flex min-h-11 items-center gap-1 text-sm underline underline-offset-4">Open in Spotify<ArrowUpRight className="size-3.5" aria-hidden="true" /></a> : null}
-          </div>
-          {snapshot?.otherDevicePlaying ? <p className="text-sm text-[var(--ink-soft)]">Music is playing on another device. Select Le Yard in Spotify before resuming here.</p> : null}
-          <div className="flex flex-wrap gap-3">
-            <Button disabled={!controls || snapshot?.playing || snapshot?.otherDevicePlaying} onClick={() => void request({ action: "play" })}><Play className="size-4" aria-hidden="true" />Resume music</Button>
-            <Button variant="secondary" disabled={!controls || !snapshot?.playing} onClick={() => void request({ action: "pause" })}><Pause className="size-4" aria-hidden="true" />Pause music</Button>
-          </div>
-          <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); void request({ action: "volume", volume }); }}>
-            <div>
-              <label htmlFor="music-volume" className="flex items-center gap-2 text-sm font-medium"><Volume2 className="size-4" aria-hidden="true" />Volume (%)</label>
-              <input id="music-volume" type="number" required min="0" max="100" step="1" value={Number.isNaN(volume) ? "" : volume} disabled={!controls}
-                onChange={(event) => setVolume(event.target.valueAsNumber)} className="focus-ring mt-2 min-h-11 w-28 rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 disabled:opacity-50" />
-            </div>
-            <Button variant="secondary" type="submit" disabled={!controls || !Number.isInteger(volume) || volume < 0 || volume > 100}>Set volume</Button>
-            <p className="pb-3 text-sm text-[var(--ink-soft)]">Reported: {snapshot?.device.volume === null || snapshot?.device.volume === undefined ? "Unknown" : `${snapshot.device.volume}%`}</p>
+        <div className="flex flex-wrap items-center gap-4">
+          <Button disabled={!controls || snapshot?.otherDevicePlaying} aria-label={snapshot?.playing ? "Pause music" : "Play music"} onClick={() => void request({ action: snapshot?.playing ? "pause" : "play" })}>{snapshot?.playing ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}{snapshot?.playing ? "Pause" : "Play"}</Button>
+          <form className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none" onSubmit={(event) => { event.preventDefault(); void request({ action: "volume", volume }); }}>
+            <label htmlFor="music-volume" className="sr-only">Volume (%)</label><Volume2 className="size-4 shrink-0 text-[var(--ink-faint)]" aria-hidden="true" />
+            <input id="music-volume" type="range" min="0" max="100" step="1" value={volume} disabled={!controls} onChange={(event) => { volumeEdited.current = true; setVolume(Number(event.target.value)); }} className="focus-ring min-h-11 w-24 min-w-12 flex-1 accent-[var(--accent-strong)] sm:w-28 sm:flex-none" />
+            <output htmlFor="music-volume" className="w-9 text-right text-xs tabular-nums">{volume}%</output><Button variant="quiet" type="submit" size="icon" aria-label="Set volume" disabled={!controls || snapshot?.device.volume === volume}><Check className="size-4" aria-hidden="true" /></Button>
           </form>
         </div>
-      </section>
-
-      <section aria-labelledby="music-schedule-title" className="grid gap-6 border-b border-[var(--line)] pb-8 md:grid-cols-[1fr_1.2fr]">
-        <div><Clock3 className="size-6 text-[var(--primary)]" aria-hidden="true" /><h2 id="music-schedule-title" className="mt-3 text-xl font-semibold">Daily schedule</h2><p className="mt-2 text-sm text-[var(--ink-soft)]">Managed by Codex · America/New_York</p></div>
-        <div>
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-            <div><dt className="text-[var(--ink-soft)]">Start</dt><dd className="mt-1 text-xl font-semibold">6:30 a.m.</dd></div>
-            <div><dt className="text-[var(--ink-soft)]">Stop</dt><dd className="mt-1 text-xl font-semibold">5:00 p.m.</dd></div>
-            <div><dt className="text-[var(--ink-soft)]">Days</dt><dd className="mt-1 font-medium">{musicSchedule.days}</dd></div>
-            <div><dt className="text-[var(--ink-soft)]">Morning volume</dt><dd className="mt-1 font-medium">{musicSchedule.volume}%</dd></div>
-            <div className="col-span-2"><dt className="text-[var(--ink-soft)]">Playlists</dt><dd className="mt-1 font-medium">{musicSchedule.playlists}</dd></div>
-          </dl>
-          <p className="mt-5 text-sm leading-6 text-[var(--ink-soft)]">Keep the Mac awake with Codex running for the existing schedule. Morning playback resumes the previous session when Spotify makes it available. This page does not verify that a scheduled run succeeded.</p>
+      </div>
+      <div className="space-y-1 px-5 pb-4 text-xs leading-5 text-[var(--ink-soft)] sm:px-6">
+        {notice ? <p role="status">{notice}</p> : null}
+        {error ? <p role="alert" className="text-[var(--danger)]">{error}</p> : null}
+        {feedback ? <p role="status">{feedback}</p> : null}
+        {snapshot && snapshot.status !== "connected" || snapshot?.device.restricted || snapshot?.otherDevicePlaying || connected && !snapshot.device.available ? <p>{snapshot?.message}</p> : null}
+        <p>{snapshot?.device.volume != null ? `Reported: ${snapshot.device.volume}%` : "Volume not reported"}{snapshot?.checkedAt ? ` · Checked ${checkedLabel(snapshot.checkedAt)}` : ""}</p>
+      </div>
+      <details className="group border-t border-[var(--line)]">
+        <summary className="focus-ring flex min-h-14 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-5 text-sm sm:px-6"><span className="flex items-center gap-2"><Clock3 className="size-4 text-[var(--ink-faint)]" aria-hidden="true" />{saved?.settings.enabled ? `${timeLabel(saved.settings.start)} – ${timeLabel(saved.settings.stop)}` : "Automatic playback off"}<span className="text-xs text-[var(--ink-faint)]">New York</span></span><span className="flex items-center gap-2 text-xs text-[var(--ink-soft)]">Edit schedule<Settings2 className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" /></span></summary>
+        <form onSubmit={saveSchedule} className="space-y-5 px-5 pb-6 pt-2 sm:px-6">
+          <label className="flex min-h-11 items-center gap-3 text-sm font-medium"><input type="checkbox" checked={settings.enabled} onChange={(event) => setSettings({ ...settings, enabled: event.target.checked })} className="size-4 accent-[var(--accent-strong)]" />Start and stop automatically</label>
+          <div className="grid gap-4 sm:grid-cols-3"><label className="space-y-2 text-xs font-medium"><span>Start time</span><input type="time" required value={settings.start} onChange={(event) => setSettings({ ...settings, start: event.target.value })} className={field} /></label><label className="space-y-2 text-xs font-medium"><span>End time</span><input type="time" required value={settings.stop} onChange={(event) => setSettings({ ...settings, stop: event.target.value })} className={field} /></label><label className="space-y-2 text-xs font-medium"><span>Starting volume (%)</span><input type="number" required min="0" max="100" step="1" value={Number.isNaN(settings.volume) ? "" : settings.volume} onChange={(event) => setSettings({ ...settings, volume: event.target.valueAsNumber })} className={field} /></label></div>
+          <fieldset><legend className="mb-2 text-xs font-medium">Days</legend><div className="flex flex-wrap gap-1.5">{days.map((day, index) => <button key={day} type="button" aria-pressed={settings.days.includes(index)} onClick={() => setSettings({ ...settings, days: settings.days.includes(index) ? settings.days.filter((value) => value !== index) : [...settings.days, index].sort() })} className={`focus-ring min-h-11 min-w-11 rounded-xl px-3 text-xs font-medium transition-colors ${settings.days.includes(index) ? "bg-[var(--accent-strong)] text-white" : "bg-[var(--paper)] text-[var(--ink-soft)]"}`}>{day}</button>)}</div></fieldset>
+          <label className="block space-y-2 text-xs font-medium"><span>Spotify playlist (optional)</span><input type="text" value={playlist} onChange={(event) => setPlaylist(event.target.value)} placeholder="Paste a Spotify playlist link" className={field} /><span className="block font-normal text-[var(--ink-soft)]">Leave blank to resume the previous session. Overnight hours end the following day.</span></label>
+          <div className="flex flex-wrap items-center gap-3"><Button type="submit" disabled={busy || !snapshot?.clientId || !dirty}>Save schedule</Button><p className="text-xs text-[var(--ink-soft)]">All times use New York time, including daylight saving.</p></div>
+          <div className="space-y-1 text-xs leading-5 text-[var(--ink-soft)]"><p>{!saved?.configured ? "Automatic playback is being prepared." : saved.settings.enabled ? schedulerHealthy ? `Schedule checked ${checkedLabel(runtime!.checkedAt)} · Runs even when this page is closed.` : "Waiting for the scheduler to check in. Refresh in a few minutes." : "Turn on automatic playback to use these hours."}</p>{runtime ? <p>Last schedule result: {runtime.message}{runtime.attemptedAt ? ` (${checkedLabel(runtime.attemptedAt)})` : ""}</p> : null}<p>The speaker must be available in Spotify. Failed commands retry up to five times; missed starts stop retrying after 15 minutes.</p></div>
+        </form>
+      </details>
+      <details open={needsConnection || undefined} className="border-t border-[var(--line)]">
+        <summary className="focus-ring flex min-h-12 cursor-pointer items-center justify-between px-5 text-xs text-[var(--ink-soft)] sm:px-6"><span>Spotify connection</span><span>{connected ? "Connected" : "Manage"}</span></summary>
+        <div className="space-y-3 px-5 pb-5 sm:px-6">
+          {!connected ? <form className="flex flex-wrap items-end gap-3" onSubmit={(event) => { event.preventDefault(); void request({ action: "connect", clientId: clientId.trim() }); }}><label className="flex-1 space-y-2 text-xs font-medium"><span>Spotify app client ID</span><input value={clientId} required pattern="[a-f0-9]{32}" maxLength={32} autoComplete="off" spellCheck={false} onChange={(event) => setClientId(event.target.value)} className={field} /></label><Button type="submit" disabled={busy || snapshot?.status === "setup_needed"}>{snapshot?.clientId ? "Reconnect Spotify" : "Connect Spotify"}<ArrowUpRight className="size-4" aria-hidden="true" /></Button></form> : null}
+          {snapshot?.clientId ? <Button variant="quiet" size="sm" disabled={busy} onClick={() => void request({ action: "disconnect" })}>Disconnect Spotify and remove schedule</Button> : null}
+          <p className="text-xs leading-5 text-[var(--ink-soft)]">Only the Le Yard speaker is controlled. Music playing on another device is left alone.</p>
+          <p className="text-xs leading-5 text-[var(--ink-faint)]">{!clientId ? <>Register the Operations callback in <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Spotify Developer Dashboard</a>: <span className="break-all">https://operations.leyardny.com/api/workspace/music/callback</span>. </> : null}<a href="https://support.spotify.com/us/article/spotify-public-commercial-use/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Spotify usage policy</a></p>
         </div>
-      </section>
-
-      <section aria-labelledby="music-connection-title" className="grid gap-6 md:grid-cols-[1fr_1.2fr]">
-        <div><Music2 className="size-6 text-[var(--primary)]" aria-hidden="true" /><h2 id="music-connection-title" className="mt-3 text-xl font-semibold">Spotify connection</h2><p className="mt-2 max-w-sm text-sm leading-6 text-[var(--ink-soft)]">Operations needs its own authorization to read playback and control the speaker.</p></div>
-        <div className="space-y-4">
-          {!connected ? <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void request({ action: "connect", clientId: clientId.trim() }); }}>
-            <label htmlFor="spotify-client-id" className="block text-sm font-medium">Spotify app client ID</label>
-            <input id="spotify-client-id" value={clientId} required pattern="[a-f0-9]{32}" maxLength={32} autoComplete="off" spellCheck={false}
-              onChange={(event) => setClientId(event.target.value)} className="focus-ring min-h-11 w-full rounded-xl border border-[var(--line)] bg-[var(--surface)] px-3 font-mono text-sm" />
-            <p className="text-xs leading-5 text-[var(--ink-soft)]">Use the Operations app in Spotify Developer Dashboard. The app’s redirect address must be <span className="break-all">https://operations.leyardny.com/api/workspace/music/callback</span>. A client secret is not needed.</p>
-            <Button type="submit" disabled={busy || snapshot?.status === "setup_needed"}>Connect Spotify<ArrowUpRight className="size-4" aria-hidden="true" /></Button>
-          </form> : null}
-          {snapshot && ["connected", "unavailable", "reconnect"].includes(snapshot.status) ? <Button variant="secondary" disabled={busy} onClick={() => void request({ action: "disconnect" })}>Disconnect from Operations</Button> : null}
-          <p className="text-xs leading-5 text-[var(--ink-soft)]">Operations stores an encrypted Spotify grant on its server. It reads current playback and controls only the Le Yard speaker. Track history and account passwords are not stored. Disconnect here to delete the saved grant.</p>
-          <a className={buttonVariants({ variant: "secondary", size: "sm" })} href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener noreferrer">Spotify Developer Dashboard<ArrowUpRight className="size-3.5" aria-hidden="true" /></a>
-          <p className="text-xs leading-5 text-[var(--ink-soft)]">Spotify is for personal listening. For music heard by customers, use a licensed business music service. <a href="https://support.spotify.com/us/article/spotify-public-commercial-use/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Spotify’s usage policy</a>.</p>
-        </div>
-      </section>
-    </PageFrame>
+      </details>
+    </section>
   );
 }
