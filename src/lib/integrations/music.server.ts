@@ -10,6 +10,7 @@ const deviceSchema = z.object({
   is_restricted: z.boolean(), volume_percent: z.number().int().min(0).max(100).nullable(), supports_volume: z.boolean().optional(),
 });
 const playbackSchema = z.object({ device: deviceSchema.optional(), is_playing: z.boolean().optional(),
+  context: z.object({ uri: z.string() }).nullable().optional(), repeat_state: z.string().optional(),
   item: z.object({ name: z.string().optional(), artists: z.array(z.object({ name: z.string() })).optional(),
     external_urls: z.object({ spotify: z.string().optional() }).optional() }).nullable().optional() });
 const grantSchema = z.object({ accessToken: z.string().min(1), refreshToken: z.string().min(1), expiresAt: z.number() });
@@ -97,6 +98,7 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
     const token = await accessToken(scope);
     if (!token) return emptySnapshot("disconnected", "Connect Spotify to check and control the Le Yard speaker.");
     const before = await readPlayer(token);
+    let playback = before.playback;
     let player = projectMusicPlayback(before.devices, before.playback);
     let result: MusicSnapshot["result"] = "none";
     let message = player.device.available ? "Status reported by Spotify." : "Le Yard is not visible to Spotify. This does not establish whether the Echo is offline.";
@@ -116,6 +118,7 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
           await spotifyMusicRequest(token, "", "PUT", { device_ids: [target.id], play: false });
           await new Promise((resolve) => setTimeout(resolve, 650));
           const transferred = await readPlayer(token);
+          playback = transferred.playback;
           player = projectMusicPlayback(transferred.devices, transferred.playback);
           const activeTarget = targetMusicDevice(transferred.devices);
           if (player.otherDevicePlaying || (!player.device.active && !(activeTarget?.id === target.id && activeTarget.is_active))) throw new MusicError("Le Yard has not become the active speaker. Select it in Spotify and try again.");
@@ -124,18 +127,28 @@ export async function runMusicRequest(scope: MusicScope, input: Exclude<MusicReq
           if (target.supports_volume === false) throw new MusicError("Spotify cannot adjust this speaker’s volume.");
           await spotifyMusicRequest(token, `/volume?${query}&volume_percent=${options.volume}`, "PUT");
         }
-        if (input.action !== "play" || !player.playing) await spotifyMusicRequest(token, path, "PUT", input.action === "play" && options?.playlist ? { context_uri: options.playlist } : undefined);
+        // Sending context_uri resets a playlist to its first track. Resume the
+        // retained position when it already matches; replace only a different context.
+        const changePlaylist = input.action === "play" && options?.playlist && playback?.context?.uri !== options.playlist;
+        if (input.action !== "play" || !player.playing || changePlaylist) {
+          await spotifyMusicRequest(token, path, "PUT", changePlaylist ? { context_uri: options!.playlist } : undefined);
+        }
+        if (input.action === "play" && options?.playlist && playback?.repeat_state !== "context") {
+          await spotifyMusicRequest(token, `/repeat?${query}&state=context`, "PUT");
+        }
         result = "accepted";
         message = "Request sent to Spotify. Speaker confirmation is pending.";
         await new Promise((resolve) => setTimeout(resolve, 650));
         try {
           const after = await readPlayer(token);
+          playback = after.playback;
           player = projectMusicPlayback(after.devices, after.playback);
         } catch {
           return { ...emptySnapshot("unavailable", "Request sent to Spotify, but the result could not be checked. Refresh before retrying.", clientId), result };
         }
       }
-      if ((input.action === "play" && player.playing && (options?.volume === undefined || player.device.volume === options.volume))
+      if ((input.action === "play" && player.playing && (options?.volume === undefined || player.device.volume === options.volume)
+        && (!options?.playlist || (playback?.context?.uri === options.playlist && playback.repeat_state === "context")))
         || (input.action === "pause" && player.device.available && !player.playing)
         || (input.action === "volume" && player.device.volume === input.volume)) {
         result = "confirmed";
