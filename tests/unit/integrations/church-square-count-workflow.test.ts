@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendChurchSquareCount } from "@/data/workflows/church-square-counts";
 import type { WorkflowContext } from "@/data/execute";
+import { churchSquareInitialCountReason } from "@/lib/integrations/church-square-stock-setup";
 
-const mocks = vi.hoisted(() => ({ rpc: vi.fn(), write: vi.fn(), confirm: vi.fn() }));
+const mocks = vi.hoisted(() => ({ rpc: vi.fn(), write: vi.fn(), confirm: vi.fn(), enableTracking: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => ({ rpc: mocks.rpc }) }));
 vi.mock("@/lib/integrations/church-square-configuration.server", () => ({
   churchSquareCountConfiguration: () => ({ merchantId: "merchant", locationId: "church" }),
@@ -11,6 +12,7 @@ vi.mock("@/lib/integrations/square-counts.server", () => ({
   SquareCountClient: class {
     writePhysicalCount = mocks.write;
     confirmPhysicalCount = mocks.confirm;
+    enableTrackingAfterCount = mocks.enableTracking;
   },
   SquareCountError: Error,
 }));
@@ -112,6 +114,31 @@ describe("Church Street physical stock count workflow", () => {
       .mockResolvedValueOnce({ error: { message: "Count receipt unavailable" } });
     mocks.confirm.mockResolvedValueOnce(readback);
     await expect(sendChurchSquareCount(context, input)).resolves.toEqual({ status: "pending" });
+    expect(mocks.rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows only owners or admins to start tracking with a count", async () => {
+    await expect(sendChurchSquareCount(context, {
+      ...input, initialCount: true, reason: churchSquareInitialCountReason,
+    })).rejects.toMatchObject({ code: "forbidden" });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("enables tracking after the first count is verified and retains a failed setup for recovery", async () => {
+    const owner = { ...context, actor: { ...context.actor,
+      memberships: [{ ...context.actor.memberships[0], role: "owner" as const }],
+    } };
+    mocks.rpc.mockResolvedValueOnce({ data: claim }).mockResolvedValueOnce({ data: true });
+    mocks.write.mockImplementationOnce(async (_observation, beforeWrite) => {
+      await beforeWrite();
+      return readback;
+    });
+    mocks.enableTracking.mockRejectedValueOnce(new Error("Square catalog version changed"));
+    await expect(sendChurchSquareCount(owner, {
+      ...input, initialCount: true, reason: churchSquareInitialCountReason,
+    })).resolves.toEqual({ status: "recovery_required" });
+    expect(mocks.write.mock.calls[0][2]).toEqual({ databaseClaimed: true, initialCount: true });
+    expect(mocks.enableTracking).toHaveBeenCalledExactlyOnceWith(readback, input.requestId);
     expect(mocks.rpc).toHaveBeenCalledTimes(2);
   });
 

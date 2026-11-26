@@ -1,13 +1,14 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { configureChurchSquareCountItemAction, listTrackedChurchSquareVariationsAction, sendChurchSquareCountAction } from "@/app/actions/workflows/church-square-counts";
+import { configureChurchSquareCountItemAction, initializeChurchSquareCountItemAction, listTrackedChurchSquareVariationsAction, sendChurchSquareCountAction } from "@/app/actions/workflows/church-square-counts";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/ui/status-pill";
 import type { ChurchSquareCountItem } from "@/data/read-models/church-square-counts";
 import type { ChurchSquareStockAlert } from "@/data/read-models/church-square-stock-alerts";
 import { useStableRequestIds } from "@/lib/idempotency/stable-request-id";
+import { churchSquareInitialCountReason, type ChurchSquareCountOption } from "@/lib/integrations/church-square-stock-setup";
 import { formatSquareStockQuantity, isSquareStockLow } from "@/lib/integrations/square-stock-alerts";
 import { ChurchSquareMenuDiagnostic } from "./church-square-menu-diagnostic";
 import { AcknowledgeStockAlertButton, StockAcknowledgmentReceipt, stockAcknowledgment, stockAcknowledgmentScope, useStockAcknowledgments } from "./church-square-stock-acknowledgment";
@@ -25,8 +26,9 @@ function StockTime({ value }: { value: string }) {
   return <time dateTime={value}>{easternTime.format(time)} ET</time>;
 }
 
-function CountItem({ item, scope, enabled, alert, alertScope }: {
-  item: ChurchSquareCountItem; scope: LocationScope; enabled: boolean; alert?: ChurchSquareStockAlert; alertScope?: string;
+function CountItem({ item, scope, enabled, canConfigure, alert, alertScope }: {
+  item: ChurchSquareCountItem; scope: LocationScope; enabled: boolean; canConfigure: boolean;
+  alert?: ChurchSquareStockAlert; alertScope?: string;
 }) {
   const router = useRouter();
   const { requestIdFor, rotateRequestId } = useStableRequestIds();
@@ -48,10 +50,12 @@ function CountItem({ item, scope, enabled, alert, alertScope }: {
   const pending = item.pendingRequestId && item.pendingReason && item.pendingQuantity != null
     ? { requestId: item.pendingRequestId, quantity: String(item.pendingQuantity), reason: item.pendingReason }
     : unconfirmed;
+  const initialCount = pending?.reason === churchSquareInitialCountReason;
+  const canSubmit = enabled && (!initialCount || canConfigure);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || !enabled) return;
+    if (saving || !canSubmit) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const payload = { quantity: String(data.get("quantity") ?? ""), reason: String(data.get("reason") ?? "").trim() };
@@ -59,7 +63,9 @@ function CountItem({ item, scope, enabled, alert, alertScope }: {
     setSaving(true);
     setMessage("");
     try {
-      const result = await sendChurchSquareCountAction({ ...scope, itemId: item.id, ...count });
+      const result = await sendChurchSquareCountAction({
+        ...scope, itemId: item.id, ...count, ...(initialCount && { initialCount: true }),
+      });
       if (!result.ok || result.mode !== "live") {
         setMessage(result.message);
       } else if (result.data.status === "confirmed") {
@@ -127,10 +133,11 @@ function CountItem({ item, scope, enabled, alert, alertScope }: {
             </label>
           </>
         )}
-        <Button type="submit" disabled={!enabled || saving} variant="accent">
+        <Button type="submit" disabled={!canSubmit || saving} variant="accent">
           {saving ? "Checking Square…" : pending ? "Check pending count" : "Send count to Square"}
         </Button>
       </form>
+      {initialCount && !canConfigure && <p className="mt-2 text-xs text-[var(--ink-soft)]">An owner or admin can finish setting up this item.</p>}
       <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{message}</p>
     </li>
   );
@@ -142,12 +149,19 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
   alertUserId?: string;
 }) {
   const router = useRouter();
+  const { requestIdFor, rotateRequestId } = useStableRequestIds();
   const [refreshingStock, startStockRefresh] = useTransition();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [variations, setVariations] = useState<{ id: string; label: string }[]>();
+  const [variations, setVariations] = useState<ChurchSquareCountOption[]>();
+  const [variationId, setVariationId] = useState("");
+  const selectedVariation = variations?.find((variation) => variation.id === variationId);
   const alertScope = alertUserId ? stockAcknowledgmentScope(scope.organizationId, scope.locationId, alertUserId) : undefined;
   const liveAlerts = useLiveChurchSquareStockAlerts(alertScope);
+  const stockRevision = liveAlerts?.stockRevision;
+  useEffect(() => {
+    if (stockRevision) router.refresh();
+  }, [router, stockRevision]);
   const currentAlerts = liveAlerts?.alerts ?? alerts;
   const alertsByItem = new Map(currentAlerts?.map((alert) => [alert.id, alert]));
 
@@ -161,7 +175,7 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
         setVariations(result.data);
       } else setMessage(result.message);
     } catch {
-      setMessage("Could not fetch tracked items from Square. Try again.");
+      setMessage("Could not load stock items from Square. Try again.");
     } finally {
       setSaving(false);
     }
@@ -169,23 +183,45 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
 
   async function configure(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (saving || !enabled || !canConfigure) return;
+    if (saving || !enabled || !canConfigure || !selectedVariation) return;
     const form = event.currentTarget;
-    const variationId = String(new FormData(form).get("variationId") ?? "").trim();
+    const quantity = String(new FormData(form).get("quantity") ?? "");
+    function removeOption() {
+      setVariations((previous) => previous?.filter((variation) => variation.id !== variationId));
+      setVariationId("");
+      form.reset();
+    }
     setSaving(true);
     setMessage("");
     try {
-      const result = await configureChurchSquareCountItemAction({ ...scope, variationId });
-      if (result.ok && result.mode === "live") {
-        setMessage(`${result.data.label} is ready for physical counts.`);
-        setVariations((previous) => previous?.filter((variation) => variation.id !== variationId));
-        form.reset();
-        router.refresh();
-      } else setMessage(result.message);
+      if (selectedVariation.tracked) {
+        const result = await configureChurchSquareCountItemAction({ ...scope, variationId });
+        if (result.ok && result.mode === "live") {
+          setMessage(`${result.data.label} is ready for physical counts.`);
+          removeOption();
+        } else setMessage(result.message);
+      } else {
+        const requestId = requestIdFor(variationId, { quantity });
+        const result = await initializeChurchSquareCountItemAction({ ...scope, variationId, quantity, requestId });
+        if (!result.ok || result.mode !== "live") {
+          setMessage(result.message);
+        } else if (result.data.status === "confirmed") {
+          setMessage(`${result.data.label} is now tracked in Square and Operations.`);
+          rotateRequestId(variationId);
+          removeOption();
+        } else if (result.data.status === "rejected") {
+          setMessage("Square rejected the starting count. Check the item in Square before trying again.");
+          rotateRequestId(variationId);
+        } else {
+          setMessage("Square confirmation is pending. Check the pending count on the item above.");
+          removeOption();
+        }
+      }
     } catch {
-      setMessage("Could not confirm the Square item was added. Refresh the list before trying again.");
+      setMessage("Square setup could not be confirmed. Check for a pending count above, or retry the same starting count.");
     } finally {
       setSaving(false);
+      router.refresh();
     }
   }
 
@@ -218,28 +254,37 @@ export function ChurchSquareStockCounts({ items, scope, enabled, canConfigure, a
         )}
         {!enabled ? <p className="mt-2 text-sm">Waiting for the Church Street Square connection.</p> : null}
         {items.length ? <ul className="mt-2 divide-y divide-[var(--line)]">
-          {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} alert={alertsByItem.get(item.id)} alertScope={alertScope} />)}
+          {items.map((item) => <CountItem key={item.id} item={item} scope={scope} enabled={enabled} canConfigure={canConfigure} alert={alertsByItem.get(item.id)} alertScope={alertScope} />)}
         </ul> : <p className="mt-2 text-sm">No items are set up for Square counts yet.</p>}
         {enabled && <ChurchSquareMenuDiagnostic key={scope.locationId} showCatalogDetails={canConfigure} />}
         {canConfigure && enabled ? (
           <details className="mt-4 border-t border-[var(--line)] pt-3">
-            <summary className="cursor-pointer text-sm font-semibold">Set up a tracked Square item</summary>
+            <summary className="cursor-pointer text-sm font-semibold">Set up a Square stock item</summary>
             {variations?.length ? (
               <form onSubmit={(event) => void configure(event)} className="mt-3 flex flex-wrap items-end gap-2">
-                <label className="grid gap-1 text-xs font-semibold">Tracked item in Square
-                  <select name="variationId" defaultValue="" required className="focus-ring rounded-md border border-[var(--line)] px-2 py-2">
+                <label className="grid gap-1 text-xs font-semibold">Square item
+                  <select value={variationId} onChange={(event) => setVariationId(event.target.value)} required disabled={saving}
+                    className="focus-ring rounded-md border border-[var(--line)] px-2 py-2">
                     <option value="" disabled>Select an item</option>
                     {variations.map((variation) => <option key={variation.id} value={variation.id}>{variation.label}</option>)}
                   </select>
                 </label>
-                <Button type="submit" variant="quiet" disabled={saving}>{saving ? "Verifying…" : "Add tracked item"}</Button>
+                {selectedVariation && !selectedVariation.tracked && (
+                  <label className="grid gap-1 text-xs font-semibold">Sellable units on hand now
+                    <input key={variationId} className="focus-ring rounded-md border border-[var(--line)] px-2 py-2"
+                      name="quantity" inputMode="numeric" pattern="0|[1-9][0-9]{0,5}" maxLength={6} required disabled={saving} />
+                  </label>
+                )}
+                <Button type="submit" variant="quiet" disabled={saving || !selectedVariation}>
+                  {saving ? "Checking Square…" : selectedVariation?.tracked ? "Add tracked item" : "Start tracking with this count"}
+                </Button>
               </form>
             ) : (
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button type="button" variant="quiet" disabled={saving} onClick={() => void loadVariations()}>
-                  {saving ? "Checking Square…" : "Find tracked items in Square"}
+                  {saving ? "Checking Square…" : "Find Square items"}
                 </Button>
-                {variations ? <p className="text-sm">No new tracked items found. Enable stock tracking after taking a physical count in Square.</p> : null}
+                {variations ? <p className="text-sm">No new Square items found.</p> : null}
               </div>
             )}
             <p role="status" className="mt-2 text-xs text-[var(--ink-soft)]">{message}</p>

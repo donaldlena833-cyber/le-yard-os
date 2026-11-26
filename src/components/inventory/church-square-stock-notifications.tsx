@@ -30,6 +30,7 @@ type AlertStatus = {
   locationId: string;
   userId: string;
   alerts: ChurchSquareStockAlert[];
+  stockRevision?: string | null;
 };
 
 type StockAlertSnapshot = {
@@ -37,6 +38,7 @@ type StockAlertSnapshot = {
   alerts?: ChurchSquareStockAlert[];
   state: "ready" | "unavailable" | "denied";
   lastCheckedAt?: string;
+  stockRevision?: string;
 };
 
 const StockAlertSnapshotContext = createContext<StockAlertSnapshot | undefined>(undefined);
@@ -108,12 +110,17 @@ export function ChurchSquareStockNotifications({
         return previous.state === "ready" ? { ...previous, state: "unavailable" } : previous;
       });
     }
-    function applyAlerts(next: ChurchSquareStockAlert[], state: "ready" | "denied") {
+    function applyAlerts(next: ChurchSquareStockAlert[], state: "ready" | "denied", stockRevision?: string | null) {
       const nextKey = JSON.stringify(next);
       const changed = nextKey !== JSON.stringify(renderedAlerts.current);
       renderedAlerts.current = next;
       const lastCheckedAt = state === "ready" ? new Date().toISOString() : undefined;
-      setSnapshot({ scopeKey, alerts: next, state, lastCheckedAt });
+      setSnapshot((previous) => ({
+        scopeKey, alerts: next, state, lastCheckedAt,
+        stockRevision: state === "ready"
+          ? stockRevision ?? (previous?.scopeKey === scopeKey ? previous.stockRevision : undefined)
+          : undefined,
+      }));
       if (changed) refresh();
     }
     function finish(controller: AbortController) {
@@ -164,7 +171,7 @@ export function ChurchSquareStockNotifications({
           unavailable();
           return;
         }
-        applyAlerts(result.alerts, "ready");
+        applyAlerts(result.alerts, "ready", result.stockRevision);
       } catch {
         // Keep the last confirmed state and retry on the next foreground check.
         if (isCurrent()) unavailable();

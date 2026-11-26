@@ -13,8 +13,10 @@ import {
   WalletCards,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import type { ChurchSquareClosePreviewSnapshot } from "@/lib/integrations/church-square-close-preview";
 import type { CSSProperties } from "react";
 import { RealtimeSyncStatus } from "@/components/realtime/realtime-sync-status";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -54,12 +56,12 @@ const incomeRealtimeBindings = [
 ] satisfies readonly RealtimeInvalidationBinding[];
 const counterIncomeRealtimeBindings = incomeRealtimeBindings.filter((binding) => binding.table !== "reservations");
 
-function currency(cents: number | null, code: string): string {
+function currency(cents: number | null, code: string, fractionDigits = 0): string {
   if (cents === null) return "—";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: code,
-    maximumFractionDigits: 0,
+    maximumFractionDigits: fractionDigits,
   }).format(cents / 100);
 }
 
@@ -577,6 +579,7 @@ export function IncomeWorkspace({
   realtimeScope,
   actionAccess = noIncomeActionAccess,
   showReservations = true,
+  squareActivity = null,
   demo = false,
 }: {
   result: LiveReadResult<IncomeOperatingModel>;
@@ -584,6 +587,7 @@ export function IncomeWorkspace({
   realtimeScope?: { organizationId: string; locationId: string };
   actionAccess?: IncomeActionAccess;
   showReservations?: boolean;
+  squareActivity?: LiveReadResult<ChurchSquareClosePreviewSnapshot> | null;
   demo?: boolean;
 }) {
   const router = useRouter();
@@ -594,27 +598,33 @@ export function IncomeWorkspace({
     organizationId: realtimeScope?.organizationId ?? "",
     locationId: realtimeScope?.locationId ?? "",
   });
+  const squareConnected = squareActivity !== null;
+  const square = squareActivity?.ok ? squareActivity.data : null;
+  const refreshIntervalMs = squareConnected ? 15_000 : 60_000;
   useEffect(() => {
     if (demo) return;
-    // Service-role sales evidence cannot be exposed through browser Realtime.
-    // Keep a low-frequency authoritative refresh as the safe provider fallback.
-    const timer = window.setInterval(() => {
-      if (navigator.onLine) router.refresh();
-    }, 60_000);
-    return () => window.clearInterval(timer);
-  }, [demo, router]);
+    const refresh = () => {
+      if (navigator.onLine && !document.hidden) router.refresh();
+    };
+    const timer = window.setInterval(refresh, refreshIntervalMs);
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("online", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("online", refresh);
+    };
+  }, [demo, refreshIntervalMs, router]);
 
-  const refreshLabel = useMemo(
-    () =>
-      result.ok
-        ? `Observed ${new Intl.DateTimeFormat("en-US", {
-            hour: "numeric",
-            minute: "2-digit",
-            timeZone: result.data.timeZone,
-          }).format(new Date(result.data.observedAt))}`
-        : "Unavailable",
-    [result],
-  );
+  const refreshLabel = useMemo(() => {
+    const timestamp = squareConnected ? square?.checkedAt : result.ok ? result.data.observedAt : null;
+    if (!timestamp) return "Awaiting data";
+    const clock = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric", minute: "2-digit", second: squareConnected ? "2-digit" : undefined,
+      timeZone: result.ok ? result.data.timeZone : undefined,
+    });
+    return `Checked ${clock.format(new Date(timestamp))}`;
+  }, [result, square?.checkedAt, squareConnected]);
 
   if (!result.ok) {
     return (
@@ -642,7 +652,10 @@ export function IncomeWorkspace({
   const salesSource = model.sources.find(
     (source) => source.key === "sales_checks",
   );
-  const liveUnavailable = model.current.liveNetSalesCents === null;
+  const liveUnavailable = squareConnected
+    ? square?.netActivityCents == null
+    : model.current.liveNetSalesCents === null;
+  const squareMoney = (cents: number | null) => currency(cents, model.currencyCode, 2);
 
   return (
     <PageFrame width="full" className="max-w-[1700px]">
@@ -650,15 +663,13 @@ export function IncomeWorkspace({
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill tone={liveUnavailable ? "warning" : "positive"} dot>
-              {liveUnavailable
-                ? "Live sales unavailable"
-                : demo
-                  ? "Synthetic preview"
-                  : "Live operating view"}
+              {squareConnected
+                ? square ? liveUnavailable ? "Square totals incomplete" : "Live Square activity" : "Square activity unavailable"
+                : liveUnavailable ? "Live sales unavailable" : demo ? "Synthetic preview" : "Live operating view"}
             </StatusPill>
             <span className="flex items-center gap-1.5 text-xs text-[var(--ink-faint)]">
               <RefreshCw className="size-3" />
-              {refreshLabel} · refreshes every minute
+              {refreshLabel} · {squareConnected ? "refreshes every 15 sec" : "refreshes every minute"}
             </span>
           </div>
           <h1 className="mt-3 text-3xl font-medium tracking-[-0.055em]">
@@ -692,7 +703,13 @@ export function IncomeWorkspace({
       </header>
       <RealtimeSyncStatus {...realtime} />
 
-      {liveUnavailable ? (
+      {squareConnected && liveUnavailable ? (
+        <InlineNotice className="mt-6" tone="warning" title={square ? "Square totals are incomplete" : "Square activity unavailable"}>
+          {square ? "Square totals appear after all payment and refund pages have loaded." : "Operations will retry the Square connection automatically."}
+        </InlineNotice>
+      ) : null}
+
+      {liveUnavailable && !squareConnected ? (
         <InlineNotice
           className="mt-6"
           tone="warning"
@@ -708,9 +725,11 @@ export function IncomeWorkspace({
         className="mt-7 grid grid-cols-2 divide-x divide-y divide-[var(--line)] border-y border-[var(--line)] lg:grid-cols-4 lg:divide-y-0"
       >
         <Metric
-          label="Live net revenue"
-          value={currency(model.current.liveNetSalesCents, model.currencyCode)}
-          detail={`${model.current.salesCheckCount} checks · ${model.current.salesCovers} covers`}
+          label={squareConnected ? "Square net collected" : "Live net revenue"}
+          value={squareConnected ? squareMoney(square?.netActivityCents ?? null) : currency(model.current.liveNetSalesCents, model.currencyCode)}
+          detail={squareConnected
+            ? "Completed payments less refunds · includes tax and tips"
+            : `${model.current.salesCheckCount} checks · ${model.current.salesCovers} covers`}
         />
         <Metric
           label="Accrued labor"
@@ -719,21 +738,47 @@ export function IncomeWorkspace({
         />
         <Metric
           label="Recorded expenses"
-          value={currency(
-            model.current.recordedExpenseCents,
-            model.currencyCode,
-          )}
+          value={currency(model.current.recordedExpenseCents, model.currencyCode)}
           detail={`${model.current.recordedExpenseCount} day-level records`}
         />
         <Metric
-          label="Tracked contribution"
-          value={currency(
-            model.current.trackedContributionCents,
-            model.currencyCode,
-          )}
-          detail="Revenue − known labor − recorded expenses; not profit"
+          label={squareConnected ? "Square tips" : "Tracked contribution"}
+          value={squareConnected ? squareMoney(square?.payments.tipCents ?? null) : currency(model.current.trackedContributionCents, model.currencyCode)}
+          detail={squareConnected
+            ? "Tips recorded with completed payments"
+            : "Revenue − known labor − recorded expenses; not profit"}
         />
       </section>
+
+      {square && (
+        <section aria-label="Square payment activity" className="mt-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-base font-semibold">Square activity · {square.date}</h2>
+            <Link href="/today" className="focus-ring rounded text-xs font-semibold underline underline-offset-4">Orders and payouts</Link>
+          </div>
+          <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 border-b border-[var(--line)] pb-3 text-sm tabular-nums">
+            <div className="flex gap-2"><dt>Payments</dt><dd className="font-semibold">{squareMoney(square.payments.totalCents)}</dd></div>
+            <div className="flex gap-2"><dt>Completed payments</dt><dd className="font-semibold">{square.payments.coverage === "complete" ? square.payments.completed : "—"}</dd></div>
+            <div className="flex gap-2"><dt>Refunds</dt><dd className="font-semibold">{squareMoney(square.refunds.amountCents)}</dd></div>
+          </dl>
+          {square.payments.unresolved > 0 && (
+            <p className="mt-2 text-xs text-[var(--ink-faint)]">{square.payments.unresolved} payments awaiting completion in Square.</p>
+          )}
+          {square.payments.tenders.length > 0 && (
+            <details className="mt-2 text-sm">
+              <summary className="focus-ring cursor-pointer rounded py-1">Payment methods</summary>
+              <dl className="mt-1 divide-y divide-[var(--line)]">
+                {square.payments.tenders.map((tender) => (
+                  <div key={tender.source} className="flex justify-between gap-3 py-2">
+                    <dt className="capitalize">{tender.source.toLowerCase().replaceAll("_", " ")}</dt>
+                    <dd>{squareMoney(tender.totalCents)}{square.payments.coverage === "complete" && ` · ${tender.completed}`}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )}
+        </section>
+      )}
 
       <div className="mt-8 grid gap-8 xl:grid-cols-[minmax(0,1fr)_340px]">
         <section className="min-w-0">
@@ -827,7 +872,7 @@ export function IncomeWorkspace({
                   className="flex items-start justify-between gap-3 py-3.5"
                 >
                   <div>
-                    <p className="text-xs font-semibold">{source.label}</p>
+                    <p className="text-xs font-semibold">{squareConnected && source.key === "sales_checks" ? "Sales history records" : source.label}</p>
                     <p className="mt-1 text-xs text-[var(--ink-faint)]">
                       {source.recordCount} records ·{" "}
                       {source.grain.replaceAll("_", " ")}
@@ -849,13 +894,12 @@ export function IncomeWorkspace({
             </div>
             <p className="mt-3 flex items-start gap-2 text-xs leading-5 text-[var(--ink-faint)]">
               <Clock3 className="mt-0.5 size-3.5 shrink-0" />
-              Sales:{" "}
+              {squareConnected ? "Sales history " : "Sales "}
               {freshnessLabel(
                 salesSource?.lastObservedAt ?? null,
                 model.timeZone,
               )}
-              . Provider status and source-data freshness are intentionally
-              separate.
+              .
             </p>
           </section>
         </aside>

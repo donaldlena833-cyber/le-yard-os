@@ -30,12 +30,13 @@ type Read<T extends Resource> = { coverage: "complete" | "partial" | "unavailabl
 async function readPages<T extends Resource>(
   window: ChurchSquareOrderWindow,
   list: (query: ChurchSquareOrderWindow) => Promise<{ records: T[]; nextCursor: string | null }>,
+  maxPages: number,
 ): Promise<Read<T>> {
   const records = new Map<string, T>();
   const cursors = new Set<string>();
   let cursor: string | undefined;
 
-  for (let i = 0; i < pageLimit; i += 1) {
+  for (let i = 0; i < maxPages; i += 1) {
     let page;
     try {
       page = await list({ ...window, cursor });
@@ -94,6 +95,7 @@ export async function loadChurchSquareClosePreview(
   date: string,
   now: Date,
   window: NonNullable<ReturnType<typeof churchSquareCloseWindow>>,
+  { maxPages = pageLimit }: { maxPages?: number } = {},
 ): Promise<ChurchSquareClosePreviewSnapshot> {
   const signal = AbortSignal.timeout(17_000);
   const query = { from: window.from, to: window.to, direction: "ASC" } as const;
@@ -101,11 +103,11 @@ export async function loadChurchSquareClosePreview(
     readPages(query, async (page) => {
       const { payments, nextCursor } = await client.listPayments(page, signal);
       return { records: payments, nextCursor };
-    }),
+    }, maxPages),
     readPages(query, async (page) => {
       const { refunds, nextCursor } = await client.listRefunds(page, signal);
       return { records: refunds, nextCursor };
-    }),
+    }, maxPages),
   ]);
   const completedPayments = payments.records.filter(({ status }) => status === "COMPLETED");
   const completedRefunds = refunds.records.filter(({ status }) => status === "COMPLETED");

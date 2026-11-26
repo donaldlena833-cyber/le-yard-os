@@ -78,6 +78,12 @@ const variationSchema = catalogLocationSchema.extend({
     location_overrides: z.array(locationTrackingOverrideSchema).optional(),
   }),
 });
+const writableVariationSchema = variationSchema.extend({
+  version: z.number().int().positive().safe(),
+  item_variation_data: variationSchema.shape.item_variation_data.extend({
+    location_overrides: z.array(locationTrackingOverrideSchema.passthrough()).optional().refine(uniqueLocationOverrides),
+  }).passthrough(),
+}).passthrough();
 const parentSchema = catalogLocationSchema.extend({
   type: z.literal("ITEM"),
   item_data: z.object({
@@ -294,18 +300,25 @@ function squareSoldOutFlag(override: {
   return { status: now > expiresAt ? "expired" : "sold_out", validUntil: validUntil.data };
 }
 
+function tracksStock(variation: z.infer<typeof variationSchema>, locationId: string) {
+  const data = variation.item_variation_data;
+  return (data.location_overrides?.find((override) => override.location_id === locationId)?.track_inventory
+    ?? data.track_inventory) === true;
+}
+
 function canCountVariation(
   variation: z.infer<typeof variationSchema>,
   { locationId, testVariationId }: Pick<SquareCountConfiguration, "locationId" | "testVariationId">,
+  requireTracking: boolean,
 ) {
   const data = variation.item_variation_data;
   const overrides = data.location_overrides?.filter((override) => override.location_id === locationId) ?? [];
-  const tracked = overrides[0]?.track_inventory ?? data.track_inventory;
-  if (overrides.length > 1 || tracked !== true || data.stockable_conversion != null || data.measurement_unit_id) {
+  const tracked = tracksStock(variation, locationId);
+  if (overrides.length > 1 || (requireTracking && !tracked) || data.stockable_conversion != null || data.measurement_unit_id) {
     return false;
   }
   if (variation.id === testVariationId || data.sku === STOCK_TEST_SKU) {
-    return variation.id === testVariationId && data.sku === STOCK_TEST_SKU
+    return tracked && variation.id === testVariationId && data.sku === STOCK_TEST_SKU
       && data.sellable === false && data.stockable === true;
   }
   return data.sellable !== false && data.stockable !== false;
@@ -427,9 +440,14 @@ export class SquareCountClient {
   }
 
   async listTrackedVariations(): Promise<SquareTrackedVariation[]> {
+    return (await this.listCountableVariations(true)).map(({ variationId, itemId, itemName, variationName }) =>
+      ({ variationId, itemId, itemName, variationName }));
+  }
+
+  async listCountableVariations(requireTracking = false): Promise<Array<SquareTrackedVariation & { tracked: boolean }>> {
     await this.verifyScope();
     const { locationId } = this.configuration;
-    const trackedVariations = new Map<string, SquareTrackedVariation>();
+    const variations = new Map<string, SquareTrackedVariation & { tracked: boolean }>();
     for await (const object of this.catalogItems()) {
       const item = parseProvider(parentSchema, object);
       if (!itemPresentAtLocation(item, locationId)) continue;
@@ -438,18 +456,18 @@ export class SquareCountClient {
         if (variation.item_variation_data.item_id !== item.id) {
           throw new SquareCountError("Square returned an inconsistent parent item.", "scope_mismatch");
         }
-        if (!presentAtLocation(variation, locationId) || !canCountVariation(variation, this.configuration)) continue;
+        if (!presentAtLocation(variation, locationId) || !canCountVariation(variation, this.configuration, requireTracking)) continue;
         const option = trackedVariationLabels(item, variation);
-        if (!option.itemName || !option.variationName || trackedVariations.has(option.variationId)) {
+        if (!option.itemName || !option.variationName || variations.has(option.variationId)) {
           throw new SquareCountError("Square returned an ambiguous catalog variation.", "scope_mismatch");
         }
-        trackedVariations.set(option.variationId, option);
-        if (trackedVariations.size > MAX_VARIATIONS) {
-          throw new SquareCountError("More than 150 tracked Square variations matched this location.", "provider_unavailable");
+        variations.set(option.variationId, { ...option, tracked: tracksStock(variation, locationId) });
+        if (variations.size > MAX_VARIATIONS) {
+          throw new SquareCountError("More than 150 countable Square variations matched this location.", "provider_unavailable");
         }
       }
     }
-    return [...trackedVariations.values()].sort((first, second) =>
+    return [...variations.values()].sort((first, second) =>
       first.itemName.localeCompare(second.itemName, "en-US")
       || first.variationName.localeCompare(second.variationName, "en-US")
       || first.variationId.localeCompare(second.variationId));
@@ -521,14 +539,19 @@ export class SquareCountClient {
   }
 
   async verifyTrackedVariation(variationId: string): Promise<SquareTrackedVariation> {
+    return (await this.getCountableVariation(variationId, true)).labels;
+  }
+
+  async verifyCountableVariation(variationId: string) {
+    const { labels, tracked } = await this.getCountableVariation(variationId, false);
+    return { ...labels, tracked };
+  }
+
+  private async getCountableVariation(variationId: string, requireTracking: boolean) {
     if (!squareId.safeParse(variationId).success) {
       throw new SquareCountError("An exact Square variation ID is required.", "invalid_input");
     }
     await this.verifyScope();
-    return this.getTrackedVariation(variationId);
-  }
-
-  private async getTrackedVariation(variationId: string) {
     const locationId = this.configuration.locationId;
     const response = await this.call(`/v2/catalog/object/${variationId}?include_related_objects=true`);
     const variation = variationSchema.safeParse(response.object);
@@ -543,14 +566,36 @@ export class SquareCountClient {
     if (parents.length !== 1 || !itemPresentAtLocation(parents[0], locationId)) {
       throw new SquareCountError("The Square variation must have one active parent item at this location.", "variation_ineligible");
     }
-    if (!canCountVariation(variation.data, this.configuration)) {
-      throw new SquareCountError("The Square variation must track directly counted, whole units and be eligible at this location.", "variation_ineligible");
+    if (!canCountVariation(variation.data, this.configuration, requireTracking)) {
+      throw new SquareCountError("The Square variation is ineligible for counts at this location.", "variation_ineligible");
     }
     const option = trackedVariationLabels(parents[0], variation.data);
     if (!option.itemName || !option.variationName) {
       throw new SquareCountError("Square did not return the item and variation names.", "variation_ineligible");
     }
-    return option;
+    return { labels: option, tracked: tracksStock(variation.data, locationId), raw: response.object };
+  }
+
+  async enableTrackingAfterCount(receipt: SquarePhysicalCountReceipt, requestId: string) {
+    const { locationId } = this.configuration;
+    if (!physicalCountRequest.shape.requestId.safeParse(requestId).success || receipt.locationId !== locationId) {
+      throw new SquareCountError("The confirmed stock count must belong to this location.", "scope_mismatch");
+    }
+    const { raw, tracked } = await this.getCountableVariation(receipt.variationId, false);
+    if (tracked) return;
+
+    const object = parseProvider(writableVariationSchema, raw);
+    delete object.updated_at;
+    const overrides = object.item_variation_data.location_overrides ?? [];
+    const here = overrides.find((entry) => entry.location_id === locationId);
+    object.item_variation_data.location_overrides = [
+      ...overrides.filter((entry) => entry.location_id !== locationId),
+      { ...here, location_id: locationId, track_inventory: true },
+    ];
+    await this.call("/v2/catalog/object", {
+      body: { idempotency_key: `track-${requestId}-${object.version}`, object },
+    });
+    await this.verifyTrackedVariation(receipt.variationId);
   }
 
   private parseInput(input: SquarePhysicalCountInput) {
@@ -739,13 +784,13 @@ export class SquareCountClient {
   async writePhysicalCount(
     input: SquarePhysicalCountInput,
     beforeWrite?: () => Promise<void>,
-    { databaseClaimed = false }: { databaseClaimed?: boolean } = {},
+    { databaseClaimed = false, initialCount = false }: { databaseClaimed?: boolean; initialCount?: boolean } = {},
   ): Promise<SquarePhysicalCountReceipt> {
     const validated = this.parseInput(input);
     // The server can lag the clock that recorded the trusted database claim.
     const allowedClockSkew = databaseClaimed && beforeWrite ? CLAIM_CLOCK_SKEW_MS : 0;
     this.verifyObservationAge(validated.occurredAt, allowedClockSkew);
-    await this.verifyTrackedVariation(validated.variationId);
+    await this.getCountableVariation(validated.variationId, !initialCount);
     this.verifyObservationAge(validated.occurredAt, allowedClockSkew);
 
     const body = {

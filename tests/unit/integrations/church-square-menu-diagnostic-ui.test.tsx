@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { configureChurchSquareCountItemAction, sendChurchSquareCountAction } from "@/app/actions/workflows/church-square-counts";
+import { configureChurchSquareCountItemAction, initializeChurchSquareCountItemAction, listTrackedChurchSquareVariationsAction, sendChurchSquareCountAction } from "@/app/actions/workflows/church-square-counts";
 import { getChurchSquareMenuDiagnosticAction } from "@/app/actions/workflows/church-square-menu-diagnostic";
 import { ChurchSquareStockCounts } from "@/components/inventory/church-square-stock-counts";
 import type { ChurchSquareMenuDiagnostic } from "@/lib/integrations/church-square-menu-diagnostic";
@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/app/actions/workflows/church-square-menu-diagnostic", () => ({ getChurchSquareMenuDiagnosticAction: vi.fn() }));
 vi.mock("@/app/actions/workflows/church-square-counts", () => ({
   configureChurchSquareCountItemAction: vi.fn(),
+  initializeChurchSquareCountItemAction: vi.fn(),
   listTrackedChurchSquareVariationsAction: vi.fn(),
   sendChurchSquareCountAction: vi.fn(),
 }));
@@ -52,12 +53,33 @@ afterEach(() => {
 it("exposes availability to count operators, with mapping setup reserved for configuration users", () => {
   const view = render(<ChurchSquareStockCounts items={[]} scope={scope} enabled canConfigure={false} />);
   expect(screen.getByText("Check the six sandwich variations")).toBeTruthy();
-  expect(screen.queryByText("Set up a tracked Square item")).toBeNull();
+  expect(screen.queryByText("Set up a Square stock item")).toBeNull();
   view.rerender(<ChurchSquareStockCounts items={[]} scope={scope} enabled={false} canConfigure />);
   expect(screen.queryByText("Check the six sandwich variations")).toBeNull();
   view.rerender(<ChurchSquareStockCounts items={[]} scope={scope} enabled canConfigure />);
-  expect(screen.getByText("Set up a tracked Square item")).toBeTruthy();
+  expect(screen.getByText("Set up a Square stock item")).toBeTruthy();
   expect(getChurchSquareMenuDiagnosticAction).not.toHaveBeenCalled();
+});
+
+it("sets up an untracked Square item with the physical count entered by the owner", async () => {
+  vi.mocked(listTrackedChurchSquareVariationsAction).mockResolvedValue({
+    ok: true, mode: "live", persisted: false, data: [{ id: "mini", label: "Le Parisien · 6 inch", tracked: false }],
+  });
+  vi.mocked(initializeChurchSquareCountItemAction).mockResolvedValue({
+    ok: true, mode: "live", persisted: true, data: { status: "confirmed", label: "Le Parisien · 6 inch" },
+  });
+  render(<ChurchSquareStockCounts items={[]} scope={scope} enabled canConfigure />);
+  fireEvent.click(screen.getByText("Set up a Square stock item"));
+  fireEvent.click(screen.getByRole("button", { name: "Find Square items" }));
+  const picker = await screen.findByLabelText("Square item");
+  fireEvent.change(picker, { target: { value: "mini" } });
+  fireEvent.change(screen.getByLabelText("Sellable units on hand now"), { target: { value: "9" } });
+  fireEvent.click(screen.getByRole("button", { name: "Start tracking with this count" }));
+  await screen.findByText("Le Parisien · 6 inch is now tracked in Square and Operations.");
+  expect(initializeChurchSquareCountItemAction).toHaveBeenCalledExactlyOnceWith({
+    ...scope, variationId: "mini", quantity: "9", requestId: expect.any(String),
+  });
+  expect(configureChurchSquareCountItemAction).not.toHaveBeenCalled();
 });
 
 it("shows a temporary Square hold for an operator without stock setup access", async () => {

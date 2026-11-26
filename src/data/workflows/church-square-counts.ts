@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { churchSquareCountConfiguration } from "@/lib/integrations/church-square-configuration.server";
+import { churchSquareInitialCountReason } from "@/lib/integrations/church-square-stock-setup";
 import { SquareCountClient, SquareCountError } from "@/lib/integrations/square-counts.server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { assertCondition, throwDatabaseError, WorkflowError } from "../errors";
@@ -54,29 +55,33 @@ export async function listTrackedChurchSquareVariations(
   if (error) throwDatabaseError(error, "The café’s active stock items could not be loaded.");
   const mapped = new Set(z.array(z.object({ id: z.uuid() })).parse(data).map((item) => item.id));
   try {
-    const variations = await new SquareCountClient(configuration).listTrackedVariations();
-    return variations.filter((variation) => !mapped.has(stockItemId(input.locationId, variation.variationId)))
-      .map((variation) => ({ id: variation.variationId, label: variationLabel(variation) }))
+    const variations = await new SquareCountClient(configuration).listCountableVariations();
+    return variations.filter((variation) => !variation.tracked || !mapped.has(stockItemId(input.locationId, variation.variationId)))
+      .map((variation) => ({ id: variation.variationId, label: variationLabel(variation), tracked: variation.tracked }))
       .filter((variation) => variation.label.length <= 120);
   } catch {
-    throw new WorkflowError("conflict", "Could not load the café’s tracked items from Square. Check the API connection and try again.");
+    throw new WorkflowError("conflict", "Could not load stock items from Square. Check the API connection and try again.");
   }
 }
 
 export async function configureChurchSquareCountItem(
   context: WorkflowContext,
   input: { organizationId: string; locationId: string; variationId: string },
+  { initialCount = false }: { initialCount?: boolean } = {},
 ) {
   const configuration = requireSquareCountAdministrator(context, input);
 
   let label: string;
   try {
-    const variation = await new SquareCountClient(configuration).verifyTrackedVariation(input.variationId);
+    const client = new SquareCountClient(configuration);
+    const variation = initialCount
+      ? await client.verifyCountableVariation(input.variationId)
+      : await client.verifyTrackedVariation(input.variationId);
     label = variationLabel(variation);
     assertCondition(label.length <= 120, "conflict", "Shorten this item’s display name in Square first.");
   } catch (error) {
     if (error instanceof WorkflowError) throw error;
-    throw new WorkflowError("conflict", "Square could not verify this variation. Check that it belongs to Church Street and tracks stock by count.");
+    throw new WorkflowError("conflict", "Square could not verify this item for whole-unit counts at Church Street.");
   }
 
   const { error } = await createAdminClient().rpc("service_configure_church_square_count_item", {
@@ -95,10 +100,13 @@ export async function configureChurchSquareCountItem(
 
 export async function sendChurchSquareCount(
   context: WorkflowContext,
-  input: { organizationId: string; locationId: string; itemId: string; requestId: string; quantity: string; reason: string },
+  input: { organizationId: string; locationId: string; itemId: string; requestId: string; quantity: string; reason: string; initialCount?: boolean },
 ) {
   requireLocationAccess(context.actor, input.organizationId, input.locationId);
-  const configuration = churchSquareCountConfiguration();
+  const initialCount = input.initialCount === true;
+  assertCondition(initialCount === (input.reason === churchSquareInitialCountReason),
+    "conflict", "Use the Square item setup to record an initial count.");
+  const configuration = initialCount ? requireSquareCountAdministrator(context, input) : churchSquareCountConfiguration();
   assertCondition(configuration, "conflict", "Square stock counts are waiting for the café API connection.");
   const admin = createAdminClient();
   const { data, error } = await admin.rpc("service_claim_church_square_count", {
@@ -142,7 +150,7 @@ export async function sendChurchSquareCount(
         });
         if (dispatchError || allowed !== true) throw new Error("The Square count dispatch could not be recorded.");
         dispatchMarked = true;
-      }, { databaseClaimed: true });
+      }, { databaseClaimed: true, ...(initialCount ? { initialCount } : {}) });
   } catch (error) {
     if (!dispatchMarked && error instanceof SquareCountError
       && ["invalid_input", "scope_mismatch", "variation_ineligible"].includes(error.code)) {
@@ -152,6 +160,13 @@ export async function sendChurchSquareCount(
     return { status: "pending" as const };
   }
   if (!receipt) return { status: "recovery_required" as const };
+  if (initialCount) {
+    try {
+      await client.enableTrackingAfterCount(receipt, observation.requestId);
+    } catch {
+      return { status: "recovery_required" as const };
+    }
+  }
 
   const { error: finishError } = await admin.rpc("service_finish_church_square_count", {
     p_request_id: input.requestId,

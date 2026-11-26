@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { canViewChurchSquareStockAlerts, readChurchSquareStockAlerts } from "@/data/read-models/church-square-stock-alerts";
+import { loadChurchSquareCountItems } from "@/data/read-models/church-square-counts";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
 import { churchSquareWebhookConfiguration } from "@/lib/integrations/church-square-webhook.server";
 
@@ -27,7 +29,10 @@ export async function GET(request: Request) {
       return new Response(null, { status: 403, headers });
     }
 
-    const result = await readChurchSquareStockAlerts(context.activeLocation.id);
+    const [result, items] = await Promise.all([
+      readChurchSquareStockAlerts(context.activeLocation.id),
+      loadChurchSquareCountItems(context.activeLocation.id).catch(() => null),
+    ]);
     if (result.status !== "ready") {
       return new Response(null, { status: result.status === "denied" ? 403 : 503, headers });
     }
@@ -36,6 +41,9 @@ export async function GET(request: Request) {
       locationId: context.activeLocation.id,
       userId: context.identity.userId,
       alerts: result.alerts,
+      stockRevision: items && createHash("sha256").update(JSON.stringify(
+        items.map(({ id, squareInStockQuantity, squareInStockCalculatedAt }) => [id, squareInStockQuantity, squareInStockCalculatedAt]),
+      )).digest("hex"),
     }, { headers });
   } catch {
     return new Response(null, { status: 503, headers });

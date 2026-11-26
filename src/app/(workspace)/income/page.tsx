@@ -4,6 +4,7 @@ import {
   IncomeWorkspace,
   type IncomeActionAccess,
 } from "@/components/income/income-workspace";
+import { loadChurchSquareLiveIncome } from "@/data/read-models/church-square-live-income.server";
 import { loadLiveIncome } from "@/data/read-models/income";
 import { readSuccess } from "@/data/read-models/shared";
 import { resolveWorkspaceSession } from "@/lib/auth/workspace-session";
@@ -56,9 +57,14 @@ export default async function IncomePage({
       isTenantFeatureEnabled(resolution.context, "providerIntegrations") &&
       (privileged || capabilities.has("integrations.manage")),
   };
+  const [result, squareActivity] = await Promise.all([
+    loadLiveIncome(resolution.context, days),
+    loadChurchSquareLiveIncome(resolution.context),
+  ]);
   return (
     <IncomeWorkspace
-      result={await loadLiveIncome(resolution.context, days)}
+      result={result}
+      squareActivity={squareActivity}
       locationName={resolution.context.activeLocation.name}
       actionAccess={actionAccess}
       showReservations={isTenantFeatureEnabled(resolution.context, "reservations")}

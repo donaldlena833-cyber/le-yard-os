@@ -13,6 +13,7 @@ import {
   deriveIncomePlanningSummary,
 } from "@/lib/income/insights";
 import type { Json } from "@/types/database.generated";
+import type { ChurchSquareClosePreviewSnapshot } from "@/lib/integrations/church-square-close-preview";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
@@ -96,6 +97,27 @@ describe("income operating model", () => {
 });
 
 describe("IncomeWorkspace", () => {
+  it("shows complete Square activity even with no closeout or imported sales", () => {
+    const model = createDemoIncomeModel();
+    model.current.liveNetSalesCents = null;
+    model.current.approvedCloseoutCount = 0;
+    const square: ChurchSquareClosePreviewSnapshot = {
+      date: "2026-11-25", checkedAt: "2026-11-25T18:00:00Z",
+      window: { from: "2026-11-25T05:00:00Z", to: "2026-11-25T18:00:00Z", dayEnded: false },
+      payments: { coverage: "complete", observed: 1, completed: 1, unresolved: 0, offline: 0,
+        missingTotal: 0, missingOrder: 0, totalCents: 1200, tipCents: 200, tenders: [] },
+      refunds: { coverage: "complete", observed: 1, completed: 1, unresolved: 0,
+        withoutPaymentReference: 0, paymentOutsideRead: 0, amountCents: 300 },
+      netActivityCents: 900,
+    };
+    render(<IncomeWorkspace result={readSuccess(model)} squareActivity={readSuccess(square)} locationName="Church Street" demo />);
+    expect(screen.getByText("Live Square activity")).toBeTruthy();
+    expect(screen.getByText("$9.00")).toBeTruthy();
+    expect(screen.getByText("$12.00")).toBeTruthy();
+    expect(screen.getByText("$3.00")).toBeTruthy();
+    expect(screen.queryByText("A real-time revenue source is not connected")).toBeNull();
+  });
+
   it("labels partial contribution and cost grains without calling them profit", () => {
     render(
       <IncomeWorkspace
